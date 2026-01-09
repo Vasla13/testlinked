@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Database — JSON</title>
+  <link rel="stylesheet" href="../point/cyberpunk-theme.css"/>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Database (privé)</h1>
+      <small>Historique des imports/exports JSON (Netlify Blobs)</small>
+    </header>
+
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="point">Point</button>
+      <button class="tab-btn" data-tab="map">Map</button>
+    </div>
+
+    <div id="panel-point" class="panel active">
+      <div class="status" id="status-point">Chargement…</div>
+      <div class="cards" id="cards-point"></div>
+    </div>
+
+    <div id="panel-map" class="panel">
+      <div class="status" id="status-map">Chargement…</div>
+      <div class="cards" id="cards-map"></div>
+    </div>
+  </div>
+
+<script>
+  const tabs = document.querySelectorAll('.tab-btn');
+  const panels = {
+    point: document.getElementById('panel-point'),
+    map: document.getElementById('panel-map')
+  };
+
+  tabs.forEach(btn => {
+    btn.addEventListener('click', () => {
+      tabs.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const tab = btn.dataset.tab;
+      Object.values(panels).forEach(p => p.classList.remove('active'));
+      panels[tab].classList.add('active');
+    });
+  });
+
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    try { return new Date(iso).toLocaleString('fr-FR'); } catch(e) { return iso; }
+  }
+
+  function makeFilename(entry) {
+    const safeDate = (entry.createdAt || '').replace(/[:.]/g, '-');
+    return `${entry.page}_${entry.action}_${safeDate || entry.ts}.json`;
+  }
+
+  async function apiList(page) {
+    const res = await fetch(`/.netlify/functions/db-list?page=${encodeURIComponent(page)}`);
+    if (!res.ok) throw new Error('List failed');
+    const out = await res.json();
+    if (!out.ok) throw new Error(out.error || 'List failed');
+    return out.entries || [];
+  }
+
+  async function apiGet(key) {
+    const res = await fetch(`/.netlify/functions/db-get?key=${encodeURIComponent(key)}`);
+    if (!res.ok) throw new Error('Get failed');
+    return await res.json();
+  }
+
+  async function apiDelete(key) {
+    const res = await fetch(`/.netlify/functions/db-delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key })
+    });
+    const out = await res.json().catch(()=>({ok:false}));
+    if (!res.ok || !out.ok) throw new Error(out.error || 'Delete failed');
+  }
+
+  function render(page, entries) {
+    const statusEl = document.getElementById(`status-${page}`);
+    const cardsEl = document.getElementById(`cards-${page}`);
+    cardsEl.innerHTML = '';
+
+    if (!entries.length) {
+      statusEl.textContent = 'Aucune entrée pour le moment.';
+      const empty = document.createElement('div');
+      empty.className = 'empty';
+      empty.textContent = 'Rien à afficher.';
+      cardsEl.appendChild(empty);
+      return;
+    }
+
+    statusEl.textContent = `${entries.length} entrées (plus récent en premier)`;
+
+    for (const entry of entries) {
+      const card = document.createElement('div');
+      card.className = 'card';
+
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+
+      const left = document.createElement('div');
+      const badge = document.createElement('span');
+      badge.className = 'badge';
+      badge.textContent = entry.action === 'import' ? 'Import' : 'Export';
+      left.appendChild(badge);
+
+      const right = document.createElement('div');
+      right.textContent = fmtDate(entry.createdAt);
+
+      meta.appendChild(left);
+      meta.appendChild(right);
+
+      const keyLine = document.createElement('div');
+      keyLine.style.opacity = '0.75';
+      keyLine.style.fontSize = '12px';
+      keyLine.style.wordBreak = 'break-all';
+      keyLine.textContent = entry.key;
+
+      const actions = document.createElement('div');
+      actions.className = 'actions';
+
+      const btnDl = document.createElement('button');
+      btnDl.className = 'action';
+      btnDl.textContent = 'Télécharger';
+      btnDl.addEventListener('click', async () => {
+        btnDl.disabled = true;
+        try {
+          const data = await apiGet(entry.key);
+          const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = makeFilename(entry);
+          document.body.appendChild(a);
+          a.click();
+          URL.revokeObjectURL(a.href);
+          a.remove();
+        } catch (e) {
+          alert('Erreur téléchargement.');
+        } finally {
+          btnDl.disabled = false;
+        }
+      });
+
+      const btnDel = document.createElement('button');
+      btnDel.className = 'action danger';
+      btnDel.textContent = 'Supprimer';
+      btnDel.addEventListener('click', async () => {
+        if (!confirm('Supprimer cette entrée ?')) return;
+        btnDel.disabled = true;
+        try {
+          await apiDelete(entry.key);
+          await refreshPage(page);
+        } catch (e) {
+          alert('Erreur suppression.');
+          btnDel.disabled = false;
+        }
+      });
+
+      actions.appendChild(btnDl);
+      actions.appendChild(btnDel);
+
+      card.appendChild(meta);
+      card.appendChild(keyLine);
+      card.appendChild(actions);
+      cardsEl.appendChild(card);
+    }
+  }
+
+  async function refreshPage(page) {
+    const statusEl = document.getElementById(`status-${page}`);
+    statusEl.textContent = 'Chargement…';
+    try {
+      const entries = await apiList(page);
+      render(page, entries);
+    } catch (e) {
+      statusEl.textContent = "Impossible de charger (Netlify Functions/Blobs non disponibles ?).";
+      document.getElementById(`cards-${page}`).innerHTML = '';
+    }
+  }
+
+  refreshPage('point');
+  refreshPage('map');
+</script>
+</body>
+</html>

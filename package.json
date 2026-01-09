@@ -1,0 +1,9 @@
+{
+  "name": "bni-linked",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Static site + Netlify Functions (Blobs) for JSON logging",
+  "dependencies": {
+    "@netlify/blobs": "^10.4.1"
+  }
+}

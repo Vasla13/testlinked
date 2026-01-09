@@ -1,0 +1,1591 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Carte interactive avec groupes</title>
+  <link rel="stylesheet" href="style.css"/>
+  <link rel="stylesheet" href="cyberpunk-theme.css"/>
+  <style>
+    html, body {
+      margin: 0; height: 100%; overflow: hidden;
+      font-family: Arial, sans-serif;
+    }
+    #container {
+      display: flex;
+      height: 100%;
+      flex-direction: row;
+    }
+    #map-container {
+      flex-grow: 1;
+      position: relative;
+      overflow: hidden;
+      cursor: grab;
+      /* Fond quadrillage façon Linked */
+      background-color: #050814;
+      background-image:
+        radial-gradient(circle at top, rgba(108, 199, 255, 0.25) 0, transparent 55%),
+        linear-gradient(rgba(83, 132, 255, 0.18) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(83, 132, 255, 0.18) 1px, transparent 1px);
+      background-size:
+        100% 100%,
+        60px 60px,
+        60px 60px;
+    }
+    #map {
+      position: absolute;
+      width: 2000px;
+      height: 2000px;
+      transform-origin: top left;
+      user-select: none;
+    }
+    #map::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: url('carte.jpg') no-repeat center center;
+      background-size: contain;
+      pointer-events: none;
+      filter: grayscale(0);
+      opacity: 1;
+      transition: filter 0.3s ease, opacity 0.3s ease;
+    }
+    #map.map-bw::before {
+      filter: grayscale(1);
+      opacity: 0.5;
+    }
+    #sidebar {
+      width: 300px;
+      background: #f9f9f9;
+      border-left: 1px solid #ccc;
+      overflow-y: auto;
+      padding: 10px;
+      box-sizing: border-box;
+    }
+    .control-box {
+      background: #fff;
+      border: 1px solid #ddd;
+      padding: 10px;
+      margin-bottom: 15px;
+      border-radius: 6px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    #groups {
+      margin-top: 10px;
+    }
+    #sidebar-search {
+      width: 100%;
+      padding: 6px 8px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+      margin-top: 6px;
+      margin-bottom: 4px;
+      font-size: 0.85rem;
+    }
+    .group-item {
+      margin: 5px 0;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    .point-item {
+      margin-left: 15px;
+      cursor: pointer;
+    }
+    .point {
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      cursor: pointer;
+      border: 2px solid white;
+      box-sizing: border-box;
+    }
+    #context-menu, #group-context-menu {
+      position: absolute;
+      background: white;
+      border: 1px solid #ccc;
+      box-shadow: 1px 1px 6px rgba(0,0,0,0.2);
+      z-index: 1000;
+      display: none;
+      padding: 5px;
+      border-radius: 4px;
+    }
+    select {
+      margin: 5px 0;
+      width: 100%;
+    }
+
+    
+    /* === Thème inspiré du site (cyberpunk minimal) v2 === */
+
+    /* Police et fond global identiques au site */
+    html, body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    /* Container global : fond sombre légèrement dégradé */
+    #container {
+      background: radial-gradient(circle at top, #15192a 0%, #050711 55%, #020309 100%);
+    }
+
+    /* Fond derrière la map : similaire au #graph du site */
+    #map-container {
+      flex-grow: 1;
+      position: relative;
+      overflow: hidden;
+      cursor: grab;
+      background: transparent;
+    }
+
+    /* Sidebar à droite proche des panneaux latéraux du site */
+    #sidebar {
+      width: 300px;
+      background: var(--panel);
+      border-left: 1px solid var(--border);
+      box-shadow: 0 0 40px rgba(0,0,0,0.7);
+      padding: 14px 12px;
+      box-sizing: border-box;
+      color: var(--text);
+    }
+
+    /* HUD fixe en bas pour les liaisons */
+    #links-hud {
+      position: fixed;
+      left: 16px;
+      right: 320px; /* s'arrête là où commence la sidebar (300px + marge) */
+      bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(5, 7, 17, 0.94);
+      border: 1px solid var(--border);
+      box-shadow: 0 0 20px rgba(0,0,0,0.7);
+      z-index: 1500;
+      backdrop-filter: blur(10px);
+      font-size: 0.8rem;
+    }
+    #links-hud .hud-title {
+      font-weight: 500;
+      opacity: 0.8;
+      white-space: nowrap;
+      margin-right: 4px;
+    }
+    #links-hud button {
+      font-size: 0.8rem;
+      padding: 4px 8px;
+    }
+    #links-hud .hud-right {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    @media (max-width: 900px) {
+      #links-hud {
+        right: 16px; /* sur mobile, on prend toute la largeur */
+        flex-wrap: wrap;
+      }
+      #links-hud .hud-right {
+        width: 100%;
+        justify-content: flex-end;
+        margin-left: 0;
+      }
+    }
+
+    #sidebar h2 {
+      margin: .2rem 0 .6rem 0;
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: .4px;
+      text-transform: none;
+      color: var(--text);
+    }
+
+    #groups {
+      margin-top: 10px;
+    }
+    #sidebar-search {
+      width: 100%;
+      padding: 6px 8px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+      margin-top: 6px;
+      margin-bottom: 4px;
+      font-size: 0.85rem;
+    }
+
+    /* Boîte de menu (créer groupe / charger / sauvegarder) inspirée des cartes/blocs du site */
+    .control-box {
+      background: #0c1019;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: .8rem .9rem;
+      box-shadow: 0 18px 45px rgba(0,0,0,0.6);
+      color: var(--text);
+      backdrop-filter: blur(10px);
+    }
+
+    .control-box h3 {
+      margin: .4rem 0 .4rem 0;
+      font-size: .92rem;
+      color: var(--muted);
+      letter-spacing: .04em;
+      text-transform: none;
+    }
+
+    .control-box button,
+    .control-box input[type="text"],
+    .control-box input[type="color"],
+    .control-box input[type="file"],
+    .control-box label {
+      font-size: 0.85rem;
+    }
+
+    /* Inputs comme dans le site */
+    input[type="text"],
+    input[type="search"],
+    input[type="file"],
+    textarea {
+      background: #0b0d12;
+      color: var(--text);
+      border: 1px solid #202536;
+      outline: none;
+      border-radius: 10px;
+      padding: .55rem .7rem;
+    }
+
+    input[type="color"] {
+      background: #0b0d12;
+      border-radius: 10px;
+      border: 1px solid #202536;
+      padding: 0;
+    }
+
+    input[type="text"]::placeholder {
+      color: var(--muted);
+    }
+
+    /* Boutons : mêmes couleurs générales que sur le site */
+    button {
+      background: #111623;
+      color: #e9eeff;
+      border: 1px solid #202536;
+      padding: .5rem .7rem;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+    button:hover {
+      border-color: #2b3350;
+    }
+    button.primary {
+      background: var(--accent);
+      color: #0c1220;
+      border-color: transparent;
+    }
+    button.danger {
+      background: var(--danger);
+      color: #0c1220;
+      border-color: transparent;
+    }
+
+    /* Menus contextuels : petits panneaux sombres */
+    #context-menu,
+    #group-context-menu {
+      background: rgba(10,12,30,0.95);
+      border: 1px solid var(--border);
+      box-shadow: 0 18px 35px rgba(0,0,0,0.75);
+      color: var(--text);
+      border-radius: 12px;
+      padding: .5rem;
+    }
+
+    #context-menu input,
+    #group-context-menu input,
+    #context-menu select,
+    #group-context-menu select {
+      width: 100%;
+      margin: 0.25rem 0;
+    }
+
+    #context-menu button,
+    #group-context-menu button {
+      width: 100%;
+      margin-top: 0.25rem;
+    }
+
+    /* Liste des groupes / points proche de l'annuaire du site */
+    .group-item {
+      padding: .3rem .2rem;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: .4rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .group-item:hover {
+      background: #101420;
+    }
+
+    .point-item {
+      margin-left: 18px;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 0.85rem;
+      padding: .15rem 0;
+    }
+
+    .point-item:hover {
+      color: var(--accent);
+    }
+
+    /* Dropdown noir comme sur le site */
+    select, option {
+      background-color: #000 !important;
+      color: #fff !important;
+    }
+    select {
+      border-color: #333 !important;
+    }
+    option:disabled {
+      color: #bbb !important;
+    }
+
+</style>
+<style>
+  /* === Overrides to ensure grid background shows around the map === */
+  #graph, #map { background-color: transparent !important; }
+  body, html { background-attachment: fixed; } /* keep the grid steady while panning */
+</style>
+</head>
+<body>
+<div id="container">
+
+  <!-- Boîte gauche pour les contrôles -->
+  <div class="control-box" style="position: absolute; top: 10px; left: 10px; z-index: 1000;">
+    <img src="logo-bni-linked.png" alt="Logo BNI Linked" style="display:block;margin:0 auto 8px auto;max-width:220px;height:auto;">
+    <button type="button" onclick="window.location.href='../Point/index.html';" style="margin:8px auto 12px auto; display:block; padding:6px 10px; font-size:0.8rem;">Passer en mode point</button>
+    <h3>➕ Nouveau groupe</h3>
+    <input type="text" id="group-name" placeholder="Nom du groupe" />
+    <input type="color" id="group-color" value="#ff0000" />
+    <button id="add-group-btn">Créer</button>
+
+    <div class="toolbar" style="margin-top: .75rem;">
+      <button id="btnExport">Exporter JSON</button>
+      <label class="file">
+        Importer JSON
+        <input id="fileImport" type="file" accept=".json"/>
+      </label>
+      <label class="file">
+        Fusionner JSON
+        <input id="fileMerge" type="file" accept=".json"/>
+      </label>
+    </div>
+    <button id="clear-btn">❌ Tout effacer</button>
+  </div>
+
+  <!-- Carte -->
+  <div id="map-container">
+    <div id="map"></div>
+  </div>
+
+  <!-- Panneau de droite -->
+  <div id="sidebar">
+    <h2>📁 Groupes</h2>
+    <input type="text" id="sidebar-search" placeholder="Rechercher un point..." />
+    <div id="groups"></div>
+  </div>
+</div>
+
+<!-- HUD bas pour les liaisons -->
+<div id="links-hud">
+  <span class="hud-title">Liaisons entre les points</span>
+  <button id="link-mode-btn">Ajouter des liaisons : OFF</button>
+  <div class="hud-right">
+    <button id="toggle-connections-btn">Masquer les liaisons</button>
+    <button id="toggle-map-color-btn">Désactiver la map colorée</button>
+    <button id="toggle-personnes-btn">Cacher les personnes</button>
+    <button id="toggle-groups-btn">Cacher les groupes</button>
+  </div>
+</div>
+
+<!-- Menus contextuels -->
+<div id="context-menu"></div>
+<div id="group-context-menu"></div>
+
+<script>
+const mapContainer = document.getElementById('map-container');
+const map = document.getElementById('map');
+const groupsDiv = document.getElementById('groups');
+const addGroupBtn = document.getElementById('add-group-btn');
+const contextMenu = document.getElementById('context-menu');
+const groupContextMenu = document.getElementById('group-context-menu');
+const btnExport = document.getElementById('btnExport');
+const fileImport = document.getElementById('fileImport');
+const fileMerge = document.getElementById('fileMerge');
+
+
+// --- Netlify Blobs database logging (Map) ---
+async function netlifyDbSave_Map(action, payload){
+  try{
+    await fetch('/.netlify/functions/db-add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ page: 'map', action, data: payload })
+    });
+  }catch(e){
+    // Silent fail to keep existing behavior unchanged.
+  }
+}
+
+const clearBtn = document.getElementById('clear-btn');
+const linkModeBtn = document.getElementById('link-mode-btn');
+const toggleConnectionsBtn = document.getElementById('toggle-connections-btn');
+const toggleMapColorBtn = document.getElementById('toggle-map-color-btn');
+const searchInput = document.getElementById('sidebar-search');
+const togglePersonnesBtn = document.getElementById('toggle-personnes-btn');
+const toggleGroupsBtn = document.getElementById('toggle-groups-btn');
+
+
+const importLabel = fileImport ? fileImport.closest('label') : null;
+const mergeLabel = fileMerge ? fileMerge.closest('label') : null;
+
+if (importLabel) {
+  importLabel.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openJsonModal({
+      mode: 'import',
+      onFileClick: (file) => {
+        try {
+          const reader = new FileReader();
+          reader.onload = function(e) {
+            const data = JSON.parse(e.target.result);
+    void netlifyDbSave_Map('import', data);
+            if (Array.isArray(data)) {
+              groups = data;
+              connections = [];
+            } else {
+              groups = data.groups || [];
+              connections = data.connections || [];
+            }
+            renderGroups();
+            renderPoints();
+            if (typeof saveMapStateToStorage === 'function') {
+              saveMapStateToStorage();
+            }
+          };
+          reader.readAsText(file);
+        } catch(err) {
+          console.error('Import JSON (map, fichier) a échoué :', err);
+        }
+      },
+      onValidate: (raw) => {
+        try {
+          const data = JSON.parse(raw);
+          // Import = replace (supporte ancien format = tableau de groupes)
+          if (Array.isArray(data)) {
+            groups = data;
+            connections = [];
+          } else {
+            groups = data.groups || [];
+            connections = data.connections || [];
+          }
+          renderGroups();
+          renderPoints();
+          if (typeof saveMapStateToStorage === 'function') {
+            saveMapStateToStorage();
+          }
+          return true;
+        } catch (err) {
+          console.error('Import JSON (map) a échoué :', err);
+          return false;
+        }
+      }
+    });
+  });
+}
+
+if (mergeLabel) {
+  mergeLabel.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openJsonModal({
+      mode: 'merge',
+      onFileClick: (file) => {
+        try {
+          const reader = new FileReader();
+          reader.onload = function(e) {
+            const data = JSON.parse(e.target.result);
+            const incomingGroups = Array.isArray(data) ? data : (data.groups || []);
+            incomingGroups.forEach(g => {
+              const existing = groups.find(gr => gr.name === g.name);
+              if (existing) {
+                g.points.forEach(pt => {
+                  if (!existing.points.find(p => p.name === pt.name && p.x === pt.x && p.y === pt.y)) {
+                    existing.points.push(pt);
+                  }
+                });
+              } else {
+                groups.push(g);
+              }
+            });
+            renderGroups();
+            renderPoints();
+            if (typeof saveMapStateToStorage === 'function') {
+              saveMapStateToStorage();
+            }
+          };
+          reader.readAsText(file);
+        } catch(err) {
+          console.error('Fusion JSON (map, fichier) a échoué :', err);
+        }
+      },
+      onValidate: (raw) => {
+        try {
+          const data = JSON.parse(raw);
+          const incomingGroups = Array.isArray(data) ? data : (data.groups || []);
+          incomingGroups.forEach(g => {
+            const existing = groups.find(gr => gr.name === g.name);
+            if (existing) {
+              g.points.forEach(pt => {
+                if (!existing.points.find(p => p.name === pt.name && p.x === pt.x && p.y === pt.y)) {
+                  existing.points.push(pt);
+                }
+              });
+            } else {
+              groups.push(g);
+            }
+          });
+          renderGroups();
+          renderPoints();
+          if (typeof saveMapStateToStorage === 'function') {
+            saveMapStateToStorage();
+          }
+          return true;
+        } catch (err) {
+          console.error('Fusion JSON (map) a échoué :', err);
+          return false;
+        }
+      }
+    });
+  });
+}
+
+
+
+
+// --- JSON modal (export / import / fusion) ---
+let __jsonModalBackdrop = null;
+let __jsonModalTextarea = null;
+let __jsonModalTitle = null;
+let __jsonModalFileBtn = null;
+let __jsonModalCopyBtn = null;
+let __jsonModalValidateBtn = null;
+let __jsonModalValidateLabel = 'valider';
+let __jsonModalOnFileClick = null;
+let __jsonModalOnValidate = null;
+
+function ensureJsonModal(){
+  if (__jsonModalBackdrop) return __jsonModalBackdrop;
+  const backdrop = document.createElement('div');
+  backdrop.className = 'json-modal-backdrop is-hidden';
+  backdrop.innerHTML = `
+    <div class="json-modal">
+      <h2 class="json-modal-title">JSON</h2>
+      <button type="button" class="json-modal-file-btn"></button>
+      <p class="json-modal-or">ou copier/coller les data brute</p>
+      <textarea spellcheck="false"></textarea>
+      <div class="json-modal-actions json-modal-actions-export">
+        <button type="button" data-json-copy>copier tout</button>
+        <button type="button" data-json-close>fermer</button>
+      </div>
+      <div class="json-modal-actions json-modal-actions-import">
+        <button type="button" data-json-validate>valider</button>
+        <button type="button" data-json-close>fermer</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+
+  __jsonModalBackdrop = backdrop;
+  __jsonModalTextarea = backdrop.querySelector('textarea');
+  __jsonModalTitle = backdrop.querySelector('.json-modal-title');
+  __jsonModalFileBtn = backdrop.querySelector('.json-modal-file-btn');
+  __jsonModalCopyBtn = backdrop.querySelector('[data-json-copy]');
+  __jsonModalValidateBtn = backdrop.querySelector('[data-json-validate]');
+  if (__jsonModalValidateBtn) {
+    __jsonModalValidateLabel = __jsonModalValidateBtn.textContent || 'valider';
+  }
+
+  backdrop.addEventListener('click', function(e){
+    if(e.target === backdrop){
+      closeJsonModal();
+    }
+  });
+
+  const closeButtons = backdrop.querySelectorAll('[data-json-close]');
+  closeButtons.forEach(function(btn){
+    btn.addEventListener('click', function(e){
+      e.preventDefault();
+      closeJsonModal();
+    });
+  });
+
+  if (__jsonModalCopyBtn && __jsonModalTextarea) {
+    __jsonModalCopyBtn.addEventListener('click', function(){
+      try{
+        __jsonModalTextarea.select();
+        if (document.execCommand) {
+          document.execCommand('copy');
+        } else if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(__jsonModalTextarea.value).catch(function(){});
+        }
+      }catch(err){
+        console.error('Copie JSON a échoué:', err);
+      }
+    });
+  }
+
+  return backdrop;
+}
+
+function openJsonModal(options){
+  options = options || {};
+  const mode = options.mode || 'export';
+  const jsonText = options.jsonText || '';
+  __jsonModalOnFileClick = typeof options.onFileClick === 'function' ? options.onFileClick : null;
+  __jsonModalOnValidate = typeof options.onValidate === 'function' ? options.onValidate : null;
+
+  const backdrop = ensureJsonModal();
+
+  if (__jsonModalTextarea) {
+    __jsonModalTextarea.value = jsonText;
+  }
+
+  if (__jsonModalTitle) {
+    if (mode === 'export') __jsonModalTitle.textContent = 'Exporter JSON';
+    else if (mode === 'import') __jsonModalTitle.textContent = 'Importer JSON';
+    else if (mode === 'merge') __jsonModalTitle.textContent = 'Fusionner JSON';
+    else __jsonModalTitle.textContent = 'JSON';
+  }
+
+  const actionsExport = backdrop.querySelector('.json-modal-actions-export');
+  const actionsImport = backdrop.querySelector('.json-modal-actions-import');
+  if (actionsExport && actionsImport) {
+    if (mode === 'export') {
+      actionsExport.style.display = 'flex';
+      actionsImport.style.display = 'none';
+    } else {
+      actionsExport.style.display = 'none';
+      actionsImport.style.display = 'flex';
+    }
+  }
+
+  if (__jsonModalFileBtn) {
+    if (mode === 'export') {
+      __jsonModalFileBtn.textContent = 'Enregistrer le fichier JSON sur l’ordinateur';
+    } else if (mode === 'import') {
+      __jsonModalFileBtn.textContent = 'Importer un fichier JSON depuis l’ordinateur';
+    } else if (mode === 'merge') {
+      __jsonModalFileBtn.textContent = 'Fusionner un fichier JSON depuis l’ordinateur';
+    } else {
+      __jsonModalFileBtn.textContent = 'Fichier JSON';
+    }
+    __jsonModalFileBtn.onclick = function(){
+      if (!__jsonModalOnFileClick) return;
+
+      if (mode === 'import' || mode === 'merge') {
+        // Crée un input[type=file] temporaire pour contourner les restrictions des navigateurs
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        input.style.position = 'fixed';
+        input.style.left = '-10000px';
+        input.style.top = '0';
+        document.body.appendChild(input);
+        input.addEventListener('change', function(){
+          const file = input.files && input.files[0];
+          document.body.removeChild(input);
+          if (file) {
+            try{
+              __jsonModalOnFileClick(file);
+            }catch(err){
+              console.error('Erreur lors du traitement du fichier JSON:', err);
+            }
+          }
+        });
+        input.click();
+      } else {
+        // Mode export : pas besoin de fichier, on laisse la callback décider
+        try{
+          __jsonModalOnFileClick();
+        }catch(err){
+          console.error('Erreur lors de l\'action export JSON:', err);
+        }
+      }
+    };
+  }
+
+  if (__jsonModalValidateBtn) {
+    if (mode === 'export') {
+      __jsonModalValidateBtn.style.display = 'none';
+    } else {
+      __jsonModalValidateBtn.style.display = '';
+      __jsonModalValidateBtn.textContent = __jsonModalValidateLabel || 'valider';
+      __jsonModalValidateBtn.classList.remove('json-modal-error');
+      __jsonModalValidateBtn.onclick = function(){
+        if (!__jsonModalOnValidate) {
+          closeJsonModal();
+          return;
+        }
+        var ok = false;
+        try{
+          ok = !!__jsonModalOnValidate(__jsonModalTextarea ? __jsonModalTextarea.value : '');
+        }catch(err){
+          console.error('Validation JSON a échoué:', err);
+          ok = false;
+        }
+        if (ok) {
+          closeJsonModal();
+        } else {
+          flashJsonValidateError();
+        }
+      };
+    }
+  }
+
+  backdrop.classList.remove('is-hidden');
+}
+
+function closeJsonModal(){
+  if (!__jsonModalBackdrop) return;
+  __jsonModalBackdrop.classList.add('is-hidden');
+}
+
+function flashJsonValidateError(){
+  if (!__jsonModalValidateBtn) return;
+  var btn = __jsonModalValidateBtn;
+  var originalText = __jsonModalValidateLabel || 'valider';
+  btn.classList.add('json-modal-error');
+  btn.textContent = 'erreur';
+  setTimeout(function(){
+    btn.classList.remove('json-modal-error');
+    btn.textContent = originalText;
+  }, 1000);
+}
+
+
+// --- Confirmation modal (in-app) ---
+function createConfirmModal(){
+  const backdrop = document.createElement('div');
+  backdrop.className = 'confirm-modal-backdrop is-hidden';
+  backdrop.innerHTML = `
+    <div class="confirm-modal">
+      <p data-confirm-message></p>
+      <div class="confirm-modal-buttons">
+        <button type="button" data-confirm-cancel>Annuler</button>
+        <button type="button" class="danger" data-confirm-ok>Confirmer</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+  return backdrop;
+}
+
+const __mapConfirmBackdrop = createConfirmModal();
+const __mapConfirmMessage = __mapConfirmBackdrop.querySelector('[data-confirm-message]');
+const __mapConfirmCancel = __mapConfirmBackdrop.querySelector('[data-confirm-cancel]');
+const __mapConfirmOk = __mapConfirmBackdrop.querySelector('[data-confirm-ok]');
+
+function showConfirmModal(message, onConfirm){
+  if(!__mapConfirmBackdrop) return;
+  __mapConfirmMessage.textContent = message || '';
+  __mapConfirmBackdrop.classList.remove('is-hidden');
+
+  const handleCancel = (e)=>{
+    e.stopPropagation();
+    close();
+  };
+  const handleOk = (e)=>{
+    e.stopPropagation();
+    close();
+    if(typeof onConfirm === 'function') onConfirm();
+  };
+  const handleBackdrop = (e)=>{
+    if(e.target === __mapConfirmBackdrop){
+      close();
+    }
+  };
+
+  function close(){
+    __mapConfirmBackdrop.classList.add('is-hidden');
+    __mapConfirmCancel.removeEventListener('click', handleCancel);
+    __mapConfirmOk.removeEventListener('click', handleOk);
+    __mapConfirmBackdrop.removeEventListener('click', handleBackdrop);
+  }
+
+  __mapConfirmCancel.addEventListener('click', handleCancel);
+  __mapConfirmOk.addEventListener('click', handleOk);
+  __mapConfirmBackdrop.addEventListener('click', handleBackdrop);
+}
+
+// --- Persistence de l'état des points (localStorage) ---
+const MAP_STORAGE_KEY = 'mapPageState_v1';
+
+function saveMapStateToStorage(){
+  try{
+    const payload = {
+      groups,
+      connections,
+      showConnections,
+      showPersonnes,
+      showGroupPoints,
+      translate,
+      scale
+    };
+    localStorage.setItem(MAP_STORAGE_KEY, JSON.stringify(payload));
+  }catch(err){
+    console.error('Erreur sauvegarde état (map):', err);
+  }
+}
+
+function loadMapStateFromStorage(){
+  try{
+    const raw = localStorage.getItem(MAP_STORAGE_KEY);
+    if(!raw) return;
+    const data = JSON.parse(raw);
+    if(Array.isArray(data.groups)) groups = data.groups;
+    if(Array.isArray(data.connections)) connections = data.connections;
+    if(typeof data.showConnections==='boolean') showConnections = data.showConnections;
+    if(typeof data.showPersonnes==='boolean') showPersonnes = data.showPersonnes;
+    if(typeof data.showGroupPoints==='boolean') showGroupPoints = data.showGroupPoints;
+    if(data.translate && typeof data.translate.x==='number' && typeof data.translate.y==='number'){
+      translate = data.translate;
+    }
+    if(typeof data.scale==='number') scale = data.scale;
+  }catch(err){
+    console.error('Erreur lecture état (map):', err);
+  }
+}
+
+// Sauvegarde automatique à la fermeture/actualisation
+window.addEventListener('beforeunload', saveMapStateToStorage);
+
+
+
+// Empêche la fermeture des menus contextuels lorsqu'on clique dedans
+if (contextMenu) {
+  contextMenu.addEventListener('click', (event) => {
+    event.stopPropagation();
+  });
+}
+if (groupContextMenu) {
+  groupContextMenu.addEventListener('click', (event) => {
+    event.stopPropagation();
+  });
+}
+
+
+let groups = [];
+let connections = [];
+let showConnections = true;
+let searchTerm = '';
+let scale = 1;
+let showPersonnes = true;
+let showGroupPoints = true;
+let translate = { x: 0, y: 0 };
+let isDragging = false;
+let dragStart = { x: 0, y: 0 };
+let draggingPoint = null;
+let dragPointStart = null;
+let dragPointMoved = false;
+
+// Crée le groupe "Personnes" par défaut au chargement
+ensurePersonnesGroup();
+
+// SVG pour les connexions entre points
+const connectionsSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+connectionsSvg.setAttribute('id', 'connections-layer');
+connectionsSvg.setAttribute('viewBox', '0 0 100 100');
+connectionsSvg.setAttribute('preserveAspectRatio', 'none');
+connectionsSvg.style.position = 'absolute';
+connectionsSvg.style.left = '0';
+connectionsSvg.style.top = '0';
+connectionsSvg.style.width = '100%';
+connectionsSvg.style.height = '100%';
+connectionsSvg.style.pointerEvents = 'none';
+map.appendChild(connectionsSvg);
+
+let linkMode = false;
+let pendingLink = null;
+
+
+function updateTransform() {
+  map.style.transform = `translate(${translate.x}px, ${translate.y}px) scale(${scale})`;
+}
+
+mapContainer.addEventListener('mousedown', (e) => {
+  if (e.button !== 0) return;
+  isDragging = true;
+  dragStart = { x: e.clientX, y: e.clientY };
+  mapContainer.style.cursor = 'grabbing';
+});
+window.addEventListener('mouseup', () => {
+  // Fin éventuelle du drag de point
+  if (draggingPoint) {
+    draggingPoint = null;
+    dragPointStart = null;
+  }
+  isDragging = false;
+  mapContainer.style.cursor = 'grab';
+});
+window.addEventListener('mousemove', (e) => {
+  // Déplacement d'un point
+  if (draggingPoint) {
+    const rect = map.getBoundingClientRect();
+    const dx = e.clientX - dragPointStart.x;
+    const dy = e.clientY - dragPointStart.y;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+      dragPointMoved = true;
+    }
+    const xPct = ((e.clientX - rect.left) / rect.width) * 100;
+    const yPct = ((e.clientY - rect.top) / rect.height) * 100;
+    const g = groups[draggingPoint.gi];
+    const pt = g.points[draggingPoint.pi];
+    pt.x = Math.max(0, Math.min(100, xPct));
+    pt.y = Math.max(0, Math.min(100, yPct));
+    renderPoints();
+    return;
+  }
+
+  // Déplacement de la carte
+  if (!isDragging) return;
+  const dx = e.clientX - dragStart.x;
+  const dy = e.clientY - dragStart.y;
+  dragStart = { x: e.clientX, y: e.clientY };
+  translate.x += dx;
+  translate.y += dy;
+  updateTransform();
+});
+
+mapContainer.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const zoom = e.deltaY < 0 ? 1.1 : 0.9;
+  const newScale = Math.min(Math.max(scale * zoom, 0.1), 10);
+  const rect = mapContainer.getBoundingClientRect();
+  const mouseX = e.clientX - rect.left;
+  const mouseY = e.clientY - rect.top;
+  const mapX = (mouseX - translate.x) / scale;
+  const mapY = (mouseY - translate.y) / scale;
+  translate.x -= mapX * (newScale - scale);
+  translate.y -= mapY * (newScale - scale);
+  scale = newScale;
+  updateTransform();
+}, { passive: false });
+
+
+function ensurePersonnesGroup() {
+  // Crée automatiquement le groupe "Personnes" si aucun groupe n'existe
+  if (groups.length === 0) {
+    groups.push({
+      name: 'Personnes',
+      color: '#ffd400',
+      points: [],
+      visible: true
+    });
+  }
+}
+
+function isPersonnesGroup(group) {
+  if (!group || !group.name) return false;
+  return group.name.toLowerCase() === 'personnes';
+}
+
+function matchesSearch(pt) {
+  if (!searchTerm) return true;
+  const name = (pt.name || '').toLowerCase();
+  return name.includes(searchTerm.toLowerCase());
+}
+
+// Recherche dans la sidebar
+if (searchInput) {
+  searchInput.addEventListener('input', () => {
+    searchTerm = searchInput.value.trim();
+    renderGroups();
+    renderPoints();
+  });
+}
+
+function renderGroups() {
+  groupsDiv.innerHTML = '';
+  groups.forEach((group, gi) => {
+    // Si une recherche est active et que ce groupe n'a aucun point correspondant, on l'ignore
+    const matchingPoints = group.points.filter(pt => matchesSearch(pt));
+    if (searchTerm && matchingPoints.length === 0) {
+      return;
+    }
+
+    const groupDiv = document.createElement('div');
+    groupDiv.className = 'group-item';
+    groupDiv.textContent = group.name;
+    groupDiv.style.color = group.color;
+
+    const pointList = document.createElement('div');
+    pointList.style.display = group.visible === false ? 'none' : 'block';
+
+    matchingPoints.forEach((pt, piOriginal) => {
+      const pi = group.points.indexOf(pt);
+      const ptDiv = document.createElement('div');
+      ptDiv.className = 'point-item';
+      ptDiv.textContent = pt.name;
+      ptDiv.addEventListener('click', () => {
+        centerOnPoint(pt);
+      });
+      ptDiv.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        showPointContextMenu(e, gi, pi);
+      });
+      pointList.appendChild(ptDiv);
+    });
+
+    groupDiv.addEventListener('click', () => {
+      group.visible = group.visible === false ? true : false;
+      renderGroups();
+      renderPoints();
+    });
+    groupDiv.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      showGroupContextMenu(e, gi);
+    });
+
+    groupsDiv.appendChild(groupDiv);
+    groupsDiv.appendChild(pointList);
+  });
+}
+
+function centerOnPoint(pt) {
+  const mapWidth = map.offsetWidth;
+  const mapHeight = map.offsetHeight;
+  const mapX = (pt.x / 100) * mapWidth;
+  const mapY = (pt.y / 100) * mapHeight;
+  translate.x = mapContainer.clientWidth / 2 - mapX * scale;
+  translate.y = mapContainer.clientHeight / 2 - mapY * scale;
+  updateTransform();
+}
+
+function renderPoints() {
+  map.querySelectorAll('.point').forEach(p => p.remove());
+  groups.forEach((g, gi) => {
+    if (g.visible === false) return;
+    g.points.forEach((pt, pi) => {
+      // Filtrage par type de groupe (Personnes / autres)
+      if (isPersonnesGroup(g) && !showPersonnes) return;
+      if (!isPersonnesGroup(g) && !showGroupPoints) return;
+
+      if (!matchesSearch(pt)) return;
+
+      const el = document.createElement('div');
+      el.className = 'point';
+      el.style.left = pt.x + '%';
+      el.style.top = pt.y + '%';
+      el.style.backgroundColor = g.color;
+      el.title = pt.name;
+
+      // Gestion des zones : plus large et semi-transparent
+      const isZone = pt.type === 'zone';
+      if (isZone) {
+        el.style.width = '34px';
+        el.style.height = '34px';
+        el.style.opacity = '0.5';
+      } else {
+        el.style.opacity = '1';
+      }
+
+      // Clic droit : menu contextuel du point
+      el.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        showPointContextMenu(e, gi, pi);
+      });
+
+      // Clic gauche + glisser : déplacer le point
+      el.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return; // uniquement clic gauche
+        e.stopPropagation();        // ne pas déclencher le drag de la carte
+        draggingPoint = { gi, pi };
+        dragPointStart = { x: e.clientX, y: e.clientY };
+        dragPointMoved = false;
+      });
+
+      // Clic simple : création de liaisons (si pas de drag)
+      el.addEventListener('click', (e) => {
+        // Si on vient de faire un drag, on ignore le clic "fantôme"
+        if (dragPointMoved) {
+          dragPointMoved = false;
+          return;
+        }
+        // Mode liaison : cliquer sur deux points pour créer une connexion
+        if (!linkMode) return;
+        e.stopPropagation();
+        if (!pendingLink) {
+          pendingLink = { g: gi, p: pi };
+        } else {
+          if (pendingLink.g === gi && pendingLink.p === pi) {
+            // même point => annuler
+            pendingLink = null;
+            return;
+          }
+          connections.push({ from: { g: pendingLink.g, p: pendingLink.p }, to: { g: gi, p: pi } });
+          pendingLink = null;
+          renderConnections();
+        }
+      });
+
+      map.appendChild(el);
+    });
+  });
+  renderConnections();
+}
+
+function renderConnections() {
+  // Efface les anciennes lignes
+  while (connectionsSvg.firstChild) {
+    connectionsSvg.removeChild(connectionsSvg.firstChild);
+  }
+
+  // Si on masque les liaisons, on cache le calque SVG et on s'arrête là
+  if (!showConnections) {
+    connectionsSvg.style.display = 'none';
+    return;
+  }
+  connectionsSvg.style.display = 'block';
+
+  connections.forEach((conn, index) => {
+    const fromGroup = groups[conn.from.g];
+    const toGroup = groups[conn.to.g];
+    if (!fromGroup || !toGroup) return;
+    if (fromGroup.visible === false || toGroup.visible === false) return;
+
+    // Respect des filtres Personnes / Groupes
+    if (isPersonnesGroup(fromGroup) && !showPersonnes) return;
+    if (!isPersonnesGroup(fromGroup) && !showGroupPoints) return;
+    if (isPersonnesGroup(toGroup) && !showPersonnes) return;
+    if (!isPersonnesGroup(toGroup) && !showGroupPoints) return;
+
+    const fromPt = fromGroup.points[conn.from.p];
+    const toPt = toGroup.points[conn.to.p];
+    if (!fromPt || !toPt) return;
+
+    // Si une recherche est active, on ne trace la liaison que si les deux points correspondent
+    if (!matchesSearch(fromPt) || !matchesSearch(toPt)) {
+      if (searchTerm) return;
+    }
+
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', fromPt.x);
+    line.setAttribute('y1', fromPt.y);
+    line.setAttribute('x2', toPt.x);
+    line.setAttribute('y2', toPt.y);
+    line.setAttribute('stroke', fromGroup.color || '#7aa2ff');
+    line.setAttribute('stroke-width', '0.12');
+    line.setAttribute('stroke-linecap', 'round');
+    line.setAttribute('opacity', '0.9');
+
+    // Permet de cliquer uniquement sur le trait
+    line.style.pointerEvents = 'stroke';
+
+    // Double-clic pour supprimer la liaison
+    line.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      if (confirm('Supprimer cette liaison ?')) {
+        connections.splice(index, 1);
+        renderConnections();
+      }
+    });
+
+    connectionsSvg.appendChild(line);
+  });
+}
+
+
+function showPointContextMenu(e, gi, pi) {
+  contextMenu.innerHTML = '';
+  const pt = groups[gi].points[pi];
+  const input = document.createElement('input');
+  input.value = pt.name;
+
+  const select = document.createElement('select');
+  groups.forEach((g, idx) => {
+    const opt = document.createElement('option');
+    opt.value = idx;
+    opt.textContent = g.name;
+    if (idx === gi) opt.selected = true;
+    select.appendChild(opt);
+  });
+
+  const btnRename = document.createElement('button');
+  btnRename.textContent = 'Renommer / Déplacer';
+  btnRename.onclick = () => {
+    pt.name = input.value;
+    const newGroupIndex = parseInt(select.value);
+    if (newGroupIndex !== gi) {
+      groups[gi].points.splice(pi, 1);
+      groups[newGroupIndex].points.push(pt);
+    }
+    hideMenus();
+    renderGroups();
+    renderPoints();
+  };
+
+  const btnDelete = document.createElement('button');
+  btnDelete.textContent = 'Supprimer';
+  btnDelete.onclick = () => {
+    // Supprimer les connexions liées à ce point et réindexer
+    connections = connections.filter(conn => !(
+      (conn.from.g === gi && conn.from.p === pi) ||
+      (conn.to.g === gi && conn.to.p === pi)
+    ));
+    connections.forEach(conn => {
+      if (conn.from.g === gi && conn.from.p > pi) conn.from.p -= 1;
+      if (conn.to.g === gi && conn.to.p > pi) conn.to.p -= 1;
+    });
+    groups[gi].points.splice(pi, 1);
+    hideMenus();
+    renderGroups();
+    renderPoints();
+  };
+
+  contextMenu.appendChild(input);
+  contextMenu.appendChild(select);
+  contextMenu.appendChild(btnRename);
+  contextMenu.appendChild(btnDelete);
+  contextMenu.style.left = e.pageX + 'px';
+  contextMenu.style.top = e.pageY + 'px';
+  contextMenu.style.display = 'block';
+}
+
+function showGroupContextMenu(e, gi) {
+  groupContextMenu.innerHTML = '';
+  const input = document.createElement('input');
+  input.value = groups[gi].name;
+  const colorInput = document.createElement('input');
+  colorInput.type = 'color';
+  colorInput.value = groups[gi].color;
+  const btnRename = document.createElement('button');
+  btnRename.textContent = 'Modifier';
+  btnRename.onclick = () => {
+    groups[gi].name = input.value;
+    groups[gi].color = colorInput.value;
+    hideMenus();
+    renderGroups();
+    renderPoints();
+  };
+  const btnDelete = document.createElement('button');
+  btnDelete.textContent = 'Supprimer';
+  btnDelete.onclick = () => {
+    // Supprimer les connexions liées à ce groupe et réindexer
+    connections = connections.filter(conn => conn.from.g !== gi && conn.to.g !== gi);
+    connections.forEach(conn => {
+      if (conn.from.g > gi) conn.from.g -= 1;
+      if (conn.to.g > gi) conn.to.g -= 1;
+    });
+    groups.splice(gi, 1);
+    hideMenus();
+    renderGroups();
+    renderPoints();
+  };
+  groupContextMenu.appendChild(input);
+  groupContextMenu.appendChild(colorInput);
+  groupContextMenu.appendChild(btnRename);
+  groupContextMenu.appendChild(btnDelete);
+  groupContextMenu.style.left = e.pageX + 'px';
+  groupContextMenu.style.top = e.pageY + 'px';
+  groupContextMenu.style.display = 'block';
+}
+
+function hideMenus() {
+  contextMenu.style.display = 'none';
+  groupContextMenu.style.display = 'none';
+}
+
+addGroupBtn.onclick = () => {
+  const name = document.getElementById('group-name').value.trim();
+  const color = document.getElementById('group-color').value;
+  if (!name) return;
+  groups.push({ name, color, points: [], visible: true });
+  document.getElementById('group-name').value = '';
+  renderGroups();
+};
+
+linkModeBtn.addEventListener('click', () => {
+  linkMode = !linkMode;
+  linkModeBtn.textContent = linkMode ? 'Ajouter des liaisons : ON' : 'Ajouter des liaisons : OFF';
+  if (linkMode) {
+    linkModeBtn.classList.add('primary');
+  } else {
+    linkModeBtn.classList.remove('primary');
+    pendingLink = null;
+  }
+});
+
+toggleConnectionsBtn.addEventListener('click', () => {
+  showConnections = !showConnections;
+  toggleConnectionsBtn.textContent = showConnections ? 'Masquer les liaisons' : 'Afficher les liaisons';
+  renderConnections();
+});
+
+let mapColorEnabled = true;
+if (toggleMapColorBtn) {
+  toggleMapColorBtn.addEventListener('click', () => {
+    mapColorEnabled = !mapColorEnabled;
+    if (mapColorEnabled) {
+      map.classList.remove('map-bw');
+      toggleMapColorBtn.textContent = 'Désactiver la map colorée';
+    } else {
+      map.classList.add('map-bw');
+      toggleMapColorBtn.textContent = 'Activer la map colorée';
+    }
+  });
+}
+
+
+if (togglePersonnesBtn) {
+  togglePersonnesBtn.addEventListener('click', () => {
+    showPersonnes = !showPersonnes;
+    togglePersonnesBtn.textContent = showPersonnes ? 'Cacher les personnes' : 'Afficher les personnes';
+    renderPoints();
+    renderConnections();
+  });
+}
+
+if (toggleGroupsBtn) {
+  toggleGroupsBtn.addEventListener('click', () => {
+    showGroupPoints = !showGroupPoints;
+    toggleGroupsBtn.textContent = showGroupPoints ? 'Cacher les groupes' : 'Afficher les groupes';
+    renderPoints();
+    renderConnections();
+  });
+}
+
+map.addEventListener('click', hideMenus);
+document.body.addEventListener('click', hideMenus);
+
+map.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  hideMenus();
+
+  if (groups.length === 0) {
+    ensurePersonnesGroup();
+  }
+
+  const x = (e.offsetX / map.offsetWidth) * 100;
+  const y = (e.offsetY / map.offsetHeight) * 100;
+
+  // Créer la fenêtre contextuelle
+  const formWrapper = document.createElement('div');
+  formWrapper.style.position = 'fixed';
+  formWrapper.style.left = e.pageX + 'px';
+  formWrapper.style.top = e.pageY + 'px';
+  formWrapper.style.background = 'white';
+  formWrapper.style.border = '1px solid #ccc';
+  formWrapper.style.padding = '10px';
+  formWrapper.style.zIndex = '10000';
+  formWrapper.style.boxShadow = '2px 2px 6px rgba(0,0,0,0.2)';
+  formWrapper.style.borderRadius = '6px';
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.placeholder = 'Nom du point';
+  input.style.width = '100%';
+  input.style.marginBottom = '5px';
+
+  const select = document.createElement('select');
+  select.style.width = '100%';
+  groups.forEach((g, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = g.name;
+    select.appendChild(opt);
+  });
+
+  // Choix du type de point : classique ou zone
+  const typeSelect = document.createElement('select');
+  typeSelect.style.width = '100%';
+  typeSelect.style.marginTop = '5px';
+  const optPoint = document.createElement('option');
+  optPoint.value = 'point';
+  optPoint.textContent = 'Point classique';
+  const optZone = document.createElement('option');
+  optZone.value = 'zone';
+  optZone.textContent = 'Zone';
+  typeSelect.appendChild(optPoint);
+  typeSelect.appendChild(optZone);
+
+  const btn = document.createElement('button');
+  btn.textContent = 'Valider';
+  btn.style.marginTop = '5px';
+  btn.style.width = '100%';
+
+  btn.onclick = () => {
+    const name = input.value.trim();
+    if (!name) {
+      alert("Veuillez entrer un nom.");
+      return;
+    }
+    const groupIndex = parseInt(select.value);
+    const type = typeSelect.value || 'point';
+    groups[groupIndex].points.push({ name, x, y, type });
+    document.body.removeChild(formWrapper);
+    renderGroups();
+    renderPoints();
+  };
+
+  formWrapper.appendChild(input);
+  formWrapper.appendChild(select);
+  formWrapper.appendChild(typeSelect);
+  formWrapper.appendChild(btn);
+  document.body.appendChild(formWrapper);
+
+  // Fermer si clic ailleurs
+  const closeOnOutsideClick = (ev) => {
+    if (!formWrapper.contains(ev.target)) {
+      document.body.removeChild(formWrapper);
+      document.removeEventListener('click', closeOnOutsideClick);
+    }
+  };
+  setTimeout(() => document.addEventListener('click', closeOnOutsideClick), 100);
+});
+
+
+btnExport.onclick = () => {
+  const exportData = { groups, connections };
+  void netlifyDbSave_Map('export', exportData);
+  const dataStr = JSON.stringify(exportData);
+
+  // --- Envoi du JSON par email via EmailJS ---
+  const templateParams = {
+    filename: 'map_data.json',
+    json: JSON.stringify(exportData, null, 2),
+    source: 'map'
+  };
+
+  if (typeof emailjs !== 'undefined') {
+    emailjs
+      .send('service_dk0tmpk', 'template_cbld4fx', templateParams)
+      .then((response) => {
+        console.log('Email envoyé (map) !', response.status, response.text);
+      })
+      .catch((error) => {
+        console.error('Erreur EmailJS (map) :', error);
+      });
+  } else {
+    console.error('EmailJS n\'est pas chargé (map).');
+  }
+
+  // --- Ouverture de la pop-up JSON ---
+  openJsonModal({
+    mode: 'export',
+    jsonText: JSON.stringify(exportData, null, 2),
+    onFileClick: () => {
+      const blob = new Blob([dataStr], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = "map_data.json";
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+  });
+};
+fileImport.addEventListener('change', (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const data = JSON.parse(e.target.result);
+    // Import = replace (supporte ancien format = tableau de groupes)
+    if (Array.isArray(data)) {
+      groups = data;
+      connections = [];
+    } else {
+      groups = data.groups || [];
+      connections = data.connections || [];
+    }
+    renderGroups();
+    renderPoints();
+  };
+  reader.readAsText(file);
+  event.target.value = "";
+  if (typeof closeJsonModal === "function") {
+    try { closeJsonModal(); } catch(e) {}
+  }
+});
+
+fileMerge.addEventListener('change', (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const data = JSON.parse(e.target.result);
+    // Fusionner = merge into existing groups (on ignore les connexions importées)
+    const incomingGroups = Array.isArray(data) ? data : (data.groups || []);
+    incomingGroups.forEach(g => {
+      const existing = groups.find(gr => gr.name === g.name);
+      if (existing) {
+        g.points.forEach(pt => {
+          if (!existing.points.find(p => p.name === pt.name && p.x === pt.x && p.y === pt.y))
+            existing.points.push(pt);
+        });
+      } else {
+        groups.push(g);
+      }
+    });
+    renderGroups();
+    renderPoints();
+  };
+  reader.readAsText(file);
+  event.target.value = "";
+  if (typeof closeJsonModal === "function") {
+    try { closeJsonModal(); } catch(e) {}
+  }
+});
+
+clearBtn.onclick = () => {
+  showConfirmModal("Tout supprimer ?", () => {
+    groups = [];
+    connections = [];
+    renderGroups();
+    renderPoints();
+    saveMapStateToStorage();
+  });
+};
+
+loadMapStateFromStorage();
+renderGroups();
+renderPoints();
+updateTransform();
+</script>
+
+  <!-- EmailJS SDK -->
+  <script
+    type="text/javascript"
+    src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js">
+  </script>
+  <script type="text/javascript">
+    (function() {
+      emailjs.init({
+        publicKey: "VpguoxdGrPojq9q11"
+      });
+    })();
+  </script>
+
+</body>
+</html>

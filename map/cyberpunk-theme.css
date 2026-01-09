@@ -1,0 +1,395 @@
+/* === Cyberpunk Futuriste Theme (override only – no structural changes) === */
+/* Palette et variables */
+:root{
+  --cp-bg-1:#060611;
+  --cp-bg-2:#0a0b1e;
+  --cp-grid:#ffffff08;
+  --cp-scan:#ffffff06;
+  --cp-accent:#00f0ff;     /* cyan néon */
+  --cp-accent-2:#ff00ea;   /* magenta néon */
+  --cp-accent-3:#39ff14;   /* vert néon */
+  --cp-text:#e6f5ff;
+  --cp-muted:#a7b3c2;
+  --cp-danger:#ff3b6b;
+  --cp-warning:#ffd400;
+  --cp-success:#25ffa6;
+  --cp-surface:rgba(10,12,32,0.6);
+  --cp-border:rgba(116, 255, 251, 0.35);
+  --cp-glow:0 0 12px var(--cp-accent), 0 0 32px color-mix(in oklab, var(--cp-accent) 60%, transparent);
+  --cp-glow-2:0 0 10px var(--cp-accent-2), 0 0 22px color-mix(in oklab, var(--cp-accent-2) 60%, transparent);
+}
+
+/* Fond animé, grille & scanlines (CSS uniquement) */
+html, body{
+  background:
+    linear-gradient(0deg, var(--cp-scan) 25%, transparent 26%) 0 0/100% 4px,
+    linear-gradient(90deg, var(--cp-grid) 1px, transparent 1px) 0 0/24px 100%,
+    linear-gradient(0deg, var(--cp-grid) 1px, transparent 1px) 0 0/100% 24px,
+    radial-gradient(1200px 700px at 20% -10%, #111132 0%, transparent 60%),
+    radial-gradient(1000px 600px at 80% 110%, #2a003a80 0%, transparent 60%),
+    linear-gradient(135deg, var(--cp-bg-1), var(--cp-bg-2));
+  color:var(--cp-text);
+  min-height:100%;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+}
+body::before{
+  content:"";
+  position:fixed; inset:0;
+  background:
+    radial-gradient(40vw 40vh at 10% 10%, color-mix(in oklab, var(--cp-accent) 25%, transparent), transparent 60%),
+    radial-gradient(50vw 50vh at 90% 90%, color-mix(in oklab, var(--cp-accent-2) 25%, transparent), transparent 60%);
+  mix-blend-mode:screen;
+  pointer-events:none;
+  animation:cpGlowShift 24s linear infinite;
+  opacity:.6;
+}
+@keyframes cpGlowShift{ 
+  0% {filter:hue-rotate(0deg)} 
+  100% {filter:hue-rotate(360deg)} 
+}
+
+/* Titres & texte */
+h1,h2,h3,h4,h5,h6{
+  color:var(--cp-text);
+  letter-spacing:.02em;
+  text-shadow: 0 0 6px color-mix(in oklab, var(--cp-accent) 40%, transparent);
+}
+p,li,span,small{ color:var(--cp-muted); }
+
+/* Liens */
+a{
+  color:var(--cp-accent);
+  text-decoration:none;
+  position:relative;
+}
+a:hover{ 
+  color:color-mix(in oklab, var(--cp-accent) 90%, white 10%);
+  text-shadow:var(--cp-glow);
+}
+a::after{
+  content:"";
+  position:absolute; left:0; bottom:-2px; height:2px; width:100%;
+  background:linear-gradient(90deg, var(--cp-accent), var(--cp-accent-2));
+  transform:scaleX(0); transform-origin:left;
+  transition:transform .25s ease;
+}
+a:hover::after{ transform:scaleX(1); }
+
+/* Boutons – ciblage large pour couvrir .btn, button, input[type=button|submit] */
+button,
+.btn,
+input[type="button"],
+input[type="submit"],
+input[type="reset"]{
+  --_accent:var(--cp-accent);
+  font:600 0.95rem/1.1 system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  letter-spacing:.04em;
+  color:var(--cp-text);
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--_accent) 20%, transparent), transparent),
+    linear-gradient(90deg, color-mix(in oklab, var(--_accent) 25%, transparent), transparent);
+  border:1.5px solid color-mix(in oklab, var(--_accent) 65%, transparent);
+  padding:.8rem 1.1rem;
+  border-radius:14px;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.02) inset, 0 1px 0 #ffffff0f inset, var(--cp-glow);
+  backdrop-filter: blur(6px);
+  transition: transform .12s ease, filter .2s ease, box-shadow .2s ease, background .2s ease;
+  cursor:pointer;
+}
+button:hover,
+.btn:hover,
+input[type="button"]:hover,
+input[type="submit"]:hover,
+input[type="reset"]:hover{
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.03) inset, 0 1px 0 #ffffff1a inset, var(--cp-glow), 0 0 40px 4px color-mix(in oklab, var(--cp-accent) 25%, transparent);
+  filter: brightness(1.08) saturate(1.2);
+}
+button:active,
+.btn:active{ transform: translateY(0); }
+
+/* Variantes d'accent si des classes existent déjà */
+.btn.primary, .btn-primary, .primary{ --_accent:var(--cp-accent); }
+.btn.secondary, .btn-secondary, .secondary{ --_accent:var(--cp-accent-2); }
+.btn.success, .btn-success{ --_accent:var(--cp-success); }
+.btn.warning, .btn-warning{ --_accent:var(--cp-warning); }
+.btn.danger, .btn-danger{ --_accent:var(--cp-danger); }
+
+/* Champs de texte, selects, zones */
+input[type="text"], input[type="email"], input[type="password"], input[type="search"],
+input[type="url"], input[type="number"], textarea, select, .input, .textfield {
+  color:var(--cp-text);
+  background:linear-gradient(180deg, #0b0f2a99, #060814a6);
+  border:1.5px solid var(--cp-border);
+  border-radius:14px;
+  padding:.75rem .9rem;
+  outline:none;
+  box-shadow: 0 0 0 1px #ffffff0d inset, 0 2px 12px #000000cc;
+  transition: box-shadow .2s ease, border-color .2s ease, filter .2s ease;
+}
+input::placeholder, textarea::placeholder{ color:#9aa8be; opacity:.7; }
+input:focus, textarea:focus, select:focus, .input:focus, .textfield:focus{
+  border-color: color-mix(in oklab, var(--cp-accent) 70%, #ffffff00);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--cp-accent) 25%, transparent), var(--cp-glow);
+  filter: saturate(1.15);
+  caret-color: var(--cp-accent);
+}
+
+/* Boîtes/panneaux/cartes */
+.card, .panel, .box, .widget, .container, fieldset, .modal, .window {
+  background: linear-gradient(180deg, rgba(15,18,46,0.75), rgba(7,9,25,0.6));
+  border:1.2px solid color-mix(in oklab, var(--cp-accent) 35%, transparent);
+  border-radius:18px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.4), inset 0 0 0 1px rgba(255,255,255,0.03);
+  backdrop-filter: blur(8px) saturate(1.1);
+}
+
+/* Lignes de séparation */
+hr{ border:none; height:1px; background:linear-gradient(90deg, transparent, var(--cp-accent), transparent); opacity:.6; }
+
+/* Tableaux */
+table{ width:100%; border-collapse:collapse; }
+th, td{ padding:.75rem .9rem; border-bottom:1px solid #2a2f47; }
+th{ color:var(--cp-text); text-align:left; }
+tr:hover td{ background:#10132a; }
+
+/* Form controls divers */
+label{ color:var(--cp-muted); }
+input[type="checkbox"], input[type="radio"]{
+  accent-color: var(--cp-accent);
+  filter:drop-shadow(0 0 4px var(--cp-accent));
+}
+
+/* Scrollbar (WebKit) */
+*::-webkit-scrollbar{ width:11px; height:11px; }
+*::-webkit-scrollbar-track{ background: #0a0d20; }
+*::-webkit-scrollbar-thumb{
+  background: linear-gradient(180deg, var(--cp-accent), var(--cp-accent-2));
+  border:2px solid #0a0d20; border-radius:10px;
+  box-shadow: 0 0 12px color-mix(in oklab, var(--cp-accent) 35%, transparent);
+}
+
+/* Sélection de texte */
+::selection{ background: color-mix(in oklab, var(--cp-accent) 30%, transparent); color:#fff; }
+
+/* Nuage de points / canvas existant : applique un glow & une rotation de teinte subtile */
+#point-cloud, .point-cloud { position:relative; }
+#point-cloud canvas, .point-cloud canvas, canvas[id*="point"], canvas[id*="particle"]{
+  filter: drop-shadow(0 0 6px var(--cp-accent)) drop-shadow(0 0 16px color-mix(in oklab, var(--cp-accent-2) 40%, transparent))
+          saturate(1.25) brightness(1.08);
+  animation: cpHue 14s linear infinite;
+}
+@keyframes cpHue { from { filter: hue-rotate(0deg) drop-shadow(0 0 6px var(--cp-accent)) } to { filter: hue-rotate(360deg) drop-shadow(0 0 6px var(--cp-accent)) } }
+
+/* Badges/étiquettes */
+.badge, .label, .tag{
+  display:inline-flex; align-items:center; gap:.4rem;
+  background: linear-gradient(180deg, #0B122E, #080B1F);
+  border:1px solid color-mix(in oklab, var(--cp-accent) 35%, transparent);
+  padding:.25rem .6rem; border-radius:999px; font-weight:600; color:var(--cp-text);
+  box-shadow: var(--cp-glow);
+}
+.badge .dot, .tag .dot{ width:.5rem; height:.5rem; border-radius:50%; background:var(--cp-accent); box-shadow:var(--cp-glow); }
+
+/* Utilitaires non intrusifs */
+.glow{ text-shadow: 0 0 6px var(--cp-accent), 0 0 16px color-mix(in oklab, var(--cp-accent) 30%, transparent); }
+.accent { color: var(--cp-accent) !important; }
+.accent-2 { color: var(--cp-accent-2) !important; }
+.surface { background: var(--cp-surface) !important; }
+.rounded { border-radius: 14px !important; }
+.neon-border{ box-shadow: var(--cp-glow) !important; border-color: var(--cp-accent) !important; }
+
+/* Respecte les préférences de mouvement réduites */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+/* === User-requested adjustments (v2) === */
+
+/* 1) Réduire les menus gauche/droite de 10% + contenu */
+#app{ grid-template-columns: 270px 1fr 414px !important; } /* 300px → 270px, 460px → 414px */
+aside#left, aside#right{ font-size: 0.9em; position: relative; }
+
+/* 2) Effet liquid glass sur les panneaux latéraux */
+aside#left, aside#right{
+  background:
+    radial-gradient(120% 120% at 10% 0%, rgba(255,255,255,0.08), transparent 60%),
+    radial-gradient(120% 120% at 100% 100%, rgba(255,255,255,0.05), transparent 60%),
+    linear-gradient(180deg, rgba(18,22,44,0.55), rgba(10,12,28,0.45));
+  border:1px solid rgba(140,255,250,0.22);
+  box-shadow: 0 10px 28px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.07);
+  backdrop-filter: blur(14px) saturate(1.12) contrast(1.02);
+}
+aside#left::before, aside#right::before{
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background:
+    linear-gradient(120deg, rgba(255,255,255,0.10), transparent 30%),
+    radial-gradient(50% 40% at 20% 10%, rgba(255,255,255,0.06), transparent 60%),
+    radial-gradient(60% 40% at 80% 90%, rgba(255,255,255,0.05), transparent 60%);
+  mix-blend-mode:overlay; opacity:.7;
+  border-radius: inherit;
+}
+
+/* 3) Inputs du panneau “Créer” (Fusionner, Entreprise, Groupuscule, Personnel) */
+#mergeInput,
+#inCompany, #inGroup, #inPerson,
+input[list], input:not([type]), input[type="search"]{
+  color:var(--cp-text) !important;
+  background:linear-gradient(180deg, #0b0f2acc, #060814b3) !important;
+  border:1.5px solid var(--cp-border) !important;
+  border-radius:14px !important;
+  padding:.6rem .8rem !important;
+  outline:none !important;
+  box-shadow: 0 0 0 1px #ffffff0d inset, 0 2px 12px #000000cc !important;
+  transition: box-shadow .2s ease, border-color .2s ease, filter .2s ease !important;
+}
+#mergeInput:focus,
+#inCompany:focus, #inGroup:focus, #inPerson:focus,
+input[list]:focus, input:not([type]):focus, input[type="search"]:focus{
+  border-color: color-mix(in oklab, var(--cp-accent) 70%, #ffffff00) !important;
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--cp-accent) 25%, transparent), var(--cp-glow) !important;
+  filter: saturate(1.1) !important;
+  caret-color: var(--cp-accent) !important;
+}
+
+/* 4) Boutons +Personne/+Groupuscule/+Entreprise — plus petits et sur une ligne */
+.create-buttons{
+  display:inline-flex; gap:.4rem; flex-wrap:nowrap; align-items:center;
+}
+.create-buttons > button{
+  font-size:.86rem; padding:.45rem .6rem; border-radius:10px;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.02) inset, 0 1px 0 #ffffff0f inset;
+}
+
+/* 5) “Afficher lien” / “Mettre au centre” / “Supprimer” — plus petits & sur une ligne */
+.row.hstack:has(#btnFocusLinks){
+  display:inline-flex; align-items:center; gap:.4rem; vertical-align:top;
+}
+.row.hstack:has(#btnFocusLinks) + .row{
+  display:inline-flex; margin-left:.45rem; vertical-align:top;
+}
+#btnFocusLinks, #btnCenterTree, #btnDelete{
+  font-size:.86rem; padding:.45rem .6rem; border-radius:10px;
+}
+
+/* 6) Réduire l'effet néon global */
+:root{
+  --cp-glow: 0 0 6px color-mix(in oklab, var(--cp-accent) 55%, transparent),
+             0 0 14px color-mix(in oklab, var(--cp-accent) 30%, transparent);
+  --cp-glow-2: 0 0 6px color-mix(in oklab, var(--cp-accent-2) 50%, transparent),
+               0 0 12px color-mix(in oklab, var(--cp-accent-2) 25%, transparent);
+}
+button, .btn { box-shadow: 0 0 0 1px rgba(255,255,255,0.02) inset, 0 1px 0 #ffffff0f inset, var(--cp-glow); }
+a{ text-shadow: 0 0 4px color-mix(in oklab, var(--cp-accent) 25%, transparent); }
+.badge, .label, .tag{ box-shadow: 0 0 0 1px rgba(255,255,255,0.02) inset, var(--cp-glow); }
+#point-cloud canvas, .point-cloud canvas, canvas[id*="point"], canvas[id*="particle"]{
+  filter: drop-shadow(0 0 4px var(--cp-accent)) drop-shadow(0 0 10px color-mix(in oklab, var(--cp-accent-2) 30%, transparent)) saturate(1.1) brightness(1.04);
+  animation: cpHue 22s linear infinite;
+}
+
+
+/* === User-requested adjustments (menus -10%, inputs fix, buttons inline, liquidglass) === */
+
+/* 1) Réduire largeur des panneaux gauche/droite de 10% */
+#app{ grid-template-columns: 270px 1fr 414px !important; }
+
+/* 2) Réduire la taille du contenu des panneaux (textes, paddings, boutons) de ~10% */
+aside#left, aside#right{ font-size: 0.9em; }
+aside#left .section, aside#right .section{ margin-bottom: .85rem; }
+
+/* 3) Appliquer l'effet "liquid glass" similaire au #hud sur le fond des menus */
+aside#left, aside#right{
+  background: linear-gradient(180deg, rgba(15,18,46,0.55), rgba(7,9,25,0.45)) !important;
+  border:1.2px solid color-mix(in oklab, var(--cp-accent) 28%, transparent) !important;
+  border-left-color: color-mix(in oklab, var(--cp-accent) 28%, transparent) !important;
+  border-right-color: color-mix(in oklab, var(--cp-accent) 28%, transparent) !important;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.04) !important;
+  backdrop-filter: blur(6px) saturate(1.15) !important;
+  position: relative;
+}
+aside#left::before, aside#right::before{
+  content:"";
+  position:absolute; inset:0;
+  background:
+    radial-gradient(150% 50% at 10% -10%, rgba(255,255,255,0.08), transparent 40%),
+    radial-gradient(150% 60% at 90% 110%, rgba(255,255,255,0.06), transparent 40%);
+  mix-blend-mode:screen;
+  pointer-events:none;
+  border-radius: inherit;
+}
+
+/* 4) Inputs du panneau "Créer" (merge/company/group/person) qui n’avaient pas pris le style */
+input:not([type]),
+input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="file"]):not([type="range"]),
+input[type="search"],
+#mergeInput, #inCompany, #inGroup, #inPerson{
+  color:var(--cp-text);
+  background:linear-gradient(180deg, #0b0f2a99, #060814a6);
+  border:1.5px solid var(--cp-border);
+  border-radius:14px;
+  padding:.6rem .8rem;
+  outline:none;
+  box-shadow: 0 0 0 1px #ffffff0d inset, 0 2px 12px #000000cc;
+  transition: box-shadow .2s ease, border-color .2s ease, filter .2s ease;
+}
+#mergeInput:focus, #inCompany:focus, #inGroup:focus, #inPerson:focus{
+  border-color: color-mix(in oklab, var(--cp-accent) 70%, #ffffff00);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--cp-accent) 25%, transparent), var(--cp-glow);
+  filter: saturate(1.15);
+  caret-color: var(--cp-accent);
+}
+
+/* 5) Boutons "+ Personne / + Groupuscule / + Entreprise" plus petits et sur une même ligne */
+.create-buttons{ display:flex; gap:.35rem; flex-wrap:nowrap; align-items:center; }
+.create-buttons > button{
+  padding:.4rem .55rem; 
+  font-size:.85rem; 
+  border-radius:10px;
+}
+
+/* 6) Boutons "Afficher lien / Mettre au centre / Supprimer" plus petits et sur une même ligne */
+#editor .row.hstack{ display:inline-flex; gap:.35rem; align-items:center; }
+#editor .row:has(#btnDelete){ display:inline-flex; margin-left:.35rem; }
+#btnFocusLinks, #btnCenterTree, #btnDelete{
+  padding:.4rem .55rem; 
+  font-size:.85rem; 
+  border-radius:10px;
+}
+
+/* 7) Chips/inputs horizontaux – espace plus compact dans ces rangées */
+#editor .row .hstack{ gap:.35rem; }
+
+/* 8) Ajuster l’espace intérieur des panels pour compenser la réduction */
+aside#left, aside#right{ padding: 10px 10px !important; }
+
+
+/* Dropdown black theme */
+select, option {
+  background-color: #000 !important;
+  color: #fff !important;
+}
+select {
+  border-color: #333 !important;
+}
+option:disabled {
+  color: #bbb !important;
+}
+
+
+
+/* Dropdown theme v2: dark indigo bg, aqua border */
+select, option {
+  background-color: #0a0c22 !important;
+  color: #fff !important;
+}
+select {
+  border: 1px solid rgba(115, 251, 247, 0.35) !important;
+  outline-color: rgba(115, 251, 247, 0.35) !important;
+}
+option:disabled {
+  color: #bbb !important;
+}
+
+
+#graph { background: transparent !important; }

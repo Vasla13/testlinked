@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Cartographie des relations — Graphe interactif</title>
+  <link rel="stylesheet" href="style.css"/>
+<link rel="stylesheet" href="cyberpunk-theme.css">
+
+<style>
+/* Dropdown black theme */
+select, option {
+  background-color: #000 !important;
+  color: #fff !important;
+}
+select {
+  border-color: #333 !important;
+}
+/* For better contrast on disabled options */
+option:disabled {
+  color: #bbb !important;
+}
+</style>
+
+
+<style>
+/* Dropdown theme v2: dark indigo bg, aqua border */
+select, option {
+  background-color: #0a0c22 !important;
+  color: #fff !important;
+}
+select {
+  border: 1px solid rgba(115, 251, 247, 0.35) !important;
+  outline-color: rgba(115, 251, 247, 0.35) !important;
+}
+option:disabled {
+  color: #bbb !important;
+}
+</style>
+
+</head>
+<body>
+  <div id="app">
+    <aside id="left">
+      <div class="section">
+        <div class="sidebar-logo" style="padding:12px 8px 4px;">
+  <img src="logo-bni-linked.png" alt="BNI Linked" style="width:100%; height:auto; display:block; max-height:90px; object-fit:contain;" />
+        <button type="button" onclick="window.location.href='../map/index.html';" style="margin:8px auto 12px auto; display:block; padding:6px 10px; font-size:0.8rem;">Passer de mode map</button>
+</div><h2>Recherche</h2>
+        <input id="searchInput" type="search" placeholder="Rechercher personne / groupe / entreprise…" />
+        <div id="searchResult"></div>
+      </div>
+      <div class="section">
+        <div class="toolbar">
+          <button id="btnExport">Exporter JSON</button>
+          <label class="file">
+            Importer JSON
+            <input id="fileImport" type="file" accept=".json"/>
+          </label>
+
+<label class="file">
+  Fusionner JSON
+  <input id="fileMerge" type="file" accept=".json"/>
+</label>
+<button id="btnClearAll">Tout effacer</button>
+
+        </div>
+      </div>
+      <div class="section list">
+        <h2>Annuaire</h2>
+        <div class="list-section">
+          <h3>Entreprises</h3>
+          <ul id="listCompanies"></ul>
+        </div>
+        <div class="list-section">
+          <h3>Groupuscules</h3>
+          <ul id="listGroups"></ul>
+        </div>
+        <div class="list-section">
+          <h3>Personnes</h3>
+          <ul id="listPeople"></ul>
+        </div>
+      </div>
+    </aside>
+
+    <main id="center">
+      <canvas id="graph" style="background: transparent !important;"></canvas>
+            <div id="linkLegend"></div>
+      <div id="hud">
+        <button id="btnRelayout">Réorganiser la carte</button>
+        <button id="btnToggleSim">Lancer la simulation</button>
+        <span class="hint"></span>
+        <label style="margin-left:auto;display:flex;align-items:center;gap:.4rem;">
+          <input id="chkLabels" type="checkbox" checked/>
+          Afficher les noms
+        </label>
+
+        <label style="margin-left:1rem;display:flex;align-items:center;gap:.4rem;">
+          <input id="chkPerf" type="checkbox"/>
+          Performance
+        </label>
+        <label style="margin-left:1rem;display:flex;align-items:center;gap:.4rem;">
+          <input id="chkLinkTypes" type="checkbox"/>
+          Type de lien
+        </label>
+      </div>
+    </main>
+
+    <aside id="right">
+      <div class="section">
+        <h2>Créer</h2>
+        <div class="create-buttons">
+          <button id="createPerson">+ Personne</button>
+          <button id="createGroup">+ Groupuscule</button>
+          <button id="createCompany">+ Entreprise</button>
+        </div>
+      </div>
+
+      <div class="section" id="relationsTop" style="display:none;">
+        <h2>Liens entre personnes</h2>
+        <div id="relationsChips" class="chips"></div>
+      </div>
+
+      <div class="section" id="editor">
+        <h2 id="editorTitle">Aucune sélection</h2>
+        <div id="editorBody" class="editor-body muted">
+          Sélectionnez un point ou créez une fiche pour éditer ici.
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <datalist id="datalist-people"></datalist>
+  <datalist id="datalist-groups"></datalist>
+  <datalist id="datalist-companies"></datalist>
+
+  <!-- EmailJS SDK -->
+  <script
+    type="text/javascript"
+    src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js">
+  </script>
+  <script type="text/javascript">
+    (function() {
+      emailjs.init({
+        publicKey: "VpguoxdGrPojq9q11"
+      });
+    })();
+  </script>
+
+  <script src="script.js"></script>
+</body>
+</html>
