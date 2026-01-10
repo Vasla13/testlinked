@@ -17,13 +17,36 @@ export function renderEditorHTML(n, state) {
         colorInputHtml = `<input id="edColor" type="color" value="${safeHex(n.color)}" style="height:38px; width:100%;"/>`;
     }
 
+    // Bouton Pathfinding Dynamique
+    let pathBtnHTML = '';
+    if (state.pathfinding.startId === null) {
+        pathBtnHTML = `<button id="btnPathStart" class="action-btn" style="flex:1; border:1px solid var(--accent-cyan); color:var(--accent-cyan); background:transparent;">🚩 Définir Source</button>`;
+    } else if (state.pathfinding.startId === n.id) {
+        pathBtnHTML = `<button id="btnPathCancel" class="action-btn danger" style="flex:1;">❌ Annuler Source</button>`;
+    } else {
+        pathBtnHTML = `<button id="btnPathCalc" class="action-btn primary" style="flex:1;">⚡ Calculer Corrélation</button>`;
+    }
+
+    let clearPathHTML = '';
+    if (state.pathfinding.active) {
+        clearPathHTML = `<button id="btnClearPath" class="action-btn" style="width:100%; margin-top:5px; background:#444;">🔄 Réinitialiser l'affichage</button>`;
+    }
+
     return `
-        <div class="flex-row-force" style="margin-bottom:15px;">
+        <div class="flex-row-force" style="margin-bottom:10px;">
             <button id="btnFocusNode" class="${state.focusMode ? 'primary' : ''}" style="flex:1; font-size:0.8rem;">
                 ${state.focusMode ? '🔍 Tout' : '🎯 Focus'}
             </button>
             <button id="btnCenterNode" style="flex:1; font-size:0.8rem;">📍 Centrer</button>
             <button id="btnDelete" class="danger" style="flex:0 0 auto; width:40px; font-size:0.8rem;">🗑️</button>
+        </div>
+
+        <div style="background:rgba(0,255,255,0.05); border:1px solid rgba(0,255,255,0.2); padding:8px; border-radius:4px; margin-bottom:15px;">
+            <div style="font-size:0.7rem; color:var(--accent-cyan); text-transform:uppercase; margin-bottom:5px; font-weight:bold;">Algorithme de Liaison</div>
+            <div class="flex-row-force">
+                ${pathBtnHTML}
+            </div>
+            ${clearPathHTML}
         </div>
 
         <details open>

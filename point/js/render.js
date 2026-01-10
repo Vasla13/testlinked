@@ -59,28 +59,32 @@ export function draw() {
 
     ctx.save();
     ctx.clearRect(0, 0, w, h);
-    
-    // Grille
-    ctx.save();
-    ctx.strokeStyle = "rgba(115, 251, 247, 0.08)"; 
-    ctx.lineWidth = 1;
-    const gridSize = 100 * p.scale; 
-    const offsetX = (w/2 + p.x) % gridSize;
-    const offsetY = (h/2 + p.y) % gridSize;
-    ctx.beginPath();
-    for (let x = offsetX; x < w; x += gridSize) { ctx.moveTo(x, 0); ctx.lineTo(x, h); }
-    for (let y = offsetY; y < h; y += gridSize) { ctx.moveTo(0, y); ctx.lineTo(w, y); }
-    ctx.stroke();
-    ctx.restore();
+    drawGrid(w, h, p);
 
     ctx.translate(w / 2 + p.x, h / 2 + p.y);
     ctx.scale(p.scale, p.scale);
 
     const useGlow = (!state.performance && p.scale > 0.4);
+    
     const focusId = state.hoverId || state.selection;
     const hasFocus = (focusId !== null);
     
     function isDimmed(objType, obj) {
+        // PRIO 1 : Pathfinding
+        if (state.pathfinding.active) {
+            if (objType === 'node') {
+                return !state.pathfinding.pathNodes.has(obj.id);
+            }
+            if (objType === 'link') {
+                const s = obj.source.id || obj.source;
+                const t = obj.target.id || obj.target;
+                const key1 = `${s}-${t}`;
+                const key2 = `${t}-${s}`;
+                return !(state.pathfinding.pathLinks.has(key1) || state.pathfinding.pathLinks.has(key2));
+            }
+        }
+
+        // PRIO 2 : Path (Debug)
         if (isPath) {
             if (objType === 'node') return !state.pathPath.has(obj.id);
             if (objType === 'link') {
@@ -89,14 +93,22 @@ export function draw() {
                 return !(state.pathLinks.has(k1) || state.pathLinks.has(k2));
             }
         }
+
+        // PRIO 3 : Focus Mode
+        if (isFocus) {
+            // ... (logique focus deja filtrée dans la boucle mais ok pour opacité)
+        }
+
+        // PRIO 4 : Hover/Selection
         if (!hasFocus) return false;
         
         if (objType === 'node') {
             if (obj.id === focusId) return false;
-            return !state.links.some(l => 
+            const connected = state.links.some(l => 
                 (l.source.id === focusId && l.target.id === obj.id) || 
                 (l.target.id === focusId && l.source.id === obj.id)
             );
+            return !connected;
         }
         if (objType === 'link') {
             return (obj.source.id !== focusId && obj.target.id !== focusId);
@@ -106,7 +118,7 @@ export function draw() {
 
     // 1. DESSIN DES LIENS
     for (const l of state.links) {
-        if (l.kind === KINDS.ENNEMI) continue; // CACHER ENNEMIS
+        if (l.kind === KINDS.ENNEMI) continue; // Cacher ennemis
 
         if (isFocus) {
             if (!state.focusSet.has(l.source.id) || !state.focusSet.has(l.target.id)) continue;
@@ -115,17 +127,24 @@ export function draw() {
         if (!l.source.x || !l.target.x) continue;
         
         const dimmed = isDimmed('link', l);
+        const isPathLink = state.pathfinding.active && !dimmed; // C'est un lien du chemin actif
+
         const globalAlpha = dimmed ? 0.05 : 0.8;
 
         ctx.beginPath();
         ctx.moveTo(l.source.x, l.source.y);
         ctx.lineTo(l.target.x, l.target.y);
 
-        if (showTypes) {
-            const color = computeLinkColor(l);
+        if (showTypes || isPathLink) {
+            // Cyan pour pathfinding, sinon couleur normale
+            const color = isPathLink ? '#00ffff' : computeLinkColor(l);
             ctx.strokeStyle = color;
-            ctx.lineWidth = (dimmed ? 1 : 2) / Math.sqrt(p.scale);
-            if (useGlow && !dimmed) {
+            ctx.lineWidth = (isPathLink ? 4 : (dimmed ? 1 : 2)) / Math.sqrt(p.scale);
+            
+            if (isPathLink) {
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = '#00ffff';
+            } else if (useGlow && !dimmed) {
                 ctx.shadowBlur = 8;
                 ctx.shadowColor = color;
             } else {
@@ -151,7 +170,7 @@ export function draw() {
         ctx.globalAlpha = globalAlpha;
         ctx.stroke();
         
-        if (showTypes && p.scale > 0.6 && !dimmed) {
+        if (showTypes && p.scale > 0.6 && !dimmed && !isPathLink) {
             const mx = (l.source.x + l.target.x) / 2;
             const my = (l.source.y + l.target.y) / 2;
             const color = computeLinkColor(l);
@@ -189,7 +208,10 @@ export function draw() {
 
     const drawSingleNode = (n) => {
         if (isFocus && !state.focusSet.has(n.id)) return;
+        
         const dimmed = isDimmed('node', n);
+        // Si pathfinding actif et que ce noeud est sur le chemin -> pas dimmed
+        
         const rad = nodeRadius(n); 
         ctx.globalAlpha = (isPath && state.pathPath.has(n.id)) ? 1.0 : (dimmed ? 0.1 : 1.0);
 
@@ -199,13 +221,15 @@ export function draw() {
         else ctx.arc(n.x, n.y, rad, 0, Math.PI * 2);
 
         ctx.fillStyle = safeColor(n.color);
+        
         const isPathNode = isPath && state.pathPath.has(n.id);
+        const isPathfindingNode = state.pathfinding.active && state.pathfinding.pathNodes.has(n.id);
 
-        if (state.selection === n.id || state.hoverId === n.id || isPathNode) {
-            ctx.shadowBlur = isPathNode ? 40 : 30; 
-            ctx.shadowColor = isPathNode ? '#ffff00' : safeColor(n.color); 
+        if (state.selection === n.id || state.hoverId === n.id || isPathNode || isPathfindingNode) {
+            ctx.shadowBlur = (isPathNode || isPathfindingNode) ? 30 : 20; 
+            ctx.shadowColor = (isPathNode || isPathfindingNode) ? '#00ffff' : safeColor(n.color); 
             ctx.strokeStyle = "#ffffff";
-            ctx.lineWidth = (isPathNode ? 6 : 4) / Math.sqrt(p.scale);
+            ctx.lineWidth = ((isPathNode || isPathfindingNode) ? 6 : 4) / Math.sqrt(p.scale);
             ctx.stroke();
         } else {
             ctx.shadowBlur = 0;
@@ -234,21 +258,30 @@ export function draw() {
     if (labelMode > 0) { 
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         const allNodes = [...structures, ...people];
+        
         for (const n of allNodes) {
             if (isFocus && !state.focusSet.has(n.id)) continue;
+
             const rad = nodeRadius(n);
             const dimmed = isDimmed('node', n);
             if (dimmed) continue;
+
             const isImportant = (n.type === TYPES.COMPANY || n.type === TYPES.GROUP);
             const isPathNode = isPath && state.pathPath.has(n.id);
+            const isPathfindingNode = state.pathfinding.active && state.pathfinding.pathNodes.has(n.id);
             const isHover = (state.hoverId === n.id || state.selection === n.id);
+            
             let showName = false;
-            if (labelMode === 2) showName = true;
-            else if (labelMode === 1) showName = isHover || isPathNode || (p.scale > 0.5 || isImportant);
+            if (labelMode === 2) {
+                showName = true;
+            } else if (labelMode === 1) {
+                showName = isHover || isPathNode || isPathfindingNode || (p.scale > 0.5 || isImportant);
+            }
 
             if (showName) {
-                const fontSize = (isPathNode ? 16 : 13) / Math.sqrt(p.scale);
+                const fontSize = (isPathNode || isPathfindingNode ? 16 : 13) / Math.sqrt(p.scale);
                 ctx.font = `600 ${fontSize}px "Rajdhani", sans-serif`; 
+                
                 const label = n.name;
                 const metrics = ctx.measureText(label);
                 const textW = metrics.width;
@@ -262,13 +295,30 @@ export function draw() {
                 if(ctx.roundRect) ctx.roundRect(boxX, boxY, textW + padding*2, textH + padding, 6);
                 else ctx.rect(boxX, boxY, textW + padding*2, textH + padding);
                 ctx.fill();
-                ctx.strokeStyle = isPathNode ? '#ffff00' : safeColor(n.color);
-                ctx.lineWidth = (isPathNode ? 3 : 1) / Math.sqrt(p.scale);
+                
+                ctx.strokeStyle = (isPathNode || isPathfindingNode) ? '#00ffff' : safeColor(n.color);
+                ctx.lineWidth = ((isPathNode || isPathfindingNode) ? 3 : 1) / Math.sqrt(p.scale);
                 ctx.stroke();
+
                 ctx.globalAlpha = 1.0; ctx.fillStyle = '#ffffff';
                 ctx.fillText(label, n.x, boxY + textH/2 + padding/2);
             }
         }
     }
+
+    ctx.restore();
+}
+
+function drawGrid(w, h, p) {
+    ctx.save();
+    ctx.strokeStyle = "rgba(115, 251, 247, 0.08)"; 
+    ctx.lineWidth = 1;
+    const gridSize = 100 * p.scale; 
+    const offsetX = (w/2 + p.x) % gridSize;
+    const offsetY = (h/2 + p.y) % gridSize;
+    ctx.beginPath();
+    for (let x = offsetX; x < w; x += gridSize) { ctx.moveTo(x, 0); ctx.lineTo(x, h); }
+    for (let y = offsetY; y < h; y += gridSize) { ctx.moveTo(0, y); ctx.lineTo(w, y); }
+    ctx.stroke();
     ctx.restore();
 }

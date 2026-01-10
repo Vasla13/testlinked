@@ -1,5 +1,4 @@
 import { restartSim } from './physics.js';
-import { updatePersonColors } from './logic.js'; // Importation circulaire gérée par les modules
 
 export const state = {
     nodes: [],
@@ -9,9 +8,16 @@ export const state = {
     hoverId: null,
     focusMode: false,
     focusSet: new Set(),
-    pathMode: false,
-    pathPath: new Set(),
-    pathLinks: new Set(),
+    
+    // --- PATHFINDING (NOUVEAU) ---
+    pathfinding: {
+        startId: null,      // ID du point de départ A
+        active: false,      // Si un chemin est affiché
+        pathNodes: new Set(), // Liste des noeuds du chemin
+        pathLinks: new Set()  // Liste des liens du chemin
+    },
+    // -----------------------------
+
     history: [], 
     tempLink: null,
     labelMode: 1, 
@@ -57,7 +63,9 @@ export function loadState() {
         if (typeof data.labelMode === 'number') state.labelMode = data.labelMode;
         else if (typeof data.showLabels === 'boolean') state.labelMode = data.showLabels ? 1 : 0;
         
-        // updatePersonColors sera appelé après l'initialisation de logic.js
+        // Reset pathfinding au chargement
+        state.pathfinding = { startId: null, active: false, pathNodes: new Set(), pathLinks: new Set() };
+
         return true;
     } catch (e) { return false; }
 }
@@ -83,9 +91,6 @@ export function undo() {
     state.nodes = prev.nodes;
     state.links = prev.links;
     state.nextId = prev.nextId;
-    
-    // On doit appeler updateColors depuis l'extérieur ou via un callback
-    // Pour simplifier, on redémarre juste la simu, la couleur se mettra à jour à la prochaine action
     restartSim();
 }
 

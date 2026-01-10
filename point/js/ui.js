@@ -1,10 +1,10 @@
 import { state, saveState, nodeById, isPerson, isCompany, isGroup, undo, pushHistory } from './state.js';
-import { ensureNode, addLink, mergeNodes, updatePersonColors } from './logic.js';
+import { ensureNode, addLink, mergeNodes, updatePersonColors, calculatePath, clearPath } from './logic.js';
 import { renderEditorHTML } from './templates.js';
 import { restartSim, getSimulation } from './physics.js';
 import { draw, updateDegreeCache, resizeCanvas } from './render.js';
 import { escapeHtml, clamp, screenToWorld, kindToLabel, linkKindEmoji, computeLinkColor } from './utils.js';
-import { TYPES } from './constants.js';
+import { TYPES, KINDS } from './constants.js';
 
 const ui = {
     listCompanies: document.getElementById('listCompanies'),
@@ -15,7 +15,14 @@ const ui = {
     linkLegend: document.getElementById('linkLegend'),
 };
 
-// --- MODAL SYSTEM ---
+function safeHex(color) {
+    if (!color || typeof color !== 'string') return '#000000';
+    if (/^#[0-9A-F]{3}$/i.test(color)) return color;
+    if (/^#[0-9A-F]{6}$/i.test(color)) return color;
+    if (color.length > 7 && color.startsWith('#')) return color.substring(0, 7);
+    return '#000000';
+}
+
 let modalOverlay = null;
 function createModal() {
     modalOverlay = document.createElement('div');
@@ -44,7 +51,6 @@ function showCustomConfirm(msg, onYes) {
 export function initUI() {
     createModal();
 
-    // CSS INJECTION (Style "Force" pour les lignes)
     const style = document.createElement('style');
     style.innerHTML = `
         .editor { width: 380px !important; }
@@ -63,7 +69,6 @@ export function initUI() {
         .mini-btn { flex: 0 0 30px !important; width: 30px !important; padding: 0 !important; text-align: center !important; justify-content: center !important; }
 
         .link-category { margin-top: 15px; margin-bottom: 8px; font-size: 0.7rem; color: #aaa; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #444; padding-bottom: 2px; }
-        
         .chip { display: flex; align-items: center; justify-content: space-between; background: rgba(20, 20, 30, 0.6); border-left: 4px solid #888; border-radius: 0 4px 4px 0; padding: 8px 10px; margin-bottom: 6px; transition: all 0.2s; }
         .chip:hover { background: rgba(255,255,255,0.08); transform: translateX(2px); }
         .chip-content { display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
@@ -79,7 +84,6 @@ export function initUI() {
     const canvas = document.getElementById('graph');
     window.addEventListener('resize', resizeCanvas);
     
-    // Label Button
     const btnLabel = document.getElementById('chkLabels');
     if (btnLabel) {
         btnLabel.type = 'button'; btnLabel.style.width = "100px"; btnLabel.style.textAlign = "center";
@@ -129,7 +133,7 @@ function setupCanvasEvents(canvas) {
         const m = screenToWorld(e.offsetX, e.offsetY, canvas, state.view);
         const delta = clamp((e.deltaY < 0 ? 1.1 : 0.9), 0.2, 5);
         state.view.scale = clamp(state.view.scale * delta, 0.1, 4.0);
-        state.view.x += (m.x * state.view.scale + state.view.x + canvas.width/2 - e.offsetX) * (1 - delta); // Approx
+        state.view.x += (m.x * state.view.scale + state.view.x + canvas.width/2 - e.offsetX) * (1 - delta);
         draw();
     }, { passive: false });
 
@@ -254,10 +258,10 @@ export function renderEditor() {
     ui.editorTitle.textContent = n.name;
     ui.editorBody.classList.remove('muted');
 
-    // Génération HTML depuis Templates
+    // INSERTION HTML VIA TEMPLATES
     ui.editorBody.innerHTML = renderEditorHTML(n, state);
 
-    // --- LOGIQUE D'AJOUT ---
+    // --- LOGIQUE AJOUT ---
     const handleAdd = (inputId, selectId, targetType) => {
         const nameInput = document.getElementById(inputId);
         const kindSelect = document.getElementById(selectId);
@@ -267,6 +271,7 @@ export function renderEditor() {
         if (!name) return;
 
         let target = state.nodes.find(x => x.name.toLowerCase() === name.toLowerCase());
+        
         if (!target) {
             showCustomConfirm(`"${name}" n'existe pas. Créer nouveau ${targetType} ?`, () => {
                 target = ensureNode(targetType, name);
@@ -299,7 +304,47 @@ export function renderEditor() {
         }
     };
 
-    // --- LISTENERS ---
+    // --- PATHFINDING BUTTONS ---
+    const btnPathStart = document.getElementById('btnPathStart');
+    if (btnPathStart) {
+        btnPathStart.onclick = () => {
+            state.pathfinding.startId = n.id;
+            state.pathfinding.active = false;
+            renderEditor();
+        };
+    }
+    const btnPathCancel = document.getElementById('btnPathCancel');
+    if (btnPathCancel) {
+        btnPathCancel.onclick = () => {
+            state.pathfinding.startId = null;
+            renderEditor();
+        };
+    }
+    const btnPathCalc = document.getElementById('btnPathCalc');
+    if (btnPathCalc) {
+        btnPathCalc.onclick = () => {
+            const result = calculatePath(state.pathfinding.startId, n.id);
+            if (result) {
+                state.pathfinding.pathNodes = result.pathNodes;
+                state.pathfinding.pathLinks = result.pathLinks;
+                state.pathfinding.active = true;
+                draw();
+                renderEditor();
+            } else {
+                showCustomAlert("Aucune connexion trouvée.");
+            }
+        };
+    }
+    const btnClearPath = document.getElementById('btnClearPath');
+    if (btnClearPath) {
+        btnClearPath.onclick = () => {
+            clearPath();
+            draw();
+            renderEditor();
+        };
+    }
+
+    // --- STANDARD LISTENERS ---
     document.getElementById('btnFocusNode').onclick = () => {
         if (state.focusMode) {
             state.focusMode = false; state.focusSet.clear();
@@ -348,7 +393,7 @@ export function renderEditor() {
         });
     };
 
-    // --- LIENS ACTIFS ---
+    // --- LIENS ACTIFS (CHIPS) ---
     const chipsContainer = document.getElementById('chipsLinks');
     const myLinks = state.links.filter(l => {
         const s = (typeof l.source === 'object') ? l.source.id : l.source;
@@ -379,13 +424,9 @@ export function renderEditor() {
                 html += `
                 <div class="chip" style="border-left-color: ${linkColor};">
                     <div class="chip-content">
-                        <span class="chip-name" onclick="window.selectNode(${item.other.id})">
-                            ${escapeHtml(item.other.name)}
-                        </span>
+                        <span class="chip-name" onclick="window.selectNode(${item.other.id})">${escapeHtml(item.other.name)}</span>
                         <div class="chip-meta">
-                            <span class="chip-badge" style="color: ${linkColor};">
-                                ${emoji} ${typeLabel}
-                            </span>
+                            <span class="chip-badge" style="color: ${linkColor};">${emoji} ${typeLabel}</span>
                         </div>
                     </div>
                     <div class="x" title="Supprimer le lien" data-s="${item.link.source.id||item.link.source}" data-t="${item.link.target.id||item.link.target}">×</div>
