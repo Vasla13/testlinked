@@ -46,11 +46,9 @@ function drawPolygon(ctx, x, y, radius, sides, rotate = 0) {
     }
 }
 
-// --- FONCTION DE SECURITE ---
-// Vérifie si une couleur est valide, sinon renvoie du gris pour éviter le crash
+// Fonction de sécurité couleur
 function safeColor(c) {
     if (typeof c !== 'string') return '#999999';
-    // Valide: #ABC, #ABCDEF, #ABCDAAAA
     const isValid = /^#([0-9A-F]{3}){1,2}$/i.test(c) || /^#([0-9A-F]{8})$/i.test(c);
     return isValid ? c : '#999999';
 }
@@ -118,13 +116,10 @@ export function draw() {
         ctx.moveTo(l.source.x, l.source.y);
         ctx.lineTo(l.target.x, l.target.y);
 
-        // --- GESTION COULEUR LIEN ---
         if (showTypes) {
-            // MODE TYPE ACTIVÉ
             const color = computeLinkColor(l);
             ctx.strokeStyle = color;
             ctx.lineWidth = (dimmed ? 1 : 2) / Math.sqrt(p.scale);
-            
             if (useGlow && !dimmed) {
                 ctx.shadowBlur = 8;
                 ctx.shadowColor = color;
@@ -132,18 +127,15 @@ export function draw() {
                 ctx.shadowBlur = 0;
             }
         } else {
-            // MODE TYPE DÉSACTIVÉ : Dégradé Source -> Target
             if (state.performance) {
                 ctx.strokeStyle = "rgba(255,255,255,0.2)";
             } else {
-                // PROTECTION CONTRE LE CRASH COULEUR
                 try {
                     const grad = ctx.createLinearGradient(l.source.x, l.source.y, l.target.x, l.target.y);
                     grad.addColorStop(0, safeColor(l.source.color));
                     grad.addColorStop(1, safeColor(l.target.color));
                     ctx.strokeStyle = grad;
                 } catch (e) {
-                    // Si ça plante quand même, fallback ultime
                     ctx.strokeStyle = '#999'; 
                 }
             }
@@ -154,7 +146,6 @@ export function draw() {
         ctx.globalAlpha = globalAlpha;
         ctx.stroke();
         
-        // --- EMOJI LIEN ---
         if (showTypes && p.scale > 0.6 && !dimmed) {
             const mx = (l.source.x + l.target.x) / 2;
             const my = (l.source.y + l.target.y) / 2;
@@ -171,7 +162,7 @@ export function draw() {
         }
     }
 
-    // 2. LIEN TEMPORAIRE (DRAG)
+    // 2. LIEN TEMPORAIRE
     if (state.tempLink) {
         ctx.beginPath();
         ctx.moveTo(state.tempLink.x1, state.tempLink.y1);
@@ -183,10 +174,21 @@ export function draw() {
         ctx.setLineDash([]);
     }
 
-    // 3. NOEUDS
-    ctx.shadowBlur = 0;
+    // 3. DESSIN DES NOEUDS (CORRECTION LAYER)
+    // On dessine d'abord les structures (fond), puis les personnes (devant)
+    
+    // On trie ou on sépare : Structures vs Personnes
+    const structures = [];
+    const people = [];
+    
     for (const n of state.nodes) {
-        if (isFocus && !state.focusSet.has(n.id)) continue;
+        if (n.type === TYPES.PERSON) people.push(n);
+        else structures.push(n);
+    }
+
+    // Fonction helper de dessin
+    const drawSingleNode = (n) => {
+        if (isFocus && !state.focusSet.has(n.id)) return;
         
         const dimmed = isDimmed('node', n);
         const rad = nodeRadius(n); 
@@ -198,7 +200,6 @@ export function draw() {
         else if (isCompany(n)) drawPolygon(ctx, n.x, n.y, rad * 1.1, 6, Math.PI/2); 
         else ctx.arc(n.x, n.y, rad, 0, Math.PI * 2);
 
-        // Protection couleur ici aussi
         ctx.fillStyle = safeColor(n.color);
         
         const isPathNode = isPath && state.pathPath.has(n.id);
@@ -227,12 +228,20 @@ export function draw() {
             ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
             ctx.fillText(NODE_ICONS[n.type] || '', n.x, n.y + (rad*0.05));
         }
-    }
+    };
 
-    // 4. LABELS
+    // PASSE 1 : Structures
+    structures.forEach(drawSingleNode);
+    // PASSE 2 : Gens (Au dessus)
+    people.forEach(drawSingleNode);
+
+    // 4. LABELS (Toujours au dessus de tout)
     if (state.showLabels) {
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        for (const n of state.nodes) {
+        // On peut dessiner les labels dans n'importe quel ordre, ou prioriser les personnes aussi
+        const allNodesSorted = [...structures, ...people];
+        
+        for (const n of allNodesSorted) {
             if (isFocus && !state.focusSet.has(n.id)) continue;
 
             const rad = nodeRadius(n);

@@ -41,34 +41,7 @@ export function initUI() {
         draw();
     }, { passive: false });
 
-    // 2. DRAG & DROP DES NOEUDS
-    d3.select(canvas).call(d3.drag()
-        .container(canvas)
-        .filter(event => !event.shiftKey) 
-        .subject(e => {
-            const p = screenToWorld(e.sourceEvent.offsetX, e.sourceEvent.offsetY, canvas);
-            return getSimulation().find(p.x, p.y, 30);
-        })
-        .on("start", e => {
-            if (!e.active) getSimulation().alphaTarget(0.3).restart();
-            e.subject.fx = e.subject.x; 
-            e.subject.fy = e.subject.y;
-            selectNode(e.subject.id); 
-        })
-        .on("drag", e => {
-            const p = screenToWorld(e.sourceEvent.offsetX, e.sourceEvent.offsetY, canvas);
-            e.subject.fx = p.x;
-            e.subject.fy = p.y;
-        })
-        .on("end", e => {
-            if (!e.active) getSimulation().alphaTarget(0);
-            e.subject.fx = null; 
-            e.subject.fy = null;
-            saveState(); 
-        })
-    );
-
-    // 3. LOGIQUE SOURIS (Création Lien + Pan)
+    // 2. LOGIQUE SOURIS (Création Lien + Pan)
     let isPanning = false;
     let lastPan = { x: 0, y: 0 };
     let dragLinkSource = null;
@@ -77,11 +50,12 @@ export function initUI() {
         const p = screenToWorld(e.offsetX, e.offsetY, canvas);
         const hit = getSimulation().find(p.x, p.y, 30); 
 
+        // SHIFT + CLICK : Création de lien (PRIORITAIRE)
         if (e.shiftKey && hit) {
             dragLinkSource = hit;
             state.tempLink = { x1: hit.x, y1: hit.y, x2: hit.x, y2: hit.y };
             draw();
-            e.stopPropagation(); 
+            e.stopImmediatePropagation();
             return;
         }
 
@@ -164,6 +138,33 @@ export function initUI() {
         draw();
     });
 
+    // 3. DRAG & DROP DES NOEUDS
+    d3.select(canvas).call(d3.drag()
+        .container(canvas)
+        .filter(event => !event.shiftKey) 
+        .subject(e => {
+            const p = screenToWorld(e.sourceEvent.offsetX, e.sourceEvent.offsetY, canvas);
+            return getSimulation().find(p.x, p.y, 30);
+        })
+        .on("start", e => {
+            if (!e.active) getSimulation().alphaTarget(0.3).restart();
+            e.subject.fx = e.subject.x; 
+            e.subject.fy = e.subject.y;
+            selectNode(e.subject.id); 
+        })
+        .on("drag", e => {
+            const p = screenToWorld(e.sourceEvent.offsetX, e.sourceEvent.offsetY, canvas);
+            e.subject.fx = p.x;
+            e.subject.fy = p.y;
+        })
+        .on("end", e => {
+            if (!e.active) getSimulation().alphaTarget(0);
+            e.subject.fx = null; 
+            e.subject.fy = null;
+            saveState(); 
+        })
+    );
+
     // 4. BOUTONS UI
     document.getElementById('btnRelayout').onclick = () => { state.view = {x:0, y:0, scale: 0.5}; restartSim(); };
     
@@ -206,7 +207,8 @@ function createNode(type, baseName) {
     let name = baseName, i = 1;
     while(state.nodes.find(n => n.name === name)) { name = `${baseName} ${++i}`; }
     const n = ensureNode(type, name);
-    selectNode(n.id);
+    // CORRECTION ZOOM DIRECT
+    zoomToNode(n.id);
     refreshLists(); restartSim();
 }
 
@@ -264,9 +266,6 @@ export function renderEditor() {
     ui.editorTitle.textContent = n.name;
     ui.editorBody.classList.remove('muted');
 
-    // -- CONSTRUCTION HTML --
-    
-    // Pour la couleur : Input couleur si Ent/Group, Texte statique si Personne
     let colorInputHtml = '';
     if (n.type === 'person') {
         colorInputHtml = `<div style="font-size:0.8rem; padding-top:10px; color:#aaa;">Auto (via Entreprise)</div>`;
@@ -311,7 +310,7 @@ export function renderEditor() {
             </div>
         </div>
         
-        <h4 style="margin: 15px 0 5px 0; color:var(--accent-cyan); border-top:1px solid #333; padding-top:10px;">Créer un lien</h4>
+        <h4 style="margin: 15px 0 5px 0; color:var(--accent-cyan); border-top:1px solid #333; padding-top:10px;">Création Rapide</h4>
 
         <div style="margin-bottom:8px;">
             <label style="font-size:0.8rem; color:#aaa;">Entreprise</label>
@@ -340,10 +339,17 @@ export function renderEditor() {
             </div>
         </div>
 
+        <h4 style="margin: 0 0 5px 0; color:var(--accent-cyan); border-top:1px solid #333; padding-top:10px;">Connexion Manuelle</h4>
+        <div class="row hstack" style="gap:5px; margin-bottom:15px;">
+           <input id="linkTarget" list="datalist-all" placeholder="Rechercher cible..." class="grow" style="min-width:0;"/>
+           <select id="linkKind" style="width:110px;"></select>
+        </div>
+        <button id="btnAddLink" style="width:100%; margin-bottom:15px;">🔗 Ajouter le lien</button>
         <h4 style="margin: 0 0 5px 0; color:var(--text-muted);">Tous les liens</h4>
         <div id="chipsLinks" class="chips"></div>
     `;
 
+    // --- LOGIQUE BOUTONS RAPIDES ---
     const tryAddLink = (inputId, defaultKind) => {
         const targetName = document.getElementById(inputId).value;
         const target = state.nodes.find(x => x.name.toLowerCase() === targetName.toLowerCase());
@@ -362,6 +368,35 @@ export function renderEditor() {
     document.getElementById('btnLinkGroupVal').onclick = () => tryAddLink('inpGroup', KINDS.MEMBRE);
     document.getElementById('btnLinkPersonEmp').onclick = () => tryAddLink('inpPerson', KINDS.EMPLOYE);
     document.getElementById('btnLinkPersonVal').onclick = () => tryAddLink('inpPerson', KINDS.AMI);
+
+    // --- LOGIQUE CONNEXION MANUELLE ---
+    // On doit remplir la datalist "Tous"
+    const allNames = state.nodes.filter(x => x.id !== n.id).sort((a,b) => a.name.localeCompare(b.name));
+    let dl = document.getElementById('datalist-all');
+    if(!dl) { 
+        dl = document.createElement('datalist'); dl.id = 'datalist-all'; document.body.appendChild(dl); 
+    }
+    dl.innerHTML = allNames.map(x => `<option value="${escapeHtml(x.name)}"></option>`).join('');
+
+    // Remplissage select types
+    const selKind = document.getElementById('linkKind');
+    const kinds = Object.values(KINDS); 
+    selKind.innerHTML = kinds.map(k => `<option value="${k}">${kindToLabel(k)}</option>`).join('');
+
+    document.getElementById('btnAddLink').onclick = () => {
+        const targetName = document.getElementById('linkTarget').value;
+        const kind = selKind.value;
+        const target = state.nodes.find(x => x.name.toLowerCase() === targetName.toLowerCase());
+        if(target) {
+            addLink(n, target, kind);
+            document.getElementById('linkTarget').value = ''; 
+            renderEditor(); 
+        } else {
+            alert("Nœud cible introuvable.");
+        }
+    };
+
+    // --- RESTE DU CODE ---
 
     document.getElementById('btnFocusNode').onclick = () => {
         if (state.focusMode) {
@@ -443,18 +478,6 @@ export function renderEditor() {
     });
 }
 
-export function updateLinkLegend() {
-    const el = ui.linkLegend;
-    if(!state.showLinkTypes) { el.innerHTML = ''; return; }
-    const usedKinds = new Set(state.links.map(l => l.kind));
-    if(usedKinds.size === 0) { el.innerHTML = ''; return; }
-    const html = [];
-    usedKinds.forEach(k => {
-        html.push(`<div class="legend-item"><span class="legend-emoji">${linkKindEmoji(k)}</span><span>${kindToLabel(k)}</span></div>`);
-    });
-    el.innerHTML = html.join('');
-}
-
 function exportGraph() {
     const data = { 
         meta: { date: new Date().toISOString() },
@@ -475,7 +498,6 @@ function importGraph(e) {
             state.nodes = d.nodes; state.links = d.links;
             const maxId = state.nodes.reduce((max, n) => Math.max(max, n.id), 0);
             state.nextId = maxId + 1;
-            // On recalcule les couleurs à l'import
             updatePersonColors();
             restartSim(); refreshLists(); alert('Import réussi !');
         } catch(err) { console.error(err); alert('Erreur import JSON.'); }

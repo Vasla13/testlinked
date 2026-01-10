@@ -37,18 +37,16 @@ const STORAGE_KEY = 'pointPageState_v4';
 
 // --- COULEURS AUTOMATIQUES ---
 export function updatePersonColors() {
-    // 1. On calcule la "taille" (degré) de chaque entreprise pour savoir laquelle est la plus grosse
+    // 1. On calcule la "taille" (degré) de chaque entreprise/groupe
     const companySizes = new Map();
     state.links.forEach(l => {
         const sId = (typeof l.source === 'object') ? l.source.id : l.source;
         const tId = (typeof l.target === 'object') ? l.target.id : l.target;
-        
-        // On compte les liens pour chaque ID
         companySizes.set(sId, (companySizes.get(sId) || 0) + 1);
         companySizes.set(tId, (companySizes.get(tId) || 0) + 1);
     });
 
-    // 2. Pour chaque personne, on cherche son employeur principal
+    // 2. Pour chaque personne, on cherche son affiliation principale
     state.nodes.forEach(n => {
         if (n.type === TYPES.PERSON) {
             let bestCompany = null;
@@ -60,10 +58,13 @@ export function updatePersonColors() {
                 const t = (typeof l.target === 'object') ? l.target : nodeById(l.target);
                 if (!s || !t) return;
 
-                const other = (s.id === n.id) ? t : s;
-                
-                // Si l'autre bout est une entreprise
-                if (other.type === TYPES.COMPANY) {
+                let other = null;
+                if (s.id === n.id) other = t;
+                else if (t.id === n.id) other = s;
+                else return; 
+
+                // On prend la couleur si c'est une Entreprise OU un Groupe
+                if (other.type === TYPES.COMPANY || other.type === TYPES.GROUP) {
                     const score = companySizes.get(other.id) || 0;
                     if (score > maxScore) {
                         maxScore = score;
@@ -73,9 +74,9 @@ export function updatePersonColors() {
             });
 
             if (bestCompany) {
-                n.color = bestCompany.color; // On prend la couleur de l'entreprise
+                n.color = bestCompany.color; 
             } else {
-                n.color = '#ffffff'; // Blanc par défaut si chômeur
+                n.color = '#ffffff'; // Blanc par défaut
             }
         }
     });
@@ -141,6 +142,10 @@ export function loadState() {
         if (data.view) state.view = data.view;
         if (data.nextId) state.nextId = data.nextId;
         if (typeof data.showLabels === 'boolean') state.showLabels = data.showLabels;
+        
+        // CORRECTION : On force la mise à jour des couleurs au chargement
+        updatePersonColors();
+        
         return true;
     } catch (e) { return false; }
 }
@@ -198,7 +203,7 @@ export function addLink(a, b, kind) {
         state.links.push({ source: A.id, target: B.id, kind });
         if (kind === KINDS.PATRON) propagateOrgNums();
         
-        // Mise à jour des couleurs auto
+        // Mise à jour des couleurs auto dès qu'on crée un lien
         updatePersonColors();
         
         restartSim();
