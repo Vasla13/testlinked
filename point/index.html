@@ -2,151 +2,376 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Cartographie des relations — Graphe interactif</title>
-  <link rel="stylesheet" href="style.css"/>
-<link rel="stylesheet" href="cyberpunk-theme.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <title>Neural Network — Cartographie</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 
-<style>
-/* Dropdown black theme */
-select, option {
-  background-color: #000 !important;
-  color: #fff !important;
-}
-select {
-  border-color: #333 !important;
-}
-/* For better contrast on disabled options */
-option:disabled {
-  color: #bbb !important;
-}
-</style>
+  <style>
+    /* --- VARIABLES & RESET --- */
+    :root { 
+      --font-main: 'Rajdhani', sans-serif; 
+      --bg-dark: #050611;
+      --bg-panel: rgba(13, 16, 33, 0.85);
+      --border-color: rgba(115, 251, 247, 0.2);
+      --accent-cyan: #73fbf7;
+      --accent-pink: #ff6b81;
+      --accent-orange: #ff922b;
+      --text-muted: #8b9bb4;
+      --text-light: #e6eefb;
+    }
 
+    * { box-sizing: border-box; }
+    
+    body { 
+      margin: 0; padding: 0;
+      font-family: var(--font-main) !important; 
+      overflow: hidden; 
+      /* Fond sombre texturé pour éviter l'effet "vide" */
+      background-color: #05060a; 
+      background-image: radial-gradient(circle at center, #0b1021 0%, #05060a 100%);
+      color: var(--text-light);
+      height: 100vh; width: 100vw;
+    }
 
-<style>
-/* Dropdown theme v2: dark indigo bg, aqua border */
-select, option {
-  background-color: #0a0c22 !important;
-  color: #fff !important;
-}
-select {
-  border: 1px solid rgba(115, 251, 247, 0.35) !important;
-  outline-color: rgba(115, 251, 247, 0.35) !important;
-}
-option:disabled {
-  color: #bbb !important;
-}
-</style>
+    /* --- SCROLLBARS CUSTOM --- */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: rgba(0,0,0,0.3); }
+    ::-webkit-scrollbar-thumb { background: rgba(115, 251, 247, 0.2); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(115, 251, 247, 0.5); }
 
+    /* --- LAYOUT PRINCIPAL --- */
+    #app {
+      display: grid;
+      grid-template-columns: 320px 1fr 320px;
+      grid-template-rows: 100vh;
+      height: 100vh;
+      width: 100vw;
+    }
+
+    /* --- SIDEBARS (Verre fumé) --- */
+    aside {
+      background: var(--bg-panel);
+      backdrop-filter: blur(12px);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      padding: 20px;
+      gap: 20px;
+      z-index: 10;
+      overflow: hidden;
+      box-shadow: 0 0 30px rgba(0,0,0,0.5);
+    }
+    #right { border-left: 1px solid var(--border-color); border-right: none; }
+
+    /* --- SECTIONS DANS SIDEBARS --- */
+    .section {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    
+    .section.list {
+      flex: 1;
+      overflow-y: auto;
+      padding-right: 5px; /* Pour la scrollbar */
+    }
+
+    h2 {
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 5px;
+      margin: 0 0 10px 0;
+    }
+
+    h3 {
+      font-size: 0.85rem;
+      margin: 15px 0 5px 0;
+      opacity: 0.9;
+    }
+
+    /* --- INPUTS & SELECTS --- */
+    input, select, textarea {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid var(--border-color);
+      color: var(--text-light);
+      font-family: var(--font-main);
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-size: 1rem;
+      width: 100%;
+      outline: none;
+      transition: all 0.2s;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 8px rgba(115, 251, 247, 0.2);
+    }
+    textarea { resize: vertical; min-height: 80px; }
+
+    /* --- BOUTONS --- */
+    button {
+      background: rgba(115, 251, 247, 0.1);
+      border: 1px solid var(--accent-cyan);
+      color: var(--accent-cyan);
+      font-family: var(--font-main);
+      text-transform: uppercase;
+      font-weight: 600;
+      letter-spacing: 1px;
+      padding: 8px 16px;
+      cursor: pointer;
+      transition: all 0.2s;
+      /* Forme futuriste (coins coupés) */
+      clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+    }
+    button:hover {
+      background: var(--accent-cyan);
+      color: #000;
+      box-shadow: 0 0 15px rgba(115, 251, 247, 0.4);
+    }
+    button.danger {
+      border-color: var(--accent-pink);
+      color: var(--accent-pink);
+      background: rgba(255, 107, 129, 0.1);
+    }
+    button.danger:hover {
+      background: var(--accent-pink);
+      color: #fff;
+    }
+
+    /* --- LISTES (ITEMS) --- */
+    ul { list-style: none; padding: 0; margin: 0; }
+    .list-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 6px 8px;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: background 0.2s;
+      font-size: 0.95rem;
+    }
+    .list-item:hover { background: rgba(255, 255, 255, 0.05); color: #fff; }
+    .bullet { width: 8px; height: 8px; border-radius: 50%; display: inline-block; box-shadow: 0 0 5px currentColor; }
+
+    /* --- CANVAS AREA --- */
+    #center {
+      position: relative;
+      overflow: hidden;
+      /* Le dégradé subtil s'ajoute au background du body */
+      background: transparent; 
+    }
+    #graph { width: 100%; height: 100%; cursor: default; }
+
+    /* --- HUD (BARRE DE CONTRÔLE FLOTTANTE) --- */
+    #hud {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(10, 12, 34, 0.9);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border-color);
+      padding: 10px 20px;
+      border-radius: 50px; /* Capsule shape */
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      z-index: 20;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+    #hud button {
+      border: none; background: transparent; color: var(--text-light);
+      clip-path: none; padding: 5px 10px; font-size: 0.9rem;
+    }
+    #hud button:hover { color: var(--accent-cyan); text-shadow: 0 0 8px var(--accent-cyan); box-shadow: none; background: transparent; }
+    
+    #hud label {
+      display: flex; align-items: center; gap: 6px; font-size: 0.9rem; cursor: pointer; color: var(--text-muted);
+    }
+    #hud label:hover { color: #fff; }
+    #hud input[type="checkbox"] { width: auto; margin: 0; cursor: pointer; accent-color: var(--accent-cyan); }
+
+    /* --- LEGENDE (Coin bas gauche) --- */
+    #linkLegend {
+      position: absolute;
+      bottom: 20px; left: 20px;
+      background: rgba(0,0,0,0.6);
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.1);
+      pointer-events: none;
+      font-size: 0.8rem;
+    }
+    .legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+    .legend-emoji { font-size: 1rem; }
+
+    /* --- RECHERCHE RESULTATS --- */
+    #searchResult {
+      font-size: 0.9rem; color: var(--accent-cyan);
+      min-height: 20px; padding: 5px 0;
+    }
+    .search-hit { cursor: pointer; text-decoration: underline; margin-right: 8px; }
+    .search-hit:hover { color: #fff; text-shadow: 0 0 5px var(--accent-cyan); }
+
+    /* --- CHIPS (TAGS) --- */
+    .chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+    .chip {
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      padding: 2px 8px; border-radius: 12px;
+      font-size: 0.85rem; display: flex; align-items: center; gap: 6px;
+    }
+    .chip .x { cursor: pointer; color: var(--accent-pink); font-weight: bold; }
+    .chip .x:hover { color: #fff; }
+
+    /* --- LOADER --- */
+    #app-loader {
+      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+      background: #050611; z-index: 9999;
+      display: flex; flex-direction: column; justify-content: center; align-items: center;
+      color: var(--accent-cyan); transition: opacity 0.5s ease;
+    }
+    .loader-text { font-size: 1.5rem; letter-spacing: 4px; animation: pulse 1.5s infinite; text-transform: uppercase; }
+    @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; text-shadow: 0 0 15px var(--accent-cyan); } 100% { opacity: 0.5; } }
+
+    /* --- HELPER CLASSES --- */
+    .row { margin-bottom: 10px; display: flex; flex-direction: column; gap: 4px; }
+    .grow { flex: 1; }
+    .create-buttons { display: flex; gap: 5px; }
+    .create-buttons button { flex: 1; font-size: 0.8rem; padding: 8px 4px; }
+    .file-btn { 
+      font-size: 0.85rem; color: var(--text-muted); cursor: pointer; 
+      border: 1px dashed var(--border-color); padding: 8px; text-align: center; border-radius: 4px; margin-top: 5px; transition: 0.2s;
+    }
+    .file-btn:hover { border-color: var(--accent-cyan); color: var(--accent-cyan); background: rgba(115, 251, 247, 0.05); }
+
+    /* Responsive rapide */
+    @media (max-width: 900px) {
+      #app { grid-template-columns: 1fr; grid-template-rows: auto 1fr auto; }
+      aside { height: 300px; width: 100%; order: 2; }
+      #center { height: 60vh; order: 1; }
+      #hud { width: 90%; justify-content: space-around; bottom: 10px; padding: 5px 10px; }
+      h2 { margin-top: 0; }
+    }
+  </style>
 </head>
+
 <body>
+
+  <div id="app-loader">
+    <div class="loader-text">Initialisation Neural Link...</div>
+  </div>
+
   <div id="app">
+    
     <aside id="left">
+      <div class="section" style="align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 20px;">
+        <img src="logo-bni-linked.png" alt="Logo" style="width:80%; max-height:80px; object-fit:contain; filter: drop-shadow(0 0 5px rgba(115,251,247,0.3)); margin-bottom: 10px;" />
+        <button type="button" onclick="window.location.href='../map/index.html';" style="width: 100%; font-size:0.8rem;">
+          🗺️ Basculer vers Mode Carte
+        </button>
+      </div>
+
       <div class="section">
-        <div class="sidebar-logo" style="padding:12px 8px 4px;">
-  <img src="logo-bni-linked.png" alt="BNI Linked" style="width:100%; height:auto; display:block; max-height:90px; object-fit:contain;" />
-        <button type="button" onclick="window.location.href='../map/index.html';" style="margin:8px auto 12px auto; display:block; padding:6px 10px; font-size:0.8rem;">Passer de mode map</button>
-</div><h2>Recherche</h2>
-        <input id="searchInput" type="search" placeholder="Rechercher personne / groupe / entreprise…" />
+        <h2>Recherche</h2>
+        <input id="searchInput" type="search" placeholder="Nom, matricule..." autocomplete="off" />
         <div id="searchResult"></div>
       </div>
+
       <div class="section">
-        <div class="toolbar">
-          <button id="btnExport">Exporter JSON</button>
-          <label class="file">
-            Importer JSON
-            <input id="fileImport" type="file" accept=".json"/>
-          </label>
-
-<label class="file">
-  Fusionner JSON
-  <input id="fileMerge" type="file" accept=".json"/>
-</label>
-<button id="btnClearAll">Tout effacer</button>
-
+        <h2>Données</h2>
+        <div style="display:flex; gap:5px;">
+          <button id="btnExport" type="button" class="grow">Sauvegarder</button>
+          <button id="btnClearAll" type="button" class="danger grow">Reset</button>
+        </div>
+        <div style="display:flex; gap:5px;">
+          <label class="file-btn grow">📂 Charger <input id="fileImport" type="file" accept=".json" style="display:none;"/></label>
+          <label class="file-btn grow">🔗 Fusionner <input id="fileMerge" type="file" accept=".json" style="display:none;"/></label>
         </div>
       </div>
+
       <div class="section list">
         <h2>Annuaire</h2>
         <div class="list-section">
-          <h3>Entreprises</h3>
+          <h3 style="color:var(--accent-orange);">🏢 Entreprises</h3>
           <ul id="listCompanies"></ul>
         </div>
         <div class="list-section">
-          <h3>Groupuscules</h3>
+          <h3 style="color:#c79af7;">👥 Groupes</h3>
           <ul id="listGroups"></ul>
         </div>
         <div class="list-section">
-          <h3>Personnes</h3>
+          <h3 style="color:#fff;">👤 Citoyens</h3>
           <ul id="listPeople"></ul>
         </div>
       </div>
     </aside>
 
-    <main id="center">
-      <canvas id="graph" style="background: transparent !important;"></canvas>
-            <div id="linkLegend"></div>
-      <div id="hud">
-        <button id="btnRelayout">Réorganiser la carte</button>
-        <button id="btnToggleSim">Lancer la simulation</button>
-        <span class="hint"></span>
-        <label style="margin-left:auto;display:flex;align-items:center;gap:.4rem;">
-          <input id="chkLabels" type="checkbox" checked/>
-          Afficher les noms
-        </label>
 
-        <label style="margin-left:1rem;display:flex;align-items:center;gap:.4rem;">
-          <input id="chkPerf" type="checkbox"/>
-          Performance
-        </label>
-        <label style="margin-left:1rem;display:flex;align-items:center;gap:.4rem;">
-          <input id="chkLinkTypes" type="checkbox"/>
-          Type de lien
-        </label>
+    <main id="center">
+      <canvas id="graph"></canvas>
+      
+      <div id="linkLegend"></div>
+
+      <div id="hud">
+        <button id="btnRelayout" title="Recentrer la caméra">⛶ Recentrer</button>
+        <button id="btnToggleSim" title="Pause/Lecture Physique">⏯️</button>
+        
+        <div style="width:1px; height:20px; background:rgba(255,255,255,0.2);"></div>
+
+        <label title="Afficher les noms"><input id="chkLabels" type="checkbox" checked/> Noms</label>
+        <label title="Mode performance (pas de néon)"><input id="chkPerf" type="checkbox"/> Eco</label>
+        <label title="Afficher types de liens"><input id="chkLinkTypes" type="checkbox"/> Liens</label>
       </div>
     </main>
 
+
     <aside id="right">
+      
       <div class="section">
-        <h2>Créer</h2>
+        <h2>Création Rapide</h2>
         <div class="create-buttons">
-          <button id="createPerson">+ Personne</button>
-          <button id="createGroup">+ Groupuscule</button>
-          <button id="createCompany">+ Entreprise</button>
+          <button id="createPerson" type="button">+ Perso.</button>
+          <button id="createGroup" type="button">+ Groupe</button>
+          <button id="createCompany" type="button">+ Entrep.</button>
         </div>
       </div>
 
-      <div class="section" id="relationsTop" style="display:none;">
-        <h2>Liens entre personnes</h2>
-        <div id="relationsChips" class="chips"></div>
-      </div>
-
-      <div class="section" id="editor">
-        <h2 id="editorTitle">Aucune sélection</h2>
-        <div id="editorBody" class="editor-body muted">
-          Sélectionnez un point ou créez une fiche pour éditer ici.
+      <div class="section" id="editor" style="flex:1;">
+        <h2 id="editorTitle" style="color:var(--accent-cyan);">Sélectionnez un nœud</h2>
+        <div id="editorBody" style="opacity:0.7; padding-top:20px; text-align:center;">
+          Cliquez sur un élément du graphe pour voir ses détails et modifier ses connexions.
         </div>
       </div>
+
     </aside>
+
   </div>
 
   <datalist id="datalist-people"></datalist>
   <datalist id="datalist-groups"></datalist>
   <datalist id="datalist-companies"></datalist>
 
-  <!-- EmailJS SDK -->
-  <script
-    type="text/javascript"
-    src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js">
-  </script>
   <script type="text/javascript">
-    (function() {
-      emailjs.init({
-        publicKey: "VpguoxdGrPojq9q11"
-      });
-    })();
+    (function() { try { emailjs.init({ publicKey: "VpguoxdGrPojq9q11" }); } catch(e){} })();
   </script>
 
-  <script src="script.js"></script>
+  <script type="module" src="js/main.js"></script>
+  
+  <script>
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        const l = document.getElementById('app-loader');
+        if(l) { l.style.opacity = '0'; setTimeout(() => l.remove(), 500); }
+      }, 600);
+    });
+  </script>
 </body>
 </html>
