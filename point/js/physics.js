@@ -21,9 +21,8 @@ export function restartSim() {
 
     simulation.nodes(state.nodes);
     
-    // --- REPULSION ADAPTATIVE (Demande Discord) ---
-    // On calcule le nombre de liens pour chaque nœud (degré)
-    // Plus un nœud a de liens, plus il doit repousser les autres pour faire de la place
+    // 1. Calcul du nombre de liens par noeud (Degré)
+    // Plus un noeud est connecté, plus il doit avoir d'espace autour de lui
     const nodeDegree = new Map();
     state.nodes.forEach(n => nodeDegree.set(n.id, 0));
     state.links.forEach(l => {
@@ -36,59 +35,49 @@ export function restartSim() {
     simulation.force("link", d3.forceLink(state.links)
         .id(d => d.id)
         .distance(l => {
-            // --- DISTANCES HIERARCHIQUES ---
-            // Patron/Haut gradé : TRÈS proche (collé à l'entreprise)
-            if (l.kind === KINDS.PATRON) return 40;
-            if (l.kind === KINDS.HAUT_GRADE) return 55;
-
-            // Famille/Amour : Proche
+            // Distances hiérarchiques
+            if (l.kind === KINDS.AFFILIATION) return 400; // Très loin pour les groupes affiliés
+            if (l.kind === KINDS.PATRON) return 50;       // Patron collé à la boite
+            if (l.kind === KINDS.HAUT_GRADE) return 70;   // Cadre proche
             if (l.kind === KINDS.FAMILLE) return 60;
             if (l.kind === KINDS.AMOUR) return 50;
-
-            // Affiliation (Groupe <-> Entreprise) : Plus souple et loin
-            if (l.kind === KINDS.AFFILIATION) return 380;
-
-            // Employé / Membre / Ami : Standard
-            if (l.kind === KINDS.EMPLOYE) return 180;
-            
-            return 130;
+            if (l.kind === KINDS.EMPLOYE) return 180;     // Employé standard
+            return 140;
         })
         .strength(l => {
-            // Souplesse des liens
-            if (l.kind === KINDS.AFFILIATION) return 0.1; // Très mou (évite collisions rigides)
-            if (l.kind === KINDS.PATRON) return 1.5;      // Très rigide (ne lâche pas l'entreprise)
-            if (l.kind === KINDS.AMOUR) return 0.9;
+            if (l.kind === KINDS.AFFILIATION) return 0.1; // Lien souple
+            if (l.kind === KINDS.PATRON) return 1.2;      // Lien rigide
             return 0.3;
         })
     );
 
     simulation.force("charge", d3.forceManyBody()
         .strength(n => {
-            // Base de répulsion
-            let base = -300;
+            // Force de base
+            let strength = -400;
             
-            // Les structures repoussent beaucoup plus par défaut
-            if (n.type === TYPES.COMPANY) base = -1000;
-            if (n.type === TYPES.GROUP) base = -700;
+            if (n.type === TYPES.COMPANY) strength = -1200;
+            if (n.type === TYPES.GROUP) strength = -900;
 
-            // Ajout proportionnel au nombre de liens :
-            // "force de répulsion sur les point non relié a lui proportionnel au nombre de point relié a lui"
+            // BONUS REPULSION : Proportionnel au nombre de liens
+            // Chaque connexion ajoute -100 de répulsion.
+            // Une entreprise avec 10 employés aura -1200 + (-100 * 10) = -2200 de force
+            // Cela "nettoie" la zone autour d'elle.
             const degree = nodeDegree.get(n.id) || 0;
-            const degreeFactor = -80; // Chaque lien ajoute -80 de répulsion
+            strength -= (degree * 120); 
 
-            return base + (degree * degreeFactor);
+            return strength;
         })
-        .distanceMax(1600) // Rayon d'action augmenté pour les grosses structures
+        .distanceMax(2000) // Augmenté pour que la répulsion agisse de loin
     );
 
     simulation.force("collide", d3.forceCollide()
-        .radius(n => nodeRadius(n) + 15) // Marge de collision
-        .iterations(2)
+        .radius(n => nodeRadius(n) + 20) // Marge de sécurité entre les points
+        .iterations(3)
     );
 
     simulation.force("center", d3.forceCenter(0, 0).strength(0.04));
     
-    // Réchauffe la simulation
     simulation.alpha(1).restart();
 }
 

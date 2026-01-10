@@ -7,7 +7,6 @@ const ctx = canvas.getContext('2d');
 
 const degreeCache = new Map();
 
-// Icônes affichées à l'intérieur des nœuds si assez zoomé
 const NODE_ICONS = {
     [TYPES.PERSON]: '👤',
     [TYPES.COMPANY]: '🏢',
@@ -39,7 +38,6 @@ export function resizeCanvas() {
     draw();
 }
 
-// Fonction utilitaire pour dessiner un polygone régulier (Carré, Hexagone)
 function drawPolygon(ctx, x, y, radius, sides, rotate = 0) {
     ctx.moveTo(x + radius * Math.cos(rotate), y + radius * Math.sin(rotate));
     for (let i = 1; i <= sides; i++) {
@@ -54,13 +52,12 @@ export function draw() {
     const w = canvas.width / r;
     const h = canvas.height / r;
     
-    // Vérification rapide : sommes-nous en mode Focus ?
+    // Etats speciaux
     const isFocus = state.focusMode;
+    const isPath = state.pathMode;
 
     ctx.save();
     ctx.clearRect(0, 0, w, h);
-    
-    // --- GRILLE DE FOND ---
     drawGrid(w, h, p);
 
     ctx.translate(w / 2 + p.x, h / 2 + p.y);
@@ -68,16 +65,26 @@ export function draw() {
 
     const useGlow = (!state.performance && p.scale > 0.4);
     
-    // --- GESTION DU HOVER (DIMMING) ---
-    // Si on survole quelque chose, on assombrit le reste
+    // Hover logic
     const focusId = state.hoverId || state.selection;
     const hasFocus = (focusId !== null);
     
     function isDimmed(objType, obj) {
+        // Priorité au Pathfinding : si actif, tout ce qui n'est pas le chemin est éteint
+        if (isPath) {
+            if (objType === 'node') return !state.pathPath.has(obj.id);
+            if (objType === 'link') {
+                const s = obj.source.id, t = obj.target.id;
+                // Clé unique pour le lien
+                const k1 = `${s}-${t}`, k2 = `${t}-${s}`;
+                return !(state.pathLinks.has(k1) || state.pathLinks.has(k2));
+            }
+        }
+
         if (!hasFocus) return false;
+        
         if (objType === 'node') {
             if (obj.id === focusId) return false;
-            // On vérifie si c'est un voisin direct du focus
             const connected = state.links.some(l => 
                 (l.source.id === focusId && l.target.id === obj.id) || 
                 (l.target.id === focusId && l.source.id === obj.id)
@@ -92,9 +99,7 @@ export function draw() {
 
     // 1. DESSIN DES LIENS
     for (const l of state.links) {
-        // --- FILTRE MODE FOCUS ---
         if (isFocus) {
-            // Si l'un des deux bouts n'est pas dans le set visible, on ne dessine pas
             if (!state.focusSet.has(l.source.id) || !state.focusSet.has(l.target.id)) continue;
         }
         
@@ -109,74 +114,75 @@ export function draw() {
 
         const color = computeLinkColor(l);
         ctx.strokeStyle = color;
-        ctx.lineWidth = (dimmed ? 1 : 2) / Math.sqrt(p.scale);
-        ctx.globalAlpha = globalAlpha;
+        
+        // Si c'est le chemin trouvé, on le fait briller
+        const isPathLink = isPath && !dimmed;
+        ctx.lineWidth = (isPathLink ? 4 : (dimmed ? 1 : 2)) / Math.sqrt(p.scale);
+        ctx.globalAlpha = isPathLink ? 1.0 : globalAlpha;
 
-        if (useGlow && !dimmed) {
-            ctx.shadowBlur = 8;
+        if ((useGlow && !dimmed) || isPathLink) {
+            ctx.shadowBlur = isPathLink ? 15 : 8;
             ctx.shadowColor = color;
         } else {
             ctx.shadowBlur = 0;
         }
         ctx.stroke();
         
-        // EMOJI SUR LE LIEN (si activé)
+        // Emoji Lien
         if (state.showLinkTypes && p.scale > 0.6 && !dimmed) {
             const mx = (l.source.x + l.target.x) / 2;
             const my = (l.source.y + l.target.y) / 2;
             
-            ctx.globalAlpha = 1; 
-            ctx.shadowBlur = 0;
-            
-            // Petite bulle noire derrière l'emoji
-            ctx.fillStyle = '#000'; 
-            ctx.beginPath(); ctx.arc(mx, my, 9 / Math.sqrt(p.scale), 0, Math.PI*2); ctx.fill();
+            ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+            ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(mx, my, 9 / Math.sqrt(p.scale), 0, Math.PI*2); ctx.fill();
 
-            ctx.strokeStyle = color;
-            ctx.lineWidth = 1 / Math.sqrt(p.scale);
-            ctx.stroke();
-
-            ctx.fillStyle = '#fff';
-            ctx.font = `${14 / Math.sqrt(p.scale)}px sans-serif`; 
+            ctx.strokeStyle = color; ctx.lineWidth = 1 / Math.sqrt(p.scale); ctx.stroke();
+            ctx.fillStyle = '#fff'; ctx.font = `${14 / Math.sqrt(p.scale)}px sans-serif`; 
             ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
             ctx.fillText(LINK_KIND_EMOJI[l.kind] || '•', mx, my);
         }
     }
 
-    // 2. DESSIN DES NOEUDS
+    // 2. LIEN TEMPORAIRE (DRAG & DROP)
+    if (state.tempLink) {
+        ctx.beginPath();
+        ctx.moveTo(state.tempLink.x1, state.tempLink.y1);
+        ctx.lineTo(state.tempLink.x2, state.tempLink.y2);
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 2 / Math.sqrt(p.scale);
+        ctx.setLineDash([5, 5]); // Pointillés
+        ctx.stroke();
+        ctx.setLineDash([]); // Reset
+    }
+
+    // 3. DESSIN DES NOEUDS
     ctx.shadowBlur = 0;
     for (const n of state.nodes) {
-        // --- FILTRE MODE FOCUS ---
         if (isFocus && !state.focusSet.has(n.id)) continue;
         
         const dimmed = isDimmed('node', n);
         const rad = nodeRadius(n); 
         
-        ctx.globalAlpha = dimmed ? 0.1 : 1.0;
+        // Si c'est le chemin, opacité max
+        ctx.globalAlpha = (isPath && state.pathPath.has(n.id)) ? 1.0 : (dimmed ? 0.1 : 1.0);
 
         ctx.beginPath();
-        
-        // Formes différentes selon le type
-        if (isGroup(n)) {
-            drawPolygon(ctx, n.x, n.y, rad * 1.2, 4); // Carré
-        } else if (isCompany(n)) {
-            drawPolygon(ctx, n.x, n.y, rad * 1.1, 6, Math.PI/2); // Hexagone
-        } else {
-            ctx.arc(n.x, n.y, rad, 0, Math.PI * 2); // Rond
-        }
+        if (isGroup(n)) drawPolygon(ctx, n.x, n.y, rad * 1.2, 4); 
+        else if (isCompany(n)) drawPolygon(ctx, n.x, n.y, rad * 1.1, 6, Math.PI/2); 
+        else ctx.arc(n.x, n.y, rad, 0, Math.PI * 2);
 
         ctx.fillStyle = n.color || '#9aa3ff';
         
-        // Effet de sélection ou hover
-        if (state.selection === n.id || state.hoverId === n.id) {
-            ctx.shadowBlur = 30;
-            ctx.shadowColor = n.color;
+        const isPathNode = isPath && state.pathPath.has(n.id);
+
+        if (state.selection === n.id || state.hoverId === n.id || isPathNode) {
+            ctx.shadowBlur = isPathNode ? 40 : 30; // Gros glow pour le chemin
+            ctx.shadowColor = isPathNode ? '#ffff00' : n.color; // Jaune pour le chemin
             ctx.strokeStyle = "#ffffff";
-            ctx.lineWidth = 4 / Math.sqrt(p.scale);
+            ctx.lineWidth = (isPathNode ? 6 : 4) / Math.sqrt(p.scale);
             ctx.stroke();
         } else {
             ctx.shadowBlur = 0;
-            // Contour léger par défaut
             if(!dimmed && p.scale > 0.5) {
                 ctx.strokeStyle = "rgba(255,255,255,0.4)";
                 ctx.lineWidth = 1.5 / Math.sqrt(p.scale);
@@ -186,36 +192,31 @@ export function draw() {
         ctx.fill();
         ctx.shadowBlur = 0;
 
-        // --- ICONE INTERNE ---
         if (!dimmed && (p.scale > 0.4 || rad > 15)) {
             ctx.globalAlpha = 1; 
             ctx.fillStyle = 'rgba(0,0,0,0.5)';
             ctx.font = `${rad}px sans-serif`;
-            ctx.textAlign = 'center'; 
-            ctx.textBaseline = 'middle';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
             ctx.fillText(NODE_ICONS[n.type] || '', n.x, n.y + (rad*0.05));
         }
     }
 
-    // 3. LABELS (Noms)
+    // 4. LABELS
     if (state.showLabels) {
-        ctx.textAlign = 'center'; 
-        ctx.textBaseline = 'middle';
-        
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         for (const n of state.nodes) {
-            // --- FILTRE MODE FOCUS ---
             if (isFocus && !state.focusSet.has(n.id)) continue;
 
             const rad = nodeRadius(n);
             const dimmed = isDimmed('node', n);
             if (dimmed) continue;
 
-            // On affiche le nom si c'est important, sélectionné, ou si on est assez zoomé
             const isImportant = (n.type === TYPES.COMPANY || n.type === TYPES.GROUP);
-            const showName = (state.hoverId === n.id || state.selection === n.id) || (p.scale > 0.5 || isImportant);
+            const isPathNode = isPath && state.pathPath.has(n.id);
+            const showName = (state.hoverId === n.id || state.selection === n.id) || (p.scale > 0.5 || isImportant) || isPathNode;
 
             if (showName) {
-                const fontSize = 13 / Math.sqrt(p.scale);
+                const fontSize = (isPathNode ? 16 : 13) / Math.sqrt(p.scale);
                 ctx.font = `600 ${fontSize}px "Rajdhani", sans-serif`; 
                 
                 const label = n.name;
@@ -226,31 +227,18 @@ export function draw() {
                 const boxX = n.x - textW / 2 - padding;
                 const boxY = n.y + rad + 6 / Math.sqrt(p.scale);
 
-                // Fond du label
-                ctx.globalAlpha = 0.9; 
-                ctx.fillStyle = '#0a0c16'; 
-                
+                ctx.globalAlpha = 0.9; ctx.fillStyle = '#0a0c16'; 
                 ctx.beginPath();
                 if(ctx.roundRect) ctx.roundRect(boxX, boxY, textW + padding*2, textH + padding, 6);
                 else ctx.rect(boxX, boxY, textW + padding*2, textH + padding);
                 ctx.fill();
                 
-                // Bordure du label (couleur du nœud)
-                ctx.strokeStyle = n.color;
-                ctx.lineWidth = 1 / Math.sqrt(p.scale);
+                ctx.strokeStyle = isPathNode ? '#ffff00' : n.color;
+                ctx.lineWidth = (isPathNode ? 3 : 1) / Math.sqrt(p.scale);
                 ctx.stroke();
 
-                // Texte
-                ctx.globalAlpha = 1.0;
-                ctx.fillStyle = '#ffffff';
+                ctx.globalAlpha = 1.0; ctx.fillStyle = '#ffffff';
                 ctx.fillText(label, n.x, boxY + textH/2 + padding/2);
-
-                // Matricule (sous le nom, si très zoomé)
-                if (p.scale > 1.2 && n.num) {
-                    ctx.font = `${fontSize * 0.85}px "Rajdhani", sans-serif`;
-                    ctx.fillStyle = '#cccccc'; 
-                    ctx.fillText(`#${n.num}`, n.x, boxY + textH + fontSize);
-                }
             }
         }
     }
@@ -262,20 +250,12 @@ function drawGrid(w, h, p) {
     ctx.save();
     ctx.strokeStyle = "rgba(115, 251, 247, 0.08)"; 
     ctx.lineWidth = 1;
-    
-    // Grille qui bouge avec le pan/zoom
     const gridSize = 100 * p.scale; 
     const offsetX = (w/2 + p.x) % gridSize;
     const offsetY = (h/2 + p.y) % gridSize;
-
     ctx.beginPath();
-    for (let x = offsetX; x < w; x += gridSize) {
-        ctx.moveTo(x, 0); ctx.lineTo(x, h);
-    }
-    for (let y = offsetY; y < h; y += gridSize) {
-        ctx.moveTo(0, y); ctx.lineTo(w, y);
-    }
-    
+    for (let x = offsetX; x < w; x += gridSize) { ctx.moveTo(x, 0); ctx.lineTo(x, h); }
+    for (let y = offsetY; y < h; y += gridSize) { ctx.moveTo(0, y); ctx.lineTo(w, y); }
     ctx.stroke();
     ctx.restore();
 }
