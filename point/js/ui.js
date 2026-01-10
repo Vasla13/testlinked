@@ -1,4 +1,4 @@
-import { state, saveState, nodeById, isPerson, isCompany, isGroup, ensureNode, addLink, propagateOrgNums, undo, pushHistory, updatePersonColors } from './state.js';
+import { state, saveState, nodeById, isPerson, isCompany, isGroup, ensureNode, addLink, propagateOrgNums, undo, pushHistory, updatePersonColors, mergeNodes } from './state.js';
 import { restartSim, getSimulation } from './physics.js';
 import { draw, updateDegreeCache, resizeCanvas } from './render.js';
 import { screenToWorld, escapeHtml, toColorInput, kindToLabel, linkKindEmoji, clamp, worldToScreen } from './utils.js';
@@ -50,32 +50,31 @@ function showCustomConfirm(msg, onYes) {
 export function initUI() {
     createModal();
 
-    // CSS RENFORCÉ POUR L'ALIGNEMENT
+    // --- CSS RENFORCÉ (Layout Fixe) ---
     const style = document.createElement('style');
     style.innerHTML = `
-        .editor { width: 380px !important; } /* Un peu plus large */
+        .editor { width: 380px !important; }
         #editorBody { max-height: calc(100vh - 180px); overflow-y: auto; padding-right: 5px; }
+        #editorBody::-webkit-scrollbar { width: 5px; }
+        #editorBody::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
         
         details { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; margin-bottom: 8px; padding: 5px; }
         summary { cursor: pointer; font-weight: bold; font-size: 0.85rem; color: var(--accent-cyan); padding: 4px 0; list-style: none; display: flex; align-items: center; justify-content: space-between; }
         summary::after { content: '+'; font-size: 1rem; font-weight: bold; }
         details[open] summary::after { content: '-'; }
         
-        /* ALIGNEMENT STRICT SUR UNE LIGNE */
-        .compact-row { 
-            display: flex; 
-            flex-direction: row; 
-            flex-wrap: nowrap; /* Interdit le retour à la ligne */
-            gap: 5px; 
-            align-items: center; 
-            width: 100%; 
+        .flex-row-force {
+            display: flex !important;
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            align-items: center !important;
+            width: 100% !important;
+            gap: 5px !important;
         }
-        .compact-col { flex: 1; min-width: 0; } /* min-width: 0 permet au champ texte de rétrécir si besoin */
-        
-        /* Select et Boutons qui ne s'écrasent pas */
-        .compact-select { width: 110px; flex: 0 0 auto; font-size: 0.75rem; }
-        .action-btn { flex: 0 0 auto; padding: 0 10px; height: 28px; display:flex; align-items:center; justify-content:center; }
-        
+        .flex-grow-input { flex: 1 1 auto !important; min-width: 0 !important; width: 100% !important; }
+        .compact-select { flex: 0 0 100px !important; width: 100px !important; font-size: 0.75rem !important; padding: 2px !important; }
+        .mini-btn { flex: 0 0 30px !important; width: 30px !important; padding: 0 !important; text-align: center !important; justify-content: center !important; }
+
         .link-category { margin-top: 10px; margin-bottom: 5px; font-size: 0.75rem; color: #888; text-transform: uppercase; border-bottom: 1px solid #333; }
         .chip { cursor: pointer; transition: background 0.2s; display:inline-flex; align-items:center; gap:4px; max-width:100%; overflow:hidden; }
         .chip:hover { background: rgba(255,255,255,0.15); }
@@ -86,7 +85,6 @@ export function initUI() {
     const canvas = document.getElementById('graph');
     window.addEventListener('resize', resizeCanvas);
     
-    // Config Bouton Labels
     const btnLabel = document.getElementById('chkLabels');
     if (btnLabel) {
         btnLabel.type = 'button';
@@ -101,14 +99,12 @@ export function initUI() {
         btnLabel.onclick = (e) => { e.preventDefault(); state.labelMode = (state.labelMode + 1) % 3; updateLabelBtn(); draw(); };
     }
 
-    // Ctrl+Z
     document.addEventListener('keydown', (e) => {
         if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
             e.preventDefault(); undo(); refreshLists(); if (state.selection) renderEditor(); draw();
         }
     });
 
-    // Zoom
     canvas.addEventListener('wheel', (e) => {
         e.preventDefault();
         const m = screenToWorld(e.offsetX, e.offsetY, canvas);
@@ -121,7 +117,6 @@ export function initUI() {
         draw();
     }, { passive: false });
 
-    // Souris
     let isPanning = false, lastPan = { x: 0, y: 0 }, dragLinkSource = null;
 
     canvas.addEventListener('mousedown', (e) => {
@@ -185,7 +180,7 @@ export function initUI() {
     const btnSim = document.getElementById('btnToggleSim'); if (btnSim) btnSim.style.display = 'none';
 
     document.getElementById('btnClearAll').onclick = () => { 
-        showCustomConfirm('Tout effacer ?', () => { 
+        showCustomConfirm('Attention : Voulez-vous vraiment tout effacer ?', () => { 
             pushHistory(); state.nodes=[]; state.links=[]; state.selection = null; state.nextId = 1;
             restartSim(); refreshLists(); renderEditor(); saveState(); 
         });
@@ -282,29 +277,22 @@ export function renderEditor() {
         colorInputHtml = `<input id="edColor" type="color" value="${safeHex(n.color)}" style="height:38px; width:100%;"/>`;
     }
 
-    // --- HELPER POUR LES OPTIONS DE LIENS ---
-    // Filtre les types de liens possibles selon qui on est et qui on vise
     const getOptionsFor = (targetType) => {
         let validKinds = [];
         const sourceType = n.type;
-        
-        // Si c'est Personne <-> Personne
         if (sourceType === TYPES.PERSON && targetType === TYPES.PERSON) validKinds = PERSON_PERSON_KINDS;
-        // Si c'est Structure <-> Structure
         else if (sourceType !== TYPES.PERSON && targetType !== TYPES.PERSON) validKinds = ORG_ORG_KINDS;
-        // Si c'est Mixte
         else validKinds = PERSON_ORG_KINDS;
-
         return Array.from(validKinds).map(k => `<option value="${k}">${kindToLabel(k)}</option>`).join('');
     };
 
     ui.editorBody.innerHTML = `
-        <div class="row hstack" style="margin-bottom:15px; gap:5px; width:100%;">
+        <div class="flex-row-force" style="margin-bottom:15px;">
             <button id="btnFocusNode" class="${state.focusMode ? 'primary' : ''}" style="flex:1; font-size:0.8rem;">
                 ${state.focusMode ? '🔍 Tout' : '🎯 Focus'}
             </button>
             <button id="btnCenterNode" style="flex:1; font-size:0.8rem;">📍 Centrer</button>
-            <button id="btnDelete" class="danger" style="flex:0 0 auto; font-size:0.8rem;">🗑️</button>
+            <button id="btnDelete" class="danger" style="flex:0 0 auto; width:40px; font-size:0.8rem;">🗑️</button>
         </div>
 
         <details open>
@@ -314,8 +302,8 @@ export function renderEditor() {
                 <input id="edName" type="text" value="${escapeHtml(n.name)}"/>
             </div>
             
-            <div class="compact-row">
-                <div class="compact-col">
+            <div class="flex-row-force">
+                <div style="flex:1;">
                     <label style="font-size:0.8rem; opacity:0.7;">Type</label>
                     <select id="edType" style="width:100%;">
                         <option value="person" ${n.type==='person'?'selected':''}>Personne</option>
@@ -323,7 +311,7 @@ export function renderEditor() {
                         <option value="company" ${n.type==='company'?'selected':''}>Entreprise</option>
                     </select>
                 </div>
-                <div class="compact-col">
+                <div style="flex:1;">
                     <label style="font-size:0.8rem; opacity:0.7;">Couleur</label>
                     ${colorInputHtml}
                 </div>
@@ -345,29 +333,40 @@ export function renderEditor() {
             
             <div style="margin-bottom:8px;">
                 <label style="font-size:0.8rem; color:#aaa;">Entreprise</label>
-                <div class="compact-row">
-                    <input id="inpCompany" list="datalist-companies" placeholder="Nom..." class="compact-col" />
+                <div class="flex-row-force">
+                    <input id="inpCompany" list="datalist-companies" placeholder="Nom..." class="flex-grow-input" />
                     <select id="selKindCompany" class="compact-select">${getOptionsFor(TYPES.COMPANY)}</select>
-                    <button id="btnAddCompany" class="primary action-btn">+</button>
+                    <button id="btnAddCompany" class="primary mini-btn">+</button>
                 </div>
             </div>
 
             <div style="margin-bottom:8px;">
                 <label style="font-size:0.8rem; color:#aaa;">Groupuscule</label>
-                <div class="compact-row">
-                    <input id="inpGroup" list="datalist-groups" placeholder="Nom..." class="compact-col" />
+                <div class="flex-row-force">
+                    <input id="inpGroup" list="datalist-groups" placeholder="Nom..." class="flex-grow-input" />
                     <select id="selKindGroup" class="compact-select">${getOptionsFor(TYPES.GROUP)}</select>
-                    <button id="btnAddGroup" class="primary action-btn">+</button>
+                    <button id="btnAddGroup" class="primary mini-btn">+</button>
                 </div>
             </div>
 
             <div style="margin-bottom:8px;">
                 <label style="font-size:0.8rem; color:#aaa;">Personnel</label>
-                <div class="compact-row">
-                    <input id="inpPerson" list="datalist-people" placeholder="Nom..." class="compact-col" />
+                <div class="flex-row-force">
+                    <input id="inpPerson" list="datalist-people" placeholder="Nom..." class="flex-grow-input" />
                     <select id="selKindPerson" class="compact-select">${getOptionsFor(TYPES.PERSON)}</select>
-                    <button id="btnAddPerson" class="primary action-btn">+</button>
+                    <button id="btnAddPerson" class="primary mini-btn">+</button>
                 </div>
+            </div>
+        </details>
+
+        <details>
+            <summary style="color:#ff5555;">Zone de Danger (Fusion)</summary>
+            <div style="font-size:0.75rem; color:#aaa; margin-bottom:5px;">
+                Fusionner <b>${escapeHtml(n.name)}</b> dans un autre point (ce point disparaîtra).
+            </div>
+            <div class="flex-row-force">
+               <input id="mergeTarget" list="datalist-all" placeholder="Vers qui fusionner ?" class="flex-grow-input" />
+               <button id="btnMerge" class="primary danger" style="padding:0 10px;">Fusionner</button>
             </div>
         </details>
 
@@ -377,8 +376,6 @@ export function renderEditor() {
         </details>
     `;
 
-    // --- LOGIQUE D'AJOUT ---
-    // Fonction unique pour gérer l'ajout depuis les 3 formulaires
     const handleAdd = (inputId, selectId, targetType) => {
         const nameInput = document.getElementById(inputId);
         const kindSelect = document.getElementById(selectId);
@@ -390,7 +387,6 @@ export function renderEditor() {
         let target = state.nodes.find(x => x.name.toLowerCase() === name.toLowerCase());
         
         if (!target) {
-            // Création automatique si n'existe pas
             showCustomConfirm(`"${name}" n'existe pas. Créer nouveau ${targetType} ?`, () => {
                 target = ensureNode(targetType, name);
                 addLink(n, target, kind);
@@ -408,7 +404,24 @@ export function renderEditor() {
     document.getElementById('btnAddGroup').onclick = () => handleAdd('inpGroup', 'selKindGroup', TYPES.GROUP);
     document.getElementById('btnAddPerson').onclick = () => handleAdd('inpPerson', 'selKindPerson', TYPES.PERSON);
 
-    // --- LISTENERS CLASSIQUES ---
+    document.getElementById('btnMerge').onclick = () => {
+        const targetName = document.getElementById('mergeTarget').value.trim();
+        const target = state.nodes.find(x => x.name.toLowerCase() === targetName.toLowerCase());
+        
+        if (target) {
+            if (target.id === n.id) {
+                showCustomAlert("Impossible de fusionner avec soi-même.");
+                return;
+            }
+            showCustomConfirm(`Fusionner "${n.name}" DANS "${target.name}" ?\n"${n.name}" sera supprimé et ses liens transférés.`, () => {
+                mergeNodes(n.id, target.id);
+                selectNode(target.id); 
+            });
+        } else {
+            showCustomAlert("Cible de fusion introuvable.");
+        }
+    };
+
     document.getElementById('btnFocusNode').onclick = () => {
         if (state.focusMode) {
             state.focusMode = false; state.focusSet.clear();
@@ -521,6 +534,12 @@ export function renderEditor() {
         };
     });
     
+    // Pour la fusion, on a besoin de la datalist complete
+    const allNames = state.nodes.filter(x => x.id !== n.id).sort((a,b) => a.name.localeCompare(b.name));
+    let dl = document.getElementById('datalist-all');
+    if(!dl) { dl = document.createElement('datalist'); dl.id = 'datalist-all'; document.body.appendChild(dl); }
+    dl.innerHTML = allNames.map(x => `<option value="${escapeHtml(x.name)}"></option>`).join('');
+
     updateLinkLegend();
 }
 

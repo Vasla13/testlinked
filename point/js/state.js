@@ -8,14 +8,27 @@ export const state = {
     nextId: 1,
     selection: null,
     hoverId: null,
+    
+    // --- MODE FOCUS & PATHFINDING ---
     focusMode: false,
     focusSet: new Set(),
+    
     pathMode: false,
     pathPath: new Set(),
     pathLinks: new Set(),
+    // --------------------------------
+
+    // --- UNDO HISTORY ---
     history: [], 
+    // --------------------
+
+    // --- DRAG & DROP CREATION ---
     tempLink: null,
+    // ----------------------------
+
+    // 0 = Off, 1 = Auto (Zoom), 2 = Always On
     labelMode: 1, 
+    
     showLinkTypes: false,
     performance: false,
     view: { x: 0, y: 0, scale: 0.8 },
@@ -26,7 +39,6 @@ const STORAGE_KEY = 'pointPageState_v6';
 
 // --- UTILITAIRES COULEURS ---
 function hexToRgb(hex) {
-    // Expand shorthand form (e.g. "03F") to full form (e.g. "0033FF")
     var shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
     hex = hex.replace(shorthandRegex, function(m, r, g, b) {
         return r + r + g + g + b + b;
@@ -45,7 +57,6 @@ function rgbToHex(r, g, b) {
 
 // --- COULEURS AUTOMATIQUES (MIX PONDÉRÉ) ---
 export function updatePersonColors() {
-    // 1. Calcul du poids (degré) de chaque noeud
     const nodeWeights = new Map();
     state.links.forEach(l => {
         const sId = (typeof l.source === 'object') ? l.source.id : l.source;
@@ -59,7 +70,6 @@ export function updatePersonColors() {
             let totalR = 0, totalG = 0, totalB = 0;
             let totalWeight = 0;
 
-            // Parcourir les liens de cette personne
             state.links.forEach(l => {
                 const s = (typeof l.source === 'object') ? l.source : nodeById(l.source);
                 const t = (typeof l.target === 'object') ? l.target : nodeById(l.target);
@@ -68,10 +78,8 @@ export function updatePersonColors() {
                 let other = (s.id === n.id) ? t : ((t.id === n.id) ? s : null);
                 if (!other) return;
 
-                // Si c'est une structure (Entreprise/Groupe/Autre personne influente)
-                // On prend sa couleur en compte
                 if (other.type !== TYPES.PERSON || other.color) { 
-                    const weight = (nodeWeights.get(other.id) || 1); // Poids basé sur la taille (connexions)
+                    const weight = (nodeWeights.get(other.id) || 1); 
                     const rgb = hexToRgb(other.color || '#ffffff');
                     
                     totalR += rgb.r * weight;
@@ -82,13 +90,61 @@ export function updatePersonColors() {
             });
 
             if (totalWeight > 0) {
-                // Moyenne pondérée
                 n.color = rgbToHex(totalR / totalWeight, totalG / totalWeight, totalB / totalWeight);
             } else {
-                n.color = '#ffffff'; // Blanc par défaut
+                n.color = '#ffffff'; 
             }
         }
     });
+}
+
+// --- FUSION DE NOEUDS ---
+export function mergeNodes(sourceId, targetId) {
+    if (sourceId === targetId) return;
+    const source = nodeById(sourceId);
+    const target = nodeById(targetId);
+    if (!source || !target) return;
+
+    pushHistory(); 
+
+    // 1. Identifier les liens à déplacer
+    const linksToMove = state.links.filter(l => {
+        const s = (typeof l.source === 'object') ? l.source.id : l.source;
+        const t = (typeof l.target === 'object') ? l.target.id : l.target;
+        return s === sourceId || t === sourceId;
+    });
+
+    // 2. Créer les nouveaux liens sur la cible
+    linksToMove.forEach(l => {
+        const s = (typeof l.source === 'object') ? l.source.id : l.source;
+        const t = (typeof l.target === 'object') ? l.target.id : l.target;
+        const otherId = (s === sourceId) ? t : s;
+
+        if (otherId === targetId) return; // On évite de créer un lien Cible-Cible
+
+        // Vérifier si la cible est déjà connectée à "other"
+        const exists = state.links.find(ex => {
+            const es = (typeof ex.source === 'object') ? ex.source.id : ex.source;
+            const et = (typeof ex.target === 'object') ? ex.target.id : ex.target;
+            return (es === targetId && et === otherId) || (es === otherId && et === targetId);
+        });
+
+        if (!exists) {
+            state.links.push({ source: targetId, target: otherId, kind: l.kind });
+        }
+    });
+
+    // 3. Supprimer le noeud source et ses vieux liens
+    state.links = state.links.filter(l => {
+        const s = (typeof l.source === 'object') ? l.source.id : l.source;
+        const t = (typeof l.target === 'object') ? l.target.id : l.target;
+        return s !== sourceId && t !== sourceId;
+    });
+    state.nodes = state.nodes.filter(n => n.id !== sourceId);
+
+    // 4. Update
+    updatePersonColors();
+    restartSim();
 }
 
 // --- GESTION HISTORIQUE ---
