@@ -1,4 +1,4 @@
-import { state, saveState, nodeById, isPerson, isCompany, isGroup, ensureNode, addLink, propagateOrgNums } from './state.js';
+import { state, saveState, nodeById, isPerson, isCompany, isGroup, ensureNode, addLink, propagateOrgNums, undo, pushHistory } from './state.js';
 import { restartSim, getSimulation } from './physics.js';
 import { draw, updateDegreeCache, resizeCanvas } from './render.js';
 import { screenToWorld, escapeHtml, toColorInput, kindToLabel, linkKindEmoji, clamp, worldToScreen } from './utils.js';
@@ -17,6 +17,19 @@ export function initUI() {
     const canvas = document.getElementById('graph');
     window.addEventListener('resize', resizeCanvas);
     
+    // --- GESTION DU CLAVIER (CTRL+Z) ---
+    document.addEventListener('keydown', (e) => {
+        // Ctrl+Z ou Cmd+Z
+        if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+            e.preventDefault();
+            undo();
+            refreshLists();
+            if (state.selection) renderEditor(); // Rafraichir l'éditeur si ouvert
+            draw();
+        }
+    });
+    // -----------------------------------
+
     // 1. ZOOM
     canvas.addEventListener('wheel', (e) => {
         e.preventDefault();
@@ -152,9 +165,14 @@ export function initUI() {
 
     // 4. BOUTONS UI
     document.getElementById('btnRelayout').onclick = () => { state.view = {x:0, y:0, scale: 0.5}; restartSim(); };
-    document.getElementById('btnToggleSim').onclick = () => { state.forceSimulation = !state.forceSimulation; if(!state.forceSimulation) restartSim(); };
+    
+    // SUPPRESSION DU BOUTON PLAY/PAUSE (Comme demandé)
+    const btnSim = document.getElementById('btnToggleSim');
+    if (btnSim) btnSim.style.display = 'none';
+
     document.getElementById('btnClearAll').onclick = () => { 
         if(confirm('Attention : Voulez-vous vraiment tout effacer ?')) { 
+            pushHistory(); // Sauvegarde avant tout effacer (au cas où)
             state.nodes=[]; state.links=[]; state.selection = null; state.nextId = 1;
             restartSim(); refreshLists(); renderEditor(); saveState(); 
         }
@@ -187,6 +205,7 @@ export function initUI() {
 function createNode(type, baseName) {
     let name = baseName, i = 1;
     while(state.nodes.find(n => n.name === name)) { name = `${baseName} ${++i}`; }
+    // Note: createNode appelle ensureNode, qui gère déjà le pushHistory
     const n = ensureNode(type, name);
     selectNode(n.id);
     refreshLists(); restartSim();
@@ -247,7 +266,6 @@ export function renderEditor() {
     ui.editorTitle.textContent = n.name;
     ui.editorBody.classList.remove('muted');
 
-    // --- CONSTRUCTION HTML ---
     ui.editorBody.innerHTML = `
         <div class="row hstack" style="margin-bottom:15px; gap:5px;">
             <button id="btnFocusNode" class="${state.focusMode ? 'primary' : ''}" style="flex:1; font-size:0.8rem;">
@@ -318,9 +336,7 @@ export function renderEditor() {
         <div id="chipsLinks" class="chips"></div>
     `;
 
-    // --- LOGIQUE BOUTONS PRO ---
-    
-    // Fonction générique pour ajouter un lien
+    // Helpers
     const tryAddLink = (inputId, defaultKind) => {
         const targetName = document.getElementById(inputId).value;
         const target = state.nodes.find(x => x.name.toLowerCase() === targetName.toLowerCase());
@@ -333,19 +349,12 @@ export function renderEditor() {
         }
     };
 
-    // Entreprise
     document.getElementById('btnLinkCompanyAff').onclick = () => tryAddLink('inpCompany', KINDS.AFFILIATION);
-    document.getElementById('btnLinkCompanyVal').onclick = () => tryAddLink('inpCompany', KINDS.PARTENAIRE); // Défaut
-
-    // Groupe
+    document.getElementById('btnLinkCompanyVal').onclick = () => tryAddLink('inpCompany', KINDS.PARTENAIRE);
     document.getElementById('btnLinkGroupAff').onclick = () => tryAddLink('inpGroup', KINDS.AFFILIATION);
-    document.getElementById('btnLinkGroupVal').onclick = () => tryAddLink('inpGroup', KINDS.MEMBRE); // Défaut
-
-    // Personne
+    document.getElementById('btnLinkGroupVal').onclick = () => tryAddLink('inpGroup', KINDS.MEMBRE);
     document.getElementById('btnLinkPersonEmp').onclick = () => tryAddLink('inpPerson', KINDS.EMPLOYE);
-    document.getElementById('btnLinkPersonVal').onclick = () => tryAddLink('inpPerson', KINDS.AMI); // Défaut
-
-    // --- LOGIQUE STANDARD ---
+    document.getElementById('btnLinkPersonVal').onclick = () => tryAddLink('inpPerson', KINDS.AMI);
 
     document.getElementById('btnFocusNode').onclick = () => {
         if (state.focusMode) {
@@ -382,6 +391,7 @@ export function renderEditor() {
 
     document.getElementById('btnDelete').onclick = () => {
         if(confirm(`Supprimer "${n.name}" ?`)) {
+            pushHistory(); // Sauvegarde avant suppression
             state.nodes = state.nodes.filter(x => x.id !== n.id);
             state.links = state.links.filter(l => l.source.id !== n.id && l.target.id !== n.id);
             state.selection = null;
@@ -389,7 +399,6 @@ export function renderEditor() {
         }
     };
 
-    // Chips
     const chips = document.getElementById('chipsLinks');
     const myLinks = state.links.filter(l => l.source.id === n.id || l.target.id === n.id);
     if (myLinks.length === 0) {
@@ -403,6 +412,7 @@ export function renderEditor() {
 
     chips.querySelectorAll('.x').forEach(x => {
         x.onclick = (e) => {
+            pushHistory(); // Sauvegarde avant suppression lien
             const targetId = parseInt(e.target.dataset.targetId);
             state.links = state.links.filter(l => {
                 const s = l.source.id;

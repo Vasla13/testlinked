@@ -13,13 +13,17 @@ export const state = {
     focusMode: false,
     focusSet: new Set(),
     
-    pathMode: false,       // Est-ce qu'on affiche un chemin ?
-    pathPath: new Set(),   // IDs des nœuds du chemin
-    pathLinks: new Set(),  // IDs des liens du chemin (combinaison source-target)
+    pathMode: false,
+    pathPath: new Set(),
+    pathLinks: new Set(),
     // --------------------------------
 
+    // --- UNDO HISTORY ---
+    history: [], // Pile des états précédents
+    // --------------------
+
     // --- DRAG & DROP CREATION ---
-    tempLink: null, // { x1, y1, x2, y2 } pour dessiner le trait pendant le drag
+    tempLink: null,
     // ----------------------------
 
     showLabels: true,
@@ -29,7 +33,43 @@ export const state = {
     forceSimulation: false
 };
 
-const STORAGE_KEY = 'pointPageState_v3'; // Version bump
+const STORAGE_KEY = 'pointPageState_v3';
+
+// --- GESTION HISTORIQUE (CTRL+Z) ---
+export function pushHistory() {
+    // On garde les 50 derniers coups
+    if (state.history.length > 50) state.history.shift();
+    
+    // On sauvegarde une copie profonde des noeuds et liens
+    // Note: On ne sauvegarde pas la vue (zoom/pan) pour ne pas désorienter l'utilisateur lors du Undo
+    const snapshot = {
+        nodes: state.nodes.map(n => ({...n})), // Copie des propriétés
+        links: state.links.map(l => ({
+            source: (typeof l.source === 'object') ? l.source.id : l.source,
+            target: (typeof l.target === 'object') ? l.target.id : l.target,
+            kind: l.kind
+        })),
+        nextId: state.nextId
+    };
+    
+    state.history.push(JSON.stringify(snapshot));
+}
+
+export function undo() {
+    if (state.history.length === 0) return;
+    
+    const prevJSON = state.history.pop();
+    const prev = JSON.parse(prevJSON);
+
+    // Restauration
+    state.nodes = prev.nodes;
+    state.links = prev.links;
+    state.nextId = prev.nextId;
+    
+    // On relance la physique pour réassocier les objets D3
+    restartSim();
+}
+// ------------------------------------
 
 export function saveState() {
     try {
@@ -74,6 +114,7 @@ export function isCompany(n) { return n.type === TYPES.COMPANY; }
 export function ensureNode(type, name, init = {}) {
     let n = state.nodes.find(x => x.name.toLowerCase() === name.toLowerCase());
     if (!n) {
+        pushHistory(); // Sauvegarde avant création
         n = { 
             id: uid(), 
             name, 
@@ -93,7 +134,6 @@ export function addLink(a, b, kind) {
     const B = (typeof b === 'object') ? b : nodeById(b);
     if (!A || !B || A.id === B.id) return false;
 
-    // Smart default logic si kind n'est pas fourni (pour le drag & drop)
     if (!kind) {
         if (A.type === TYPES.PERSON && B.type === TYPES.PERSON) kind = KINDS.AMI;
         else if (A.type === TYPES.COMPANY || B.type === TYPES.COMPANY) kind = KINDS.EMPLOYE;
@@ -115,6 +155,7 @@ export function addLink(a, b, kind) {
     });
 
     if (!exists) {
+        pushHistory(); // Sauvegarde avant ajout lien
         state.links.push({ source: A.id, target: B.id, kind });
         if (kind === KINDS.PATRON) propagateOrgNums();
         restartSim();

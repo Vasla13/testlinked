@@ -12,7 +12,7 @@ export function initPhysics() {
 }
 
 function ticked() {
-    if (state.forceSimulation) return; // Pause
+    if (state.forceSimulation) return; 
     draw();
 }
 
@@ -21,8 +21,7 @@ export function restartSim() {
 
     simulation.nodes(state.nodes);
     
-    // 1. Calcul du nombre de liens par noeud (Degré)
-    // Plus un noeud est connecté, plus il doit avoir d'espace autour de lui
+    // Calcul du degré pour la répulsion
     const nodeDegree = new Map();
     state.nodes.forEach(n => nodeDegree.set(n.id, 0));
     state.links.forEach(l => {
@@ -35,46 +34,60 @@ export function restartSim() {
     simulation.force("link", d3.forceLink(state.links)
         .id(d => d.id)
         .distance(l => {
-            // Distances hiérarchiques
-            if (l.kind === KINDS.AFFILIATION) return 400; // Très loin pour les groupes affiliés
-            if (l.kind === KINDS.PATRON) return 50;       // Patron collé à la boite
-            if (l.kind === KINDS.HAUT_GRADE) return 70;   // Cadre proche
+            if (l.kind === KINDS.AFFILIATION) return 400;
+            if (l.kind === KINDS.PATRON) return 50;
+            if (l.kind === KINDS.HAUT_GRADE) return 70;
             if (l.kind === KINDS.FAMILLE) return 60;
             if (l.kind === KINDS.AMOUR) return 50;
-            if (l.kind === KINDS.EMPLOYE) return 180;     // Employé standard
+            if (l.kind === KINDS.EMPLOYE) return 180;
             return 140;
         })
         .strength(l => {
-            if (l.kind === KINDS.AFFILIATION) return 0.1; // Lien souple
-            if (l.kind === KINDS.PATRON) return 1.2;      // Lien rigide
+            if (l.kind === KINDS.AFFILIATION) return 0.1; 
+            if (l.kind === KINDS.PATRON) return 1.2;
             return 0.3;
         })
     );
 
     simulation.force("charge", d3.forceManyBody()
         .strength(n => {
-            // Force de base
             let strength = -400;
-            
             if (n.type === TYPES.COMPANY) strength = -1200;
             if (n.type === TYPES.GROUP) strength = -900;
-
-            // BONUS REPULSION : Proportionnel au nombre de liens
-            // Chaque connexion ajoute -100 de répulsion.
-            // Une entreprise avec 10 employés aura -1200 + (-100 * 10) = -2200 de force
-            // Cela "nettoie" la zone autour d'elle.
+            
+            // Répulsion dynamique
             const degree = nodeDegree.get(n.id) || 0;
             strength -= (degree * 120); 
 
             return strength;
         })
-        .distanceMax(2000) // Augmenté pour que la répulsion agisse de loin
+        .distanceMax(2000)
     );
 
     simulation.force("collide", d3.forceCollide()
-        .radius(n => nodeRadius(n) + 20) // Marge de sécurité entre les points
+        .radius(n => nodeRadius(n) + 20)
         .iterations(3)
     );
+
+    // --- NOUVEAU : Force de confinement (Limite de distance) ---
+    // Le rayon autorisé dépend du nombre de nœuds pour éviter l'étouffement
+    // Base 1200 + 15 pixels par nœud supplémentaire
+    const worldRadius = 1200 + (state.nodes.length * 15);
+    
+    simulation.force("boundary", () => {
+        for (const n of state.nodes) {
+            const dist = Math.sqrt(n.x * n.x + n.y * n.y);
+            if (dist > worldRadius) {
+                // Si le point dépasse la limite, on le repousse vers le centre (0,0)
+                // Plus il est loin, plus la force est grande
+                const angle = Math.atan2(n.y, n.x);
+                const strength = 0.5; // Force de rappel
+                n.vx -= Math.cos(angle) * strength;
+                n.vy -= Math.sin(angle) * strength;
+            }
+        }
+    });
+    // -----------------------------------------------------------
 
     simulation.force("center", d3.forceCenter(0, 0).strength(0.04));
     
