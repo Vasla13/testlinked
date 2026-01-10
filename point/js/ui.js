@@ -13,7 +13,7 @@ const ui = {
     linkLegend: document.getElementById('linkLegend'),
 };
 
-// Fonction pour nettoyer les couleurs pour l'input HTML (Doit être #RRGGBB)
+// Fonction pour nettoyer les couleurs pour l'input HTML
 function safeHex(color) {
     if (!color || typeof color !== 'string') return '#000000';
     if (/^#[0-9A-F]{3}$/i.test(color)) return color;
@@ -26,15 +26,23 @@ export function initUI() {
     // --- CSS INJECTION ---
     const style = document.createElement('style');
     style.innerHTML = `
-        #editorBody { max-height: calc(100vh - 200px); overflow-y: auto; padding-right: 5px; }
+        /* Scrollbar si le contenu est trop long */
+        #editorBody { max-height: calc(100vh - 180px); overflow-y: auto; padding-right: 5px; }
         #editorBody::-webkit-scrollbar { width: 5px; }
         #editorBody::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+        
+        /* Style des blocs accordéon */
         details { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; margin-bottom: 8px; padding: 5px; }
-        summary { cursor: pointer; font-weight: bold; font-size: 0.85rem; color: var(--accent-cyan); padding: 2px 0; list-style: none; display: flex; align-items: center; justify-content: space-between; }
+        summary { cursor: pointer; font-weight: bold; font-size: 0.85rem; color: var(--accent-cyan); padding: 4px 0; list-style: none; display: flex; align-items: center; justify-content: space-between; }
         summary::after { content: '+'; font-size: 1rem; font-weight: bold; }
         details[open] summary::after { content: '-'; }
-        .compact-row { display: flex; gap: 5px; align-items: center; }
+        
+        /* Lignes compactes */
+        .compact-row { display: flex; gap: 5px; align-items: center; width: 100%; }
         .compact-col { flex: 1; }
+        
+        /* Boutons d'action compacts */
+        .action-btn { flex: 0 0 auto; padding: 4px 8px; font-size: 0.75rem; white-space: nowrap; }
     `;
     document.head.appendChild(style);
 
@@ -211,6 +219,7 @@ export function initUI() {
             restartSim(); refreshLists(); renderEditor(); saveState(); 
         }
     };
+    document.getElementById('chkLabels').onchange = (e) => { state.showLabels = e.target.checked; draw(); };
     document.getElementById('chkPerf').onchange = (e) => { state.performance = e.target.checked; draw(); };
     document.getElementById('chkLinkTypes').onchange = (e) => { state.showLinkTypes = e.target.checked; updateLinkLegend(); draw(); };
 
@@ -280,9 +289,7 @@ export function refreshLists() {
     fillDL('datalist-people', state.nodes.filter(isPerson));
     fillDL('datalist-groups', state.nodes.filter(isGroup));
     fillDL('datalist-companies', state.nodes.filter(isCompany));
-    
-    // CORRECTION : On met à jour la légende ici aussi
-    updateLinkLegend();
+    updateLinkLegend(); // <-- La fonction était appelée mais non définie dans ce fichier, je l'ajoute plus bas
 }
 
 export function renderEditor() {
@@ -300,7 +307,7 @@ export function renderEditor() {
 
     let colorInputHtml = '';
     if (n.type === 'person') {
-        colorInputHtml = `<div style="font-size:0.8rem; padding-top:10px; color:#aaa;">Auto (via Entreprise)</div>`;
+        colorInputHtml = `<div style="font-size:0.8rem; padding-top:10px; color:#aaa;">Auto</div>`;
     } else {
         colorInputHtml = `<input id="edColor" type="color" value="${safeHex(n.color)}" style="height:38px; width:100%;"/>`;
     }
@@ -308,7 +315,7 @@ export function renderEditor() {
     ui.editorBody.innerHTML = `
         <div class="row hstack" style="margin-bottom:15px; gap:5px;">
             <button id="btnFocusNode" class="${state.focusMode ? 'primary' : ''}" style="flex:1; font-size:0.8rem;">
-                ${state.focusMode ? '🔍 Voir Tout' : '🎯 Focus'}
+                ${state.focusMode ? '🔍 Tout' : '🎯 Focus'}
             </button>
             <button id="btnCenterNode" style="flex:1; font-size:0.8rem;">📍 Centrer</button>
             <button id="btnDelete" class="danger" style="flex:0 0 auto; font-size:0.8rem;">🗑️</button>
@@ -320,6 +327,7 @@ export function renderEditor() {
                 <label>Nom</label>
                 <input id="edName" type="text" value="${escapeHtml(n.name)}"/>
             </div>
+            
             <div class="compact-row">
                 <div class="compact-col">
                     <label style="font-size:0.8rem; opacity:0.7;">Type</label>
@@ -334,48 +342,54 @@ export function renderEditor() {
                     ${colorInputHtml}
                 </div>
             </div>
+
             <div class="row" style="margin-top:5px;">
-                <label>Matricule</label>
+                <label>Téléphone</label>
                 <input id="edNum" type="text" value="${escapeHtml(n.num||'')}"/>
             </div>
-            <div class="row">
-                <textarea id="edNotes" class="notes-textarea" placeholder="Informations...">${escapeHtml(n.notes||'')}</textarea>
-            </div>
+        </details>
+
+        <details open>
+            <summary>Informations</summary>
+            <textarea id="edNotes" class="notes-textarea" placeholder="Notes..." style="min-height:80px;">${escapeHtml(n.notes||'')}</textarea>
         </details>
         
         <details open>
-            <summary>Création Rapide</summary>
+            <summary>Ajouter une relation</summary>
+            
             <div style="margin-bottom:8px;">
                 <label style="font-size:0.8rem; color:#aaa;">Entreprise</label>
-                <div class="row hstack" style="gap:5px;">
-                    <input id="inpCompany" list="datalist-companies" placeholder="Nom..." class="grow" style="min-width:0;"/>
-                    <button id="btnLinkCompanyAff" style="font-size:0.75rem; padding:4px 8px;">Aff.</button>
-                    <button id="btnLinkCompanyVal" class="primary" style="font-size:0.75rem; padding:4px 8px;">OK</button>
+                <div class="compact-row">
+                    <input id="inpCompany" list="datalist-companies" placeholder="Nom..." class="compact-col" style="min-width:0;"/>
+                    <button id="btnLinkCompanyAff" class="action-btn">Aff.</button>
+                    <button id="btnLinkCompanyVal" class="action-btn primary">Partenaire</button>
                 </div>
             </div>
+
             <div style="margin-bottom:8px;">
                 <label style="font-size:0.8rem; color:#aaa;">Groupuscule</label>
-                <div class="row hstack" style="gap:5px;">
-                    <input id="inpGroup" list="datalist-groups" placeholder="Nom..." class="grow" style="min-width:0;"/>
-                    <button id="btnLinkGroupAff" style="font-size:0.75rem; padding:4px 8px;">Aff.</button>
-                    <button id="btnLinkGroupVal" class="primary" style="font-size:0.75rem; padding:4px 8px;">OK</button>
+                <div class="compact-row">
+                    <input id="inpGroup" list="datalist-groups" placeholder="Nom..." class="compact-col" style="min-width:0;"/>
+                    <button id="btnLinkGroupAff" class="action-btn">Aff.</button>
+                    <button id="btnLinkGroupVal" class="action-btn primary">Membre</button>
                 </div>
             </div>
+
             <div style="margin-bottom:8px;">
                 <label style="font-size:0.8rem; color:#aaa;">Personnel</label>
-                <div class="row hstack" style="gap:5px;">
-                    <input id="inpPerson" list="datalist-people" placeholder="Nom..." class="grow" style="min-width:0;"/>
-                    <button id="btnLinkPersonEmp" style="font-size:0.75rem; padding:4px 8px;">Emp.</button>
-                    <button id="btnLinkPersonVal" class="primary" style="font-size:0.75rem; padding:4px 8px;">OK</button>
+                <div class="compact-row">
+                    <input id="inpPerson" list="datalist-people" placeholder="Nom..." class="compact-col" style="min-width:0;"/>
+                    <button id="btnLinkPersonEmp" class="action-btn">Emp.</button>
+                    <button id="btnLinkPersonVal" class="action-btn primary">Ami</button>
                 </div>
             </div>
         </details>
 
         <details>
-            <summary>Connexion Manuelle</summary>
-            <div class="row hstack" style="gap:5px; margin-bottom:5px;">
-               <input id="linkTarget" list="datalist-all" placeholder="Rechercher cible..." class="grow" style="min-width:0;"/>
-               <select id="linkKind" style="width:110px;"></select>
+            <summary>Connexion Avancée (Autre)</summary>
+            <div class="compact-row" style="margin-bottom:5px;">
+               <input id="linkTarget" list="datalist-all" placeholder="Cible..." class="compact-col" style="min-width:0;"/>
+               <select id="linkKind" style="width:100px;"></select>
             </div>
             <button id="btnAddLink" style="width:100%; margin-bottom:5px;">🔗 Lier</button>
         </details>
@@ -385,6 +399,8 @@ export function renderEditor() {
             <div id="chipsLinks" class="chips"></div>
         </details>
     `;
+
+    // --- LISTENERS ---
 
     const tryAddLink = (inputId, defaultKind) => {
         const targetName = document.getElementById(inputId).value;
@@ -515,18 +531,25 @@ export function renderEditor() {
         };
     });
     
-    // CORRECTION : On met à jour la légende ici aussi car les liens actifs ont peut-être changé
     updateLinkLegend();
 }
 
+// VOICI LA FONCTION MANQUANTE
 export function updateLinkLegend() {
     const el = ui.linkLegend;
     if(!state.showLinkTypes) { el.innerHTML = ''; return; }
+    
     const usedKinds = new Set(state.links.map(l => l.kind));
     if(usedKinds.size === 0) { el.innerHTML = ''; return; }
+
     const html = [];
     usedKinds.forEach(k => {
-        html.push(`<div class="legend-item"><span class="legend-emoji">${linkKindEmoji(k)}</span><span>${kindToLabel(k)}</span></div>`);
+        html.push(`
+            <div class="legend-item">
+                <span class="legend-emoji">${linkKindEmoji(k)}</span>
+                <span>${kindToLabel(k)}</span>
+            </div>
+        `);
     });
     el.innerHTML = html.join('');
 }
