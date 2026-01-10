@@ -46,15 +46,24 @@ function drawPolygon(ctx, x, y, radius, sides, rotate = 0) {
     }
 }
 
+// --- FONCTION DE SECURITE ---
+// Vérifie si une couleur est valide, sinon renvoie du gris pour éviter le crash
+function safeColor(c) {
+    if (typeof c !== 'string') return '#999999';
+    // Valide: #ABC, #ABCDEF, #ABCDAAAA
+    const isValid = /^#([0-9A-F]{3}){1,2}$/i.test(c) || /^#([0-9A-F]{8})$/i.test(c);
+    return isValid ? c : '#999999';
+}
+
 export function draw() {
     const p = state.view;
     const r = window.devicePixelRatio || 1;
     const w = canvas.width / r;
     const h = canvas.height / r;
     
-    // Etats speciaux
     const isFocus = state.focusMode;
     const isPath = state.pathMode;
+    const showTypes = state.showLinkTypes; 
 
     ctx.save();
     ctx.clearRect(0, 0, w, h);
@@ -70,17 +79,14 @@ export function draw() {
     const hasFocus = (focusId !== null);
     
     function isDimmed(objType, obj) {
-        // Priorité au Pathfinding : si actif, tout ce qui n'est pas le chemin est éteint
         if (isPath) {
             if (objType === 'node') return !state.pathPath.has(obj.id);
             if (objType === 'link') {
                 const s = obj.source.id, t = obj.target.id;
-                // Clé unique pour le lien
                 const k1 = `${s}-${t}`, k2 = `${t}-${s}`;
                 return !(state.pathLinks.has(k1) || state.pathLinks.has(k2));
             }
         }
-
         if (!hasFocus) return false;
         
         if (objType === 'node') {
@@ -112,50 +118,72 @@ export function draw() {
         ctx.moveTo(l.source.x, l.source.y);
         ctx.lineTo(l.target.x, l.target.y);
 
-        const color = computeLinkColor(l);
-        ctx.strokeStyle = color;
-        
-        // Si c'est le chemin trouvé, on le fait briller
-        const isPathLink = isPath && !dimmed;
-        ctx.lineWidth = (isPathLink ? 4 : (dimmed ? 1 : 2)) / Math.sqrt(p.scale);
-        ctx.globalAlpha = isPathLink ? 1.0 : globalAlpha;
-
-        if ((useGlow && !dimmed) || isPathLink) {
-            ctx.shadowBlur = isPathLink ? 15 : 8;
-            ctx.shadowColor = color;
+        // --- GESTION COULEUR LIEN ---
+        if (showTypes) {
+            // MODE TYPE ACTIVÉ
+            const color = computeLinkColor(l);
+            ctx.strokeStyle = color;
+            ctx.lineWidth = (dimmed ? 1 : 2) / Math.sqrt(p.scale);
+            
+            if (useGlow && !dimmed) {
+                ctx.shadowBlur = 8;
+                ctx.shadowColor = color;
+            } else {
+                ctx.shadowBlur = 0;
+            }
         } else {
+            // MODE TYPE DÉSACTIVÉ : Dégradé Source -> Target
+            if (state.performance) {
+                ctx.strokeStyle = "rgba(255,255,255,0.2)";
+            } else {
+                // PROTECTION CONTRE LE CRASH COULEUR
+                try {
+                    const grad = ctx.createLinearGradient(l.source.x, l.source.y, l.target.x, l.target.y);
+                    grad.addColorStop(0, safeColor(l.source.color));
+                    grad.addColorStop(1, safeColor(l.target.color));
+                    ctx.strokeStyle = grad;
+                } catch (e) {
+                    // Si ça plante quand même, fallback ultime
+                    ctx.strokeStyle = '#999'; 
+                }
+            }
+            ctx.lineWidth = (dimmed ? 1 : 1.5) / Math.sqrt(p.scale);
             ctx.shadowBlur = 0;
         }
+
+        ctx.globalAlpha = globalAlpha;
         ctx.stroke();
         
-        // Emoji Lien
-        if (state.showLinkTypes && p.scale > 0.6 && !dimmed) {
+        // --- EMOJI LIEN ---
+        if (showTypes && p.scale > 0.6 && !dimmed) {
             const mx = (l.source.x + l.target.x) / 2;
             const my = (l.source.y + l.target.y) / 2;
+            const color = computeLinkColor(l);
             
             ctx.globalAlpha = 1; ctx.shadowBlur = 0;
-            ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(mx, my, 9 / Math.sqrt(p.scale), 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(mx, my, 10 / Math.sqrt(p.scale), 0, Math.PI*2); ctx.fill();
 
             ctx.strokeStyle = color; ctx.lineWidth = 1 / Math.sqrt(p.scale); ctx.stroke();
             ctx.fillStyle = '#fff'; ctx.font = `${14 / Math.sqrt(p.scale)}px sans-serif`; 
             ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-            ctx.fillText(LINK_KIND_EMOJI[l.kind] || '•', mx, my);
+            const emoji = LINK_KIND_EMOJI[l.kind] || '•';
+            ctx.fillText(emoji, mx, my);
         }
     }
 
-    // 2. LIEN TEMPORAIRE (DRAG & DROP)
+    // 2. LIEN TEMPORAIRE (DRAG)
     if (state.tempLink) {
         ctx.beginPath();
         ctx.moveTo(state.tempLink.x1, state.tempLink.y1);
         ctx.lineTo(state.tempLink.x2, state.tempLink.y2);
         ctx.strokeStyle = "#ffffff";
         ctx.lineWidth = 2 / Math.sqrt(p.scale);
-        ctx.setLineDash([5, 5]); // Pointillés
+        ctx.setLineDash([5, 5]);
         ctx.stroke();
-        ctx.setLineDash([]); // Reset
+        ctx.setLineDash([]);
     }
 
-    // 3. DESSIN DES NOEUDS
+    // 3. NOEUDS
     ctx.shadowBlur = 0;
     for (const n of state.nodes) {
         if (isFocus && !state.focusSet.has(n.id)) continue;
@@ -163,7 +191,6 @@ export function draw() {
         const dimmed = isDimmed('node', n);
         const rad = nodeRadius(n); 
         
-        // Si c'est le chemin, opacité max
         ctx.globalAlpha = (isPath && state.pathPath.has(n.id)) ? 1.0 : (dimmed ? 0.1 : 1.0);
 
         ctx.beginPath();
@@ -171,13 +198,14 @@ export function draw() {
         else if (isCompany(n)) drawPolygon(ctx, n.x, n.y, rad * 1.1, 6, Math.PI/2); 
         else ctx.arc(n.x, n.y, rad, 0, Math.PI * 2);
 
-        ctx.fillStyle = n.color || '#9aa3ff';
+        // Protection couleur ici aussi
+        ctx.fillStyle = safeColor(n.color);
         
         const isPathNode = isPath && state.pathPath.has(n.id);
 
         if (state.selection === n.id || state.hoverId === n.id || isPathNode) {
-            ctx.shadowBlur = isPathNode ? 40 : 30; // Gros glow pour le chemin
-            ctx.shadowColor = isPathNode ? '#ffff00' : n.color; // Jaune pour le chemin
+            ctx.shadowBlur = isPathNode ? 40 : 30; 
+            ctx.shadowColor = isPathNode ? '#ffff00' : safeColor(n.color); 
             ctx.strokeStyle = "#ffffff";
             ctx.lineWidth = (isPathNode ? 6 : 4) / Math.sqrt(p.scale);
             ctx.stroke();
@@ -233,7 +261,7 @@ export function draw() {
                 else ctx.rect(boxX, boxY, textW + padding*2, textH + padding);
                 ctx.fill();
                 
-                ctx.strokeStyle = isPathNode ? '#ffff00' : n.color;
+                ctx.strokeStyle = isPathNode ? '#ffff00' : safeColor(n.color);
                 ctx.lineWidth = (isPathNode ? 3 : 1) / Math.sqrt(p.scale);
                 ctx.stroke();
 

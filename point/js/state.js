@@ -19,7 +19,7 @@ export const state = {
     // --------------------------------
 
     // --- UNDO HISTORY ---
-    history: [], // Pile des états précédents
+    history: [], 
     // --------------------
 
     // --- DRAG & DROP CREATION ---
@@ -33,17 +33,59 @@ export const state = {
     forceSimulation: false
 };
 
-const STORAGE_KEY = 'pointPageState_v3';
+const STORAGE_KEY = 'pointPageState_v4';
+
+// --- COULEURS AUTOMATIQUES ---
+export function updatePersonColors() {
+    // 1. On calcule la "taille" (degré) de chaque entreprise pour savoir laquelle est la plus grosse
+    const companySizes = new Map();
+    state.links.forEach(l => {
+        const sId = (typeof l.source === 'object') ? l.source.id : l.source;
+        const tId = (typeof l.target === 'object') ? l.target.id : l.target;
+        
+        // On compte les liens pour chaque ID
+        companySizes.set(sId, (companySizes.get(sId) || 0) + 1);
+        companySizes.set(tId, (companySizes.get(tId) || 0) + 1);
+    });
+
+    // 2. Pour chaque personne, on cherche son employeur principal
+    state.nodes.forEach(n => {
+        if (n.type === TYPES.PERSON) {
+            let bestCompany = null;
+            let maxScore = -1;
+
+            // On cherche les liens connectés à cette personne
+            state.links.forEach(l => {
+                const s = (typeof l.source === 'object') ? l.source : nodeById(l.source);
+                const t = (typeof l.target === 'object') ? l.target : nodeById(l.target);
+                if (!s || !t) return;
+
+                const other = (s.id === n.id) ? t : s;
+                
+                // Si l'autre bout est une entreprise
+                if (other.type === TYPES.COMPANY) {
+                    const score = companySizes.get(other.id) || 0;
+                    if (score > maxScore) {
+                        maxScore = score;
+                        bestCompany = other;
+                    }
+                }
+            });
+
+            if (bestCompany) {
+                n.color = bestCompany.color; // On prend la couleur de l'entreprise
+            } else {
+                n.color = '#ffffff'; // Blanc par défaut si chômeur
+            }
+        }
+    });
+}
 
 // --- GESTION HISTORIQUE (CTRL+Z) ---
 export function pushHistory() {
-    // On garde les 50 derniers coups
     if (state.history.length > 50) state.history.shift();
-    
-    // On sauvegarde une copie profonde des noeuds et liens
-    // Note: On ne sauvegarde pas la vue (zoom/pan) pour ne pas désorienter l'utilisateur lors du Undo
     const snapshot = {
-        nodes: state.nodes.map(n => ({...n})), // Copie des propriétés
+        nodes: state.nodes.map(n => ({...n})), 
         links: state.links.map(l => ({
             source: (typeof l.source === 'object') ? l.source.id : l.source,
             target: (typeof l.target === 'object') ? l.target.id : l.target,
@@ -51,22 +93,19 @@ export function pushHistory() {
         })),
         nextId: state.nextId
     };
-    
     state.history.push(JSON.stringify(snapshot));
 }
 
 export function undo() {
     if (state.history.length === 0) return;
-    
     const prevJSON = state.history.pop();
     const prev = JSON.parse(prevJSON);
-
-    // Restauration
     state.nodes = prev.nodes;
     state.links = prev.links;
     state.nextId = prev.nextId;
     
-    // On relance la physique pour réassocier les objets D3
+    // On recalcule les couleurs au cas où
+    updatePersonColors();
     restartSim();
 }
 // ------------------------------------
@@ -114,7 +153,7 @@ export function isCompany(n) { return n.type === TYPES.COMPANY; }
 export function ensureNode(type, name, init = {}) {
     let n = state.nodes.find(x => x.name.toLowerCase() === name.toLowerCase());
     if (!n) {
-        pushHistory(); // Sauvegarde avant création
+        pushHistory(); 
         n = { 
             id: uid(), 
             name, 
@@ -155,9 +194,13 @@ export function addLink(a, b, kind) {
     });
 
     if (!exists) {
-        pushHistory(); // Sauvegarde avant ajout lien
+        pushHistory(); 
         state.links.push({ source: A.id, target: B.id, kind });
         if (kind === KINDS.PATRON) propagateOrgNums();
+        
+        // Mise à jour des couleurs auto
+        updatePersonColors();
+        
         restartSim();
         return true;
     }

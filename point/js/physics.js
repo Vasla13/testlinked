@@ -6,8 +6,8 @@ let simulation;
 
 export function initPhysics() {
     simulation = d3.forceSimulation()
-        .alphaDecay(0.02)     // Ralentissement naturel
-        .velocityDecay(0.3)   // Friction (0.3 = assez élevé pour éviter que ça parte dans tous les sens)
+        .alphaDecay(0.02)
+        .velocityDecay(0.3)
         .on("tick", ticked);
 }
 
@@ -21,17 +21,28 @@ export function restartSim() {
 
     simulation.nodes(state.nodes);
     
-    // Calcul du degré pour la répulsion
+    // --- 1. PRÉPARATION ---
     const nodeDegree = new Map();
+    const connectedPairs = new Set();
+
     state.nodes.forEach(n => nodeDegree.set(n.id, 0));
+    
     state.links.forEach(l => {
         const s = (typeof l.source === 'object') ? l.source.id : l.source;
         const t = (typeof l.target === 'object') ? l.target.id : l.target;
+        
         nodeDegree.set(s, (nodeDegree.get(s) || 0) + 1);
         nodeDegree.set(t, (nodeDegree.get(t) || 0) + 1);
+
+        // On stocke les connexions sous forme de chaîne "ID-ID"
+        // On s'assure que ce sont des Strings pour éviter les bugs type nombre vs string
+        connectedPairs.add(`${s}-${t}`);
+        connectedPairs.add(`${t}-${s}`);
     });
 
-    // 1. LIENS (Ressorts)
+    // --- 2. FORCES ---
+
+    // A. LIENS
     simulation.force("link", d3.forceLink(state.links)
         .id(d => d.id)
         .distance(l => {
@@ -44,62 +55,83 @@ export function restartSim() {
             return 140;
         })
         .strength(l => {
-            if (l.kind === KINDS.AFFILIATION) return 0.05; // Très souple
-            if (l.kind === KINDS.PATRON) return 1.5;       // Très fort
+            if (l.kind === KINDS.AFFILIATION) return 0.05; 
+            if (l.kind === KINDS.PATRON) return 1.5;
             return 0.3;
         })
     );
 
-    // 2. REPULSION (Charges électriques)
+    // B. CHARGE (Répulsion globale)
     simulation.force("charge", d3.forceManyBody()
         .strength(n => {
-            let strength = -400; // Base pour tout le monde
-            
-            // Les structures repoussent fort
-            if (n.type === TYPES.COMPANY) strength = -1200;
-            if (n.type === TYPES.GROUP) strength = -900;
-            
-            // Répulsion dynamique : plus on a de liens, plus on fait le vide autour de soi
+            let strength = -400;
+            if (n.type === TYPES.COMPANY) strength = -1500; 
+            if (n.type === TYPES.GROUP) strength = -1000;
             const degree = nodeDegree.get(n.id) || 0;
             strength -= (degree * 100); 
-
             return strength;
         })
-        .distanceMax(2000) // On arrête de calculer la répulsion si trop loin (optimisation)
+        .distanceMax(2500)
     );
 
-    // 3. ANTI-COLLISION (Évite que les bulles se chevauchent)
+    // C. COLLISION
     simulation.force("collide", d3.forceCollide()
         .radius(n => nodeRadius(n) + 20)
         .iterations(3)
     );
 
-    // 4. BARRIÈRE ÉLASTIQUE (Empêche les points de se barrer)
-    // Rayon dynamique : Base 600px + 10px par point existant
-    const worldRadius = 600 + (state.nodes.length * 10);
-
+    // D. BARRIÈRE (Limite du monde)
+    const worldRadius = 800 + (state.nodes.length * 12);
     simulation.force("boundary", () => {
         for (const n of state.nodes) {
-            // Distance du centre (0,0)
             const d = Math.sqrt(n.x * n.x + n.y * n.y);
-            
-            // Si le point est hors du cercle autorisé
             if (d > worldRadius) {
-                const excess = d - worldRadius; // De combien il dépasse
+                const excess = d - worldRadius;
                 const angle = Math.atan2(n.y, n.x);
-                
-                // Force de rappel : "Ressort" qui tire vers le centre
-                // 0.05 * excess = plus il est loin, plus ça tire fort.
-                const pullBack = excess * 0.05; 
-
+                const pullBack = excess * 0.08; 
                 n.vx -= Math.cos(angle) * pullBack;
                 n.vy -= Math.sin(angle) * pullBack;
             }
         }
     });
 
-    // 5. GRAVITÉ CENTRALE (Douce, pour garder tout le monde groupé)
-    simulation.force("center", d3.forceCenter(0, 0).strength(0.08));
+    // E. TERRITOIRE (Zone interdite aux non-membres)
+    simulation.force("territory", () => {
+        const structures = state.nodes.filter(n => n.type === TYPES.COMPANY || n.type === TYPES.GROUP);
+        const alpha = 0.5; 
+
+        for (const struct of structures) {
+            const territoryRadius = (struct.type === TYPES.COMPANY) ? 280 : 200; 
+
+            for (const n of state.nodes) {
+                // 1. On ignore soi-même et les autres structures
+                if (n.id === struct.id || n.type === TYPES.COMPANY || n.type === TYPES.GROUP) continue;
+                
+                // 2. CORRECTION CRITIQUE : Si le nœud est tenu par la souris (drag), on le laisse entrer !
+                // fx est défini quand D3 drag est actif
+                if (n.fx != null || n.fy != null) continue;
+
+                // 3. Si connecté, on ignore (droit d'entrée)
+                if (connectedPairs.has(`${n.id}-${struct.id}`)) continue;
+
+                // 4. Calcul distance
+                const dx = n.x - struct.x;
+                const dy = n.y - struct.y;
+                const distSq = dx*dx + dy*dy; 
+                const minDistSq = territoryRadius * territoryRadius;
+
+                // 5. Ejection si trop près
+                if (distSq < minDistSq) {
+                    const dist = Math.sqrt(distSq);
+                    const l = (territoryRadius - dist) / (dist || 1) * alpha;
+                    n.vx += dx * l;
+                    n.vy += dy * l;
+                }
+            }
+        }
+    });
+
+    simulation.force("center", d3.forceCenter(0, 0).strength(0.05));
     
     simulation.alpha(1).restart();
 }

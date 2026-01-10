@@ -1,4 +1,4 @@
-import { state, saveState, nodeById, isPerson, isCompany, isGroup, ensureNode, addLink, propagateOrgNums, undo, pushHistory } from './state.js';
+import { state, saveState, nodeById, isPerson, isCompany, isGroup, ensureNode, addLink, propagateOrgNums, undo, pushHistory, updatePersonColors } from './state.js';
 import { restartSim, getSimulation } from './physics.js';
 import { draw, updateDegreeCache, resizeCanvas } from './render.js';
 import { screenToWorld, escapeHtml, toColorInput, kindToLabel, linkKindEmoji, clamp, worldToScreen } from './utils.js';
@@ -19,16 +19,14 @@ export function initUI() {
     
     // --- GESTION DU CLAVIER (CTRL+Z) ---
     document.addEventListener('keydown', (e) => {
-        // Ctrl+Z ou Cmd+Z
         if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
             e.preventDefault();
             undo();
             refreshLists();
-            if (state.selection) renderEditor(); // Rafraichir l'éditeur si ouvert
+            if (state.selection) renderEditor(); 
             draw();
         }
     });
-    // -----------------------------------
 
     // 1. ZOOM
     canvas.addEventListener('wheel', (e) => {
@@ -43,7 +41,7 @@ export function initUI() {
         draw();
     }, { passive: false });
 
-    // 2. DRAG & DROP + SHIFT LINK
+    // 2. DRAG & DROP DES NOEUDS
     d3.select(canvas).call(d3.drag()
         .container(canvas)
         .filter(event => !event.shiftKey) 
@@ -70,19 +68,20 @@ export function initUI() {
         })
     );
 
-    // 3. PANNING & LINK CREATION (SHIFT)
+    // 3. LOGIQUE SOURIS (Création Lien + Pan)
     let isPanning = false;
     let lastPan = { x: 0, y: 0 };
     let dragLinkSource = null;
 
     canvas.addEventListener('mousedown', (e) => {
         const p = screenToWorld(e.offsetX, e.offsetY, canvas);
-        const hit = getSimulation().find(p.x, p.y, 30);
+        const hit = getSimulation().find(p.x, p.y, 30); 
 
         if (e.shiftKey && hit) {
             dragLinkSource = hit;
             state.tempLink = { x1: hit.x, y1: hit.y, x2: hit.x, y2: hit.y };
             draw();
+            e.stopPropagation(); 
             return;
         }
 
@@ -138,10 +137,12 @@ export function initUI() {
         const p = screenToWorld(e.offsetX, e.offsetY, canvas);
         
         if (dragLinkSource) {
-            const hit = getSimulation().find(p.x, p.y, 30);
+            const hit = getSimulation().find(p.x, p.y, 40); 
             if (hit && hit.id !== dragLinkSource.id) {
                 const success = addLink(dragLinkSource, hit, null); 
-                if (success) selectNode(dragLinkSource.id);
+                if (success) {
+                    selectNode(dragLinkSource.id);
+                }
             }
             dragLinkSource = null;
             state.tempLink = null;
@@ -166,13 +167,12 @@ export function initUI() {
     // 4. BOUTONS UI
     document.getElementById('btnRelayout').onclick = () => { state.view = {x:0, y:0, scale: 0.5}; restartSim(); };
     
-    // SUPPRESSION DU BOUTON PLAY/PAUSE (Comme demandé)
     const btnSim = document.getElementById('btnToggleSim');
     if (btnSim) btnSim.style.display = 'none';
 
     document.getElementById('btnClearAll').onclick = () => { 
         if(confirm('Attention : Voulez-vous vraiment tout effacer ?')) { 
-            pushHistory(); // Sauvegarde avant tout effacer (au cas où)
+            pushHistory();
             state.nodes=[]; state.links=[]; state.selection = null; state.nextId = 1;
             restartSim(); refreshLists(); renderEditor(); saveState(); 
         }
@@ -205,7 +205,6 @@ export function initUI() {
 function createNode(type, baseName) {
     let name = baseName, i = 1;
     while(state.nodes.find(n => n.name === name)) { name = `${baseName} ${++i}`; }
-    // Note: createNode appelle ensureNode, qui gère déjà le pushHistory
     const n = ensureNode(type, name);
     selectNode(n.id);
     refreshLists(); restartSim();
@@ -252,7 +251,6 @@ export function refreshLists() {
     fillDL('datalist-companies', state.nodes.filter(isCompany));
 }
 
-// --- EDITEUR ET CREATION DE LIENS ---
 export function renderEditor() {
     const n = nodeById(state.selection);
     
@@ -265,6 +263,16 @@ export function renderEditor() {
 
     ui.editorTitle.textContent = n.name;
     ui.editorBody.classList.remove('muted');
+
+    // -- CONSTRUCTION HTML --
+    
+    // Pour la couleur : Input couleur si Ent/Group, Texte statique si Personne
+    let colorInputHtml = '';
+    if (n.type === 'person') {
+        colorInputHtml = `<div style="font-size:0.8rem; padding-top:10px; color:#aaa;">Auto (via Entreprise)</div>`;
+    } else {
+        colorInputHtml = `<input id="edColor" type="color" value="${toColorInput(n.color)}" style="height:38px; width:100%;"/>`;
+    }
 
     ui.editorBody.innerHTML = `
         <div class="row hstack" style="margin-bottom:15px; gap:5px;">
@@ -291,7 +299,7 @@ export function renderEditor() {
                 </div>
                 <div>
                     <label style="font-size:0.8rem; opacity:0.7;">Couleur</label>
-                    <input id="edColor" type="color" value="${toColorInput(n.color)}" style="height:38px; width:100%;"/>
+                    ${colorInputHtml}
                 </div>
             </div>
             <div class="row">
@@ -336,7 +344,6 @@ export function renderEditor() {
         <div id="chipsLinks" class="chips"></div>
     `;
 
-    // Helpers
     const tryAddLink = (inputId, defaultKind) => {
         const targetName = document.getElementById(inputId).value;
         const target = state.nodes.find(x => x.name.toLowerCase() === targetName.toLowerCase());
@@ -384,14 +391,24 @@ export function renderEditor() {
     document.getElementById('btnCenterNode').onclick = () => { state.view.x = -n.x * state.view.scale; state.view.y = -n.y * state.view.scale; restartSim(); };
 
     document.getElementById('edName').oninput = (e) => { n.name = e.target.value; refreshLists(); draw(); };
-    document.getElementById('edType').onchange = (e) => { n.type = e.target.value; restartSim(); draw(); refreshLists(); renderEditor(); };
-    document.getElementById('edColor').oninput = (e) => { n.color = e.target.value; draw(); };
+    document.getElementById('edType').onchange = (e) => { n.type = e.target.value; updatePersonColors(); restartSim(); draw(); refreshLists(); renderEditor(); };
+    
+    // Si c'est une entreprise/groupe, on permet de changer la couleur
+    const inpColor = document.getElementById('edColor');
+    if (inpColor) {
+        inpColor.oninput = (e) => { 
+            n.color = e.target.value; 
+            updatePersonColors();
+            draw(); 
+        };
+    }
+
     document.getElementById('edNum').oninput = (e) => { n.num = e.target.value; if(n.type === TYPES.PERSON) propagateOrgNums(); };
     document.getElementById('edNotes').oninput = (e) => { n.notes = e.target.value; };
 
     document.getElementById('btnDelete').onclick = () => {
         if(confirm(`Supprimer "${n.name}" ?`)) {
-            pushHistory(); // Sauvegarde avant suppression
+            pushHistory(); 
             state.nodes = state.nodes.filter(x => x.id !== n.id);
             state.links = state.links.filter(l => l.source.id !== n.id && l.target.id !== n.id);
             state.selection = null;
@@ -412,7 +429,7 @@ export function renderEditor() {
 
     chips.querySelectorAll('.x').forEach(x => {
         x.onclick = (e) => {
-            pushHistory(); // Sauvegarde avant suppression lien
+            pushHistory(); 
             const targetId = parseInt(e.target.dataset.targetId);
             state.links = state.links.filter(l => {
                 const s = l.source.id;
@@ -420,6 +437,7 @@ export function renderEditor() {
                 const isTheLink = (s === n.id && t === targetId) || (s === targetId && t === n.id);
                 return !isTheLink;
             });
+            updatePersonColors();
             restartSim(); renderEditor();
         };
     });
@@ -457,6 +475,8 @@ function importGraph(e) {
             state.nodes = d.nodes; state.links = d.links;
             const maxId = state.nodes.reduce((max, n) => Math.max(max, n.id), 0);
             state.nextId = maxId + 1;
+            // On recalcule les couleurs à l'import
+            updatePersonColors();
             restartSim(); refreshLists(); alert('Import réussi !');
         } catch(err) { console.error(err); alert('Erreur import JSON.'); }
     };
@@ -478,6 +498,7 @@ function mergeGraph(e) {
                     state.nodes.push(n); addedNodes++;
                 }
             });
+            updatePersonColors();
             restartSim(); refreshLists(); alert(`Fusion terminée : ${addedNodes} nœuds ajoutés.`);
         } catch(err) { console.error(err); alert('Erreur fusion.'); }
     };
