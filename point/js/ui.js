@@ -4,7 +4,7 @@ import { renderEditorHTML } from './templates.js';
 import { restartSim, getSimulation } from './physics.js';
 import { draw, updateDegreeCache, resizeCanvas } from './render.js';
 import { escapeHtml, clamp, screenToWorld, kindToLabel, linkKindEmoji, computeLinkColor } from './utils.js';
-import { TYPES, KINDS } from './constants.js';
+import { TYPES, KINDS, FILTERS } from './constants.js';
 
 const ui = {
     listCompanies: document.getElementById('listCompanies'),
@@ -50,6 +50,7 @@ function showCustomConfirm(msg, onYes) {
 
 export function initUI() {
     createModal();
+    createFilterBar(); // <-- BARRE DE FILTRES
 
     const style = document.createElement('style');
     style.innerHTML = `
@@ -78,6 +79,30 @@ export function initUI() {
         .chip-badge { padding: 1px 6px; border-radius: 3px; background: rgba(0,0,0,0.4); font-weight: bold; text-transform: uppercase; display: inline-flex; align-items: center; gap: 4px; }
         .x { padding: 6px 10px; cursor: pointer; color: #666; font-size: 1.2rem; line-height: 1; margin-left: 5px; }
         .x:hover { color: #ff5555; background: rgba(255,0,0,0.1); border-radius: 4px; }
+
+        /* FILTRE BAR - POSITION REMONTÉE (85px) */
+        #filter-bar {
+            position: fixed; 
+            bottom: 85px; /* REHAUSSÉ POUR ÉVITER LE CHEVAUCHEMENT */
+            left: 50%; 
+            transform: translateX(-50%);
+            background: rgba(10, 15, 30, 0.85); 
+            border: 1px solid rgba(0, 255, 255, 0.2);
+            border-radius: 50px; 
+            padding: 8px 15px; 
+            display: flex; 
+            gap: 10px;
+            backdrop-filter: blur(5px); 
+            z-index: 1000; 
+            box-shadow: 0 5px 20px rgba(0,0,0,0.5);
+        }
+        .filter-btn {
+            background: transparent; border: 1px solid transparent; color: #aaa;
+            padding: 6px 16px; border-radius: 20px; cursor: pointer; font-size: 0.8rem;
+            font-weight: bold; text-transform: uppercase; transition: all 0.2s;
+        }
+        .filter-btn:hover { color: #fff; background: rgba(255,255,255,0.1); }
+        .filter-btn.active { background: var(--accent-cyan); color: #000; box-shadow: 0 0 10px var(--accent-cyan); }
     `;
     document.head.appendChild(style);
 
@@ -125,6 +150,33 @@ export function initUI() {
     document.getElementById('btnExport').onclick = exportGraph;
     document.getElementById('fileImport').onchange = importGraph;
     document.getElementById('fileMerge').onchange = mergeGraph;
+}
+
+function createFilterBar() {
+    const bar = document.createElement('div');
+    bar.id = 'filter-bar';
+    
+    const buttons = [
+        { id: FILTERS.ALL, label: '🌐 Global' },
+        { id: FILTERS.BUSINESS, label: '💼 Business' },
+        { id: FILTERS.ILLEGAL, label: '⚔️ Conflit/Illégal' },
+        { id: FILTERS.SOCIAL, label: '❤️ Social' }
+    ];
+
+    buttons.forEach(btn => {
+        const b = document.createElement('button');
+        b.className = `filter-btn ${state.activeFilter === btn.id ? 'active' : ''}`;
+        b.innerText = btn.label;
+        b.onclick = () => {
+            state.activeFilter = btn.id;
+            document.querySelectorAll('.filter-btn').forEach(el => el.classList.remove('active'));
+            b.classList.add('active');
+            draw();
+        };
+        bar.appendChild(b);
+    });
+
+    document.body.appendChild(bar);
 }
 
 function setupCanvasEvents(canvas) {
@@ -258,10 +310,10 @@ export function renderEditor() {
     ui.editorTitle.textContent = n.name;
     ui.editorBody.classList.remove('muted');
 
-    // INSERTION HTML VIA TEMPLATES
+    // TEMPLATE GENERE VIA templates.js
     ui.editorBody.innerHTML = renderEditorHTML(n, state);
 
-    // --- LOGIQUE AJOUT ---
+    // --- LOGIQUE D'AJOUT ---
     const handleAdd = (inputId, selectId, targetType) => {
         const nameInput = document.getElementById(inputId);
         const kindSelect = document.getElementById(selectId);
@@ -290,9 +342,11 @@ export function renderEditor() {
     document.getElementById('btnAddGroup').onclick = () => handleAdd('inpGroup', 'selKindGroup', TYPES.GROUP);
     document.getElementById('btnAddPerson').onclick = () => handleAdd('inpPerson', 'selKindPerson', TYPES.PERSON);
 
+    // --- FUSION ---
     document.getElementById('btnMerge').onclick = () => {
         const targetName = document.getElementById('mergeTarget').value.trim();
         const target = state.nodes.find(x => x.name.toLowerCase() === targetName.toLowerCase());
+        
         if (target) {
             if (target.id === n.id) { showCustomAlert("Impossible de fusionner avec soi-même."); return; }
             showCustomConfirm(`Fusionner "${n.name}" DANS "${target.name}" ?\n"${n.name}" sera supprimé.`, () => {

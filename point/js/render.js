@@ -1,6 +1,6 @@
 import { state, isGroup, isCompany } from './state.js';
-import { NODE_BASE_SIZE, DEG_SCALE, R_MIN, R_MAX, LINK_KIND_EMOJI, TYPES, KINDS } from './constants.js';
-import { computeLinkColor } from './utils.js';
+import { NODE_BASE_SIZE, DEG_SCALE, R_MIN, R_MAX, LINK_KIND_EMOJI, TYPES, KINDS, FILTERS, FILTER_RULES } from './constants.js';
+import { computeLinkColor, safeHex } from './utils.js';
 
 const canvas = document.getElementById('graph');
 const ctx = canvas.getContext('2d');
@@ -40,12 +40,6 @@ function drawPolygon(ctx, x, y, radius, sides, rotate = 0) {
     }
 }
 
-function safeColor(c) {
-    if (typeof c !== 'string') return '#999999';
-    const isValid = /^#([0-9A-F]{3}){1,2}$/i.test(c) || /^#([0-9A-F]{8})$/i.test(c);
-    return isValid ? c : '#999999';
-}
-
 export function draw() {
     const p = state.view;
     const r = window.devicePixelRatio || 1;
@@ -56,79 +50,80 @@ export function draw() {
     const isPath = state.pathMode;
     const showTypes = state.showLinkTypes; 
     const labelMode = state.labelMode; 
+    const activeFilter = state.activeFilter; 
 
     ctx.save();
     ctx.clearRect(0, 0, w, h);
-    drawGrid(w, h, p);
+    
+    ctx.save();
+    ctx.strokeStyle = "rgba(115, 251, 247, 0.08)"; 
+    ctx.lineWidth = 1;
+    const gridSize = 100 * p.scale; 
+    const offsetX = (w/2 + p.x) % gridSize;
+    const offsetY = (h/2 + p.y) % gridSize;
+    ctx.beginPath();
+    for (let x = offsetX; x < w; x += gridSize) { ctx.moveTo(x, 0); ctx.lineTo(x, h); }
+    for (let y = offsetY; y < h; y += gridSize) { ctx.moveTo(0, y); ctx.lineTo(w, y); }
+    ctx.stroke();
+    ctx.restore();
 
     ctx.translate(w / 2 + p.x, h / 2 + p.y);
     ctx.scale(p.scale, p.scale);
 
     const useGlow = (!state.performance && p.scale > 0.4);
-    
     const focusId = state.hoverId || state.selection;
     const hasFocus = (focusId !== null);
-    
+
+    // FILTRAGE
+    const allowedKinds = FILTER_RULES[activeFilter];
+    const visibleLinks = new Set();
+    const activeNodes = new Set(); 
+
+    for (const l of state.links) {
+        if (allowedKinds && !allowedKinds.has(l.kind)) continue;
+        visibleLinks.add(l);
+        const sId = l.source.id || l.source;
+        const tId = l.target.id || l.target;
+        activeNodes.add(sId);
+        activeNodes.add(tId);
+    }
+
     function isDimmed(objType, obj) {
-        // PRIO 1 : Pathfinding
         if (state.pathfinding.active) {
-            if (objType === 'node') {
-                return !state.pathfinding.pathNodes.has(obj.id);
-            }
+            if (objType === 'node') return !state.pathfinding.pathNodes.has(obj.id);
             if (objType === 'link') {
                 const s = obj.source.id || obj.source;
                 const t = obj.target.id || obj.target;
-                const key1 = `${s}-${t}`;
-                const key2 = `${t}-${s}`;
-                return !(state.pathfinding.pathLinks.has(key1) || state.pathfinding.pathLinks.has(key2));
-            }
-        }
-
-        // PRIO 2 : Path (Debug)
-        if (isPath) {
-            if (objType === 'node') return !state.pathPath.has(obj.id);
-            if (objType === 'link') {
-                const s = obj.source.id, t = obj.target.id;
                 const k1 = `${s}-${t}`, k2 = `${t}-${s}`;
-                return !(state.pathLinks.has(k1) || state.pathLinks.has(k2));
+                return !(state.pathfinding.pathLinks.has(k1) || state.pathfinding.pathLinks.has(k2));
             }
         }
-
-        // PRIO 3 : Focus Mode
         if (isFocus) {
-            // ... (logique focus deja filtrée dans la boucle mais ok pour opacité)
+            // Focus logic
         }
-
-        // PRIO 4 : Hover/Selection
         if (!hasFocus) return false;
-        
         if (objType === 'node') {
             if (obj.id === focusId) return false;
-            const connected = state.links.some(l => 
-                (l.source.id === focusId && l.target.id === obj.id) || 
-                (l.target.id === focusId && l.source.id === obj.id)
+            return !state.links.some(l => 
+                visibleLinks.has(l) &&
+                ((l.source.id === focusId && l.target.id === obj.id) || 
+                 (l.target.id === focusId && l.source.id === obj.id))
             );
-            return !connected;
         }
-        if (objType === 'link') {
-            return (obj.source.id !== focusId && obj.target.id !== focusId);
-        }
+        if (objType === 'link') return (obj.source.id !== focusId && obj.target.id !== focusId);
         return false;
     }
 
-    // 1. DESSIN DES LIENS
+    // 1. LIENS
     for (const l of state.links) {
-        if (l.kind === KINDS.ENNEMI) continue; // Cacher ennemis
+        if (!visibleLinks.has(l)) continue;
+        if (l.kind === KINDS.ENNEMI && activeFilter !== FILTERS.ILLEGAL && activeFilter !== FILTERS.ALL) continue;
+        if (l.kind === KINDS.ENNEMI) continue; // Toujours invisible graphiquement
 
-        if (isFocus) {
-            if (!state.focusSet.has(l.source.id) || !state.focusSet.has(l.target.id)) continue;
-        }
-        
-        if (!l.source.x || !l.target.x) continue;
+        if (isFocus && (!state.focusSet.has(l.source.id) || !state.focusSet.has(l.target.id))) continue;
         
         const dimmed = isDimmed('link', l);
-        const isPathLink = state.pathfinding.active && !dimmed; // C'est un lien du chemin actif
-
+        const isPathLink = state.pathfinding.active && !dimmed;
         const globalAlpha = dimmed ? 0.05 : 0.8;
 
         ctx.beginPath();
@@ -136,48 +131,34 @@ export function draw() {
         ctx.lineTo(l.target.x, l.target.y);
 
         if (showTypes || isPathLink) {
-            // Cyan pour pathfinding, sinon couleur normale
-            const color = isPathLink ? '#00ffff' : computeLinkColor(l);
-            ctx.strokeStyle = color;
-            ctx.lineWidth = (isPathLink ? 4 : (dimmed ? 1 : 2)) / Math.sqrt(p.scale);
-            
-            if (isPathLink) {
-                ctx.shadowBlur = 15;
-                ctx.shadowColor = '#00ffff';
-            } else if (useGlow && !dimmed) {
-                ctx.shadowBlur = 8;
-                ctx.shadowColor = color;
-            } else {
-                ctx.shadowBlur = 0;
-            }
+             const color = isPathLink ? '#00ffff' : computeLinkColor(l);
+             ctx.strokeStyle = color;
+             ctx.lineWidth = (isPathLink ? 4 : (dimmed ? 1 : 2)) / Math.sqrt(p.scale);
+             if(isPathLink) { ctx.shadowBlur = 15; ctx.shadowColor = '#00ffff'; }
+             else if(useGlow && !dimmed) { ctx.shadowBlur = 8; ctx.shadowColor = color; }
+             else { ctx.shadowBlur = 0; }
         } else {
-            if (state.performance) {
-                ctx.strokeStyle = "rgba(255,255,255,0.2)";
-            } else {
-                try {
+             if (state.performance) ctx.strokeStyle = "rgba(255,255,255,0.2)";
+             else {
+                 try {
                     const grad = ctx.createLinearGradient(l.source.x, l.source.y, l.target.x, l.target.y);
-                    grad.addColorStop(0, safeColor(l.source.color));
-                    grad.addColorStop(1, safeColor(l.target.color));
+                    grad.addColorStop(0, safeHex(l.source.color));
+                    grad.addColorStop(1, safeHex(l.target.color));
                     ctx.strokeStyle = grad;
-                } catch (e) {
-                    ctx.strokeStyle = '#999'; 
-                }
-            }
-            ctx.lineWidth = (dimmed ? 1 : 1.5) / Math.sqrt(p.scale);
-            ctx.shadowBlur = 0;
+                 } catch(e) { ctx.strokeStyle = '#999'; }
+             }
+             ctx.lineWidth = (dimmed ? 1 : 1.5) / Math.sqrt(p.scale);
+             ctx.shadowBlur = 0;
         }
-
         ctx.globalAlpha = globalAlpha;
         ctx.stroke();
-        
+
         if (showTypes && p.scale > 0.6 && !dimmed && !isPathLink) {
             const mx = (l.source.x + l.target.x) / 2;
             const my = (l.source.y + l.target.y) / 2;
             const color = computeLinkColor(l);
-            
             ctx.globalAlpha = 1; ctx.shadowBlur = 0;
             ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(mx, my, 10 / Math.sqrt(p.scale), 0, Math.PI*2); ctx.fill();
-
             ctx.strokeStyle = color; ctx.lineWidth = 1 / Math.sqrt(p.scale); ctx.stroke();
             ctx.fillStyle = '#fff'; ctx.font = `${14 / Math.sqrt(p.scale)}px sans-serif`; 
             ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -186,7 +167,7 @@ export function draw() {
         }
     }
 
-    // 2. LIEN TEMPORAIRE
+    // 2. LIEN TEMP
     if (state.tempLink) {
         ctx.beginPath();
         ctx.moveTo(state.tempLink.x1, state.tempLink.y1);
@@ -199,19 +180,15 @@ export function draw() {
     }
 
     // 3. NOEUDS
-    const structures = [];
-    const people = [];
-    for (const n of state.nodes) {
-        if (n.type === TYPES.PERSON) people.push(n);
-        else structures.push(n);
-    }
+    const sortedNodes = state.nodes.filter(n => n.type !== TYPES.PERSON).concat(state.nodes.filter(n => n.type === TYPES.PERSON));
 
-    const drawSingleNode = (n) => {
-        if (isFocus && !state.focusSet.has(n.id)) return;
-        
+    for (const n of sortedNodes) {
+        if (activeFilter !== FILTERS.ALL) {
+            if (n.type === TYPES.PERSON && !activeNodes.has(n.id)) continue;
+        }
+
+        if (isFocus && !state.focusSet.has(n.id)) continue;
         const dimmed = isDimmed('node', n);
-        // Si pathfinding actif et que ce noeud est sur le chemin -> pas dimmed
-        
         const rad = nodeRadius(n); 
         ctx.globalAlpha = (isPath && state.pathPath.has(n.id)) ? 1.0 : (dimmed ? 0.1 : 1.0);
 
@@ -220,14 +197,13 @@ export function draw() {
         else if (isCompany(n)) drawPolygon(ctx, n.x, n.y, rad * 1.1, 6, Math.PI/2); 
         else ctx.arc(n.x, n.y, rad, 0, Math.PI * 2);
 
-        ctx.fillStyle = safeColor(n.color);
-        
+        ctx.fillStyle = safeHex(n.color);
         const isPathNode = isPath && state.pathPath.has(n.id);
         const isPathfindingNode = state.pathfinding.active && state.pathfinding.pathNodes.has(n.id);
 
         if (state.selection === n.id || state.hoverId === n.id || isPathNode || isPathfindingNode) {
             ctx.shadowBlur = (isPathNode || isPathfindingNode) ? 30 : 20; 
-            ctx.shadowColor = (isPathNode || isPathfindingNode) ? '#00ffff' : safeColor(n.color); 
+            ctx.shadowColor = (isPathNode || isPathfindingNode) ? '#00ffff' : safeHex(n.color); 
             ctx.strokeStyle = "#ffffff";
             ctx.lineWidth = ((isPathNode || isPathfindingNode) ? 6 : 4) / Math.sqrt(p.scale);
             ctx.stroke();
@@ -249,39 +225,32 @@ export function draw() {
             ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
             ctx.fillText(NODE_ICONS[n.type] || '', n.x, n.y + (rad*0.05));
         }
-    };
-
-    structures.forEach(drawSingleNode);
-    people.forEach(drawSingleNode);
+    }
 
     // 4. LABELS
     if (labelMode > 0) { 
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        const allNodes = [...structures, ...people];
-        
-        for (const n of allNodes) {
+        for (const n of sortedNodes) {
+            if (activeFilter !== FILTERS.ALL) {
+                if (n.type === TYPES.PERSON && !activeNodes.has(n.id)) continue;
+            }
             if (isFocus && !state.focusSet.has(n.id)) continue;
-
             const rad = nodeRadius(n);
             const dimmed = isDimmed('node', n);
             if (dimmed) continue;
-
+            
             const isImportant = (n.type === TYPES.COMPANY || n.type === TYPES.GROUP);
             const isPathNode = isPath && state.pathPath.has(n.id);
             const isPathfindingNode = state.pathfinding.active && state.pathfinding.pathNodes.has(n.id);
             const isHover = (state.hoverId === n.id || state.selection === n.id);
             
             let showName = false;
-            if (labelMode === 2) {
-                showName = true;
-            } else if (labelMode === 1) {
-                showName = isHover || isPathNode || isPathfindingNode || (p.scale > 0.5 || isImportant);
-            }
+            if (labelMode === 2) showName = true;
+            else if (labelMode === 1) showName = isHover || isPathNode || isPathfindingNode || (p.scale > 0.5 || isImportant);
 
             if (showName) {
                 const fontSize = (isPathNode || isPathfindingNode ? 16 : 13) / Math.sqrt(p.scale);
                 ctx.font = `600 ${fontSize}px "Rajdhani", sans-serif`; 
-                
                 const label = n.name;
                 const metrics = ctx.measureText(label);
                 const textW = metrics.width;
@@ -295,30 +264,13 @@ export function draw() {
                 if(ctx.roundRect) ctx.roundRect(boxX, boxY, textW + padding*2, textH + padding, 6);
                 else ctx.rect(boxX, boxY, textW + padding*2, textH + padding);
                 ctx.fill();
-                
-                ctx.strokeStyle = (isPathNode || isPathfindingNode) ? '#00ffff' : safeColor(n.color);
+                ctx.strokeStyle = (isPathNode || isPathfindingNode) ? '#00ffff' : safeHex(n.color);
                 ctx.lineWidth = ((isPathNode || isPathfindingNode) ? 3 : 1) / Math.sqrt(p.scale);
                 ctx.stroke();
-
                 ctx.globalAlpha = 1.0; ctx.fillStyle = '#ffffff';
                 ctx.fillText(label, n.x, boxY + textH/2 + padding/2);
             }
         }
     }
-
-    ctx.restore();
-}
-
-function drawGrid(w, h, p) {
-    ctx.save();
-    ctx.strokeStyle = "rgba(115, 251, 247, 0.08)"; 
-    ctx.lineWidth = 1;
-    const gridSize = 100 * p.scale; 
-    const offsetX = (w/2 + p.x) % gridSize;
-    const offsetY = (h/2 + p.y) % gridSize;
-    ctx.beginPath();
-    for (let x = offsetX; x < w; x += gridSize) { ctx.moveTo(x, 0); ctx.lineTo(x, h); }
-    for (let y = offsetY; y < h; y += gridSize) { ctx.moveTo(0, y); ctx.lineTo(w, y); }
-    ctx.stroke();
     ctx.restore();
 }

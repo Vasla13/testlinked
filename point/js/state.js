@@ -9,14 +9,16 @@ export const state = {
     focusMode: false,
     focusSet: new Set(),
     
-    // --- PATHFINDING (NOUVEAU) ---
+    // Pathfinding
     pathfinding: {
-        startId: null,      // ID du point de départ A
-        active: false,      // Si un chemin est affiché
-        pathNodes: new Set(), // Liste des noeuds du chemin
-        pathLinks: new Set()  // Liste des liens du chemin
+        startId: null,      
+        active: false,      
+        pathNodes: new Set(), 
+        pathLinks: new Set()  
     },
-    // -----------------------------
+
+    // Filtre actif
+    activeFilter: 'ALL',
 
     history: [], 
     tempLink: null,
@@ -27,7 +29,7 @@ export const state = {
     forceSimulation: false
 };
 
-const STORAGE_KEY = 'pointPageState_v7';
+const STORAGE_KEY = 'pointPageState_v8'; // Incrémenté
 
 export function saveState() {
     try {
@@ -44,6 +46,7 @@ export function saveState() {
             view: state.view,
             labelMode: state.labelMode, 
             showLinkTypes: state.showLinkTypes,
+            activeFilter: state.activeFilter, // Sauvegarde du filtre
             nextId: state.nextId
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -63,7 +66,8 @@ export function loadState() {
         if (typeof data.labelMode === 'number') state.labelMode = data.labelMode;
         else if (typeof data.showLabels === 'boolean') state.labelMode = data.showLabels ? 1 : 0;
         
-        // Reset pathfinding au chargement
+        if (data.activeFilter) state.activeFilter = data.activeFilter;
+
         state.pathfinding = { startId: null, active: false, pathNodes: new Set(), pathLinks: new Set() };
 
         return true;
