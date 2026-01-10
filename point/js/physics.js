@@ -6,8 +6,8 @@ let simulation;
 
 export function initPhysics() {
     simulation = d3.forceSimulation()
-        .alphaDecay(0.02)
-        .velocityDecay(0.3)
+        .alphaDecay(0.02)     // Ralentissement naturel
+        .velocityDecay(0.3)   // Friction (0.3 = assez élevé pour éviter que ça parte dans tous les sens)
         .on("tick", ticked);
 }
 
@@ -31,6 +31,7 @@ export function restartSim() {
         nodeDegree.set(t, (nodeDegree.get(t) || 0) + 1);
     });
 
+    // 1. LIENS (Ressorts)
     simulation.force("link", d3.forceLink(state.links)
         .id(d => d.id)
         .distance(l => {
@@ -43,53 +44,62 @@ export function restartSim() {
             return 140;
         })
         .strength(l => {
-            if (l.kind === KINDS.AFFILIATION) return 0.1; 
-            if (l.kind === KINDS.PATRON) return 1.2;
+            if (l.kind === KINDS.AFFILIATION) return 0.05; // Très souple
+            if (l.kind === KINDS.PATRON) return 1.5;       // Très fort
             return 0.3;
         })
     );
 
+    // 2. REPULSION (Charges électriques)
     simulation.force("charge", d3.forceManyBody()
         .strength(n => {
-            let strength = -400;
+            let strength = -400; // Base pour tout le monde
+            
+            // Les structures repoussent fort
             if (n.type === TYPES.COMPANY) strength = -1200;
             if (n.type === TYPES.GROUP) strength = -900;
             
-            // Répulsion dynamique
+            // Répulsion dynamique : plus on a de liens, plus on fait le vide autour de soi
             const degree = nodeDegree.get(n.id) || 0;
-            strength -= (degree * 120); 
+            strength -= (degree * 100); 
 
             return strength;
         })
-        .distanceMax(2000)
+        .distanceMax(2000) // On arrête de calculer la répulsion si trop loin (optimisation)
     );
 
+    // 3. ANTI-COLLISION (Évite que les bulles se chevauchent)
     simulation.force("collide", d3.forceCollide()
         .radius(n => nodeRadius(n) + 20)
         .iterations(3)
     );
 
-    // --- NOUVEAU : Force de confinement (Limite de distance) ---
-    // Le rayon autorisé dépend du nombre de nœuds pour éviter l'étouffement
-    // Base 1200 + 15 pixels par nœud supplémentaire
-    const worldRadius = 1200 + (state.nodes.length * 15);
-    
+    // 4. BARRIÈRE ÉLASTIQUE (Empêche les points de se barrer)
+    // Rayon dynamique : Base 600px + 10px par point existant
+    const worldRadius = 600 + (state.nodes.length * 10);
+
     simulation.force("boundary", () => {
         for (const n of state.nodes) {
-            const dist = Math.sqrt(n.x * n.x + n.y * n.y);
-            if (dist > worldRadius) {
-                // Si le point dépasse la limite, on le repousse vers le centre (0,0)
-                // Plus il est loin, plus la force est grande
+            // Distance du centre (0,0)
+            const d = Math.sqrt(n.x * n.x + n.y * n.y);
+            
+            // Si le point est hors du cercle autorisé
+            if (d > worldRadius) {
+                const excess = d - worldRadius; // De combien il dépasse
                 const angle = Math.atan2(n.y, n.x);
-                const strength = 0.5; // Force de rappel
-                n.vx -= Math.cos(angle) * strength;
-                n.vy -= Math.sin(angle) * strength;
+                
+                // Force de rappel : "Ressort" qui tire vers le centre
+                // 0.05 * excess = plus il est loin, plus ça tire fort.
+                const pullBack = excess * 0.05; 
+
+                n.vx -= Math.cos(angle) * pullBack;
+                n.vy -= Math.sin(angle) * pullBack;
             }
         }
     });
-    // -----------------------------------------------------------
 
-    simulation.force("center", d3.forceCenter(0, 0).strength(0.04));
+    // 5. GRAVITÉ CENTRALE (Douce, pour garder tout le monde groupé)
+    simulation.force("center", d3.forceCenter(0, 0).strength(0.08));
     
     simulation.alpha(1).restart();
 }
