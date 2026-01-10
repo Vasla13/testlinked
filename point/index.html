@@ -280,9 +280,10 @@
       </div>
 
       <div class="section">
-        <h2>Recherche</h2>
-        <input id="searchInput" type="search" placeholder="Nom, matricule..." autocomplete="off" />
-        <div id="searchResult"></div>
+        <h2>Liaison IA</h2>
+        <div id="pathfinding-ui">
+           <div style="font-size:0.8rem; color:#666; font-style:italic;">Chargement...</div>
+        </div>
       </div>
 
       <div class="section">
@@ -295,6 +296,12 @@
           <label class="file-btn grow">📂 Charger <input id="fileImport" type="file" accept=".json" style="display:none;"/></label>
           <label class="file-btn grow">🔗 Fusionner <input id="fileMerge" type="file" accept=".json" style="display:none;"/></label>
         </div>
+      </div>
+
+      <div class="section">
+        <h2>Recherche</h2>
+        <input id="searchInput" type="search" placeholder="Nom, matricule..." autocomplete="off" />
+        <div id="searchResult"></div>
       </div>
 
       <div class="section list">

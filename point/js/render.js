@@ -4,6 +4,8 @@ import { computeLinkColor, safeHex } from './utils.js';
 
 const canvas = document.getElementById('graph');
 const ctx = canvas.getContext('2d');
+const container = document.getElementById('center'); 
+
 const degreeCache = new Map();
 const NODE_ICONS = { [TYPES.PERSON]: '👤', [TYPES.COMPANY]: '🏢', [TYPES.GROUP]: '👥' };
 
@@ -25,9 +27,14 @@ export function nodeRadius(n) {
 }
 
 export function resizeCanvas() {
+    if (!canvas || !container) return;
     const r = window.devicePixelRatio || 1;
-    canvas.width = canvas.clientWidth * r;
-    canvas.height = canvas.clientHeight * r;
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    canvas.width = w * r;
+    canvas.height = h * r;
+    canvas.style.width = `${w}px`;
+    canvas.style.height = `${h}px`;
     ctx.setTransform(r, 0, 0, r, 0, 0);
     draw();
 }
@@ -41,6 +48,8 @@ function drawPolygon(ctx, x, y, radius, sides, rotate = 0) {
 }
 
 export function draw() {
+    if (canvas.width === 0 || canvas.height === 0) return;
+
     const p = state.view;
     const r = window.devicePixelRatio || 1;
     const w = canvas.width / r;
@@ -74,7 +83,6 @@ export function draw() {
     const focusId = state.hoverId || state.selection;
     const hasFocus = (focusId !== null);
 
-    // FILTRAGE
     const allowedKinds = FILTER_RULES[activeFilter];
     const visibleLinks = new Set();
     const activeNodes = new Set(); 
@@ -98,9 +106,6 @@ export function draw() {
                 return !(state.pathfinding.pathLinks.has(k1) || state.pathfinding.pathLinks.has(k2));
             }
         }
-        if (isFocus) {
-            // Focus logic
-        }
         if (!hasFocus) return false;
         if (objType === 'node') {
             if (obj.id === focusId) return false;
@@ -117,14 +122,17 @@ export function draw() {
     // 1. LIENS
     for (const l of state.links) {
         if (!visibleLinks.has(l)) continue;
-        if (l.kind === KINDS.ENNEMI && activeFilter !== FILTERS.ILLEGAL && activeFilter !== FILTERS.ALL) continue;
-        if (l.kind === KINDS.ENNEMI) continue; // Toujours invisible graphiquement
+        if (l.kind === KINDS.ENNEMI) continue; 
 
         if (isFocus && (!state.focusSet.has(l.source.id) || !state.focusSet.has(l.target.id))) continue;
         
         const dimmed = isDimmed('link', l);
         const isPathLink = state.pathfinding.active && !dimmed;
-        const globalAlpha = dimmed ? 0.05 : 0.8;
+        
+        // MODIFICATION ICI : Opacité augmentée pour les éléments grisés
+        // Avant : dimmed ? 0.05 : 0.8
+        // Après : dimmed ? 0.25 : 0.8  (Beaucoup plus visible)
+        const globalAlpha = dimmed ? 0.25 : 0.8; 
 
         ctx.beginPath();
         ctx.moveTo(l.source.x, l.source.y);
@@ -190,7 +198,11 @@ export function draw() {
         if (isFocus && !state.focusSet.has(n.id)) continue;
         const dimmed = isDimmed('node', n);
         const rad = nodeRadius(n); 
-        ctx.globalAlpha = (isPath && state.pathPath.has(n.id)) ? 1.0 : (dimmed ? 0.1 : 1.0);
+        
+        // MODIFICATION ICI : Opacité augmentée pour les nœuds grisés
+        // Avant : dimmed ? 0.1 : 1.0
+        // Après : dimmed ? 0.4 : 1.0 (On voit bien ce qu'on fait)
+        ctx.globalAlpha = (isPath && state.pathPath.has(n.id)) ? 1.0 : (dimmed ? 0.4 : 1.0);
 
         ctx.beginPath();
         if (isGroup(n)) drawPolygon(ctx, n.x, n.y, rad * 1.2, 4); 

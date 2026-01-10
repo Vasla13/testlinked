@@ -34,14 +34,10 @@ export function restartSim() {
         connectedPairs.add(`${t}-${s}`);
     });
 
-    // --- FORCES ---
-
-    // A. LIENS
     simulation.force("link", d3.forceLink(state.links)
         .id(d => d.id)
         .distance(l => {
-            // ENNEMIS = TRÈS LOIN
-            if (l.kind === KINDS.ENNEMI) return 1200; 
+            if (l.kind === KINDS.ENNEMI) return 1200; // Ennemis très loin
             if (l.kind === KINDS.AFFILIATION) return 500; 
             if (l.kind === KINDS.PATRON) return 60;
             if (l.kind === KINDS.HAUT_GRADE) return 90;
@@ -55,7 +51,6 @@ export function restartSim() {
         })
     );
 
-    // B. CHARGE (RÉPULSION FORTE)
     simulation.force("charge", d3.forceManyBody()
         .strength(n => {
             let strength = -800; 
@@ -69,13 +64,8 @@ export function restartSim() {
         .distanceMin(50) 
     );
 
-    // C. COLLISION
-    simulation.force("collide", d3.forceCollide()
-        .radius(n => nodeRadius(n) + 40)
-        .iterations(4)
-    );
+    simulation.force("collide", d3.forceCollide().radius(n => nodeRadius(n) + 40).iterations(4));
 
-    // D. BARRIÈRE (LARGE)
     const worldRadius = 2500;
     simulation.force("boundary", () => {
         for (const n of state.nodes) {
@@ -89,7 +79,6 @@ export function restartSim() {
         }
     });
 
-    // E. TERRITOIRE
     simulation.force("territory", () => {
         const structures = state.nodes.filter(n => n.type === TYPES.COMPANY || n.type === TYPES.GROUP);
         for (const struct of structures) {
@@ -98,12 +87,10 @@ export function restartSim() {
                 if (n.id === struct.id || n.type === TYPES.COMPANY || n.type === TYPES.GROUP) continue;
                 if (n.fx != null) continue;
                 if (connectedPairs.has(`${n.id}-${struct.id}`)) continue;
-
                 const dx = n.x - struct.x;
                 const dy = n.y - struct.y;
                 const distSq = dx*dx + dy*dy; 
                 const minDistSq = territoryRadius * territoryRadius;
-
                 if (distSq < minDistSq) {
                     const dist = Math.sqrt(distSq);
                     const push = (territoryRadius - dist) * 0.1;
@@ -115,9 +102,7 @@ export function restartSim() {
         }
     });
 
-    // F. PAS DE CENTRE (Anti-Planète)
     simulation.force("center", null);
-    
     simulation.alpha(1).restart();
 }
 

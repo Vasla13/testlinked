@@ -1,6 +1,7 @@
 import { escapeHtml, safeHex, kindToLabel } from './utils.js';
 import { TYPES, PERSON_PERSON_KINDS, PERSON_ORG_KINDS, ORG_ORG_KINDS } from './constants.js';
 
+// Helper pour les options de select
 export function getLinkOptions(sourceType, targetType) {
     let validKinds = [];
     if (sourceType === TYPES.PERSON && targetType === TYPES.PERSON) validKinds = PERSON_PERSON_KINDS;
@@ -9,6 +10,56 @@ export function getLinkOptions(sourceType, targetType) {
     return Array.from(validKinds).map(k => `<option value="${k}">${kindToLabel(k)}</option>`).join('');
 }
 
+// --- FONCTION MANQUANTE : COLONNE GAUCHE (PATHFINDING) ---
+export function renderPathfindingSidebar(state, selectedNode) {
+    let html = '';
+
+    // État 1 : Pas de départ défini
+    if (state.pathfinding.startId === null) {
+        if (selectedNode) {
+            html += `
+                <div style="margin-bottom:5px; font-size:0.8rem;">Départ : <span style="color:var(--text-light); font-weight:bold;">${escapeHtml(selectedNode.name)}</span></div>
+                <button id="btnPathStart" class="action-btn primary" style="width:100%;">🚩 Définir comme Source</button>
+            `;
+        } else {
+            html += `
+                <div style="padding:10px; background:rgba(255,255,255,0.05); border-radius:4px; font-size:0.8rem; color:#888; text-align:center;">
+                    Sélectionnez un point sur la carte pour définir le départ.
+                </div>
+            `;
+        }
+    } 
+    // État 2 : Départ défini
+    else {
+        // On cherche le nom du point de départ
+        const startNodeName = state.nodes.find(n => n.id === state.pathfinding.startId)?.name || "Inconnu";
+        
+        html += `
+            <div style="margin-bottom:8px; padding:8px; background:rgba(0,255,255,0.1); border:1px solid var(--accent-cyan); border-radius:4px;">
+                <div style="font-size:0.7rem; color:var(--accent-cyan); text-transform:uppercase;">Source</div>
+                <div style="font-weight:bold; font-size:0.9rem;">${escapeHtml(startNodeName)}</div>
+            </div>
+        `;
+
+        if (selectedNode && selectedNode.id !== state.pathfinding.startId) {
+            html += `
+                <div style="text-align:center; margin:5px 0;">⬇️</div>
+                <div style="margin-bottom:5px; font-size:0.8rem;">Cible : <span style="color:var(--text-light); font-weight:bold;">${escapeHtml(selectedNode.name)}</span></div>
+                <button id="btnPathCalc" class="action-btn primary" style="width:100%;">⚡ Calculer la Liaison</button>
+            `;
+        } else if (state.pathfinding.active) {
+             html += `<div style="text-align:center; color:#00ff00; font-size:0.8rem; margin:10px 0;">✅ Chemin affiché</div>`;
+        } else {
+            html += `<div style="font-size:0.8rem; color:#888; margin-top:5px;">Sélectionnez un autre point pour tracer le chemin.</div>`;
+        }
+
+        html += `<button id="btnPathCancel" class="action-btn danger" style="width:100%; margin-top:10px;">❌ Annuler / Reset</button>`;
+    }
+
+    return html;
+}
+
+// --- FONCTION COLONNE DROITE (EDITEUR) ---
 export function renderEditorHTML(n, state) {
     let colorInputHtml = '';
     if (n.type === 'person') {
@@ -17,36 +68,13 @@ export function renderEditorHTML(n, state) {
         colorInputHtml = `<input id="edColor" type="color" value="${safeHex(n.color)}" style="height:38px; width:100%;"/>`;
     }
 
-    // Bouton Pathfinding Dynamique
-    let pathBtnHTML = '';
-    if (state.pathfinding.startId === null) {
-        pathBtnHTML = `<button id="btnPathStart" class="action-btn" style="flex:1; border:1px solid var(--accent-cyan); color:var(--accent-cyan); background:transparent;">🚩 Définir Source</button>`;
-    } else if (state.pathfinding.startId === n.id) {
-        pathBtnHTML = `<button id="btnPathCancel" class="action-btn danger" style="flex:1;">❌ Annuler Source</button>`;
-    } else {
-        pathBtnHTML = `<button id="btnPathCalc" class="action-btn primary" style="flex:1;">⚡ Calculer Corrélation</button>`;
-    }
-
-    let clearPathHTML = '';
-    if (state.pathfinding.active) {
-        clearPathHTML = `<button id="btnClearPath" class="action-btn" style="width:100%; margin-top:5px; background:#444;">🔄 Réinitialiser l'affichage</button>`;
-    }
-
     return `
-        <div class="flex-row-force" style="margin-bottom:10px;">
+        <div class="flex-row-force" style="margin-bottom:15px;">
             <button id="btnFocusNode" class="${state.focusMode ? 'primary' : ''}" style="flex:1; font-size:0.8rem;">
                 ${state.focusMode ? '🔍 Tout' : '🎯 Focus'}
             </button>
             <button id="btnCenterNode" style="flex:1; font-size:0.8rem;">📍 Centrer</button>
             <button id="btnDelete" class="danger" style="flex:0 0 auto; width:40px; font-size:0.8rem;">🗑️</button>
-        </div>
-
-        <div style="background:rgba(0,255,255,0.05); border:1px solid rgba(0,255,255,0.2); padding:8px; border-radius:4px; margin-bottom:15px;">
-            <div style="font-size:0.7rem; color:var(--accent-cyan); text-transform:uppercase; margin-bottom:5px; font-weight:bold;">Algorithme de Liaison</div>
-            <div class="flex-row-force">
-                ${pathBtnHTML}
-            </div>
-            ${clearPathHTML}
         </div>
 
         <details open>

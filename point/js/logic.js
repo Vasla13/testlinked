@@ -1,9 +1,9 @@
 import { state, nodeById, pushHistory } from './state.js';
 import { restartSim } from './physics.js';
 import { uid, randomPastel, hexToRgb, rgbToHex } from './utils.js';
-import { TYPES, KINDS, PERSON_PERSON_KINDS, PERSON_ORG_KINDS, ORG_ORG_KINDS } from './constants.js';
+import { TYPES, KINDS } from './constants.js';
 
-// --- COULEURS ---
+// --- COULEURS (MIX) ---
 export function updatePersonColors() {
     const nodeWeights = new Map();
     state.links.forEach(l => {
@@ -15,7 +15,8 @@ export function updatePersonColors() {
 
     state.nodes.forEach(n => {
         if (n.type === TYPES.PERSON) {
-            let totalR = 0, totalG = 0, totalB = 0, totalWeight = 0;
+            let totalR = 0, totalG = 0, totalB = 0;
+            let totalWeight = 0;
 
             state.links.forEach(l => {
                 const s = (typeof l.source === 'object') ? l.source : nodeById(l.source);
@@ -28,7 +29,10 @@ export function updatePersonColors() {
                 if (other.type !== TYPES.PERSON || other.color) { 
                     const weight = (nodeWeights.get(other.id) || 1); 
                     const rgb = hexToRgb(other.color || '#ffffff');
-                    totalR += rgb.r * weight; totalG += rgb.g * weight; totalB += rgb.b * weight;
+                    
+                    totalR += rgb.r * weight;
+                    totalG += rgb.g * weight;
+                    totalB += rgb.b * weight;
                     totalWeight += weight;
                 }
             });
@@ -42,7 +46,7 @@ export function updatePersonColors() {
     });
 }
 
-// --- GESTION GRAPHE ---
+// --- GESTION NOEUDS/LIENS ---
 export function ensureNode(type, name) {
     let n = state.nodes.find(x => x.name.toLowerCase() === name.toLowerCase());
     if (!n) {
@@ -143,7 +147,7 @@ export function propagateOrgNums() {
     }
 }
 
-// --- ALGORITHME DE CORRÉLATION (PATHFINDING) ---
+// --- PATHFINDING ---
 export function calculatePath(startId, endId) {
     if (!startId || !endId || startId === endId) return null;
 
@@ -155,7 +159,6 @@ export function calculatePath(startId, endId) {
         const node = path[path.length - 1];
 
         if (node === endId) {
-            // Chemin trouvé
             const pathNodes = new Set(path);
             const pathLinks = new Set();
 

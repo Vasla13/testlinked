@@ -81,7 +81,7 @@ export function computeLinkColor(l) {
         case KINDS.AMOUR: 
         case KINDS.COUPLE: return '#ff69b4';
         case KINDS.AMI: return '#00ffff';
-        case KINDS.ENNEMI: return '#ff0000';
+        case KINDS.ENNEMI: return '#ff0000'; // Rouge vif
         case KINDS.RIVAL: return '#ffffff';
         default: return '#888888';
     }

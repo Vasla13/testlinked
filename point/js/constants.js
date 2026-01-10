@@ -13,7 +13,7 @@ export const KINDS = {
     COUPLE: 'couple',
     AMOUR: 'amour',
     AMI: 'ami',
-    ENNEMI: 'ennemi', // Invisible sur la carte (sauf filtre spécifique), mais repousse
+    ENNEMI: 'ennemi', // Invisible sur la carte, grosse répulsion
     RIVAL: 'rival',
     CONNAISSANCE: 'connaissance',
     AFFILIATION: 'affiliation',
@@ -42,21 +42,12 @@ export const FILTERS = {
     SOCIAL: 'SOCIAL'
 };
 
-// Règles de filtrage : quels liens sont visibles pour chaque vue ?
+// Règles de visibilité des liens selon le filtre actif
 export const FILTER_RULES = {
-    [FILTERS.ALL]: null, // Null signifie "Tout afficher"
-    
-    [FILTERS.BUSINESS]: new Set([
-        KINDS.PATRON, KINDS.EMPLOYE, KINDS.COLLEGUE, KINDS.PARTENAIRE, KINDS.RELATION
-    ]),
-    
-    [FILTERS.ILLEGAL]: new Set([
-        KINDS.ENNEMI, KINDS.RIVAL, KINDS.MEMBRE, KINDS.AFFILIATION, KINDS.PARTENAIRE
-    ]),
-    
-    [FILTERS.SOCIAL]: new Set([
-        KINDS.FAMILLE, KINDS.COUPLE, KINDS.AMOUR, KINDS.AMI, KINDS.CONNAISSANCE, KINDS.ENNEMI
-    ])
+    [FILTERS.ALL]: null,
+    [FILTERS.BUSINESS]: new Set([KINDS.PATRON, KINDS.EMPLOYE, KINDS.COLLEGUE, KINDS.PARTENAIRE, KINDS.RELATION]),
+    [FILTERS.ILLEGAL]: new Set([KINDS.ENNEMI, KINDS.RIVAL, KINDS.MEMBRE, KINDS.AFFILIATION, KINDS.PARTENAIRE]),
+    [FILTERS.SOCIAL]: new Set([KINDS.FAMILLE, KINDS.COUPLE, KINDS.AMOUR, KINDS.AMI, KINDS.CONNAISSANCE, KINDS.ENNEMI])
 };
 
 export const NODE_BASE_SIZE = { [TYPES.PERSON]: 12, [TYPES.COMPANY]: 25, [TYPES.GROUP]: 18 };

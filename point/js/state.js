@@ -9,7 +9,7 @@ export const state = {
     focusMode: false,
     focusSet: new Set(),
     
-    // Pathfinding
+    // Pathfinding data
     pathfinding: {
         startId: null,      
         active: false,      
@@ -17,7 +17,7 @@ export const state = {
         pathLinks: new Set()  
     },
 
-    // Filtre actif
+    // Filtre actif (Dashboard)
     activeFilter: 'ALL',
 
     history: [], 
@@ -29,7 +29,7 @@ export const state = {
     forceSimulation: false
 };
 
-const STORAGE_KEY = 'pointPageState_v8'; // Incrémenté
+const STORAGE_KEY = 'pointPageState_v9'; 
 
 export function saveState() {
     try {
@@ -46,7 +46,7 @@ export function saveState() {
             view: state.view,
             labelMode: state.labelMode, 
             showLinkTypes: state.showLinkTypes,
-            activeFilter: state.activeFilter, // Sauvegarde du filtre
+            activeFilter: state.activeFilter,
             nextId: state.nextId
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));

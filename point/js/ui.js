@@ -1,6 +1,6 @@
 import { state, saveState, nodeById, isPerson, isCompany, isGroup, undo, pushHistory } from './state.js';
 import { ensureNode, addLink, mergeNodes, updatePersonColors, calculatePath, clearPath } from './logic.js';
-import { renderEditorHTML } from './templates.js';
+import { renderEditorHTML, renderPathfindingSidebar } from './templates.js'; // IMPORTANT : Import renderPathfindingSidebar
 import { restartSim, getSimulation } from './physics.js';
 import { draw, updateDegreeCache, resizeCanvas } from './render.js';
 import { escapeHtml, clamp, screenToWorld, kindToLabel, linkKindEmoji, computeLinkColor } from './utils.js';
@@ -13,6 +13,7 @@ const ui = {
     editorTitle: document.getElementById('editorTitle'),
     editorBody: document.getElementById('editorBody'),
     linkLegend: document.getElementById('linkLegend'),
+    pathfindingContainer: document.getElementById('pathfinding-ui') // Nouveau container
 };
 
 function safeHex(color) {
@@ -50,7 +51,8 @@ function showCustomConfirm(msg, onYes) {
 
 export function initUI() {
     createModal();
-    createFilterBar(); // <-- BARRE DE FILTRES
+    createFilterBar();
+    updatePathfindingPanel(); // Init panel vide
 
     const style = document.createElement('style');
     style.innerHTML = `
@@ -69,32 +71,23 @@ export function initUI() {
         .compact-select { flex: 0 0 100px !important; width: 100px !important; font-size: 0.75rem !important; padding: 2px !important; }
         .mini-btn { flex: 0 0 30px !important; width: 30px !important; padding: 0 !important; text-align: center !important; justify-content: center !important; }
 
-        .link-category { margin-top: 15px; margin-bottom: 8px; font-size: 0.7rem; color: #aaa; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #444; padding-bottom: 2px; }
-        .chip { display: flex; align-items: center; justify-content: space-between; background: rgba(20, 20, 30, 0.6); border-left: 4px solid #888; border-radius: 0 4px 4px 0; padding: 8px 10px; margin-bottom: 6px; transition: all 0.2s; }
-        .chip:hover { background: rgba(255,255,255,0.08); transform: translateX(2px); }
-        .chip-content { display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
-        .chip-name { font-weight: bold; font-size: 0.95rem; cursor: pointer; color: #ddd; }
+        .link-category { margin-top: 10px; margin-bottom: 2px; font-size: 0.65rem; color: #888; text-transform: uppercase; border-bottom: 1px solid #333; }
+        
+        .chip { display: flex; align-items: center; justify-content: space-between; background: rgba(20, 20, 30, 0.4); border-left: 3px solid #888; border-radius: 0 3px 3px 0; padding: 2px 6px; margin-bottom: 3px; transition: all 0.2s; height: 24px; }
+        .chip:hover { background: rgba(255,255,255,0.08); }
+        .chip-content { display: flex; align-items: center; flex: 1; min-width: 0; gap: 8px; }
+        .chip-name { font-weight: 500; font-size: 0.8rem; cursor: pointer; color: #ddd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .chip-name:hover { text-decoration: underline; color: #fff; }
-        .chip-meta { display: flex; align-items: center; gap: 6px; font-size: 0.75rem; }
-        .chip-badge { padding: 1px 6px; border-radius: 3px; background: rgba(0,0,0,0.4); font-weight: bold; text-transform: uppercase; display: inline-flex; align-items: center; gap: 4px; }
-        .x { padding: 6px 10px; cursor: pointer; color: #666; font-size: 1.2rem; line-height: 1; margin-left: 5px; }
-        .x:hover { color: #ff5555; background: rgba(255,0,0,0.1); border-radius: 4px; }
+        .chip-meta { margin-left: auto; }
+        .chip-badge { font-size: 0.65rem; font-weight: bold; text-transform: uppercase; opacity: 0.9; white-space: nowrap; }
+        .x { padding: 0 0 0 8px; cursor: pointer; color: #666; font-size: 1rem; font-weight: bold; }
+        .x:hover { color: #ff5555; }
 
-        /* FILTRE BAR - POSITION REMONTÉE (85px) */
         #filter-bar {
-            position: fixed; 
-            bottom: 85px; /* REHAUSSÉ POUR ÉVITER LE CHEVAUCHEMENT */
-            left: 50%; 
-            transform: translateX(-50%);
-            background: rgba(10, 15, 30, 0.85); 
-            border: 1px solid rgba(0, 255, 255, 0.2);
-            border-radius: 50px; 
-            padding: 8px 15px; 
-            display: flex; 
-            gap: 10px;
-            backdrop-filter: blur(5px); 
-            z-index: 1000; 
-            box-shadow: 0 5px 20px rgba(0,0,0,0.5);
+            position: fixed; bottom: 85px; left: 50%; transform: translateX(-50%);
+            background: rgba(10, 15, 30, 0.85); border: 1px solid rgba(0, 255, 255, 0.2);
+            border-radius: 50px; padding: 8px 15px; display: flex; gap: 10px;
+            backdrop-filter: blur(5px); z-index: 1000; box-shadow: 0 5px 20px rgba(0,0,0,0.5);
         }
         .filter-btn {
             background: transparent; border: 1px solid transparent; color: #aaa;
@@ -150,6 +143,57 @@ export function initUI() {
     document.getElementById('btnExport').onclick = exportGraph;
     document.getElementById('fileImport').onchange = importGraph;
     document.getElementById('fileMerge').onchange = mergeGraph;
+}
+
+// --- NOUVELLE FONCTION DE GESTION DU PANNEAU PATHFINDING ---
+function updatePathfindingPanel() {
+    const el = ui.pathfindingContainer;
+    if(!el) return;
+
+    // Quel noeud est sélectionné ?
+    const selectedNode = nodeById(state.selection);
+    
+    // Génère le HTML via templates.js
+    el.innerHTML = renderPathfindingSidebar(state, selectedNode);
+
+    // Attache les events
+    const btnStart = document.getElementById('btnPathStart');
+    if(btnStart) {
+        btnStart.onclick = () => {
+            if(!selectedNode) return;
+            state.pathfinding.startId = selectedNode.id;
+            state.pathfinding.active = false;
+            updatePathfindingPanel(); // Refresh UI
+        };
+    }
+
+    const btnCancel = document.getElementById('btnPathCancel');
+    if(btnCancel) {
+        btnCancel.onclick = () => {
+            state.pathfinding.startId = null;
+            state.pathfinding.active = false;
+            clearPath(); // Nettoie le path
+            draw(); // Redessine
+            updatePathfindingPanel(); // Refresh UI
+        };
+    }
+
+    const btnCalc = document.getElementById('btnPathCalc');
+    if(btnCalc) {
+        btnCalc.onclick = () => {
+            if(!selectedNode || !state.pathfinding.startId) return;
+            const result = calculatePath(state.pathfinding.startId, selectedNode.id);
+            if (result) {
+                state.pathfinding.pathNodes = result.pathNodes;
+                state.pathfinding.pathLinks = result.pathLinks;
+                state.pathfinding.active = true;
+                draw(); // Dessine le chemin
+                updatePathfindingPanel();
+            } else {
+                showCustomAlert("Aucune connexion trouvée entre ces deux points.");
+            }
+        };
+    }
 }
 
 function createFilterBar() {
@@ -258,7 +302,13 @@ function createNode(type, baseName) {
 
 export function selectNode(id) {
     state.selection = id;
+    
+    // Met à jour l'éditeur à droite
     renderEditor();
+    
+    // Met à jour le panneau de liaison à gauche
+    updatePathfindingPanel();
+    
     draw();
 }
 
@@ -271,6 +321,7 @@ function zoomToNode(id) {
     state.view.y = -n.y * 1.6;
     restartSim();
     renderEditor();
+    updatePathfindingPanel();
 }
 
 export function refreshLists() {
@@ -310,10 +361,8 @@ export function renderEditor() {
     ui.editorTitle.textContent = n.name;
     ui.editorBody.classList.remove('muted');
 
-    // TEMPLATE GENERE VIA templates.js
     ui.editorBody.innerHTML = renderEditorHTML(n, state);
 
-    // --- LOGIQUE D'AJOUT ---
     const handleAdd = (inputId, selectId, targetType) => {
         const nameInput = document.getElementById(inputId);
         const kindSelect = document.getElementById(selectId);
@@ -342,11 +391,9 @@ export function renderEditor() {
     document.getElementById('btnAddGroup').onclick = () => handleAdd('inpGroup', 'selKindGroup', TYPES.GROUP);
     document.getElementById('btnAddPerson').onclick = () => handleAdd('inpPerson', 'selKindPerson', TYPES.PERSON);
 
-    // --- FUSION ---
     document.getElementById('btnMerge').onclick = () => {
         const targetName = document.getElementById('mergeTarget').value.trim();
         const target = state.nodes.find(x => x.name.toLowerCase() === targetName.toLowerCase());
-        
         if (target) {
             if (target.id === n.id) { showCustomAlert("Impossible de fusionner avec soi-même."); return; }
             showCustomConfirm(`Fusionner "${n.name}" DANS "${target.name}" ?\n"${n.name}" sera supprimé.`, () => {
@@ -358,47 +405,6 @@ export function renderEditor() {
         }
     };
 
-    // --- PATHFINDING BUTTONS ---
-    const btnPathStart = document.getElementById('btnPathStart');
-    if (btnPathStart) {
-        btnPathStart.onclick = () => {
-            state.pathfinding.startId = n.id;
-            state.pathfinding.active = false;
-            renderEditor();
-        };
-    }
-    const btnPathCancel = document.getElementById('btnPathCancel');
-    if (btnPathCancel) {
-        btnPathCancel.onclick = () => {
-            state.pathfinding.startId = null;
-            renderEditor();
-        };
-    }
-    const btnPathCalc = document.getElementById('btnPathCalc');
-    if (btnPathCalc) {
-        btnPathCalc.onclick = () => {
-            const result = calculatePath(state.pathfinding.startId, n.id);
-            if (result) {
-                state.pathfinding.pathNodes = result.pathNodes;
-                state.pathfinding.pathLinks = result.pathLinks;
-                state.pathfinding.active = true;
-                draw();
-                renderEditor();
-            } else {
-                showCustomAlert("Aucune connexion trouvée.");
-            }
-        };
-    }
-    const btnClearPath = document.getElementById('btnClearPath');
-    if (btnClearPath) {
-        btnClearPath.onclick = () => {
-            clearPath();
-            draw();
-            renderEditor();
-        };
-    }
-
-    // --- STANDARD LISTENERS ---
     document.getElementById('btnFocusNode').onclick = () => {
         if (state.focusMode) {
             state.focusMode = false; state.focusSet.clear();
@@ -447,7 +453,6 @@ export function renderEditor() {
         });
     };
 
-    // --- LIENS ACTIFS (CHIPS) ---
     const chipsContainer = document.getElementById('chipsLinks');
     const myLinks = state.links.filter(l => {
         const s = (typeof l.source === 'object') ? l.source.id : l.source;
@@ -478,9 +483,13 @@ export function renderEditor() {
                 html += `
                 <div class="chip" style="border-left-color: ${linkColor};">
                     <div class="chip-content">
-                        <span class="chip-name" onclick="window.selectNode(${item.other.id})">${escapeHtml(item.other.name)}</span>
+                        <span class="chip-name" onclick="window.selectNode(${item.other.id})">
+                            ${escapeHtml(item.other.name)}
+                        </span>
                         <div class="chip-meta">
-                            <span class="chip-badge" style="color: ${linkColor};">${emoji} ${typeLabel}</span>
+                            <span class="chip-badge" style="color: ${linkColor};">
+                                ${emoji} ${typeLabel}
+                            </span>
                         </div>
                     </div>
                     <div class="x" title="Supprimer le lien" data-s="${item.link.source.id||item.link.source}" data-t="${item.link.target.id||item.link.target}">×</div>
