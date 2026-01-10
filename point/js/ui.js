@@ -13,11 +13,57 @@ const ui = {
     linkLegend: document.getElementById('linkLegend'),
 };
 
+// Fonction pour nettoyer les couleurs pour l'input HTML (Doit être #RRGGBB)
+function safeHex(color) {
+    if (!color || typeof color !== 'string') return '#000000';
+    // Si format #123
+    if (/^#[0-9A-F]{3}$/i.test(color)) return color;
+    // Si format #123456
+    if (/^#[0-9A-F]{6}$/i.test(color)) return color;
+    // Si c'est un format bizarre (ex: 7 chars ou 8 chars), on coupe ou on renvoie noir
+    if (color.length > 7 && color.startsWith('#')) return color.substring(0, 7);
+    return '#000000';
+}
+
 export function initUI() {
+    // --- CSS INJECTION ---
+    const style = document.createElement('style');
+    style.innerHTML = `
+        #editorBody { max-height: calc(100vh - 200px); overflow-y: auto; padding-right: 5px; }
+        #editorBody::-webkit-scrollbar { width: 5px; }
+        #editorBody::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+        details { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; margin-bottom: 8px; padding: 5px; }
+        summary { cursor: pointer; font-weight: bold; font-size: 0.85rem; color: var(--accent-cyan); padding: 2px 0; list-style: none; display: flex; align-items: center; justify-content: space-between; }
+        summary::after { content: '+'; font-size: 1rem; font-weight: bold; }
+        details[open] summary::after { content: '-'; }
+        .compact-row { display: flex; gap: 5px; align-items: center; }
+        .compact-col { flex: 1; }
+    `;
+    document.head.appendChild(style);
+
     const canvas = document.getElementById('graph');
     window.addEventListener('resize', resizeCanvas);
     
-    // --- GESTION DU CLAVIER (CTRL+Z) ---
+    // BOUTON LABELS 3 ETATS
+    const btnLabel = document.getElementById('chkLabels');
+    if (btnLabel) {
+        btnLabel.type = 'button';
+        btnLabel.style.width = "100px";
+        btnLabel.style.textAlign = "center";
+        const updateLabelBtn = () => {
+            const modes = ['❌ Aucun', '✨ Auto', '👁️ Toujours'];
+            btnLabel.value = modes[state.labelMode];
+            btnLabel.innerText = modes[state.labelMode];
+        };
+        updateLabelBtn();
+        btnLabel.onclick = (e) => {
+            e.preventDefault();
+            state.labelMode = (state.labelMode + 1) % 3;
+            updateLabelBtn();
+            draw();
+        };
+    }
+
     document.addEventListener('keydown', (e) => {
         if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
             e.preventDefault();
@@ -28,7 +74,6 @@ export function initUI() {
         }
     });
 
-    // 1. ZOOM
     canvas.addEventListener('wheel', (e) => {
         e.preventDefault();
         const m = screenToWorld(e.offsetX, e.offsetY, canvas);
@@ -41,7 +86,7 @@ export function initUI() {
         draw();
     }, { passive: false });
 
-    // 2. LOGIQUE SOURIS (Création Lien + Pan)
+    // LOGIQUE SOURIS
     let isPanning = false;
     let lastPan = { x: 0, y: 0 };
     let dragLinkSource = null;
@@ -50,7 +95,6 @@ export function initUI() {
         const p = screenToWorld(e.offsetX, e.offsetY, canvas);
         const hit = getSimulation().find(p.x, p.y, 30); 
 
-        // SHIFT + CLICK : Création de lien (PRIORITAIRE)
         if (e.shiftKey && hit) {
             dragLinkSource = hit;
             state.tempLink = { x1: hit.x, y1: hit.y, x2: hit.x, y2: hit.y };
@@ -73,14 +117,12 @@ export function initUI() {
 
     canvas.addEventListener('mousemove', (e) => {
         const p = screenToWorld(e.offsetX, e.offsetY, canvas);
-
         if (dragLinkSource) {
             state.tempLink.x2 = p.x;
             state.tempLink.y2 = p.y;
             draw();
             return;
         }
-
         if (isPanning) {
             const dx = e.clientX - lastPan.x;
             const dy = e.clientY - lastPan.y;
@@ -90,7 +132,6 @@ export function initUI() {
             draw();
             return; 
         }
-
         const hit = getSimulation().find(p.x, p.y, 25);
         if (hit) {
             if (state.hoverId !== hit.id) {
@@ -109,7 +150,6 @@ export function initUI() {
 
     canvas.addEventListener('mouseup', (e) => {
         const p = screenToWorld(e.offsetX, e.offsetY, canvas);
-        
         if (dragLinkSource) {
             const hit = getSimulation().find(p.x, p.y, 40); 
             if (hit && hit.id !== dragLinkSource.id) {
@@ -123,7 +163,6 @@ export function initUI() {
             draw();
             return;
         }
-
         if (isPanning) {
             isPanning = false;
             canvas.style.cursor = 'default';
@@ -138,7 +177,6 @@ export function initUI() {
         draw();
     });
 
-    // 3. DRAG & DROP DES NOEUDS
     d3.select(canvas).call(d3.drag()
         .container(canvas)
         .filter(event => !event.shiftKey) 
@@ -165,9 +203,7 @@ export function initUI() {
         })
     );
 
-    // 4. BOUTONS UI
     document.getElementById('btnRelayout').onclick = () => { state.view = {x:0, y:0, scale: 0.5}; restartSim(); };
-    
     const btnSim = document.getElementById('btnToggleSim');
     if (btnSim) btnSim.style.display = 'none';
 
@@ -178,7 +214,6 @@ export function initUI() {
             restartSim(); refreshLists(); renderEditor(); saveState(); 
         }
     };
-    document.getElementById('chkLabels').onchange = (e) => { state.showLabels = e.target.checked; draw(); };
     document.getElementById('chkPerf').onchange = (e) => { state.performance = e.target.checked; draw(); };
     document.getElementById('chkLinkTypes').onchange = (e) => { state.showLinkTypes = e.target.checked; updateLinkLegend(); draw(); };
 
@@ -186,7 +221,6 @@ export function initUI() {
     document.getElementById('createGroup').onclick = () => createNode(TYPES.GROUP, 'Nouveau groupe');
     document.getElementById('createCompany').onclick = () => createNode(TYPES.COMPANY, 'Nouvelle entreprise');
 
-    // 5. RECHERCHE
     document.getElementById('searchInput').addEventListener('input', (e) => {
         const q = e.target.value.trim().toLowerCase();
         const res = document.getElementById('searchResult');
@@ -197,7 +231,6 @@ export function initUI() {
         res.querySelectorAll('.search-hit').forEach(el => el.onclick = () => { zoomToNode(+el.dataset.id); e.target.value = ''; res.textContent = ''; });
     });
 
-    // 6. IMPORT/EXPORT
     document.getElementById('btnExport').onclick = exportGraph;
     document.getElementById('fileImport').onchange = importGraph;
     document.getElementById('fileMerge').onchange = mergeGraph;
@@ -207,7 +240,6 @@ function createNode(type, baseName) {
     let name = baseName, i = 1;
     while(state.nodes.find(n => n.name === name)) { name = `${baseName} ${++i}`; }
     const n = ensureNode(type, name);
-    // CORRECTION ZOOM DIRECT
     zoomToNode(n.id);
     refreshLists(); restartSim();
 }
@@ -270,7 +302,8 @@ export function renderEditor() {
     if (n.type === 'person') {
         colorInputHtml = `<div style="font-size:0.8rem; padding-top:10px; color:#aaa;">Auto (via Entreprise)</div>`;
     } else {
-        colorInputHtml = `<input id="edColor" type="color" value="${toColorInput(n.color)}" style="height:38px; width:100%;"/>`;
+        // Utilisation de safeHex pour éviter le warning rouge dans la console
+        colorInputHtml = `<input id="edColor" type="color" value="${safeHex(n.color)}" style="height:38px; width:100%;"/>`;
     }
 
     ui.editorBody.innerHTML = `
@@ -282,13 +315,14 @@ export function renderEditor() {
             <button id="btnDelete" class="danger" style="flex:0 0 auto; font-size:0.8rem;">🗑️</button>
         </div>
 
-        <div class="block">
+        <details open>
+            <summary>Propriétés</summary>
             <div class="row">
                 <label>Nom</label>
                 <input id="edName" type="text" value="${escapeHtml(n.name)}"/>
             </div>
-            <div class="row hstack">
-                <div class="grow">
+            <div class="compact-row">
+                <div class="compact-col">
                     <label style="font-size:0.8rem; opacity:0.7;">Type</label>
                     <select id="edType" style="width:100%;">
                         <option value="person" ${n.type==='person'?'selected':''}>Personne</option>
@@ -296,60 +330,64 @@ export function renderEditor() {
                         <option value="company" ${n.type==='company'?'selected':''}>Entreprise</option>
                     </select>
                 </div>
-                <div>
+                <div class="compact-col">
                     <label style="font-size:0.8rem; opacity:0.7;">Couleur</label>
                     ${colorInputHtml}
                 </div>
             </div>
-            <div class="row">
-                <label>Num / Matricule</label>
+            <div class="row" style="margin-top:5px;">
+                <label>Matricule</label>
                 <input id="edNum" type="text" value="${escapeHtml(n.num||'')}"/>
             </div>
             <div class="row">
                 <textarea id="edNotes" class="notes-textarea" placeholder="Informations...">${escapeHtml(n.notes||'')}</textarea>
             </div>
-        </div>
+        </details>
         
-        <h4 style="margin: 15px 0 5px 0; color:var(--accent-cyan); border-top:1px solid #333; padding-top:10px;">Création Rapide</h4>
-
-        <div style="margin-bottom:8px;">
-            <label style="font-size:0.8rem; color:#aaa;">Entreprise</label>
-            <div class="row hstack" style="gap:5px;">
-                <input id="inpCompany" list="datalist-companies" placeholder="Nom entreprise..." class="grow" style="min-width:0;"/>
-                <button id="btnLinkCompanyAff" style="font-size:0.75rem; padding:4px 8px;">Affiliation</button>
-                <button id="btnLinkCompanyVal" class="primary" style="font-size:0.75rem; padding:4px 8px;">Valider</button>
+        <details open>
+            <summary>Création Rapide</summary>
+            <div style="margin-bottom:8px;">
+                <label style="font-size:0.8rem; color:#aaa;">Entreprise</label>
+                <div class="row hstack" style="gap:5px;">
+                    <input id="inpCompany" list="datalist-companies" placeholder="Nom..." class="grow" style="min-width:0;"/>
+                    <button id="btnLinkCompanyAff" style="font-size:0.75rem; padding:4px 8px;">Aff.</button>
+                    <button id="btnLinkCompanyVal" class="primary" style="font-size:0.75rem; padding:4px 8px;">OK</button>
+                </div>
             </div>
-        </div>
-
-        <div style="margin-bottom:8px;">
-            <label style="font-size:0.8rem; color:#aaa;">Groupuscule</label>
-            <div class="row hstack" style="gap:5px;">
-                <input id="inpGroup" list="datalist-groups" placeholder="Nom groupe..." class="grow" style="min-width:0;"/>
-                <button id="btnLinkGroupAff" style="font-size:0.75rem; padding:4px 8px;">Affiliation</button>
-                <button id="btnLinkGroupVal" class="primary" style="font-size:0.75rem; padding:4px 8px;">Valider</button>
+            <div style="margin-bottom:8px;">
+                <label style="font-size:0.8rem; color:#aaa;">Groupuscule</label>
+                <div class="row hstack" style="gap:5px;">
+                    <input id="inpGroup" list="datalist-groups" placeholder="Nom..." class="grow" style="min-width:0;"/>
+                    <button id="btnLinkGroupAff" style="font-size:0.75rem; padding:4px 8px;">Aff.</button>
+                    <button id="btnLinkGroupVal" class="primary" style="font-size:0.75rem; padding:4px 8px;">OK</button>
+                </div>
             </div>
-        </div>
-
-        <div style="margin-bottom:15px;">
-            <label style="font-size:0.8rem; color:#aaa;">Personnel</label>
-            <div class="row hstack" style="gap:5px;">
-                <input id="inpPerson" list="datalist-people" placeholder="Nom personne..." class="grow" style="min-width:0;"/>
-                <button id="btnLinkPersonEmp" style="font-size:0.75rem; padding:4px 8px;">Employé</button>
-                <button id="btnLinkPersonVal" class="primary" style="font-size:0.75rem; padding:4px 8px;">Valider</button>
+            <div style="margin-bottom:8px;">
+                <label style="font-size:0.8rem; color:#aaa;">Personnel</label>
+                <div class="row hstack" style="gap:5px;">
+                    <input id="inpPerson" list="datalist-people" placeholder="Nom..." class="grow" style="min-width:0;"/>
+                    <button id="btnLinkPersonEmp" style="font-size:0.75rem; padding:4px 8px;">Emp.</button>
+                    <button id="btnLinkPersonVal" class="primary" style="font-size:0.75rem; padding:4px 8px;">OK</button>
+                </div>
             </div>
-        </div>
+        </details>
 
-        <h4 style="margin: 0 0 5px 0; color:var(--accent-cyan); border-top:1px solid #333; padding-top:10px;">Connexion Manuelle</h4>
-        <div class="row hstack" style="gap:5px; margin-bottom:15px;">
-           <input id="linkTarget" list="datalist-all" placeholder="Rechercher cible..." class="grow" style="min-width:0;"/>
-           <select id="linkKind" style="width:110px;"></select>
-        </div>
-        <button id="btnAddLink" style="width:100%; margin-bottom:15px;">🔗 Ajouter le lien</button>
-        <h4 style="margin: 0 0 5px 0; color:var(--text-muted);">Tous les liens</h4>
-        <div id="chipsLinks" class="chips"></div>
+        <details>
+            <summary>Connexion Manuelle</summary>
+            <div class="row hstack" style="gap:5px; margin-bottom:5px;">
+               <input id="linkTarget" list="datalist-all" placeholder="Rechercher cible..." class="grow" style="min-width:0;"/>
+               <select id="linkKind" style="width:110px;"></select>
+            </div>
+            <button id="btnAddLink" style="width:100%; margin-bottom:5px;">🔗 Lier</button>
+        </details>
+
+        <details open>
+            <summary>Liens Actifs</summary>
+            <div id="chipsLinks" class="chips"></div>
+        </details>
     `;
 
-    // --- LOGIQUE BOUTONS RAPIDES ---
+    // Listeners
     const tryAddLink = (inputId, defaultKind) => {
         const targetName = document.getElementById(inputId).value;
         const target = state.nodes.find(x => x.name.toLowerCase() === targetName.toLowerCase());
@@ -369,16 +407,11 @@ export function renderEditor() {
     document.getElementById('btnLinkPersonEmp').onclick = () => tryAddLink('inpPerson', KINDS.EMPLOYE);
     document.getElementById('btnLinkPersonVal').onclick = () => tryAddLink('inpPerson', KINDS.AMI);
 
-    // --- LOGIQUE CONNEXION MANUELLE ---
-    // On doit remplir la datalist "Tous"
     const allNames = state.nodes.filter(x => x.id !== n.id).sort((a,b) => a.name.localeCompare(b.name));
     let dl = document.getElementById('datalist-all');
-    if(!dl) { 
-        dl = document.createElement('datalist'); dl.id = 'datalist-all'; document.body.appendChild(dl); 
-    }
+    if(!dl) { dl = document.createElement('datalist'); dl.id = 'datalist-all'; document.body.appendChild(dl); }
     dl.innerHTML = allNames.map(x => `<option value="${escapeHtml(x.name)}"></option>`).join('');
 
-    // Remplissage select types
     const selKind = document.getElementById('linkKind');
     const kinds = Object.values(KINDS); 
     selKind.innerHTML = kinds.map(k => `<option value="${k}">${kindToLabel(k)}</option>`).join('');
@@ -395,8 +428,6 @@ export function renderEditor() {
             alert("Nœud cible introuvable.");
         }
     };
-
-    // --- RESTE DU CODE ---
 
     document.getElementById('btnFocusNode').onclick = () => {
         if (state.focusMode) {
@@ -428,7 +459,7 @@ export function renderEditor() {
     document.getElementById('edName').oninput = (e) => { n.name = e.target.value; refreshLists(); draw(); };
     document.getElementById('edType').onchange = (e) => { n.type = e.target.value; updatePersonColors(); restartSim(); draw(); refreshLists(); renderEditor(); };
     
-    // Si c'est une entreprise/groupe, on permet de changer la couleur
+    // CORRECTION : Déclaration de inpColor récupérée depuis le DOM APRES son injection
     const inpColor = document.getElementById('edColor');
     if (inpColor) {
         inpColor.oninput = (e) => { 
@@ -452,12 +483,24 @@ export function renderEditor() {
     };
 
     const chips = document.getElementById('chipsLinks');
-    const myLinks = state.links.filter(l => l.source.id === n.id || l.target.id === n.id);
+    
+    // CORRECTION : Filtrage robuste des liens (ID vs Objet)
+    const myLinks = state.links.filter(l => {
+        const s = (typeof l.source === 'object') ? l.source.id : l.source;
+        const t = (typeof l.target === 'object') ? l.target.id : l.target;
+        return s === n.id || t === n.id;
+    });
+
     if (myLinks.length === 0) {
         chips.innerHTML = '<span style="color:#666; font-style:italic; font-size:0.8rem;">Aucune connexion</span>';
     } else {
         chips.innerHTML = myLinks.map(l => {
-            const other = (l.source.id === n.id) ? l.target : l.source;
+            const s = (typeof l.source === 'object') ? l.source : nodeById(l.source);
+            const t = (typeof l.target === 'object') ? l.target : nodeById(l.target);
+            // Sécurité si un lien est cassé
+            if (!s || !t) return ''; 
+            
+            const other = (s.id === n.id) ? t : s;
             return `<span class="chip" title="${kindToLabel(l.kind)}">${escapeHtml(other.name)} <small>(${linkKindEmoji(l.kind)})</small> <span class="x" data-target-id="${other.id}">×</span></span>`;
         }).join('');
     }
@@ -467,8 +510,8 @@ export function renderEditor() {
             pushHistory(); 
             const targetId = parseInt(e.target.dataset.targetId);
             state.links = state.links.filter(l => {
-                const s = l.source.id;
-                const t = l.target.id;
+                const s = (typeof l.source === 'object') ? l.source.id : l.source;
+                const t = (typeof l.target === 'object') ? l.target.id : l.target;
                 const isTheLink = (s === n.id && t === targetId) || (s === targetId && t === n.id);
                 return !isTheLink;
             });
@@ -482,7 +525,7 @@ function exportGraph() {
     const data = { 
         meta: { date: new Date().toISOString() },
         nodes: state.nodes.map(n => ({ id: n.id, name: n.name, type: n.type, color: n.color, num: n.num, notes: n.notes, x: n.x, y: n.y })), 
-        links: state.links.map(l => ({ source: l.source.id, target: l.target.id, kind: l.kind })) 
+        links: state.links.map(l => ({ source: (typeof l.source === 'object') ? l.source.id : l.source, target: (typeof l.target === 'object') ? l.target.id : l.target, kind: l.kind })) 
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'graph_neural_link.json'; a.click();

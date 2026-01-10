@@ -26,18 +26,19 @@ export const state = {
     tempLink: null,
     // ----------------------------
 
-    showLabels: true,
+    // 0 = Off, 1 = Auto (Zoom), 2 = Always On
+    labelMode: 1, 
+    
     showLinkTypes: false,
     performance: false,
     view: { x: 0, y: 0, scale: 0.8 },
     forceSimulation: false
 };
 
-const STORAGE_KEY = 'pointPageState_v4';
+const STORAGE_KEY = 'pointPageState_v5';
 
 // --- COULEURS AUTOMATIQUES ---
 export function updatePersonColors() {
-    // 1. On calcule la "taille" (degré) de chaque entreprise/groupe
     const companySizes = new Map();
     state.links.forEach(l => {
         const sId = (typeof l.source === 'object') ? l.source.id : l.source;
@@ -46,13 +47,11 @@ export function updatePersonColors() {
         companySizes.set(tId, (companySizes.get(tId) || 0) + 1);
     });
 
-    // 2. Pour chaque personne, on cherche son affiliation principale
     state.nodes.forEach(n => {
         if (n.type === TYPES.PERSON) {
             let bestCompany = null;
             let maxScore = -1;
 
-            // On cherche les liens connectés à cette personne
             state.links.forEach(l => {
                 const s = (typeof l.source === 'object') ? l.source : nodeById(l.source);
                 const t = (typeof l.target === 'object') ? l.target : nodeById(l.target);
@@ -63,7 +62,6 @@ export function updatePersonColors() {
                 else if (t.id === n.id) other = s;
                 else return; 
 
-                // On prend la couleur si c'est une Entreprise OU un Groupe
                 if (other.type === TYPES.COMPANY || other.type === TYPES.GROUP) {
                     const score = companySizes.get(other.id) || 0;
                     if (score > maxScore) {
@@ -76,13 +74,13 @@ export function updatePersonColors() {
             if (bestCompany) {
                 n.color = bestCompany.color; 
             } else {
-                n.color = '#ffffff'; // Blanc par défaut
+                n.color = '#ffffff';
             }
         }
     });
 }
 
-// --- GESTION HISTORIQUE (CTRL+Z) ---
+// --- GESTION HISTORIQUE ---
 export function pushHistory() {
     if (state.history.length > 50) state.history.shift();
     const snapshot = {
@@ -104,12 +102,9 @@ export function undo() {
     state.nodes = prev.nodes;
     state.links = prev.links;
     state.nextId = prev.nextId;
-    
-    // On recalcule les couleurs au cas où
     updatePersonColors();
     restartSim();
 }
-// ------------------------------------
 
 export function saveState() {
     try {
@@ -124,7 +119,7 @@ export function saveState() {
                 kind: l.kind
             })),
             view: state.view,
-            showLabels: state.showLabels,
+            labelMode: state.labelMode, // Sauvegarde du mode
             showLinkTypes: state.showLinkTypes,
             nextId: state.nextId
         };
@@ -141,11 +136,12 @@ export function loadState() {
         if (data.links) state.links = data.links;
         if (data.view) state.view = data.view;
         if (data.nextId) state.nextId = data.nextId;
-        if (typeof data.showLabels === 'boolean') state.showLabels = data.showLabels;
         
-        // CORRECTION : On force la mise à jour des couleurs au chargement
+        // Chargement du mode label (compatibilité avec anciennes versions)
+        if (typeof data.labelMode === 'number') state.labelMode = data.labelMode;
+        else if (typeof data.showLabels === 'boolean') state.labelMode = data.showLabels ? 1 : 0;
+        
         updatePersonColors();
-        
         return true;
     } catch (e) { return false; }
 }
@@ -202,10 +198,7 @@ export function addLink(a, b, kind) {
         pushHistory(); 
         state.links.push({ source: A.id, target: B.id, kind });
         if (kind === KINDS.PATRON) propagateOrgNums();
-        
-        // Mise à jour des couleurs auto dès qu'on crée un lien
         updatePersonColors();
-        
         restartSim();
         return true;
     }

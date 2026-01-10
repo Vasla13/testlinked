@@ -46,7 +46,6 @@ function drawPolygon(ctx, x, y, radius, sides, rotate = 0) {
     }
 }
 
-// Fonction de sécurité couleur
 function safeColor(c) {
     if (typeof c !== 'string') return '#999999';
     const isValid = /^#([0-9A-F]{3}){1,2}$/i.test(c) || /^#([0-9A-F]{8})$/i.test(c);
@@ -62,6 +61,7 @@ export function draw() {
     const isFocus = state.focusMode;
     const isPath = state.pathMode;
     const showTypes = state.showLinkTypes; 
+    const labelMode = state.labelMode; // 0=Off, 1=Auto, 2=Always
 
     ctx.save();
     ctx.clearRect(0, 0, w, h);
@@ -174,10 +174,7 @@ export function draw() {
         ctx.setLineDash([]);
     }
 
-    // 3. DESSIN DES NOEUDS (CORRECTION LAYER)
-    // On dessine d'abord les structures (fond), puis les personnes (devant)
-    
-    // On trie ou on sépare : Structures vs Personnes
+    // 3. NOEUDS (Layers)
     const structures = [];
     const people = [];
     
@@ -186,7 +183,6 @@ export function draw() {
         else structures.push(n);
     }
 
-    // Fonction helper de dessin
     const drawSingleNode = (n) => {
         if (isFocus && !state.focusSet.has(n.id)) return;
         
@@ -230,18 +226,17 @@ export function draw() {
         }
     };
 
-    // PASSE 1 : Structures
     structures.forEach(drawSingleNode);
-    // PASSE 2 : Gens (Au dessus)
     people.forEach(drawSingleNode);
 
-    // 4. LABELS (Toujours au dessus de tout)
-    if (state.showLabels) {
+    // 4. LABELS (Gérés par le labelMode)
+    if (labelMode > 0) { // Si mode 1 ou 2
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        // On peut dessiner les labels dans n'importe quel ordre, ou prioriser les personnes aussi
-        const allNodesSorted = [...structures, ...people];
         
-        for (const n of allNodesSorted) {
+        // On fusionne tout pour dessiner les labels
+        const allNodes = [...structures, ...people];
+        
+        for (const n of allNodes) {
             if (isFocus && !state.focusSet.has(n.id)) continue;
 
             const rad = nodeRadius(n);
@@ -250,7 +245,18 @@ export function draw() {
 
             const isImportant = (n.type === TYPES.COMPANY || n.type === TYPES.GROUP);
             const isPathNode = isPath && state.pathPath.has(n.id);
-            const showName = (state.hoverId === n.id || state.selection === n.id) || (p.scale > 0.5 || isImportant) || isPathNode;
+            const isHover = (state.hoverId === n.id || state.selection === n.id);
+            
+            // LOGIQUE D'AFFICHAGE DU NOM
+            let showName = false;
+            
+            if (labelMode === 2) {
+                // Mode "Toujours" : on affiche tout
+                showName = true;
+            } else if (labelMode === 1) {
+                // Mode "Auto" (Classique)
+                showName = isHover || isPathNode || (p.scale > 0.5 || isImportant);
+            }
 
             if (showName) {
                 const fontSize = (isPathNode ? 16 : 13) / Math.sqrt(p.scale);
