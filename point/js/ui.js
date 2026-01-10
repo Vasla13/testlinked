@@ -4,7 +4,6 @@ import { draw, updateDegreeCache, resizeCanvas } from './render.js';
 import { screenToWorld, escapeHtml, toColorInput, kindToLabel, linkKindEmoji, clamp, worldToScreen } from './utils.js';
 import { TYPES, KINDS, PERSON_ORG_KINDS, PERSON_PERSON_KINDS, ORG_ORG_KINDS } from './constants.js';
 
-// Références aux éléments du DOM pour éviter de les rechercher en boucle
 const ui = {
     listCompanies: document.getElementById('listCompanies'),
     listGroups: document.getElementById('listGroups'),
@@ -14,82 +13,61 @@ const ui = {
     linkLegend: document.getElementById('linkLegend'),
 };
 
-/**
- * Initialisation de tous les événements de l'interface
- */
 export function initUI() {
     const canvas = document.getElementById('graph');
-    
-    // Redimensionnement de la fenêtre
     window.addEventListener('resize', resizeCanvas);
     
-    // ============================================================
-    // 1. ZOOM (Molette de souris)
-    // ============================================================
+    // 1. ZOOM (Wheel)
     canvas.addEventListener('wheel', (e) => {
         e.preventDefault();
-        // Zoom centré sur la souris
         const m = screenToWorld(e.offsetX, e.offsetY, canvas);
         const before = worldToScreen(m.x, m.y, canvas);
-        
-        // Sens du zoom
         const delta = clamp((e.deltaY < 0 ? 1.1 : 0.9), 0.2, 5);
         state.view.scale = clamp(state.view.scale * delta, 0.1, 4.0);
-        
         const after = worldToScreen(m.x, m.y, canvas);
         state.view.x += (before.x - after.x);
         state.view.y += (before.y - after.y);
-        
         draw();
     }, { passive: false });
 
-    // ============================================================
-    // 2. DRAG & DROP DES NOEUDS (D3.js)
-    // ============================================================
+    // 2. DRAG & DROP
     d3.select(canvas).call(d3.drag()
         .container(canvas)
         .subject(e => {
-            // Convertit la position souris en position monde
             const p = screenToWorld(e.sourceEvent.offsetX, e.sourceEvent.offsetY, canvas);
-            // Cherche un nœud sous la souris (rayon 30px)
             return getSimulation().find(p.x, p.y, 30);
         })
         .on("start", e => {
             if (!e.active) getSimulation().alphaTarget(0.3).restart();
-            e.subject.fx = e.subject.x; // Fixe la position physique
+            e.subject.fx = e.subject.x; 
             e.subject.fy = e.subject.y;
-            selectNode(e.subject.id); // Sélectionne le nœud
+            selectNode(e.subject.id); 
         })
         .on("drag", e => {
-            // Met à jour la position pendant le drag
             const p = screenToWorld(e.sourceEvent.offsetX, e.sourceEvent.offsetY, canvas);
             e.subject.fx = p.x;
             e.subject.fy = p.y;
         })
         .on("end", e => {
             if (!e.active) getSimulation().alphaTarget(0);
-            e.subject.fx = null; // Relâche la physique
+            e.subject.fx = null; 
             e.subject.fy = null;
-            saveState(); // Sauvegarde l'état après mouvement
+            saveState(); 
         })
     );
 
-    // ============================================================
-    // 3. PANNING (Déplacement carte) & HOVER (Survol)
-    // ============================================================
+    // 3. PANNING & HOVER
     let isPanning = false;
     let lastPan = { x: 0, y: 0 };
 
     canvas.addEventListener('mousedown', (e) => {
         const p = screenToWorld(e.offsetX, e.offsetY, canvas);
         const hit = getSimulation().find(p.x, p.y, 30);
-        
-        // Si on ne clique PAS sur un nœud, on active le mode Pan
         if (!hit) {
             isPanning = true;
             lastPan = { x: e.clientX, y: e.clientY };
             canvas.style.cursor = 'grabbing';
-            // On désélectionne si on clique dans le vide
+            // Si on clique dans le vide, on désélectionne
             if (state.selection) {
                 state.selection = null;
                 renderEditor();
@@ -99,31 +77,26 @@ export function initUI() {
     });
 
     canvas.addEventListener('mousemove', (e) => {
-        // A. GESTION DU DEPLACEMENT (PAN)
         if (isPanning) {
             const dx = e.clientX - lastPan.x;
             const dy = e.clientY - lastPan.y;
             lastPan = { x: e.clientX, y: e.clientY };
-            
             state.view.x += dx;
             state.view.y += dy;
             draw();
-            return; // On arrête là pour ne pas calculer le hover pendant le pan
+            return; 
         }
 
-        // B. GESTION DU SURVOL (HOVER)
         const p = screenToWorld(e.offsetX, e.offsetY, canvas);
         const hit = getSimulation().find(p.x, p.y, 25);
 
         if (hit) {
-            // Si on entre sur un nœud
             if (state.hoverId !== hit.id) {
                 state.hoverId = hit.id;
                 canvas.style.cursor = 'pointer';
                 draw();
             }
         } else {
-            // Si on sort d'un nœud
             if (state.hoverId !== null) {
                 state.hoverId = null;
                 canvas.style.cursor = 'default';
@@ -139,31 +112,23 @@ export function initUI() {
         }
     });
     
-    // Sortie de la souris du canvas : on reset le panning et le hover
     canvas.addEventListener('mouseleave', () => {
         isPanning = false;
         state.hoverId = null;
         draw();
     });
 
-
-    // ============================================================
-    // 4. BOUTONS & BARRE D'OUTILS
-    // ============================================================
-    
-    // Recentrer la vue
+    // 4. BOUTONS GLOBAUX & BARRE D'OUTILS
     document.getElementById('btnRelayout').onclick = () => { 
         state.view = {x:0, y:0, scale: 0.5}; 
         restartSim(); 
     };
 
-    // Pause / Play Simulation
     document.getElementById('btnToggleSim').onclick = () => { 
         state.forceSimulation = !state.forceSimulation; 
         if(!state.forceSimulation) restartSim(); 
     };
 
-    // Tout effacer
     document.getElementById('btnClearAll').onclick = () => { 
         if(confirm('Attention : Voulez-vous vraiment tout effacer ?')) { 
             state.nodes=[]; 
@@ -177,30 +142,21 @@ export function initUI() {
         }
     };
     
-    // Checkboxes d'affichage
     document.getElementById('chkLabels').onchange = (e) => { state.showLabels = e.target.checked; draw(); };
     document.getElementById('chkPerf').onchange = (e) => { state.performance = e.target.checked; draw(); };
     document.getElementById('chkLinkTypes').onchange = (e) => { state.showLinkTypes = e.target.checked; updateLinkLegend(); draw(); };
 
-    // Boutons de création rapide
     document.getElementById('createPerson').onclick = () => createNode(TYPES.PERSON, 'Nouvelle personne');
     document.getElementById('createGroup').onclick = () => createNode(TYPES.GROUP, 'Nouveau groupe');
     document.getElementById('createCompany').onclick = () => createNode(TYPES.COMPANY, 'Nouvelle entreprise');
 
-    // ============================================================
     // 5. RECHERCHE
-    // ============================================================
     document.getElementById('searchInput').addEventListener('input', (e) => {
         const q = e.target.value.trim().toLowerCase();
         const res = document.getElementById('searchResult');
-        
-        if(!q) { 
-            res.textContent = ''; 
-            return; 
-        }
+        if(!q) { res.textContent = ''; return; }
         
         const found = state.nodes.filter(n => n.name.toLowerCase().includes(q));
-        
         if(found.length === 0) {
             res.innerHTML = '<span style="color:#666;">Aucun résultat</span>';
             return;
@@ -210,31 +166,23 @@ export function initUI() {
             `<span class="search-hit" data-id="${n.id}">${escapeHtml(n.name)}</span>`
         ).join(' · ');
 
-        // Clic sur un résultat
         res.querySelectorAll('.search-hit').forEach(el => 
             el.onclick = () => {
                 zoomToNode(+el.dataset.id);
-                // On vide la recherche après sélection
                 e.target.value = '';
                 res.textContent = '';
             }
         );
     });
 
-    // ============================================================
     // 6. IMPORT / EXPORT
-    // ============================================================
     document.getElementById('btnExport').onclick = exportGraph;
     document.getElementById('fileImport').onchange = importGraph;
     document.getElementById('fileMerge').onchange = mergeGraph;
 }
 
-// --- FONCTIONS UTILITAIRES DE L'UI ---
-
-/** Crée un nœud avec un nom unique et le sélectionne */
 function createNode(type, baseName) {
     let name = baseName, i = 1;
-    // Trouve un nom unique (ex: Nouvelle personne 2)
     while(state.nodes.find(n => n.name === name)) {
         name = `${baseName} ${++i}`;
     }
@@ -244,20 +192,17 @@ function createNode(type, baseName) {
     restartSim();
 }
 
-/** Sélectionne un nœud, met à jour l'éditeur et redessine */
 export function selectNode(id) {
     state.selection = id;
     renderEditor();
     draw();
 }
 
-/** Zoom sur un nœud spécifique et le sélectionne */
 function zoomToNode(id) {
     const n = nodeById(id);
     if (!n) return;
     
     state.selection = id;
-    // Animation simple vers le nœud
     state.view.scale = 1.6;
     state.view.x = -n.x * 1.6;
     state.view.y = -n.y * 1.6;
@@ -266,7 +211,6 @@ function zoomToNode(id) {
     renderEditor();
 }
 
-/** Met à jour les listes dans la barre latérale gauche */
 export function refreshLists() {
     updateDegreeCache();
     
@@ -285,7 +229,6 @@ export function refreshLists() {
     fill(ui.listGroups, state.nodes.filter(isGroup));
     fill(ui.listPeople, state.nodes.filter(isPerson));
     
-    // Mise à jour des Datalists (pour l'autocomplétion)
     const fillDL = (id, arr) => {
         const el = document.getElementById(id);
         if(el) el.innerHTML = arr.map(n => `<option value="${escapeHtml(n.name)}"></option>`).join('');
@@ -295,13 +238,10 @@ export function refreshLists() {
     fillDL('datalist-companies', state.nodes.filter(isCompany));
 }
 
-/**
- * Génère le panneau d'édition (droite) pour le nœud sélectionné
- */
+// --- GESTION DU PANNEAU DE DROITE ---
 export function renderEditor() {
     const n = nodeById(state.selection);
     
-    // Cas : Rien de sélectionné
     if (!n) {
         ui.editorTitle.textContent = 'Aucune sélection';
         ui.editorBody.innerHTML = '<p style="padding:10px; opacity:0.6;">Cliquez sur un nœud pour afficher ses détails.</p>';
@@ -309,108 +249,131 @@ export function renderEditor() {
         return;
     }
 
-    // Cas : Nœud sélectionné
     ui.editorTitle.textContent = n.name;
     ui.editorBody.classList.remove('muted');
 
-    // Génération HTML du formulaire
+    // Génération du HTML (Avec les nouveaux boutons Focus et Centrer)
     ui.editorBody.innerHTML = `
-        <div class="row">
-            <label>Nom</label>
-            <input id="edName" type="text" value="${escapeHtml(n.name)}" class="grow"/>
+        <div class="row hstack" style="margin-bottom:15px; gap:5px;">
+            <button id="btnFocusNode" class="${state.focusMode ? 'primary' : ''}" style="flex:1; font-size:0.8rem;" title="Voir le point et ses voisins (2 niveaux)">
+                ${state.focusMode ? '🔍 Voir Tout' : '🎯 Focus Voisins'}
+            </button>
+            <button id="btnCenterNode" style="flex:1; font-size:0.8rem;">📍 Centrer</button>
         </div>
-        <div class="row">
-            <label>Type</label>
-            <select id="edType">
-                <option value="person" ${n.type==='person'?'selected':''}>Personne</option>
-                <option value="group" ${n.type==='group'?'selected':''}>Groupuscule</option>
-                <option value="company" ${n.type==='company'?'selected':''}>Entreprise</option>
-            </select>
-        </div>
-        <div class="row">
-            <label>Couleur</label>
-            <input id="edColor" type="color" value="${toColorInput(n.color)}"/>
-        </div>
-        <div class="row">
-            <label>Num</label>
-            <input id="edNum" type="text" value="${escapeHtml(n.num||'')}" placeholder="Matricule..." style="width:100%"/>
-        </div>
-        <div class="row">
-            <label>Notes</label>
-            <textarea id="edNotes" class="notes-textarea" placeholder="Informations complémentaires...">${escapeHtml(n.notes||'')}</textarea>
+
+        <div class="block">
+            <h4>Propriétés</h4>
+            <div class="row">
+                <label style="width:50px;">Nom</label>
+                <input id="edName" type="text" value="${escapeHtml(n.name)}" class="grow"/>
+            </div>
+            <div class="row" style="margin-top:5px;">
+                <label style="width:50px;">Type</label>
+                <select id="edType" class="grow">
+                    <option value="person" ${n.type==='person'?'selected':''}>Personne</option>
+                    <option value="group" ${n.type==='group'?'selected':''}>Groupuscule</option>
+                    <option value="company" ${n.type==='company'?'selected':''}>Entreprise</option>
+                </select>
+            </div>
+            <div class="row" style="margin-top:5px;">
+                <label style="width:50px;">Couleur</label>
+                <input id="edColor" type="color" value="${toColorInput(n.color)}" style="flex:0 0 40px;"/>
+                <input id="edNum" type="text" value="${escapeHtml(n.num||'')}" placeholder="Matricule..." class="grow" style="margin-left:5px;"/>
+            </div>
+            <div class="row" style="margin-top:5px;">
+                <textarea id="edNotes" class="notes-textarea" placeholder="Informations complémentaires...">${escapeHtml(n.notes||'')}</textarea>
+            </div>
         </div>
         
-        <hr style="border-color:#333; margin:15px 0; opacity:0.3;"/>
-        
-        <h3>Connexions</h3>
-        <div id="createLinkZone" class="row">
-           <input id="linkTarget" list="datalist-all" placeholder="Nom de la cible..." class="grow"/>
-           <select id="linkKind" style="width:100px;"></select>
-           <button id="btnAddLink" style="padding:4px 8px;">+</button>
+        <div class="block" style="margin-top:10px;">
+            <h4>Créer une connexion</h4>
+            <div class="row hstack" style="gap:5px;">
+               <input id="linkTarget" list="datalist-all" placeholder="Rechercher cible..." class="grow" style="min-width:0;"/>
+               <select id="linkKind" style="width:110px;"></select>
+            </div>
+            <button id="btnAddLink" style="width:100%; margin-top:5px;">🔗 Ajouter le lien</button>
         </div>
-        <div id="chipsLinks" class="chips"></div>
+        
+        <div id="chipsLinks" class="chips" style="margin-top:10px;"></div>
 
         <div class="row" style="margin-top:20px; justify-content:center;">
             <button id="btnDelete" class="danger" style="width:100%;">Supprimer ce nœud</button>
         </div>
     `;
 
-    // --- Listeners des inputs ---
-    
-    // Nom
-    document.getElementById('edName').oninput = (e) => { 
-        n.name = e.target.value; 
-        refreshLists(); 
-        draw(); // Redessine le label
-    };
-    
-    // Type
-    document.getElementById('edType').onchange = (e) => { 
-        n.type = e.target.value; 
-        restartSim(); 
-        draw(); 
-        refreshLists(); 
-        renderEditor(); // Recharge l'éditeur (couleurs par défaut changent)
-    };
-    
-    // Couleur
-    document.getElementById('edColor').oninput = (e) => { 
-        n.color = e.target.value; 
-        draw(); 
-    };
-    
-    // Numéro (Matricule)
-    document.getElementById('edNum').oninput = (e) => { 
-        n.num = e.target.value; 
-        // Si c'est une personne, on propage son numéro à l'entreprise si "Patron"
-        if(n.type === TYPES.PERSON) propagateOrgNums(); 
-    };
-    
-    // Notes
-    document.getElementById('edNotes').oninput = (e) => { 
-        n.notes = e.target.value; 
+    // --- LOGIQUE FOCUS (PROFONDEUR 2) ---
+    document.getElementById('btnFocusNode').onclick = () => {
+        if (state.focusMode) {
+            // On désactive
+            state.focusMode = false;
+            state.focusSet.clear();
+        } else {
+            // On active
+            state.focusMode = true;
+            state.focusSet.clear();
+            
+            // Niveau 0 : Soi-même
+            state.focusSet.add(n.id);
+
+            // Helper pour trouver les voisins d'un ID
+            const getNeighbors = (targetId) => {
+                const neighbors = [];
+                state.links.forEach(l => {
+                    const s = (typeof l.source === 'object') ? l.source.id : l.source;
+                    const t = (typeof l.target === 'object') ? l.target.id : l.target;
+                    if (s === targetId) neighbors.push(t);
+                    if (t === targetId) neighbors.push(s);
+                });
+                return neighbors;
+            };
+
+            // Niveau 1 : Voisins directs
+            const level1 = getNeighbors(n.id);
+            level1.forEach(id => state.focusSet.add(id));
+
+            // Niveau 2 : Voisins des voisins
+            level1.forEach(l1Id => {
+                const level2 = getNeighbors(l1Id);
+                level2.forEach(id => state.focusSet.add(id));
+            });
+        }
+        renderEditor(); // Met à jour le style du bouton
+        draw();
     };
 
-    // Suppression du nœud
+    // Bouton Centrer
+    document.getElementById('btnCenterNode').onclick = () => {
+        state.view.x = -n.x * state.view.scale;
+        state.view.y = -n.y * state.view.scale;
+        restartSim();
+    };
+
+    // Listeners classiques
+    document.getElementById('edName').oninput = (e) => { 
+        n.name = e.target.value; refreshLists(); draw(); 
+    };
+    document.getElementById('edType').onchange = (e) => { 
+        n.type = e.target.value; restartSim(); draw(); refreshLists(); renderEditor(); 
+    };
+    document.getElementById('edColor').oninput = (e) => { n.color = e.target.value; draw(); };
+    document.getElementById('edNum').oninput = (e) => { 
+        n.num = e.target.value; 
+        if(n.type === TYPES.PERSON) propagateOrgNums(); 
+    };
+    document.getElementById('edNotes').oninput = (e) => { n.notes = e.target.value; };
+
     document.getElementById('btnDelete').onclick = () => {
         if(confirm(`Supprimer définitivement "${n.name}" ?`)) {
-            // Supprime le nœud
             state.nodes = state.nodes.filter(x => x.id !== n.id);
-            // Supprime les liens associés
             state.links = state.links.filter(l => l.source.id !== n.id && l.target.id !== n.id);
-            
             state.selection = null;
-            restartSim(); 
-            refreshLists(); 
-            renderEditor();
+            restartSim(); refreshLists(); renderEditor();
         }
     };
 
-    // --- Gestion des Liens (Create Link) ---
-
-    // 1. Préparer la datalist pour l'ajout de lien (tous les autres nœuds)
+    // Remplissage de la Datalist pour la recherche de liens
     const allNames = state.nodes
-        .filter(x => x.id !== n.id) // Pas de lien vers soi-même
+        .filter(x => x.id !== n.id)
         .sort((a,b) => a.name.localeCompare(b.name));
     
     let dl = document.getElementById('datalist-all');
@@ -421,29 +384,27 @@ export function renderEditor() {
     }
     dl.innerHTML = allNames.map(x => `<option value="${escapeHtml(x.name)}"></option>`).join('');
 
-    // 2. Remplir le select des types de lien
+    // Remplissage des types de liens
     const selKind = document.getElementById('linkKind');
     const kinds = Object.values(KINDS); 
     selKind.innerHTML = kinds.map(k => `<option value="${k}">${kindToLabel(k)}</option>`).join('');
 
-    // 3. Action Ajouter Lien
+    // Création du lien
     document.getElementById('btnAddLink').onclick = () => {
         const targetName = document.getElementById('linkTarget').value;
         const kind = selKind.value;
-        
-        // Trouve la cible
         const target = state.nodes.find(x => x.name.toLowerCase() === targetName.toLowerCase());
         
         if(target) {
             addLink(n, target, kind);
-            document.getElementById('linkTarget').value = ''; // Reset input
-            renderEditor(); // Rafraîchir pour voir le chip
+            document.getElementById('linkTarget').value = ''; 
+            renderEditor(); 
         } else {
-            alert("Nœud cible introuvable. Créez-le d'abord.");
+            alert("Nœud cible introuvable.");
         }
     };
 
-    // 4. Affichage des "Chips" (Liens existants)
+    // Affichage des liens existants (Chips)
     const chips = document.getElementById('chipsLinks');
     const myLinks = state.links.filter(l => l.source.id === n.id || l.target.id === n.id);
     
@@ -452,7 +413,6 @@ export function renderEditor() {
     } else {
         chips.innerHTML = myLinks.map(l => {
             const other = (l.source.id === n.id) ? l.target : l.source;
-            // On stocke l'ID du lien ou du noeud cible pour la suppression
             return `
                 <span class="chip" title="${kindToLabel(l.kind)} avec ${escapeHtml(other.name)}">
                     ${escapeHtml(other.name)} 
@@ -462,39 +422,27 @@ export function renderEditor() {
         }).join('');
     }
 
-    // 5. Action Supprimer Lien (clic sur le x)
+    // Suppression de liens
     chips.querySelectorAll('.x').forEach(x => {
         x.onclick = (e) => {
             const targetId = parseInt(e.target.dataset.targetId);
-            
-            // Filtre : on retire le lien spécifique entre n.id et targetId
             state.links = state.links.filter(l => {
                 const s = l.source.id;
                 const t = l.target.id;
-                // Si c'est le lien qu'on veut supprimer, on retourne false
                 const isTheLink = (s === n.id && t === targetId) || (s === targetId && t === n.id);
                 return !isTheLink;
             });
-            
-            restartSim(); 
-            renderEditor();
+            restartSim(); renderEditor();
         };
     });
 }
 
-/** Met à jour la légende des couleurs de liens en bas */
 export function updateLinkLegend() {
     const el = ui.linkLegend;
-    if(!state.showLinkTypes) { 
-        el.innerHTML = ''; 
-        return; 
-    }
+    if(!state.showLinkTypes) { el.innerHTML = ''; return; }
     
     const usedKinds = new Set(state.links.map(l => l.kind));
-    if(usedKinds.size === 0) {
-         el.innerHTML = ''; 
-         return; 
-    }
+    if(usedKinds.size === 0) { el.innerHTML = ''; return; }
 
     const html = [];
     usedKinds.forEach(k => {
@@ -508,15 +456,12 @@ export function updateLinkLegend() {
     el.innerHTML = html.join('');
 }
 
-// --- GESTION FICHIERS ---
-
 function exportGraph() {
-    // On nettoie les données pour n'exporter que le nécessaire (pas les objets d3)
     const data = { 
         meta: { date: new Date().toISOString() },
         nodes: state.nodes.map(n => ({
             id: n.id, name: n.name, type: n.type, color: n.color, num: n.num, notes: n.notes,
-            x: n.x, y: n.y // On garde la position
+            x: n.x, y: n.y 
         })), 
         links: state.links.map(l => ({
             source: l.source.id, 
@@ -540,20 +485,15 @@ function importGraph(e) {
     r.onload = () => {
         try {
             const d = JSON.parse(r.result);
-            // Reset complet
             state.nodes = d.nodes;
             state.links = d.links;
-            
-            // Recalcul du prochain ID
             const maxId = state.nodes.reduce((max, n) => Math.max(max, n.id), 0);
             state.nextId = maxId + 1;
-            
-            restartSim(); 
-            refreshLists();
+            restartSim(); refreshLists();
             alert('Import réussi !');
         } catch(err) {
             console.error(err);
-            alert('Erreur lors de l\'import du fichier JSON.');
+            alert('Erreur import JSON.');
         }
     };
     r.readAsText(f);
@@ -568,33 +508,21 @@ function mergeGraph(e) {
         try {
             const d = JSON.parse(r.result);
             let addedNodes = 0;
-            
-            // 1. Ajouter les nœuds qui n'existent pas (par nom)
             d.nodes.forEach(n => {
                 if(!state.nodes.find(x => x.name.toLowerCase() === n.name.toLowerCase())) {
-                    // Nouvel ID pour éviter collisions
                     const newId = state.nextId++;
-                    // On map l'ancien ID vers le nouveau pour les liens
-                    n._oldId = n.id;
                     n.id = newId;
-                    n.x = (Math.random()-0.5)*100; // Position aléatoire proche centre
+                    n.x = (Math.random()-0.5)*100;
                     n.y = (Math.random()-0.5)*100;
                     state.nodes.push(n);
                     addedNodes++;
                 }
             });
-            
-            // 2. Ajouter les liens
-            // Attention: C'est complexe si les IDs ont changé.
-            // Pour faire simple dans cette version, on importe tout et on laisse D3 nettoyer
-            // (Ou on pourrait mapper par Nom si les noms sont uniques)
-            
-            restartSim(); 
-            refreshLists();
+            restartSim(); refreshLists();
             alert(`Fusion terminée : ${addedNodes} nœuds ajoutés.`);
         } catch(err) {
             console.error(err);
-            alert('Erreur lors de la fusion.');
+            alert('Erreur fusion.');
         }
     };
     r.readAsText(f);

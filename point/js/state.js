@@ -7,7 +7,13 @@ export const state = {
     links: [],
     nextId: 1,
     selection: null,
-    hoverId: null, // <--- NOUVEAU : Pour l'effet de survol
+    hoverId: null,
+    
+    // --- MODE FOCUS (ISOLATION) ---
+    focusMode: false,      // Active/Désactive le mode focus
+    focusSet: new Set(),   // Contient les IDs des nœuds à afficher (Nœud + Voisins + Voisins²)
+    // ------------------------------
+
     showLabels: true,
     showLinkTypes: false,
     performance: false,
@@ -21,8 +27,15 @@ export function saveState() {
     try {
         const payload = {
             nodes: state.nodes.map(n => ({
-                id: n.id, name: n.name, type: n.type, color: n.color, num: n.num, notes: n.notes,
-                x: n.x, y: n.y, fixed: n.fixed 
+                id: n.id, 
+                name: n.name, 
+                type: n.type, 
+                color: n.color, 
+                num: n.num, 
+                notes: n.notes,
+                x: n.x, 
+                y: n.y, 
+                fixed: n.fixed 
             })),
             links: state.links.map(l => ({
                 source: (typeof l.source === 'object') ? l.source.id : l.source,
@@ -60,7 +73,16 @@ export function isCompany(n) { return n.type === TYPES.COMPANY; }
 export function ensureNode(type, name, init = {}) {
     let n = state.nodes.find(x => x.name.toLowerCase() === name.toLowerCase());
     if (!n) {
-        n = { id: uid(), name, type, x: (Math.random()-0.5)*50, y: (Math.random()-0.5)*50, vx: 0, vy: 0, color: (type === TYPES.PERSON ? '#ffffff' : (init.color || randomPastel())) };
+        n = { 
+            id: uid(), 
+            name, 
+            type, 
+            x: (Math.random()-0.5)*50, 
+            y: (Math.random()-0.5)*50, 
+            vx: 0, 
+            vy: 0, 
+            color: (type === TYPES.PERSON ? '#ffffff' : (init.color || randomPastel())) 
+        };
         state.nodes.push(n);
     }
     return n;
@@ -71,6 +93,7 @@ export function addLink(a, b, kind) {
     const B = (typeof b === 'object') ? b : nodeById(b);
     if (!A || !B || A.id === B.id) return;
 
+    // Vérification de compatibilité des types de liens
     let allowed = false;
     if (A.type === TYPES.PERSON && B.type === TYPES.PERSON && PERSON_PERSON_KINDS.has(kind)) allowed = true;
     else if (((A.type === TYPES.PERSON && B.type !== TYPES.PERSON) || (A.type !== TYPES.PERSON && B.type === TYPES.PERSON)) && PERSON_ORG_KINDS.has(kind)) allowed = true;
@@ -78,6 +101,7 @@ export function addLink(a, b, kind) {
     
     if (!allowed) return;
 
+    // Vérifie si le lien existe déjà (dans un sens ou l'autre)
     const exists = state.links.find(l => {
         const s = (typeof l.source === 'object') ? l.source.id : l.source;
         const t = (typeof l.target === 'object') ? l.target.id : l.target;
@@ -86,20 +110,26 @@ export function addLink(a, b, kind) {
 
     if (!exists) {
         state.links.push({ source: A.id, target: B.id, kind });
+        // Si c'est un patron, on propage le matricule si nécessaire
         if (kind === KINDS.PATRON) propagateOrgNums();
         restartSim();
     }
 }
 
 export function propagateOrgNums() {
+    // Si un patron a un matricule, l'entreprise/groupe prend ce matricule (visuellement utile)
     for (const l of state.links) {
         if (l.kind !== KINDS.PATRON) continue;
         const srcId = (typeof l.source === 'object') ? l.source.id : l.source;
         const tgtId = (typeof l.target === 'object') ? l.target.id : l.target;
         const A = nodeById(srcId), B = nodeById(tgtId);
         if (!A || !B) continue;
-        const person = isPerson(A) ? A : B;
-        const org = !isPerson(A) ? A : B;
-        if (person && org && person.num) org.num = person.num;
+        
+        const person = isPerson(A) ? A : (isPerson(B) ? B : null);
+        const org = !isPerson(A) ? A : (!isPerson(B) ? B : null);
+        
+        if (person && org && person.num) {
+            org.num = person.num;
+        }
     }
 }
