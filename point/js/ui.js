@@ -1,9 +1,9 @@
 import { state, saveState, nodeById, isPerson, isCompany, isGroup, undo, pushHistory } from './state.js';
-import { ensureNode, addLink, mergeNodes, updatePersonColors } from './logic.js'; // IMPORT DE LOGIC
-import { renderEditorHTML } from './templates.js'; // IMPORT TEMPLATES
+import { ensureNode, addLink, mergeNodes, updatePersonColors } from './logic.js';
+import { renderEditorHTML } from './templates.js';
 import { restartSim, getSimulation } from './physics.js';
 import { draw, updateDegreeCache, resizeCanvas } from './render.js';
-import { escapeHtml, clamp, screenToWorld, kindToLabel, linkKindEmoji } from './utils.js';
+import { escapeHtml, clamp, screenToWorld, kindToLabel, linkKindEmoji, computeLinkColor } from './utils.js';
 import { TYPES } from './constants.js';
 
 const ui = {
@@ -44,7 +44,7 @@ function showCustomConfirm(msg, onYes) {
 export function initUI() {
     createModal();
 
-    // CSS INJECTION (Toujours utile pour le layout)
+    // CSS INJECTION (Style "Force" pour les lignes)
     const style = document.createElement('style');
     style.innerHTML = `
         .editor { width: 380px !important; }
@@ -62,17 +62,24 @@ export function initUI() {
         .compact-select { flex: 0 0 100px !important; width: 100px !important; font-size: 0.75rem !important; padding: 2px !important; }
         .mini-btn { flex: 0 0 30px !important; width: 30px !important; padding: 0 !important; text-align: center !important; justify-content: center !important; }
 
-        .link-category { margin-top: 10px; margin-bottom: 5px; font-size: 0.75rem; color: #888; text-transform: uppercase; border-bottom: 1px solid #333; }
-        .chip { cursor: pointer; transition: background 0.2s; display:inline-flex; align-items:center; gap:4px; max-width:100%; overflow:hidden; }
-        .chip:hover { background: rgba(255,255,255,0.15); }
-        .chip-name { text-decoration: underline; text-decoration-color: rgba(255,255,255,0.3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .link-category { margin-top: 15px; margin-bottom: 8px; font-size: 0.7rem; color: #aaa; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #444; padding-bottom: 2px; }
+        
+        .chip { display: flex; align-items: center; justify-content: space-between; background: rgba(20, 20, 30, 0.6); border-left: 4px solid #888; border-radius: 0 4px 4px 0; padding: 8px 10px; margin-bottom: 6px; transition: all 0.2s; }
+        .chip:hover { background: rgba(255,255,255,0.08); transform: translateX(2px); }
+        .chip-content { display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
+        .chip-name { font-weight: bold; font-size: 0.95rem; cursor: pointer; color: #ddd; }
+        .chip-name:hover { text-decoration: underline; color: #fff; }
+        .chip-meta { display: flex; align-items: center; gap: 6px; font-size: 0.75rem; }
+        .chip-badge { padding: 1px 6px; border-radius: 3px; background: rgba(0,0,0,0.4); font-weight: bold; text-transform: uppercase; display: inline-flex; align-items: center; gap: 4px; }
+        .x { padding: 6px 10px; cursor: pointer; color: #666; font-size: 1.2rem; line-height: 1; margin-left: 5px; }
+        .x:hover { color: #ff5555; background: rgba(255,0,0,0.1); border-radius: 4px; }
     `;
     document.head.appendChild(style);
 
     const canvas = document.getElementById('graph');
     window.addEventListener('resize', resizeCanvas);
     
-    // Bouton Labels
+    // Label Button
     const btnLabel = document.getElementById('chkLabels');
     if (btnLabel) {
         btnLabel.type = 'button'; btnLabel.style.width = "100px"; btnLabel.style.textAlign = "center";
@@ -83,10 +90,8 @@ export function initUI() {
 
     document.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undo(); refreshLists(); if (state.selection) renderEditor(); draw(); } });
 
-    // Events canvas (Zoom, Pan, Drag) -> Identique à avant
     setupCanvasEvents(canvas);
 
-    // Boutons globaux
     document.getElementById('btnRelayout').onclick = () => { state.view = {x:0, y:0, scale: 0.5}; restartSim(); };
     const btnSim = document.getElementById('btnToggleSim'); if (btnSim) btnSim.style.display = 'none';
 
@@ -118,34 +123,20 @@ export function initUI() {
     document.getElementById('fileMerge').onchange = mergeGraph;
 }
 
-// Fonction d'aide pour ne pas dupliquer le code canvas
 function setupCanvasEvents(canvas) {
-    // Zoom
     canvas.addEventListener('wheel', (e) => {
         e.preventDefault();
-        const screen = {x: e.offsetX, y: e.offsetY};
-        // Conversion basique puisque screenToWorld est dans utils maintenant, 
-        // mais pour le zoom D3 on peut faire simple :
-        const oldScale = state.view.scale;
+        const m = screenToWorld(e.offsetX, e.offsetY, canvas, state.view);
         const delta = clamp((e.deltaY < 0 ? 1.1 : 0.9), 0.2, 5);
-        const newScale = clamp(oldScale * delta, 0.1, 4.0);
-        
-        // Math zoom vers curseur (simplifié)
-        const mx = (screen.x - canvas.width/2 - state.view.x) / oldScale;
-        const my = (screen.y - canvas.height/2 - state.view.y) / oldScale;
-        
-        state.view.x -= mx * (newScale - oldScale);
-        state.view.y -= my * (newScale - oldScale);
-        state.view.scale = newScale;
-        
+        state.view.scale = clamp(state.view.scale * delta, 0.1, 4.0);
+        state.view.x += (m.x * state.view.scale + state.view.x + canvas.width/2 - e.offsetX) * (1 - delta); // Approx
         draw();
     }, { passive: false });
 
-    // Drag and Click
     let isPanning = false, lastPan = { x: 0, y: 0 }, dragLinkSource = null;
 
     canvas.addEventListener('mousedown', (e) => {
-        const p = screenToWorld(e.offsetX, e.offsetY, canvas, state.view); // Utils doit avoir screenToWorld adapté
+        const p = screenToWorld(e.offsetX, e.offsetY, canvas, state.view);
         const hit = getSimulation().find(p.x, p.y, 30); 
         if (e.shiftKey && hit) {
             dragLinkSource = hit;
@@ -187,7 +178,6 @@ function setupCanvasEvents(canvas) {
     
     canvas.addEventListener('mouseleave', () => { isPanning = false; state.hoverId = null; dragLinkSource = null; state.tempLink = null; draw(); });
 
-    // D3 Drag
     d3.select(canvas).call(d3.drag().container(canvas).filter(event => !event.shiftKey).subject(e => {
         const p = screenToWorld(e.sourceEvent.offsetX, e.sourceEvent.offsetY, canvas, state.view);
         return getSimulation().find(p.x, p.y, 30);
@@ -264,7 +254,7 @@ export function renderEditor() {
     ui.editorTitle.textContent = n.name;
     ui.editorBody.classList.remove('muted');
 
-    // TEMPLATE GENERE VIA templates.js
+    // Génération HTML depuis Templates
     ui.editorBody.innerHTML = renderEditorHTML(n, state);
 
     // --- LOGIQUE D'AJOUT ---
@@ -277,7 +267,6 @@ export function renderEditor() {
         if (!name) return;
 
         let target = state.nodes.find(x => x.name.toLowerCase() === name.toLowerCase());
-        
         if (!target) {
             showCustomConfirm(`"${name}" n'existe pas. Créer nouveau ${targetType} ?`, () => {
                 target = ensureNode(targetType, name);
@@ -296,11 +285,9 @@ export function renderEditor() {
     document.getElementById('btnAddGroup').onclick = () => handleAdd('inpGroup', 'selKindGroup', TYPES.GROUP);
     document.getElementById('btnAddPerson').onclick = () => handleAdd('inpPerson', 'selKindPerson', TYPES.PERSON);
 
-    // --- FUSION ---
     document.getElementById('btnMerge').onclick = () => {
         const targetName = document.getElementById('mergeTarget').value.trim();
         const target = state.nodes.find(x => x.name.toLowerCase() === targetName.toLowerCase());
-        
         if (target) {
             if (target.id === n.id) { showCustomAlert("Impossible de fusionner avec soi-même."); return; }
             showCustomConfirm(`Fusionner "${n.name}" DANS "${target.name}" ?\n"${n.name}" sera supprimé.`, () => {
@@ -312,7 +299,7 @@ export function renderEditor() {
         }
     };
 
-    // --- LISTENERS CLASSIQUES ---
+    // --- LISTENERS ---
     document.getElementById('btnFocusNode').onclick = () => {
         if (state.focusMode) {
             state.focusMode = false; state.focusSet.clear();
@@ -361,9 +348,8 @@ export function renderEditor() {
         });
     };
 
-    // --- LIENS ACTIFS GROUPÉS ---
+    // --- LIENS ACTIFS ---
     const chipsContainer = document.getElementById('chipsLinks');
-    
     const myLinks = state.links.filter(l => {
         const s = (typeof l.source === 'object') ? l.source.id : l.source;
         const t = (typeof l.target === 'object') ? l.target.id : l.target;
@@ -371,10 +357,9 @@ export function renderEditor() {
     });
 
     if (myLinks.length === 0) {
-        chipsContainer.innerHTML = '<span style="color:#666; font-style:italic; font-size:0.8rem;">Aucune connexion</span>';
+        chipsContainer.innerHTML = '<div style="padding:10px; text-align:center; color:#666; font-style:italic; font-size:0.8rem;">Aucune connexion active</div>';
     } else {
         const groups = { [TYPES.COMPANY]: [], [TYPES.GROUP]: [], [TYPES.PERSON]: [] };
-        
         myLinks.forEach(l => {
             const s = (typeof l.source === 'object') ? l.source : nodeById(l.source);
             const t = (typeof l.target === 'object') ? l.target : nodeById(l.target);
@@ -387,20 +372,32 @@ export function renderEditor() {
             if (items.length === 0) return '';
             let html = `<div class="link-category">${title}</div>`;
             items.forEach(item => {
+                const linkColor = computeLinkColor(item.link);
+                const typeLabel = kindToLabel(item.link.kind);
+                const emoji = linkKindEmoji(item.link.kind);
+                
                 html += `
-                <span class="chip" title="${kindToLabel(item.link.kind)}">
-                    <span class="chip-name" onclick="window.selectNode(${item.other.id})">${escapeHtml(item.other.name)}</span>
-                    <small style="opacity:0.7; margin-left:3px;">(${linkKindEmoji(item.link.kind)})</small> 
-                    <span class="x" data-s="${item.link.source.id||item.link.source}" data-t="${item.link.target.id||item.link.target}">×</span>
-                </span>`;
+                <div class="chip" style="border-left-color: ${linkColor};">
+                    <div class="chip-content">
+                        <span class="chip-name" onclick="window.selectNode(${item.other.id})">
+                            ${escapeHtml(item.other.name)}
+                        </span>
+                        <div class="chip-meta">
+                            <span class="chip-badge" style="color: ${linkColor};">
+                                ${emoji} ${typeLabel}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="x" title="Supprimer le lien" data-s="${item.link.source.id||item.link.source}" data-t="${item.link.target.id||item.link.target}">×</div>
+                </div>`;
             });
             return html;
         };
 
         chipsContainer.innerHTML = 
-            renderGroup('Entreprises', groups[TYPES.COMPANY]) +
-            renderGroup('Groupuscules', groups[TYPES.GROUP]) +
-            renderGroup('Personnes', groups[TYPES.PERSON]);
+            renderGroup('🏢 Entreprises', groups[TYPES.COMPANY]) +
+            renderGroup('👥 Groupuscules', groups[TYPES.GROUP]) +
+            renderGroup('👤 Personnes', groups[TYPES.PERSON]);
             
         window.selectNode = selectNode; 
     }

@@ -1,5 +1,5 @@
-import { escapeHtml, safeHex, kindToLabel, linkKindEmoji } from './utils.js';
-import { TYPES, KINDS, PERSON_PERSON_KINDS, PERSON_ORG_KINDS, ORG_ORG_KINDS } from './constants.js';
+import { escapeHtml, safeHex, kindToLabel } from './utils.js';
+import { TYPES, PERSON_PERSON_KINDS, PERSON_ORG_KINDS, ORG_ORG_KINDS } from './constants.js';
 
 export function getLinkOptions(sourceType, targetType) {
     let validKinds = [];

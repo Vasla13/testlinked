@@ -1,9 +1,9 @@
-import { state, nodeById, pushHistory } from './state.js';
+import { state, nodeById, pushHistory, isPerson } from './state.js';
 import { restartSim } from './physics.js';
 import { uid, randomPastel, hexToRgb, rgbToHex } from './utils.js';
 import { TYPES, KINDS, PERSON_PERSON_KINDS, PERSON_ORG_KINDS, ORG_ORG_KINDS } from './constants.js';
 
-// --- COULEURS ---
+// --- COULEURS (MIX PONDÉRÉ) ---
 export function updatePersonColors() {
     const nodeWeights = new Map();
     state.links.forEach(l => {
@@ -15,7 +15,8 @@ export function updatePersonColors() {
 
     state.nodes.forEach(n => {
         if (n.type === TYPES.PERSON) {
-            let totalR = 0, totalG = 0, totalB = 0, totalWeight = 0;
+            let totalR = 0, totalG = 0, totalB = 0;
+            let totalWeight = 0;
 
             state.links.forEach(l => {
                 const s = (typeof l.source === 'object') ? l.source : nodeById(l.source);
@@ -28,7 +29,10 @@ export function updatePersonColors() {
                 if (other.type !== TYPES.PERSON || other.color) { 
                     const weight = (nodeWeights.get(other.id) || 1); 
                     const rgb = hexToRgb(other.color || '#ffffff');
-                    totalR += rgb.r * weight; totalG += rgb.g * weight; totalB += rgb.b * weight;
+                    
+                    totalR += rgb.r * weight;
+                    totalG += rgb.g * weight;
+                    totalB += rgb.b * weight;
                     totalWeight += weight;
                 }
             });
@@ -42,7 +46,7 @@ export function updatePersonColors() {
     });
 }
 
-// --- ACTIONS GRAPHE ---
+// --- ACTIONS ---
 export function ensureNode(type, name) {
     let n = state.nodes.find(x => x.name.toLowerCase() === name.toLowerCase());
     if (!n) {
@@ -50,8 +54,12 @@ export function ensureNode(type, name) {
         const startX = (Math.random()-0.5)*50;
         const startY = (Math.random()-0.5)*50;
         n = { 
-            id: uid(), name, type, 
-            x: startX, y: startY, fx: startX, fy: startY, vx: 0, vy: 0, 
+            id: uid(), 
+            name, 
+            type, 
+            x: startX, y: startY, 
+            fx: startX, fy: startY, // Figé au départ
+            vx: 0, vy: 0, 
             color: (type === TYPES.PERSON ? '#ffffff' : randomPastel()) 
         };
         state.nodes.push(n);
@@ -65,6 +73,7 @@ export function addLink(a, b, kind) {
     if (!A || !B || A.id === B.id) return false;
 
     if (!kind) {
+        // Fallbacks si aucun type n'est donné
         if (A.type === TYPES.PERSON && B.type === TYPES.PERSON) kind = KINDS.AMI;
         else if (A.type === TYPES.COMPANY || B.type === TYPES.COMPANY) kind = KINDS.EMPLOYE;
         else if (A.type === TYPES.GROUP || B.type === TYPES.GROUP) kind = KINDS.MEMBRE;
@@ -81,12 +90,8 @@ export function addLink(a, b, kind) {
         pushHistory(); 
         state.links.push({ source: A.id, target: B.id, kind });
         
-        // Propagation matricule si patron
-        if (kind === KINDS.PATRON) {
-            const person = (A.type === TYPES.PERSON) ? A : (B.type === TYPES.PERSON ? B : null);
-            const org = (A.type !== TYPES.PERSON) ? A : (B.type !== TYPES.PERSON ? B : null);
-            if (person && org && person.num) org.num = person.num;
-        }
+        // Propagation Numéro
+        if (kind === KINDS.PATRON) propagateOrgNums();
         
         // Libération physique
         if (A.fx !== undefined) A.fx = null;
@@ -105,17 +110,19 @@ export function mergeNodes(sourceId, targetId) {
     if (sourceId === targetId) return;
     pushHistory(); 
 
-    // Déplacement des liens
+    // Identifier les liens à déplacer
     const linksToMove = state.links.filter(l => {
         const s = (typeof l.source === 'object') ? l.source.id : l.source;
         const t = (typeof l.target === 'object') ? l.target.id : l.target;
         return s === sourceId || t === sourceId;
     });
 
+    // Créer les nouveaux liens
     linksToMove.forEach(l => {
         const s = (typeof l.source === 'object') ? l.source.id : l.source;
         const t = (typeof l.target === 'object') ? l.target.id : l.target;
         const otherId = (s === sourceId) ? t : s;
+
         if (otherId === targetId) return; 
 
         const exists = state.links.find(ex => {
@@ -129,7 +136,7 @@ export function mergeNodes(sourceId, targetId) {
         }
     });
 
-    // Suppression ancien
+    // Supprimer l'ancien noeud
     state.links = state.links.filter(l => {
         const s = (typeof l.source === 'object') ? l.source.id : l.source;
         const t = (typeof l.target === 'object') ? l.target.id : l.target;
@@ -139,4 +146,17 @@ export function mergeNodes(sourceId, targetId) {
 
     updatePersonColors();
     restartSim();
+}
+
+export function propagateOrgNums() {
+    for (const l of state.links) {
+        if (l.kind !== KINDS.PATRON) continue;
+        const srcId = (typeof l.source === 'object') ? l.source.id : l.source;
+        const tgtId = (typeof l.target === 'object') ? l.target.id : l.target;
+        const A = nodeById(srcId), B = nodeById(tgtId);
+        if (!A || !B) continue;
+        const person = isPerson(A) ? A : (isPerson(B) ? B : null);
+        const org = !isPerson(A) ? A : (!isPerson(B) ? B : null);
+        if (person && org && person.num) org.num = person.num;
+    }
 }

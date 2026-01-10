@@ -6,8 +6,8 @@ let simulation;
 
 export function initPhysics() {
     simulation = d3.forceSimulation()
-        .alphaDecay(0.015)     // Ralentissement plus lent pour laisser le temps de s'étaler
-        .velocityDecay(0.4)    // Plus de friction pour stopper l'effet "vibration"
+        .alphaDecay(0.015)     
+        .velocityDecay(0.4)    
         .on("tick", ticked);
 }
 
@@ -21,29 +21,27 @@ export function restartSim() {
 
     simulation.nodes(state.nodes);
     
-    // --- 1. PRÉPARATION ---
     const nodeDegree = new Map();
     const connectedPairs = new Set();
 
     state.nodes.forEach(n => nodeDegree.set(n.id, 0));
-    
     state.links.forEach(l => {
         const s = (typeof l.source === 'object') ? l.source.id : l.source;
         const t = (typeof l.target === 'object') ? l.target.id : l.target;
-        
         nodeDegree.set(s, (nodeDegree.get(s) || 0) + 1);
         nodeDegree.set(t, (nodeDegree.get(t) || 0) + 1);
-
         connectedPairs.add(`${s}-${t}`);
         connectedPairs.add(`${t}-${s}`);
     });
 
-    // --- 2. FORCES ---
+    // --- FORCES ---
 
-    // A. LIENS (Plus longs pour aérer)
+    // A. LIENS
     simulation.force("link", d3.forceLink(state.links)
         .id(d => d.id)
         .distance(l => {
+            // ENNEMIS = TRÈS LOIN
+            if (l.kind === KINDS.ENNEMI) return 1200; 
             if (l.kind === KINDS.AFFILIATION) return 500; 
             if (l.kind === KINDS.PATRON) return 60;
             if (l.kind === KINDS.HAUT_GRADE) return 90;
@@ -51,59 +49,51 @@ export function restartSim() {
             return 200;
         })
         .strength(l => {
+            if (l.kind === KINDS.ENNEMI) return 1.0; 
             if (l.kind === KINDS.PATRON) return 1.2;
-            return 0.2; // Liens plus souples pour laisser respirer
+            return 0.2; 
         })
     );
 
-    // B. CHARGE (Répulsion massive à courte portée)
+    // B. CHARGE (RÉPULSION FORTE)
     simulation.force("charge", d3.forceManyBody()
         .strength(n => {
-            // Force de répulsion augmentée pour éviter l'agglutinement
             let strength = -800; 
             if (n.type === TYPES.COMPANY) strength = -4000; 
             if (n.type === TYPES.GROUP) strength = -2500;
-            
             const degree = nodeDegree.get(n.id) || 0;
             strength -= (degree * 200); 
             return strength;
         })
-        // DistanceMax réduite : ils se repoussent très fort quand ils sont proches,
-        // mais arrêtent de se pousser quand ils sont déjà loin (évite la fuite aux bords)
         .distanceMax(1500) 
-        .distanceMin(50) // Evite les explosions si deux points sont superposés
+        .distanceMin(50) 
     );
 
-    // C. COLLISION (Physique "Dure")
+    // C. COLLISION
     simulation.force("collide", d3.forceCollide()
-        .radius(n => nodeRadius(n) + 40) // Très grosse marge
+        .radius(n => nodeRadius(n) + 40)
         .iterations(4)
     );
 
-    // D. BARRIÈRE ÉLASTIQUE (Rayon fixe large)
-    // On fixe un rayon de 2500px. C'est assez grand pour 400 points, 
-    // mais ça les empêche de sortir du cadre.
+    // D. BARRIÈRE (LARGE)
     const worldRadius = 2500;
-
     simulation.force("boundary", () => {
         for (const n of state.nodes) {
             const d = Math.sqrt(n.x * n.x + n.y * n.y);
             if (d > worldRadius) {
                 const excess = d - worldRadius;
                 const angle = Math.atan2(n.y, n.x);
-                // Force de rappel très sèche dès qu'on touche le bord
                 n.vx -= Math.cos(angle) * (excess * 0.2);
                 n.vy -= Math.sin(angle) * (excess * 0.2);
             }
         }
     });
 
-    // E. TERRITOIRE (Protection des entreprises)
+    // E. TERRITOIRE
     simulation.force("territory", () => {
         const structures = state.nodes.filter(n => n.type === TYPES.COMPANY || n.type === TYPES.GROUP);
         for (const struct of structures) {
             const territoryRadius = (struct.type === TYPES.COMPANY) ? 400 : 300; 
-
             for (const n of state.nodes) {
                 if (n.id === struct.id || n.type === TYPES.COMPANY || n.type === TYPES.GROUP) continue;
                 if (n.fx != null) continue;
@@ -125,9 +115,7 @@ export function restartSim() {
         }
     });
 
-    // F. GRAVITÉ CENTRALE (DÉSACTIVÉE)
-    // On ne veut plus que le centre aspire tout le monde,
-    // on laisse la répulsion et les liens trouver leur équilibre naturel.
+    // F. PAS DE CENTRE (Anti-Planète)
     simulation.force("center", null);
     
     simulation.alpha(1).restart();

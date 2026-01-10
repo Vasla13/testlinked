@@ -1,29 +1,49 @@
-export const TYPES = { PERSON: 'person', GROUP: 'group', COMPANY: 'company' };
+export const TYPES = {
+    PERSON: 'person',
+    GROUP: 'group',
+    COMPANY: 'company'
+};
 
 export const KINDS = {
-    AMOUR: 'amour', FAMILLE: 'famille', PARTENAIRE: 'partenaire', AMI: 'ami',
-    PATRON: 'patron', HAUT_GRADE: 'haut_grade', EMPLOYE: 'employe', MEMBRE: 'membre',
-    AFFILIATION: 'affiliation'
+    PATRON: 'patron',
+    EMPLOYE: 'employe',
+    COLLEGUE: 'collegue',
+    PARTENAIRE: 'partenaire',
+    FAMILLE: 'famille',
+    COUPLE: 'couple',
+    AMOUR: 'amour',
+    AMI: 'ami',
+    ENNEMI: 'ennemi', // Invisible sur la carte, mais repousse
+    RIVAL: 'rival',
+    CONNAISSANCE: 'connaissance',
+    AFFILIATION: 'affiliation',
+    MEMBRE: 'membre',
+    RELATION: 'relation'
 };
 
-export const ORG_REL = new Set([KINDS.PATRON, KINDS.HAUT_GRADE, KINDS.EMPLOYE, KINDS.MEMBRE]);
-export const PERSON_PERSON_KINDS = new Set([KINDS.AMOUR, KINDS.AMI, KINDS.FAMILLE, KINDS.PARTENAIRE]);
-export const PERSON_ORG_KINDS = new Set([KINDS.PATRON, KINDS.HAUT_GRADE, KINDS.EMPLOYE, KINDS.MEMBRE, KINDS.AFFILIATION]);
-export const ORG_ORG_KINDS = new Set([KINDS.AFFILIATION]);
+export const PERSON_PERSON_KINDS = new Set([
+    KINDS.FAMILLE, KINDS.COUPLE, KINDS.AMOUR, KINDS.AMI, 
+    KINDS.ENNEMI, KINDS.RIVAL, KINDS.CONNAISSANCE, KINDS.COLLEGUE
+]);
 
-export const NODE_BASE_SIZE = { [TYPES.PERSON]: 10, [TYPES.GROUP]: 20, [TYPES.COMPANY]: 22 };
-export const DEG_SCALE = { [TYPES.PERSON]: 3.5, [TYPES.GROUP]: 5.0, [TYPES.COMPANY]: 5.5 };
-export const R_MIN = { [TYPES.PERSON]: 10, [TYPES.GROUP]: 20, [TYPES.COMPANY]: 22 };
-export const R_MAX = { [TYPES.PERSON]: 48, [TYPES.GROUP]: 72, [TYPES.COMPANY]: 80 };
+export const PERSON_ORG_KINDS = new Set([
+    KINDS.PATRON, KINDS.EMPLOYE, KINDS.AFFILIATION, KINDS.MEMBRE,
+    KINDS.PARTENAIRE, KINDS.ENNEMI 
+]);
+
+export const ORG_ORG_KINDS = new Set([
+    KINDS.PARTENAIRE, KINDS.RIVAL, KINDS.ENNEMI, KINDS.AFFILIATION
+]);
+
+export const NODE_BASE_SIZE = { [TYPES.PERSON]: 12, [TYPES.COMPANY]: 25, [TYPES.GROUP]: 18 };
+export const DEG_SCALE = { [TYPES.PERSON]: 3, [TYPES.COMPANY]: 1.5, [TYPES.GROUP]: 2 };
+export const R_MIN = { [TYPES.PERSON]: 12, [TYPES.COMPANY]: 25, [TYPES.GROUP]: 18 };
+export const R_MAX = { [TYPES.PERSON]: 50, [TYPES.COMPANY]: 100, [TYPES.GROUP]: 80 };
 
 export const LINK_KIND_EMOJI = {
-    [KINDS.AMOUR]: '❤️', [KINDS.FAMILLE]: '👪', [KINDS.PARTENAIRE]: '🤝', [KINDS.AMI]: '🤝',
-    [KINDS.PATRON]: '👑', [KINDS.HAUT_GRADE]: '🏅', [KINDS.EMPLOYE]: '💼', [KINDS.MEMBRE]: '🎫',
-    [KINDS.AFFILIATION]: '🔗'
-};
-
-export const LINK_KIND_COLOR = {
-    [KINDS.AMOUR]: '#ff6b81', [KINDS.FAMILLE]: '#ffd43b', [KINDS.PARTENAIRE]: '#b197fc',
-    [KINDS.AMI]: '#4dabf7', [KINDS.PATRON]: '#ff922b', [KINDS.HAUT_GRADE]: '#fab005',
-    [KINDS.EMPLOYE]: '#20c997', [KINDS.MEMBRE]: '#15aabf', [KINDS.AFFILIATION]: '#94d82d'
+    [KINDS.PATRON]: '👑', [KINDS.EMPLOYE]: '💼', [KINDS.COLLEGUE]: '🤝',
+    [KINDS.PARTENAIRE]: '🤝', [KINDS.FAMILLE]: '🏠', [KINDS.COUPLE]: '❤️',
+    [KINDS.AMOUR]: '❤️', [KINDS.AMI]: '🍻', [KINDS.ENNEMI]: '⚔️',
+    [KINDS.RIVAL]: '⚡', [KINDS.CONNAISSANCE]: '👋', [KINDS.AFFILIATION]: '🏴',
+    [KINDS.MEMBRE]: '👤', [KINDS.RELATION]: '🔗'
 };

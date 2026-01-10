@@ -1,25 +1,24 @@
-import { state, loadState, saveState } from './state.js';
-import { initPhysics, restartSim } from './physics.js';
-import { initUI, refreshLists, renderEditor } from './ui.js';
-import { resizeCanvas } from './render.js';
+import { loadState, state, pushHistory } from './state.js';
+import { restartSim } from './physics.js';
+import { initUI, refreshLists } from './ui.js';
+import { updatePersonColors } from './logic.js'; // Important de mettre à jour les couleurs au chargement
 
-console.log("System Start...");
+window.addEventListener('load', () => {
+    // 1. Initialiser l'UI
+    initUI();
 
-// Chargement
-loadState();
+    // 2. Charger les données
+    const hasData = loadState();
+    if (!hasData) {
+        // Données par défaut si vide
+        pushHistory();
+        state.nodes = [];
+    }
 
-// Init Modules
-initPhysics();
-initUI();
+    // 3. Calculer les couleurs initiales (mix)
+    updatePersonColors();
 
-// Lancement
-resizeCanvas();
-refreshLists();
-renderEditor();
-restartSim();
-
-// Sauvegarde auto
-window.addEventListener('beforeunload', saveState);
-
-// Auto-save periodique (5s)
-setInterval(saveState, 5000);
+    // 4. Lancer la simu et l'affichage
+    refreshLists();
+    restartSim();
+});

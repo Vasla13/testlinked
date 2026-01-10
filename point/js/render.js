@@ -1,17 +1,11 @@
 import { state, isGroup, isCompany } from './state.js';
-import { NODE_BASE_SIZE, DEG_SCALE, R_MIN, R_MAX, LINK_KIND_EMOJI, TYPES } from './constants.js';
+import { NODE_BASE_SIZE, DEG_SCALE, R_MIN, R_MAX, LINK_KIND_EMOJI, TYPES, KINDS } from './constants.js';
 import { computeLinkColor } from './utils.js';
 
 const canvas = document.getElementById('graph');
 const ctx = canvas.getContext('2d');
-
 const degreeCache = new Map();
-
-const NODE_ICONS = {
-    [TYPES.PERSON]: '👤',
-    [TYPES.COMPANY]: '🏢',
-    [TYPES.GROUP]: '👥'
-};
+const NODE_ICONS = { [TYPES.PERSON]: '👤', [TYPES.COMPANY]: '🏢', [TYPES.GROUP]: '👥' };
 
 export function updateDegreeCache() {
     degreeCache.clear();
@@ -65,13 +59,24 @@ export function draw() {
 
     ctx.save();
     ctx.clearRect(0, 0, w, h);
-    drawGrid(w, h, p);
+    
+    // Grille
+    ctx.save();
+    ctx.strokeStyle = "rgba(115, 251, 247, 0.08)"; 
+    ctx.lineWidth = 1;
+    const gridSize = 100 * p.scale; 
+    const offsetX = (w/2 + p.x) % gridSize;
+    const offsetY = (h/2 + p.y) % gridSize;
+    ctx.beginPath();
+    for (let x = offsetX; x < w; x += gridSize) { ctx.moveTo(x, 0); ctx.lineTo(x, h); }
+    for (let y = offsetY; y < h; y += gridSize) { ctx.moveTo(0, y); ctx.lineTo(w, y); }
+    ctx.stroke();
+    ctx.restore();
 
     ctx.translate(w / 2 + p.x, h / 2 + p.y);
     ctx.scale(p.scale, p.scale);
 
     const useGlow = (!state.performance && p.scale > 0.4);
-    
     const focusId = state.hoverId || state.selection;
     const hasFocus = (focusId !== null);
     
@@ -88,11 +93,10 @@ export function draw() {
         
         if (objType === 'node') {
             if (obj.id === focusId) return false;
-            const connected = state.links.some(l => 
+            return !state.links.some(l => 
                 (l.source.id === focusId && l.target.id === obj.id) || 
                 (l.target.id === focusId && l.source.id === obj.id)
             );
-            return !connected;
         }
         if (objType === 'link') {
             return (obj.source.id !== focusId && obj.target.id !== focusId);
@@ -102,6 +106,8 @@ export function draw() {
 
     // 1. DESSIN DES LIENS
     for (const l of state.links) {
+        if (l.kind === KINDS.ENNEMI) continue; // CACHER ENNEMIS
+
         if (isFocus) {
             if (!state.focusSet.has(l.source.id) || !state.focusSet.has(l.target.id)) continue;
         }
@@ -173,10 +179,9 @@ export function draw() {
         ctx.setLineDash([]);
     }
 
-    // 3. DESSIN DES NOEUDS (Layers: Structures dessous, Personnes dessus)
+    // 3. NOEUDS
     const structures = [];
     const people = [];
-    
     for (const n of state.nodes) {
         if (n.type === TYPES.PERSON) people.push(n);
         else structures.push(n);
@@ -184,10 +189,8 @@ export function draw() {
 
     const drawSingleNode = (n) => {
         if (isFocus && !state.focusSet.has(n.id)) return;
-        
         const dimmed = isDimmed('node', n);
         const rad = nodeRadius(n); 
-        
         ctx.globalAlpha = (isPath && state.pathPath.has(n.id)) ? 1.0 : (dimmed ? 0.1 : 1.0);
 
         ctx.beginPath();
@@ -196,7 +199,6 @@ export function draw() {
         else ctx.arc(n.x, n.y, rad, 0, Math.PI * 2);
 
         ctx.fillStyle = safeColor(n.color);
-        
         const isPathNode = isPath && state.pathPath.has(n.id);
 
         if (state.selection === n.id || state.hoverId === n.id || isPathNode) {
@@ -231,31 +233,22 @@ export function draw() {
     // 4. LABELS
     if (labelMode > 0) { 
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        
         const allNodes = [...structures, ...people];
-        
         for (const n of allNodes) {
             if (isFocus && !state.focusSet.has(n.id)) continue;
-
             const rad = nodeRadius(n);
             const dimmed = isDimmed('node', n);
             if (dimmed) continue;
-
             const isImportant = (n.type === TYPES.COMPANY || n.type === TYPES.GROUP);
             const isPathNode = isPath && state.pathPath.has(n.id);
             const isHover = (state.hoverId === n.id || state.selection === n.id);
-            
             let showName = false;
-            if (labelMode === 2) {
-                showName = true;
-            } else if (labelMode === 1) {
-                showName = isHover || isPathNode || (p.scale > 0.5 || isImportant);
-            }
+            if (labelMode === 2) showName = true;
+            else if (labelMode === 1) showName = isHover || isPathNode || (p.scale > 0.5 || isImportant);
 
             if (showName) {
                 const fontSize = (isPathNode ? 16 : 13) / Math.sqrt(p.scale);
                 ctx.font = `600 ${fontSize}px "Rajdhani", sans-serif`; 
-                
                 const label = n.name;
                 const metrics = ctx.measureText(label);
                 const textW = metrics.width;
@@ -269,30 +262,13 @@ export function draw() {
                 if(ctx.roundRect) ctx.roundRect(boxX, boxY, textW + padding*2, textH + padding, 6);
                 else ctx.rect(boxX, boxY, textW + padding*2, textH + padding);
                 ctx.fill();
-                
                 ctx.strokeStyle = isPathNode ? '#ffff00' : safeColor(n.color);
                 ctx.lineWidth = (isPathNode ? 3 : 1) / Math.sqrt(p.scale);
                 ctx.stroke();
-
                 ctx.globalAlpha = 1.0; ctx.fillStyle = '#ffffff';
                 ctx.fillText(label, n.x, boxY + textH/2 + padding/2);
             }
         }
     }
-
-    ctx.restore();
-}
-
-function drawGrid(w, h, p) {
-    ctx.save();
-    ctx.strokeStyle = "rgba(115, 251, 247, 0.08)"; 
-    ctx.lineWidth = 1;
-    const gridSize = 100 * p.scale; 
-    const offsetX = (w/2 + p.x) % gridSize;
-    const offsetY = (h/2 + p.y) % gridSize;
-    ctx.beginPath();
-    for (let x = offsetX; x < w; x += gridSize) { ctx.moveTo(x, 0); ctx.lineTo(x, h); }
-    for (let y = offsetY; y < h; y += gridSize) { ctx.moveTo(0, y); ctx.lineTo(w, y); }
-    ctx.stroke();
     ctx.restore();
 }

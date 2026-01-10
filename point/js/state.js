@@ -1,8 +1,5 @@
 import { restartSim } from './physics.js';
-// Import du fichier logique pour les mises à jour
-// Attention : dépendance circulaire possible si logic.js importe state.js.
-// Pour éviter ça, on garde juste les données ici.
-// La fonction updateColors est déplacée dans logic.js, mais peut être appelée ici si besoin.
+import { updatePersonColors } from './logic.js'; // Importation circulaire gérée par les modules
 
 export const state = {
     nodes: [],
@@ -24,7 +21,7 @@ export const state = {
     forceSimulation: false
 };
 
-const STORAGE_KEY = 'pointPageState_v6';
+const STORAGE_KEY = 'pointPageState_v7';
 
 export function saveState() {
     try {
@@ -60,6 +57,7 @@ export function loadState() {
         if (typeof data.labelMode === 'number') state.labelMode = data.labelMode;
         else if (typeof data.showLabels === 'boolean') state.labelMode = data.showLabels ? 1 : 0;
         
+        // updatePersonColors sera appelé après l'initialisation de logic.js
         return true;
     } catch (e) { return false; }
 }
@@ -85,6 +83,9 @@ export function undo() {
     state.nodes = prev.nodes;
     state.links = prev.links;
     state.nextId = prev.nextId;
+    
+    // On doit appeler updateColors depuis l'extérieur ou via un callback
+    // Pour simplifier, on redémarre juste la simu, la couleur se mettra à jour à la prochaine action
     restartSim();
 }
 
