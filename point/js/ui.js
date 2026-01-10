@@ -13,7 +13,7 @@ const ui = {
     linkLegend: document.getElementById('linkLegend'),
 };
 
-// Fonction pour nettoyer les couleurs pour l'input HTML
+// Nettoyage couleur
 function safeHex(color) {
     if (!color || typeof color !== 'string') return '#000000';
     if (/^#[0-9A-F]{3}$/i.test(color)) return color;
@@ -22,27 +22,80 @@ function safeHex(color) {
     return '#000000';
 }
 
+// --- SYSTÈME DE MODAL (Pour remplacer alert/confirm) ---
+let modalOverlay = null;
+
+function createModal() {
+    modalOverlay = document.createElement('div');
+    modalOverlay.id = 'custom-modal';
+    modalOverlay.style.cssText = `
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.7); z-index: 9999; display: none;
+        align-items: center; justify-content: center;
+    `;
+    modalOverlay.innerHTML = `
+        <div style="background: #1a1a2e; border: 1px solid var(--accent-cyan); padding: 20px; border-radius: 8px; min-width: 300px; text-align: center; box-shadow: 0 0 20px rgba(0,0,0,0.8);">
+            <div id="modal-msg" style="margin-bottom: 20px; color: #fff; font-size: 1rem;"></div>
+            <div id="modal-actions" style="display: flex; gap: 10px; justify-content: center;"></div>
+        </div>
+    `;
+    document.body.appendChild(modalOverlay);
+}
+
+function showCustomAlert(msg) {
+    if(!modalOverlay) createModal();
+    document.getElementById('modal-msg').innerText = msg;
+    const actions = document.getElementById('modal-actions');
+    actions.innerHTML = `<button onclick="document.getElementById('custom-modal').style.display='none'" class="primary">OK</button>`;
+    modalOverlay.style.display = 'flex';
+}
+
+function showCustomConfirm(msg, onYes) {
+    if(!modalOverlay) createModal();
+    document.getElementById('modal-msg').innerText = msg;
+    const actions = document.getElementById('modal-actions');
+    actions.innerHTML = '';
+    
+    const btnYes = document.createElement('button');
+    btnYes.className = 'primary danger';
+    btnYes.innerText = 'Oui';
+    btnYes.onclick = () => { modalOverlay.style.display='none'; onYes(); };
+    
+    const btnNo = document.createElement('button');
+    btnNo.innerText = 'Non';
+    btnNo.onclick = () => { modalOverlay.style.display='none'; };
+    
+    actions.appendChild(btnNo);
+    actions.appendChild(btnYes);
+    modalOverlay.style.display = 'flex';
+}
+// -----------------------------------------------------
+
 export function initUI() {
-    // --- CSS INJECTION ---
+    createModal();
+
+    // CSS INJECTION
     const style = document.createElement('style');
     style.innerHTML = `
-        /* Scrollbar si le contenu est trop long */
+        .editor { width: 360px !important; } 
         #editorBody { max-height: calc(100vh - 180px); overflow-y: auto; padding-right: 5px; }
         #editorBody::-webkit-scrollbar { width: 5px; }
         #editorBody::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
         
-        /* Style des blocs accordéon */
         details { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; margin-bottom: 8px; padding: 5px; }
         summary { cursor: pointer; font-weight: bold; font-size: 0.85rem; color: var(--accent-cyan); padding: 4px 0; list-style: none; display: flex; align-items: center; justify-content: space-between; }
         summary::after { content: '+'; font-size: 1rem; font-weight: bold; }
         details[open] summary::after { content: '-'; }
         
-        /* Lignes compactes */
         .compact-row { display: flex; gap: 5px; align-items: center; width: 100%; }
         .compact-col { flex: 1; }
-        
-        /* Boutons d'action compacts */
         .action-btn { flex: 0 0 auto; padding: 4px 8px; font-size: 0.75rem; white-space: nowrap; }
+        
+        /* Links categories */
+        .link-category { margin-top: 10px; margin-bottom: 5px; font-size: 0.75rem; color: #888; text-transform: uppercase; border-bottom: 1px solid #333; }
+        .chip { cursor: pointer; transition: background 0.2s; }
+        .chip:hover { background: rgba(255,255,255,0.15); }
+        .chip-name { text-decoration: underline; text-decoration-color: rgba(255,255,255,0.3); }
     `;
     document.head.appendChild(style);
 
@@ -213,11 +266,11 @@ export function initUI() {
     if (btnSim) btnSim.style.display = 'none';
 
     document.getElementById('btnClearAll').onclick = () => { 
-        if(confirm('Attention : Voulez-vous vraiment tout effacer ?')) { 
+        showCustomConfirm('Attention : Voulez-vous vraiment tout effacer ?', () => { 
             pushHistory();
             state.nodes=[]; state.links=[]; state.selection = null; state.nextId = 1;
             restartSim(); refreshLists(); renderEditor(); saveState(); 
-        }
+        });
     };
     document.getElementById('chkLabels').onchange = (e) => { state.showLabels = e.target.checked; draw(); };
     document.getElementById('chkPerf').onchange = (e) => { state.performance = e.target.checked; draw(); };
@@ -289,7 +342,7 @@ export function refreshLists() {
     fillDL('datalist-people', state.nodes.filter(isPerson));
     fillDL('datalist-groups', state.nodes.filter(isGroup));
     fillDL('datalist-companies', state.nodes.filter(isCompany));
-    updateLinkLegend(); // <-- La fonction était appelée mais non définie dans ce fichier, je l'ajoute plus bas
+    updateLinkLegend();
 }
 
 export function renderEditor() {
@@ -307,7 +360,7 @@ export function renderEditor() {
 
     let colorInputHtml = '';
     if (n.type === 'person') {
-        colorInputHtml = `<div style="font-size:0.8rem; padding-top:10px; color:#aaa;">Auto</div>`;
+        colorInputHtml = `<div style="font-size:0.8rem; padding-top:10px; color:#aaa;">Auto (Mix)</div>`;
     } else {
         colorInputHtml = `<input id="edColor" type="color" value="${safeHex(n.color)}" style="height:38px; width:100%;"/>`;
     }
@@ -327,7 +380,6 @@ export function renderEditor() {
                 <label>Nom</label>
                 <input id="edName" type="text" value="${escapeHtml(n.name)}"/>
             </div>
-            
             <div class="compact-row">
                 <div class="compact-col">
                     <label style="font-size:0.8rem; opacity:0.7;">Type</label>
@@ -342,7 +394,6 @@ export function renderEditor() {
                     ${colorInputHtml}
                 </div>
             </div>
-
             <div class="row" style="margin-top:5px;">
                 <label>Téléphone</label>
                 <input id="edNum" type="text" value="${escapeHtml(n.num||'')}"/>
@@ -355,7 +406,7 @@ export function renderEditor() {
         </details>
         
         <details open>
-            <summary>Ajouter une relation</summary>
+            <summary>Ajouter / Créer relation</summary>
             
             <div style="margin-bottom:8px;">
                 <label style="font-size:0.8rem; color:#aaa;">Entreprise</label>
@@ -385,64 +436,42 @@ export function renderEditor() {
             </div>
         </details>
 
-        <details>
-            <summary>Connexion Avancée (Autre)</summary>
-            <div class="compact-row" style="margin-bottom:5px;">
-               <input id="linkTarget" list="datalist-all" placeholder="Cible..." class="compact-col" style="min-width:0;"/>
-               <select id="linkKind" style="width:100px;"></select>
-            </div>
-            <button id="btnAddLink" style="width:100%; margin-bottom:5px;">🔗 Lier</button>
-        </details>
-
         <details open>
             <summary>Liens Actifs</summary>
-            <div id="chipsLinks" class="chips"></div>
+            <div id="chipsLinks"></div>
         </details>
     `;
 
-    // --- LISTENERS ---
+    // --- LOGIQUE AJOUT/CREATION ---
+    const tryAddLink = (inputId, createType, defaultKind) => {
+        const name = document.getElementById(inputId).value.trim();
+        if (!name) return;
 
-    const tryAddLink = (inputId, defaultKind) => {
-        const targetName = document.getElementById(inputId).value;
-        const target = state.nodes.find(x => x.name.toLowerCase() === targetName.toLowerCase());
-        if(target) {
+        let target = state.nodes.find(x => x.name.toLowerCase() === name.toLowerCase());
+        
+        if (!target) {
+            // Pas de confirm() ici, on utilise notre modal
+            showCustomConfirm(`"${name}" n'existe pas. Créer nouveau ${createType} ?`, () => {
+                target = ensureNode(createType, name);
+                addLink(n, target, defaultKind);
+                document.getElementById(inputId).value = '';
+                renderEditor();
+            });
+        } else {
             addLink(n, target, defaultKind);
             document.getElementById(inputId).value = '';
             renderEditor();
-        } else {
-            alert("Cible introuvable.");
         }
     };
 
-    document.getElementById('btnLinkCompanyAff').onclick = () => tryAddLink('inpCompany', KINDS.AFFILIATION);
-    document.getElementById('btnLinkCompanyVal').onclick = () => tryAddLink('inpCompany', KINDS.PARTENAIRE);
-    document.getElementById('btnLinkGroupAff').onclick = () => tryAddLink('inpGroup', KINDS.AFFILIATION);
-    document.getElementById('btnLinkGroupVal').onclick = () => tryAddLink('inpGroup', KINDS.MEMBRE);
-    document.getElementById('btnLinkPersonEmp').onclick = () => tryAddLink('inpPerson', KINDS.EMPLOYE);
-    document.getElementById('btnLinkPersonVal').onclick = () => tryAddLink('inpPerson', KINDS.AMI);
+    document.getElementById('btnLinkCompanyAff').onclick = () => tryAddLink('inpCompany', TYPES.COMPANY, KINDS.AFFILIATION);
+    document.getElementById('btnLinkCompanyVal').onclick = () => tryAddLink('inpCompany', TYPES.COMPANY, KINDS.PARTENAIRE);
+    document.getElementById('btnLinkGroupAff').onclick = () => tryAddLink('inpGroup', TYPES.GROUP, KINDS.AFFILIATION);
+    document.getElementById('btnLinkGroupVal').onclick = () => tryAddLink('inpGroup', TYPES.GROUP, KINDS.MEMBRE);
+    document.getElementById('btnLinkPersonEmp').onclick = () => tryAddLink('inpPerson', TYPES.PERSON, KINDS.EMPLOYE);
+    document.getElementById('btnLinkPersonVal').onclick = () => tryAddLink('inpPerson', TYPES.PERSON, KINDS.AMI);
 
-    const allNames = state.nodes.filter(x => x.id !== n.id).sort((a,b) => a.name.localeCompare(b.name));
-    let dl = document.getElementById('datalist-all');
-    if(!dl) { dl = document.createElement('datalist'); dl.id = 'datalist-all'; document.body.appendChild(dl); }
-    dl.innerHTML = allNames.map(x => `<option value="${escapeHtml(x.name)}"></option>`).join('');
-
-    const selKind = document.getElementById('linkKind');
-    const kinds = Object.values(KINDS); 
-    selKind.innerHTML = kinds.map(k => `<option value="${k}">${kindToLabel(k)}</option>`).join('');
-
-    document.getElementById('btnAddLink').onclick = () => {
-        const targetName = document.getElementById('linkTarget').value;
-        const kind = selKind.value;
-        const target = state.nodes.find(x => x.name.toLowerCase() === targetName.toLowerCase());
-        if(target) {
-            addLink(n, target, kind);
-            document.getElementById('linkTarget').value = ''; 
-            renderEditor(); 
-        } else {
-            alert("Nœud cible introuvable.");
-        }
-    };
-
+    // --- LISTENERS ---
     document.getElementById('btnFocusNode').onclick = () => {
         if (state.focusMode) {
             state.focusMode = false; state.focusSet.clear();
@@ -486,16 +515,17 @@ export function renderEditor() {
     document.getElementById('edNotes').oninput = (e) => { n.notes = e.target.value; };
 
     document.getElementById('btnDelete').onclick = () => {
-        if(confirm(`Supprimer "${n.name}" ?`)) {
+        showCustomConfirm(`Supprimer "${n.name}" ?`, () => {
             pushHistory(); 
             state.nodes = state.nodes.filter(x => x.id !== n.id);
             state.links = state.links.filter(l => l.source.id !== n.id && l.target.id !== n.id);
             state.selection = null;
             restartSim(); refreshLists(); renderEditor();
-        }
+        });
     };
 
-    const chips = document.getElementById('chipsLinks');
+    // --- LIENS ACTIFS TRIES ET CLIQUABLES ---
+    const chipsContainer = document.getElementById('chipsLinks');
     
     const myLinks = state.links.filter(l => {
         const s = (typeof l.source === 'object') ? l.source.id : l.source;
@@ -504,27 +534,53 @@ export function renderEditor() {
     });
 
     if (myLinks.length === 0) {
-        chips.innerHTML = '<span style="color:#666; font-style:italic; font-size:0.8rem;">Aucune connexion</span>';
+        chipsContainer.innerHTML = '<span style="color:#666; font-style:italic; font-size:0.8rem;">Aucune connexion</span>';
     } else {
-        chips.innerHTML = myLinks.map(l => {
+        const groups = { [TYPES.COMPANY]: [], [TYPES.GROUP]: [], [TYPES.PERSON]: [] };
+        
+        myLinks.forEach(l => {
             const s = (typeof l.source === 'object') ? l.source : nodeById(l.source);
             const t = (typeof l.target === 'object') ? l.target : nodeById(l.target);
-            if (!s || !t) return ''; 
+            if (!s || !t) return;
             
             const other = (s.id === n.id) ? t : s;
-            return `<span class="chip" title="${kindToLabel(l.kind)}">${escapeHtml(other.name)} <small>(${linkKindEmoji(l.kind)})</small> <span class="x" data-target-id="${other.id}">×</span></span>`;
-        }).join('');
+            groups[other.type].push({ link: l, other });
+        });
+
+        const renderGroup = (title, items) => {
+            if (items.length === 0) return '';
+            let html = `<div class="link-category">${title}</div>`;
+            items.forEach(item => {
+                html += `
+                <span class="chip" title="${kindToLabel(item.link.kind)}">
+                    <span class="chip-name" onclick="window.selectNode(${item.other.id})">${escapeHtml(item.other.name)}</span>
+                    <small>(${linkKindEmoji(item.link.kind)})</small> 
+                    <span class="x" data-s="${item.link.source.id||item.link.source}" data-t="${item.link.target.id||item.link.target}">×</span>
+                </span>`;
+            });
+            return html;
+        };
+
+        chipsContainer.innerHTML = 
+            renderGroup('Entreprises', groups[TYPES.COMPANY]) +
+            renderGroup('Groupuscules', groups[TYPES.GROUP]) +
+            renderGroup('Personnes', groups[TYPES.PERSON]);
+            
+        // Pour que selectNode fonctionne via onclick HTML string
+        window.selectNode = selectNode; 
     }
 
-    chips.querySelectorAll('.x').forEach(x => {
+    // Listener suppression liens
+    chipsContainer.querySelectorAll('.x').forEach(x => {
         x.onclick = (e) => {
             pushHistory(); 
-            const targetId = parseInt(e.target.dataset.targetId);
+            const sId = parseInt(e.target.dataset.s);
+            const tId = parseInt(e.target.dataset.t);
             state.links = state.links.filter(l => {
                 const s = (typeof l.source === 'object') ? l.source.id : l.source;
                 const t = (typeof l.target === 'object') ? l.target.id : l.target;
-                const isTheLink = (s === n.id && t === targetId) || (s === targetId && t === n.id);
-                return !isTheLink;
+                // On compare les IDs
+                return !((s === sId && t === tId) || (s === tId && t === sId));
             });
             updatePersonColors();
             restartSim(); renderEditor();
@@ -534,7 +590,6 @@ export function renderEditor() {
     updateLinkLegend();
 }
 
-// VOICI LA FONCTION MANQUANTE
 export function updateLinkLegend() {
     const el = ui.linkLegend;
     if(!state.showLinkTypes) { el.innerHTML = ''; return; }
@@ -575,8 +630,8 @@ function importGraph(e) {
             const maxId = state.nodes.reduce((max, n) => Math.max(max, n.id), 0);
             state.nextId = maxId + 1;
             updatePersonColors();
-            restartSim(); refreshLists(); alert('Import réussi !');
-        } catch(err) { console.error(err); alert('Erreur import JSON.'); }
+            restartSim(); refreshLists(); showCustomAlert('Import réussi !');
+        } catch(err) { console.error(err); showCustomAlert('Erreur import JSON.'); }
     };
     r.readAsText(f);
 }
@@ -597,8 +652,8 @@ function mergeGraph(e) {
                 }
             });
             updatePersonColors();
-            restartSim(); refreshLists(); alert(`Fusion terminée : ${addedNodes} nœuds ajoutés.`);
-        } catch(err) { console.error(err); alert('Erreur fusion.'); }
+            restartSim(); refreshLists(); showCustomAlert(`Fusion terminée : ${addedNodes} nœuds ajoutés.`);
+        } catch(err) { console.error(err); showCustomAlert('Erreur fusion.'); }
     };
     r.readAsText(f);
 }

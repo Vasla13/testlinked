@@ -61,7 +61,7 @@ export function draw() {
     const isFocus = state.focusMode;
     const isPath = state.pathMode;
     const showTypes = state.showLinkTypes; 
-    const labelMode = state.labelMode; // 0=Off, 1=Auto, 2=Always
+    const labelMode = state.labelMode; 
 
     ctx.save();
     ctx.clearRect(0, 0, w, h);
@@ -72,7 +72,6 @@ export function draw() {
 
     const useGlow = (!state.performance && p.scale > 0.4);
     
-    // Hover logic
     const focusId = state.hoverId || state.selection;
     const hasFocus = (focusId !== null);
     
@@ -174,7 +173,7 @@ export function draw() {
         ctx.setLineDash([]);
     }
 
-    // 3. NOEUDS (Layers)
+    // 3. DESSIN DES NOEUDS (Layers: Structures dessous, Personnes dessus)
     const structures = [];
     const people = [];
     
@@ -229,11 +228,10 @@ export function draw() {
     structures.forEach(drawSingleNode);
     people.forEach(drawSingleNode);
 
-    // 4. LABELS (Gérés par le labelMode)
-    if (labelMode > 0) { // Si mode 1 ou 2
+    // 4. LABELS
+    if (labelMode > 0) { 
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         
-        // On fusionne tout pour dessiner les labels
         const allNodes = [...structures, ...people];
         
         for (const n of allNodes) {
@@ -247,14 +245,10 @@ export function draw() {
             const isPathNode = isPath && state.pathPath.has(n.id);
             const isHover = (state.hoverId === n.id || state.selection === n.id);
             
-            // LOGIQUE D'AFFICHAGE DU NOM
             let showName = false;
-            
             if (labelMode === 2) {
-                // Mode "Toujours" : on affiche tout
                 showName = true;
             } else if (labelMode === 1) {
-                // Mode "Auto" (Classique)
                 showName = isHover || isPathNode || (p.scale > 0.5 || isImportant);
             }
 

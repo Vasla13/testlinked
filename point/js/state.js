@@ -8,73 +8,84 @@ export const state = {
     nextId: 1,
     selection: null,
     hoverId: null,
-    
-    // --- MODE FOCUS & PATHFINDING ---
     focusMode: false,
     focusSet: new Set(),
-    
     pathMode: false,
     pathPath: new Set(),
     pathLinks: new Set(),
-    // --------------------------------
-
-    // --- UNDO HISTORY ---
     history: [], 
-    // --------------------
-
-    // --- DRAG & DROP CREATION ---
     tempLink: null,
-    // ----------------------------
-
-    // 0 = Off, 1 = Auto (Zoom), 2 = Always On
     labelMode: 1, 
-    
     showLinkTypes: false,
     performance: false,
     view: { x: 0, y: 0, scale: 0.8 },
     forceSimulation: false
 };
 
-const STORAGE_KEY = 'pointPageState_v5';
+const STORAGE_KEY = 'pointPageState_v6';
 
-// --- COULEURS AUTOMATIQUES ---
+// --- UTILITAIRES COULEURS ---
+function hexToRgb(hex) {
+    // Expand shorthand form (e.g. "03F") to full form (e.g. "0033FF")
+    var shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
+    hex = hex.replace(shorthandRegex, function(m, r, g, b) {
+        return r + r + g + g + b + b;
+    });
+    var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16)
+    } : { r: 255, g: 255, b: 255 };
+}
+
+function rgbToHex(r, g, b) {
+    return "#" + ((1 << 24) + (Math.round(r) << 16) + (Math.round(g) << 8) + Math.round(b)).toString(16).slice(1);
+}
+
+// --- COULEURS AUTOMATIQUES (MIX PONDÉRÉ) ---
 export function updatePersonColors() {
-    const companySizes = new Map();
+    // 1. Calcul du poids (degré) de chaque noeud
+    const nodeWeights = new Map();
     state.links.forEach(l => {
         const sId = (typeof l.source === 'object') ? l.source.id : l.source;
         const tId = (typeof l.target === 'object') ? l.target.id : l.target;
-        companySizes.set(sId, (companySizes.get(sId) || 0) + 1);
-        companySizes.set(tId, (companySizes.get(tId) || 0) + 1);
+        nodeWeights.set(sId, (nodeWeights.get(sId) || 0) + 1);
+        nodeWeights.set(tId, (nodeWeights.get(tId) || 0) + 1);
     });
 
     state.nodes.forEach(n => {
         if (n.type === TYPES.PERSON) {
-            let bestCompany = null;
-            let maxScore = -1;
+            let totalR = 0, totalG = 0, totalB = 0;
+            let totalWeight = 0;
 
+            // Parcourir les liens de cette personne
             state.links.forEach(l => {
                 const s = (typeof l.source === 'object') ? l.source : nodeById(l.source);
                 const t = (typeof l.target === 'object') ? l.target : nodeById(l.target);
                 if (!s || !t) return;
 
-                let other = null;
-                if (s.id === n.id) other = t;
-                else if (t.id === n.id) other = s;
-                else return; 
+                let other = (s.id === n.id) ? t : ((t.id === n.id) ? s : null);
+                if (!other) return;
 
-                if (other.type === TYPES.COMPANY || other.type === TYPES.GROUP) {
-                    const score = companySizes.get(other.id) || 0;
-                    if (score > maxScore) {
-                        maxScore = score;
-                        bestCompany = other;
-                    }
+                // Si c'est une structure (Entreprise/Groupe/Autre personne influente)
+                // On prend sa couleur en compte
+                if (other.type !== TYPES.PERSON || other.color) { 
+                    const weight = (nodeWeights.get(other.id) || 1); // Poids basé sur la taille (connexions)
+                    const rgb = hexToRgb(other.color || '#ffffff');
+                    
+                    totalR += rgb.r * weight;
+                    totalG += rgb.g * weight;
+                    totalB += rgb.b * weight;
+                    totalWeight += weight;
                 }
             });
 
-            if (bestCompany) {
-                n.color = bestCompany.color; 
+            if (totalWeight > 0) {
+                // Moyenne pondérée
+                n.color = rgbToHex(totalR / totalWeight, totalG / totalWeight, totalB / totalWeight);
             } else {
-                n.color = '#ffffff';
+                n.color = '#ffffff'; // Blanc par défaut
             }
         }
     });
@@ -154,20 +165,15 @@ export function ensureNode(type, name, init = {}) {
     let n = state.nodes.find(x => x.name.toLowerCase() === name.toLowerCase());
     if (!n) {
         pushHistory(); 
-        
-        // CORRECTION ICI : On définit une position de départ
         const startX = (Math.random()-0.5)*50;
         const startY = (Math.random()-0.5)*50;
-
         n = { 
             id: uid(), 
             name, 
             type, 
             x: startX, 
             y: startY, 
-            // ON LE FIGE ICI (fx/fy) pour qu'il ne bouge pas à la création
-            fx: startX,
-            fy: startY,
+            fx: startX, fy: startY,
             vx: 0, vy: 0, 
             color: (type === TYPES.PERSON ? '#ffffff' : (init.color || randomPastel())) 
         };
@@ -206,8 +212,6 @@ export function addLink(a, b, kind) {
         state.links.push({ source: A.id, target: B.id, kind });
         if (kind === KINDS.PATRON) propagateOrgNums();
         
-        // CORRECTION ICI : On libère les points (fx=null) quand on crée un lien
-        // Pour qu'ils puissent être attirés par la physique vers leur cible
         if (A.fx !== undefined) A.fx = null;
         if (A.fy !== undefined) A.fy = null;
         if (B.fx !== undefined) B.fx = null;
