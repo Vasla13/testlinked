@@ -13,7 +13,6 @@ const ui = {
     linkLegend: document.getElementById('linkLegend'),
 };
 
-// Nettoyage couleur
 function safeHex(color) {
     if (!color || typeof color !== 'string') return '#000000';
     if (/^#[0-9A-F]{3}$/i.test(color)) return color;
@@ -22,87 +21,72 @@ function safeHex(color) {
     return '#000000';
 }
 
-// --- SYSTÈME DE MODAL (Pour remplacer alert/confirm) ---
+// --- MODAL SYSTEM ---
 let modalOverlay = null;
-
 function createModal() {
     modalOverlay = document.createElement('div');
     modalOverlay.id = 'custom-modal';
-    modalOverlay.style.cssText = `
-        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        background: rgba(0,0,0,0.7); z-index: 9999; display: none;
-        align-items: center; justify-content: center;
-    `;
-    modalOverlay.innerHTML = `
-        <div style="background: #1a1a2e; border: 1px solid var(--accent-cyan); padding: 20px; border-radius: 8px; min-width: 300px; text-align: center; box-shadow: 0 0 20px rgba(0,0,0,0.8);">
-            <div id="modal-msg" style="margin-bottom: 20px; color: #fff; font-size: 1rem;"></div>
-            <div id="modal-actions" style="display: flex; gap: 10px; justify-content: center;"></div>
-        </div>
-    `;
+    modalOverlay.style.cssText = `position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 9999; display: none; align-items: center; justify-content: center;`;
+    modalOverlay.innerHTML = `<div style="background: #1a1a2e; border: 1px solid var(--accent-cyan); padding: 20px; border-radius: 8px; min-width: 300px; text-align: center; box-shadow: 0 0 20px rgba(0,0,0,0.8);"><div id="modal-msg" style="margin-bottom: 20px; color: #fff; font-size: 1rem;"></div><div id="modal-actions" style="display: flex; gap: 10px; justify-content: center;"></div></div>`;
     document.body.appendChild(modalOverlay);
 }
-
 function showCustomAlert(msg) {
     if(!modalOverlay) createModal();
     document.getElementById('modal-msg').innerText = msg;
-    const actions = document.getElementById('modal-actions');
-    actions.innerHTML = `<button onclick="document.getElementById('custom-modal').style.display='none'" class="primary">OK</button>`;
+    document.getElementById('modal-actions').innerHTML = `<button onclick="document.getElementById('custom-modal').style.display='none'" class="primary">OK</button>`;
     modalOverlay.style.display = 'flex';
 }
-
 function showCustomConfirm(msg, onYes) {
     if(!modalOverlay) createModal();
     document.getElementById('modal-msg').innerText = msg;
     const actions = document.getElementById('modal-actions');
     actions.innerHTML = '';
-    
-    const btnYes = document.createElement('button');
-    btnYes.className = 'primary danger';
-    btnYes.innerText = 'Oui';
-    btnYes.onclick = () => { modalOverlay.style.display='none'; onYes(); };
-    
-    const btnNo = document.createElement('button');
-    btnNo.innerText = 'Non';
-    btnNo.onclick = () => { modalOverlay.style.display='none'; };
-    
-    actions.appendChild(btnNo);
-    actions.appendChild(btnYes);
+    const btnYes = document.createElement('button'); btnYes.className = 'primary danger'; btnYes.innerText = 'Oui'; btnYes.onclick = () => { modalOverlay.style.display='none'; onYes(); };
+    const btnNo = document.createElement('button'); btnNo.innerText = 'Non'; btnNo.onclick = () => { modalOverlay.style.display='none'; };
+    actions.appendChild(btnNo); actions.appendChild(btnYes);
     modalOverlay.style.display = 'flex';
 }
-// -----------------------------------------------------
 
 export function initUI() {
     createModal();
 
-    // CSS INJECTION
+    // CSS RENFORCÉ POUR L'ALIGNEMENT
     const style = document.createElement('style');
     style.innerHTML = `
-        .editor { width: 360px !important; } 
+        .editor { width: 380px !important; } /* Un peu plus large */
         #editorBody { max-height: calc(100vh - 180px); overflow-y: auto; padding-right: 5px; }
-        #editorBody::-webkit-scrollbar { width: 5px; }
-        #editorBody::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
         
         details { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; margin-bottom: 8px; padding: 5px; }
         summary { cursor: pointer; font-weight: bold; font-size: 0.85rem; color: var(--accent-cyan); padding: 4px 0; list-style: none; display: flex; align-items: center; justify-content: space-between; }
         summary::after { content: '+'; font-size: 1rem; font-weight: bold; }
         details[open] summary::after { content: '-'; }
         
-        .compact-row { display: flex; gap: 5px; align-items: center; width: 100%; }
-        .compact-col { flex: 1; }
-        .action-btn { flex: 0 0 auto; padding: 4px 8px; font-size: 0.75rem; white-space: nowrap; }
+        /* ALIGNEMENT STRICT SUR UNE LIGNE */
+        .compact-row { 
+            display: flex; 
+            flex-direction: row; 
+            flex-wrap: nowrap; /* Interdit le retour à la ligne */
+            gap: 5px; 
+            align-items: center; 
+            width: 100%; 
+        }
+        .compact-col { flex: 1; min-width: 0; } /* min-width: 0 permet au champ texte de rétrécir si besoin */
         
-        /* Links categories */
+        /* Select et Boutons qui ne s'écrasent pas */
+        .compact-select { width: 110px; flex: 0 0 auto; font-size: 0.75rem; }
+        .action-btn { flex: 0 0 auto; padding: 0 10px; height: 28px; display:flex; align-items:center; justify-content:center; }
+        
         .link-category { margin-top: 10px; margin-bottom: 5px; font-size: 0.75rem; color: #888; text-transform: uppercase; border-bottom: 1px solid #333; }
-        .chip { cursor: pointer; transition: background 0.2s; }
+        .chip { cursor: pointer; transition: background 0.2s; display:inline-flex; align-items:center; gap:4px; max-width:100%; overflow:hidden; }
         .chip:hover { background: rgba(255,255,255,0.15); }
-        .chip-name { text-decoration: underline; text-decoration-color: rgba(255,255,255,0.3); }
+        .chip-name { text-decoration: underline; text-decoration-color: rgba(255,255,255,0.3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     `;
     document.head.appendChild(style);
 
     const canvas = document.getElementById('graph');
     window.addEventListener('resize', resizeCanvas);
     
-    // BOUTON LABELS 3 ETATS
+    // Config Bouton Labels
     const btnLabel = document.getElementById('chkLabels');
     if (btnLabel) {
         btnLabel.type = 'button';
@@ -114,24 +98,17 @@ export function initUI() {
             btnLabel.innerText = modes[state.labelMode];
         };
         updateLabelBtn();
-        btnLabel.onclick = (e) => {
-            e.preventDefault();
-            state.labelMode = (state.labelMode + 1) % 3;
-            updateLabelBtn();
-            draw();
-        };
+        btnLabel.onclick = (e) => { e.preventDefault(); state.labelMode = (state.labelMode + 1) % 3; updateLabelBtn(); draw(); };
     }
 
+    // Ctrl+Z
     document.addEventListener('keydown', (e) => {
         if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-            e.preventDefault();
-            undo();
-            refreshLists();
-            if (state.selection) renderEditor(); 
-            draw();
+            e.preventDefault(); undo(); refreshLists(); if (state.selection) renderEditor(); draw();
         }
     });
 
+    // Zoom
     canvas.addEventListener('wheel', (e) => {
         e.preventDefault();
         const m = screenToWorld(e.offsetX, e.offsetY, canvas);
@@ -144,66 +121,35 @@ export function initUI() {
         draw();
     }, { passive: false });
 
-    // LOGIQUE SOURIS
-    let isPanning = false;
-    let lastPan = { x: 0, y: 0 };
-    let dragLinkSource = null;
+    // Souris
+    let isPanning = false, lastPan = { x: 0, y: 0 }, dragLinkSource = null;
 
     canvas.addEventListener('mousedown', (e) => {
         const p = screenToWorld(e.offsetX, e.offsetY, canvas);
         const hit = getSimulation().find(p.x, p.y, 30); 
-
         if (e.shiftKey && hit) {
             dragLinkSource = hit;
             state.tempLink = { x1: hit.x, y1: hit.y, x2: hit.x, y2: hit.y };
-            draw();
-            e.stopImmediatePropagation();
-            return;
+            draw(); e.stopImmediatePropagation(); return;
         }
-
         if (!hit) {
-            isPanning = true;
-            lastPan = { x: e.clientX, y: e.clientY };
+            isPanning = true; lastPan = { x: e.clientX, y: e.clientY };
             canvas.style.cursor = 'grabbing';
-            if (state.selection) {
-                state.selection = null;
-                renderEditor();
-                draw();
-            }
+            if (state.selection) { state.selection = null; renderEditor(); draw(); }
         }
     });
 
     canvas.addEventListener('mousemove', (e) => {
         const p = screenToWorld(e.offsetX, e.offsetY, canvas);
-        if (dragLinkSource) {
-            state.tempLink.x2 = p.x;
-            state.tempLink.y2 = p.y;
-            draw();
-            return;
-        }
+        if (dragLinkSource) { state.tempLink.x2 = p.x; state.tempLink.y2 = p.y; draw(); return; }
         if (isPanning) {
-            const dx = e.clientX - lastPan.x;
-            const dy = e.clientY - lastPan.y;
+            const dx = e.clientX - lastPan.x; const dy = e.clientY - lastPan.y;
             lastPan = { x: e.clientX, y: e.clientY };
-            state.view.x += dx;
-            state.view.y += dy;
-            draw();
-            return; 
+            state.view.x += dx; state.view.y += dy; draw(); return; 
         }
         const hit = getSimulation().find(p.x, p.y, 25);
-        if (hit) {
-            if (state.hoverId !== hit.id) {
-                state.hoverId = hit.id;
-                canvas.style.cursor = 'pointer';
-                draw();
-            }
-        } else {
-            if (state.hoverId !== null) {
-                state.hoverId = null;
-                canvas.style.cursor = 'default';
-                draw();
-            }
-        }
+        if (hit) { if (state.hoverId !== hit.id) { state.hoverId = hit.id; canvas.style.cursor = 'pointer'; draw(); } } 
+        else { if (state.hoverId !== null) { state.hoverId = null; canvas.style.cursor = 'default'; draw(); } }
     });
 
     canvas.addEventListener('mouseup', (e) => {
@@ -212,63 +158,35 @@ export function initUI() {
             const hit = getSimulation().find(p.x, p.y, 40); 
             if (hit && hit.id !== dragLinkSource.id) {
                 const success = addLink(dragLinkSource, hit, null); 
-                if (success) {
-                    selectNode(dragLinkSource.id);
-                }
+                if (success) selectNode(dragLinkSource.id);
             }
-            dragLinkSource = null;
-            state.tempLink = null;
-            draw();
-            return;
+            dragLinkSource = null; state.tempLink = null; draw(); return;
         }
-        if (isPanning) {
-            isPanning = false;
-            canvas.style.cursor = 'default';
-        }
+        if (isPanning) { isPanning = false; canvas.style.cursor = 'default'; }
     });
     
-    canvas.addEventListener('mouseleave', () => {
-        isPanning = false;
-        state.hoverId = null;
-        dragLinkSource = null;
-        state.tempLink = null;
-        draw();
-    });
+    canvas.addEventListener('mouseleave', () => { isPanning = false; state.hoverId = null; dragLinkSource = null; state.tempLink = null; draw(); });
 
-    d3.select(canvas).call(d3.drag()
-        .container(canvas)
-        .filter(event => !event.shiftKey) 
-        .subject(e => {
-            const p = screenToWorld(e.sourceEvent.offsetX, e.sourceEvent.offsetY, canvas);
-            return getSimulation().find(p.x, p.y, 30);
-        })
-        .on("start", e => {
-            if (!e.active) getSimulation().alphaTarget(0.3).restart();
-            e.subject.fx = e.subject.x; 
-            e.subject.fy = e.subject.y;
-            selectNode(e.subject.id); 
-        })
-        .on("drag", e => {
-            const p = screenToWorld(e.sourceEvent.offsetX, e.sourceEvent.offsetY, canvas);
-            e.subject.fx = p.x;
-            e.subject.fy = p.y;
-        })
-        .on("end", e => {
-            if (!e.active) getSimulation().alphaTarget(0);
-            e.subject.fx = null; 
-            e.subject.fy = null;
-            saveState(); 
-        })
-    );
+    d3.select(canvas).call(d3.drag().container(canvas).filter(event => !event.shiftKey).subject(e => {
+        const p = screenToWorld(e.sourceEvent.offsetX, e.sourceEvent.offsetY, canvas);
+        return getSimulation().find(p.x, p.y, 30);
+    }).on("start", e => {
+        if (!e.active) getSimulation().alphaTarget(0.3).restart();
+        e.subject.fx = e.subject.x; e.subject.fy = e.subject.y; selectNode(e.subject.id); 
+    }).on("drag", e => {
+        const p = screenToWorld(e.sourceEvent.offsetX, e.sourceEvent.offsetY, canvas);
+        e.subject.fx = p.x; e.subject.fy = p.y;
+    }).on("end", e => {
+        if (!e.active) getSimulation().alphaTarget(0);
+        e.subject.fx = null; e.subject.fy = null; saveState(); 
+    }));
 
     document.getElementById('btnRelayout').onclick = () => { state.view = {x:0, y:0, scale: 0.5}; restartSim(); };
-    const btnSim = document.getElementById('btnToggleSim');
-    if (btnSim) btnSim.style.display = 'none';
+    const btnSim = document.getElementById('btnToggleSim'); if (btnSim) btnSim.style.display = 'none';
 
     document.getElementById('btnClearAll').onclick = () => { 
-        showCustomConfirm('Attention : Voulez-vous vraiment tout effacer ?', () => { 
-            pushHistory();
-            state.nodes=[]; state.links=[]; state.selection = null; state.nextId = 1;
+        showCustomConfirm('Tout effacer ?', () => { 
+            pushHistory(); state.nodes=[]; state.links=[]; state.selection = null; state.nextId = 1;
             restartSim(); refreshLists(); renderEditor(); saveState(); 
         });
     };
@@ -299,8 +217,7 @@ function createNode(type, baseName) {
     let name = baseName, i = 1;
     while(state.nodes.find(n => n.name === name)) { name = `${baseName} ${++i}`; }
     const n = ensureNode(type, name);
-    zoomToNode(n.id);
-    refreshLists(); restartSim();
+    zoomToNode(n.id); refreshLists(); restartSim();
 }
 
 export function selectNode(id) {
@@ -365,8 +282,24 @@ export function renderEditor() {
         colorInputHtml = `<input id="edColor" type="color" value="${safeHex(n.color)}" style="height:38px; width:100%;"/>`;
     }
 
+    // --- HELPER POUR LES OPTIONS DE LIENS ---
+    // Filtre les types de liens possibles selon qui on est et qui on vise
+    const getOptionsFor = (targetType) => {
+        let validKinds = [];
+        const sourceType = n.type;
+        
+        // Si c'est Personne <-> Personne
+        if (sourceType === TYPES.PERSON && targetType === TYPES.PERSON) validKinds = PERSON_PERSON_KINDS;
+        // Si c'est Structure <-> Structure
+        else if (sourceType !== TYPES.PERSON && targetType !== TYPES.PERSON) validKinds = ORG_ORG_KINDS;
+        // Si c'est Mixte
+        else validKinds = PERSON_ORG_KINDS;
+
+        return Array.from(validKinds).map(k => `<option value="${k}">${kindToLabel(k)}</option>`).join('');
+    };
+
     ui.editorBody.innerHTML = `
-        <div class="row hstack" style="margin-bottom:15px; gap:5px;">
+        <div class="row hstack" style="margin-bottom:15px; gap:5px; width:100%;">
             <button id="btnFocusNode" class="${state.focusMode ? 'primary' : ''}" style="flex:1; font-size:0.8rem;">
                 ${state.focusMode ? '🔍 Tout' : '🎯 Focus'}
             </button>
@@ -380,6 +313,7 @@ export function renderEditor() {
                 <label>Nom</label>
                 <input id="edName" type="text" value="${escapeHtml(n.name)}"/>
             </div>
+            
             <div class="compact-row">
                 <div class="compact-col">
                     <label style="font-size:0.8rem; opacity:0.7;">Type</label>
@@ -394,6 +328,7 @@ export function renderEditor() {
                     ${colorInputHtml}
                 </div>
             </div>
+
             <div class="row" style="margin-top:5px;">
                 <label>Téléphone</label>
                 <input id="edNum" type="text" value="${escapeHtml(n.num||'')}"/>
@@ -411,27 +346,27 @@ export function renderEditor() {
             <div style="margin-bottom:8px;">
                 <label style="font-size:0.8rem; color:#aaa;">Entreprise</label>
                 <div class="compact-row">
-                    <input id="inpCompany" list="datalist-companies" placeholder="Nom..." class="compact-col" style="min-width:0;"/>
-                    <button id="btnLinkCompanyAff" class="action-btn">Aff.</button>
-                    <button id="btnLinkCompanyVal" class="action-btn primary">Partenaire</button>
+                    <input id="inpCompany" list="datalist-companies" placeholder="Nom..." class="compact-col" />
+                    <select id="selKindCompany" class="compact-select">${getOptionsFor(TYPES.COMPANY)}</select>
+                    <button id="btnAddCompany" class="primary action-btn">+</button>
                 </div>
             </div>
 
             <div style="margin-bottom:8px;">
                 <label style="font-size:0.8rem; color:#aaa;">Groupuscule</label>
                 <div class="compact-row">
-                    <input id="inpGroup" list="datalist-groups" placeholder="Nom..." class="compact-col" style="min-width:0;"/>
-                    <button id="btnLinkGroupAff" class="action-btn">Aff.</button>
-                    <button id="btnLinkGroupVal" class="action-btn primary">Membre</button>
+                    <input id="inpGroup" list="datalist-groups" placeholder="Nom..." class="compact-col" />
+                    <select id="selKindGroup" class="compact-select">${getOptionsFor(TYPES.GROUP)}</select>
+                    <button id="btnAddGroup" class="primary action-btn">+</button>
                 </div>
             </div>
 
             <div style="margin-bottom:8px;">
                 <label style="font-size:0.8rem; color:#aaa;">Personnel</label>
                 <div class="compact-row">
-                    <input id="inpPerson" list="datalist-people" placeholder="Nom..." class="compact-col" style="min-width:0;"/>
-                    <button id="btnLinkPersonEmp" class="action-btn">Emp.</button>
-                    <button id="btnLinkPersonVal" class="action-btn primary">Ami</button>
+                    <input id="inpPerson" list="datalist-people" placeholder="Nom..." class="compact-col" />
+                    <select id="selKindPerson" class="compact-select">${getOptionsFor(TYPES.PERSON)}</select>
+                    <button id="btnAddPerson" class="primary action-btn">+</button>
                 </div>
             </div>
         </details>
@@ -442,36 +377,38 @@ export function renderEditor() {
         </details>
     `;
 
-    // --- LOGIQUE AJOUT/CREATION ---
-    const tryAddLink = (inputId, createType, defaultKind) => {
-        const name = document.getElementById(inputId).value.trim();
+    // --- LOGIQUE D'AJOUT ---
+    // Fonction unique pour gérer l'ajout depuis les 3 formulaires
+    const handleAdd = (inputId, selectId, targetType) => {
+        const nameInput = document.getElementById(inputId);
+        const kindSelect = document.getElementById(selectId);
+        const name = nameInput.value.trim();
+        const kind = kindSelect.value;
+
         if (!name) return;
 
         let target = state.nodes.find(x => x.name.toLowerCase() === name.toLowerCase());
         
         if (!target) {
-            // Pas de confirm() ici, on utilise notre modal
-            showCustomConfirm(`"${name}" n'existe pas. Créer nouveau ${createType} ?`, () => {
-                target = ensureNode(createType, name);
-                addLink(n, target, defaultKind);
-                document.getElementById(inputId).value = '';
+            // Création automatique si n'existe pas
+            showCustomConfirm(`"${name}" n'existe pas. Créer nouveau ${targetType} ?`, () => {
+                target = ensureNode(targetType, name);
+                addLink(n, target, kind);
+                nameInput.value = '';
                 renderEditor();
             });
         } else {
-            addLink(n, target, defaultKind);
-            document.getElementById(inputId).value = '';
+            addLink(n, target, kind);
+            nameInput.value = '';
             renderEditor();
         }
     };
 
-    document.getElementById('btnLinkCompanyAff').onclick = () => tryAddLink('inpCompany', TYPES.COMPANY, KINDS.AFFILIATION);
-    document.getElementById('btnLinkCompanyVal').onclick = () => tryAddLink('inpCompany', TYPES.COMPANY, KINDS.PARTENAIRE);
-    document.getElementById('btnLinkGroupAff').onclick = () => tryAddLink('inpGroup', TYPES.GROUP, KINDS.AFFILIATION);
-    document.getElementById('btnLinkGroupVal').onclick = () => tryAddLink('inpGroup', TYPES.GROUP, KINDS.MEMBRE);
-    document.getElementById('btnLinkPersonEmp').onclick = () => tryAddLink('inpPerson', TYPES.PERSON, KINDS.EMPLOYE);
-    document.getElementById('btnLinkPersonVal').onclick = () => tryAddLink('inpPerson', TYPES.PERSON, KINDS.AMI);
+    document.getElementById('btnAddCompany').onclick = () => handleAdd('inpCompany', 'selKindCompany', TYPES.COMPANY);
+    document.getElementById('btnAddGroup').onclick = () => handleAdd('inpGroup', 'selKindGroup', TYPES.GROUP);
+    document.getElementById('btnAddPerson').onclick = () => handleAdd('inpPerson', 'selKindPerson', TYPES.PERSON);
 
-    // --- LISTENERS ---
+    // --- LISTENERS CLASSIQUES ---
     document.getElementById('btnFocusNode').onclick = () => {
         if (state.focusMode) {
             state.focusMode = false; state.focusSet.clear();
@@ -524,7 +461,7 @@ export function renderEditor() {
         });
     };
 
-    // --- LIENS ACTIFS TRIES ET CLIQUABLES ---
+    // --- LIENS ACTIFS GROUPÉS ---
     const chipsContainer = document.getElementById('chipsLinks');
     
     const myLinks = state.links.filter(l => {
@@ -554,7 +491,7 @@ export function renderEditor() {
                 html += `
                 <span class="chip" title="${kindToLabel(item.link.kind)}">
                     <span class="chip-name" onclick="window.selectNode(${item.other.id})">${escapeHtml(item.other.name)}</span>
-                    <small>(${linkKindEmoji(item.link.kind)})</small> 
+                    <small style="opacity:0.7; margin-left:3px;">(${linkKindEmoji(item.link.kind)})</small> 
                     <span class="x" data-s="${item.link.source.id||item.link.source}" data-t="${item.link.target.id||item.link.target}">×</span>
                 </span>`;
             });
@@ -566,11 +503,9 @@ export function renderEditor() {
             renderGroup('Groupuscules', groups[TYPES.GROUP]) +
             renderGroup('Personnes', groups[TYPES.PERSON]);
             
-        // Pour que selectNode fonctionne via onclick HTML string
         window.selectNode = selectNode; 
     }
 
-    // Listener suppression liens
     chipsContainer.querySelectorAll('.x').forEach(x => {
         x.onclick = (e) => {
             pushHistory(); 
@@ -579,7 +514,6 @@ export function renderEditor() {
             state.links = state.links.filter(l => {
                 const s = (typeof l.source === 'object') ? l.source.id : l.source;
                 const t = (typeof l.target === 'object') ? l.target.id : l.target;
-                // On compare les IDs
                 return !((s === sId && t === tId) || (s === tId && t === sId));
             });
             updatePersonColors();
@@ -593,18 +527,11 @@ export function renderEditor() {
 export function updateLinkLegend() {
     const el = ui.linkLegend;
     if(!state.showLinkTypes) { el.innerHTML = ''; return; }
-    
     const usedKinds = new Set(state.links.map(l => l.kind));
     if(usedKinds.size === 0) { el.innerHTML = ''; return; }
-
     const html = [];
     usedKinds.forEach(k => {
-        html.push(`
-            <div class="legend-item">
-                <span class="legend-emoji">${linkKindEmoji(k)}</span>
-                <span>${kindToLabel(k)}</span>
-            </div>
-        `);
+        html.push(`<div class="legend-item"><span class="legend-emoji">${linkKindEmoji(k)}</span><span>${kindToLabel(k)}</span></div>`);
     });
     el.innerHTML = html.join('');
 }
