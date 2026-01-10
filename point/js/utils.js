@@ -1,49 +1,119 @@
-import { state } from './state.js';
-import { LINK_KIND_EMOJI, LINK_KIND_COLOR, KINDS } from './constants.js';
+import { KINDS } from './constants.js';
 
-export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-export function uid() { return state.nextId++; }
-
-export function hslToHex(h, s, l) {
-    s /= 100; l /= 100;
-    const k = n => (n + h / 30) % 12;
-    const a = s * Math.min(l, 1 - l);
-    const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
-    const th = x => Math.round(255 * x).toString(16).padStart(2, '0');
-    return `#${th(f(0))}${th(f(8))}${th(f(4))}`;
+export function uid() {
+    return Date.now().toString(36) + Math.random().toString(36).substr(2);
 }
 
-export function randomPastel() { return hslToHex(Math.floor(Math.random() * 360), 60, 65); }
-export function escapeHtml(s) { return (s||'').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+export function randomPastel() {
+    const hue = Math.floor(Math.random() * 360);
+    return `hsl(${hue}, 70%, 80%)`;
+}
+
+export function clamp(val, min, max) {
+    return Math.max(min, Math.min(max, val));
+}
+
+// Nettoyage couleur pour input HTML
+export function safeHex(color) {
+    if (!color || typeof color !== 'string') return '#000000';
+    // Format #RGB
+    if (/^#[0-9A-F]{3}$/i.test(color)) return color;
+    // Format #RRGGBB
+    if (/^#[0-9A-F]{6}$/i.test(color)) return color;
+    // Nettoyage format bâtard
+    if (color.length > 7 && color.startsWith('#')) return color.substring(0, 7);
+    return '#000000';
+}
 
 export function toColorInput(hex) {
-    if (/^#[0-9a-f]{3}$/i.test(hex)) { return '#' + hex.slice(1).split('').map(c => c + c).join(''); }
-    return hex || '#ffffff';
+    return safeHex(hex);
 }
 
-export function kindToLabel(k) {
-    const map = {
-        [KINDS.PATRON]: 'Patron', [KINDS.HAUT_GRADE]: 'Haut gradé', [KINDS.EMPLOYE]: 'Employé',
-        [KINDS.MEMBRE]: 'Membre', [KINDS.AFFILIATION]: 'Affiliation', [KINDS.AMOUR]: 'Amour',
-        [KINDS.AMI]: 'Ami', [KINDS.FAMILLE]: 'Famille', [KINDS.PARTENAIRE]: 'Partenaire'
+// Conversion Hex -> RGB pour le mixage
+export function hexToRgb(hex) {
+    var shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
+    hex = hex.replace(shorthandRegex, (m, r, g, b) => r + r + g + g + b + b);
+    var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16)
+    } : { r: 255, g: 255, b: 255 };
+}
+
+export function rgbToHex(r, g, b) {
+    return "#" + ((1 << 24) + (Math.round(r) << 16) + (Math.round(g) << 8) + Math.round(b)).toString(16).slice(1);
+}
+
+export function screenToWorld(sx, sy, canvas, view) {
+    // Si view n'est pas fourni, on assume qu'on est en coordonnées brutes (ou géré ailleurs)
+    // Mais pour le zoom souris, on a besoin de la vue (x, y, scale)
+    if (!view) return { x: sx, y: sy };
+    return {
+        x: (sx - canvas.width / 2 - view.x) / view.scale,
+        y: (sy - canvas.height / 2 - view.y) / view.scale
     };
-    return map[k] || k || '';
 }
 
-export function linkKindEmoji(kind) { return LINK_KIND_EMOJI[kind] || '•'; }
-export function linkKindColor(kind) { return LINK_KIND_COLOR[kind] || '#5b6280'; }
-export function computeLinkColor(l) { return linkKindColor(l.kind); }
-
-export function screenToWorld(px, py, canvas) {
-    const p = state.view;
-    const r = window.devicePixelRatio || 1;
-    const w = canvas.width / r, h = canvas.height / r;
-    return { x: (px - w / 2 - p.x) / p.scale, y: (py - h / 2 - p.y) / p.scale };
+// Fonction pour convertir les coordonnée Monde -> Écran (utile pour le zoom curseur)
+export function worldToScreen(wx, wy, canvas, view) {
+    if (!view) return { x: wx, y: wy };
+    return {
+        x: wx * view.scale + view.x + canvas.width / 2,
+        y: wy * view.scale + view.y + canvas.height / 2
+    };
 }
 
-export function worldToScreen(x, y, canvas) {
-    const p = state.view;
-    const r = window.devicePixelRatio || 1;
-    const w = canvas.width / r, h = canvas.height / r;
-    return { x: (x * p.scale) + (w / 2 + p.x), y: (y * p.scale) + (h / 2 + p.y) };
+export function escapeHtml(text) {
+    if (!text) return '';
+    return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+export function kindToLabel(kind) {
+    if (!kind) return 'Lien';
+    return kind.charAt(0).toUpperCase() + kind.slice(1).replace('_', ' ');
+}
+
+export function linkKindEmoji(kind) {
+    const map = {
+        [KINDS.PATRON]: '👑', 
+        [KINDS.EMPLOYE]: '💼', 
+        [KINDS.COLLEGUE]: '🤝', 
+        [KINDS.PARTENAIRE]: '🤝',
+        [KINDS.FAMILLE]: '🏠', 
+        [KINDS.COUPLE]: '❤️', 
+        [KINDS.AMOUR]: '❤️',
+        [KINDS.AMI]: '🍻', 
+        [KINDS.ENNEMI]: '⚔️',
+        [KINDS.RIVAL]: '⚡',
+        [KINDS.CONNAISSANCE]: '👋', 
+        [KINDS.AFFILIATION]: '🏴', 
+        [KINDS.MEMBRE]: '👤'
+    };
+    return map[kind] || '•';
+}
+
+// CELLE QUI MANQUAIT :
+export function computeLinkColor(l) {
+    const k = l.kind;
+    switch (k) {
+        case KINDS.PATRON: return '#ff4444';      // Rouge clair
+        case KINDS.EMPLOYE: return '#44ff44';     // Vert clair
+        case KINDS.COLLEGUE: return '#4444ff';    // Bleu
+        case KINDS.PARTENAIRE: return '#00aaff';  // Cyan foncé
+        case KINDS.AFFILIATION: return '#ffff00'; // Jaune
+        case KINDS.MEMBRE: return '#00ff00';      // Vert
+        case KINDS.FAMILLE: return '#ff00ff';     // Magenta
+        case KINDS.AMOUR: 
+        case KINDS.COUPLE: return '#ff69b4';      // Rose
+        case KINDS.AMI: return '#00ffff';         // Cyan
+        case KINDS.ENNEMI: 
+        case KINDS.RIVAL: return '#ffffff';       // Blanc
+        default: return '#888888';
+    }
 }

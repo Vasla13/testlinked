@@ -1,8 +1,10 @@
-import { state, saveState, nodeById, isPerson, isCompany, isGroup, ensureNode, addLink, propagateOrgNums, undo, pushHistory, updatePersonColors, mergeNodes } from './state.js';
+import { state, saveState, nodeById, isPerson, isCompany, isGroup, undo, pushHistory } from './state.js';
+import { ensureNode, addLink, mergeNodes, updatePersonColors } from './logic.js'; // IMPORT DE LOGIC
+import { renderEditorHTML } from './templates.js'; // IMPORT TEMPLATES
 import { restartSim, getSimulation } from './physics.js';
 import { draw, updateDegreeCache, resizeCanvas } from './render.js';
-import { screenToWorld, escapeHtml, toColorInput, kindToLabel, linkKindEmoji, clamp, worldToScreen } from './utils.js';
-import { TYPES, KINDS, PERSON_ORG_KINDS, PERSON_PERSON_KINDS, ORG_ORG_KINDS } from './constants.js';
+import { escapeHtml, clamp, screenToWorld, kindToLabel, linkKindEmoji } from './utils.js';
+import { TYPES } from './constants.js';
 
 const ui = {
     listCompanies: document.getElementById('listCompanies'),
@@ -12,14 +14,6 @@ const ui = {
     editorBody: document.getElementById('editorBody'),
     linkLegend: document.getElementById('linkLegend'),
 };
-
-function safeHex(color) {
-    if (!color || typeof color !== 'string') return '#000000';
-    if (/^#[0-9A-F]{3}$/i.test(color)) return color;
-    if (/^#[0-9A-F]{6}$/i.test(color)) return color;
-    if (color.length > 7 && color.startsWith('#')) return color.substring(0, 7);
-    return '#000000';
-}
 
 // --- MODAL SYSTEM ---
 let modalOverlay = null;
@@ -50,7 +44,7 @@ function showCustomConfirm(msg, onYes) {
 export function initUI() {
     createModal();
 
-    // --- CSS RENFORCÉ (Layout Fixe) ---
+    // CSS INJECTION (Toujours utile pour le layout)
     const style = document.createElement('style');
     style.innerHTML = `
         .editor { width: 380px !important; }
@@ -63,14 +57,7 @@ export function initUI() {
         summary::after { content: '+'; font-size: 1rem; font-weight: bold; }
         details[open] summary::after { content: '-'; }
         
-        .flex-row-force {
-            display: flex !important;
-            flex-direction: row !important;
-            flex-wrap: nowrap !important;
-            align-items: center !important;
-            width: 100% !important;
-            gap: 5px !important;
-        }
+        .flex-row-force { display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; align-items: center !important; width: 100% !important; gap: 5px !important; }
         .flex-grow-input { flex: 1 1 auto !important; min-width: 0 !important; width: 100% !important; }
         .compact-select { flex: 0 0 100px !important; width: 100px !important; font-size: 0.75rem !important; padding: 2px !important; }
         .mini-btn { flex: 0 0 30px !important; width: 30px !important; padding: 0 !important; text-align: center !important; justify-content: center !important; }
@@ -85,97 +72,21 @@ export function initUI() {
     const canvas = document.getElementById('graph');
     window.addEventListener('resize', resizeCanvas);
     
+    // Bouton Labels
     const btnLabel = document.getElementById('chkLabels');
     if (btnLabel) {
-        btnLabel.type = 'button';
-        btnLabel.style.width = "100px";
-        btnLabel.style.textAlign = "center";
-        const updateLabelBtn = () => {
-            const modes = ['❌ Aucun', '✨ Auto', '👁️ Toujours'];
-            btnLabel.value = modes[state.labelMode];
-            btnLabel.innerText = modes[state.labelMode];
-        };
+        btnLabel.type = 'button'; btnLabel.style.width = "100px"; btnLabel.style.textAlign = "center";
+        const updateLabelBtn = () => { const modes = ['❌ Aucun', '✨ Auto', '👁️ Toujours']; btnLabel.value = modes[state.labelMode]; btnLabel.innerText = modes[state.labelMode]; };
         updateLabelBtn();
         btnLabel.onclick = (e) => { e.preventDefault(); state.labelMode = (state.labelMode + 1) % 3; updateLabelBtn(); draw(); };
     }
 
-    document.addEventListener('keydown', (e) => {
-        if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-            e.preventDefault(); undo(); refreshLists(); if (state.selection) renderEditor(); draw();
-        }
-    });
+    document.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undo(); refreshLists(); if (state.selection) renderEditor(); draw(); } });
 
-    canvas.addEventListener('wheel', (e) => {
-        e.preventDefault();
-        const m = screenToWorld(e.offsetX, e.offsetY, canvas);
-        const before = worldToScreen(m.x, m.y, canvas);
-        const delta = clamp((e.deltaY < 0 ? 1.1 : 0.9), 0.2, 5);
-        state.view.scale = clamp(state.view.scale * delta, 0.1, 4.0);
-        const after = worldToScreen(m.x, m.y, canvas);
-        state.view.x += (before.x - after.x);
-        state.view.y += (before.y - after.y);
-        draw();
-    }, { passive: false });
+    // Events canvas (Zoom, Pan, Drag) -> Identique à avant
+    setupCanvasEvents(canvas);
 
-    let isPanning = false, lastPan = { x: 0, y: 0 }, dragLinkSource = null;
-
-    canvas.addEventListener('mousedown', (e) => {
-        const p = screenToWorld(e.offsetX, e.offsetY, canvas);
-        const hit = getSimulation().find(p.x, p.y, 30); 
-        if (e.shiftKey && hit) {
-            dragLinkSource = hit;
-            state.tempLink = { x1: hit.x, y1: hit.y, x2: hit.x, y2: hit.y };
-            draw(); e.stopImmediatePropagation(); return;
-        }
-        if (!hit) {
-            isPanning = true; lastPan = { x: e.clientX, y: e.clientY };
-            canvas.style.cursor = 'grabbing';
-            if (state.selection) { state.selection = null; renderEditor(); draw(); }
-        }
-    });
-
-    canvas.addEventListener('mousemove', (e) => {
-        const p = screenToWorld(e.offsetX, e.offsetY, canvas);
-        if (dragLinkSource) { state.tempLink.x2 = p.x; state.tempLink.y2 = p.y; draw(); return; }
-        if (isPanning) {
-            const dx = e.clientX - lastPan.x; const dy = e.clientY - lastPan.y;
-            lastPan = { x: e.clientX, y: e.clientY };
-            state.view.x += dx; state.view.y += dy; draw(); return; 
-        }
-        const hit = getSimulation().find(p.x, p.y, 25);
-        if (hit) { if (state.hoverId !== hit.id) { state.hoverId = hit.id; canvas.style.cursor = 'pointer'; draw(); } } 
-        else { if (state.hoverId !== null) { state.hoverId = null; canvas.style.cursor = 'default'; draw(); } }
-    });
-
-    canvas.addEventListener('mouseup', (e) => {
-        const p = screenToWorld(e.offsetX, e.offsetY, canvas);
-        if (dragLinkSource) {
-            const hit = getSimulation().find(p.x, p.y, 40); 
-            if (hit && hit.id !== dragLinkSource.id) {
-                const success = addLink(dragLinkSource, hit, null); 
-                if (success) selectNode(dragLinkSource.id);
-            }
-            dragLinkSource = null; state.tempLink = null; draw(); return;
-        }
-        if (isPanning) { isPanning = false; canvas.style.cursor = 'default'; }
-    });
-    
-    canvas.addEventListener('mouseleave', () => { isPanning = false; state.hoverId = null; dragLinkSource = null; state.tempLink = null; draw(); });
-
-    d3.select(canvas).call(d3.drag().container(canvas).filter(event => !event.shiftKey).subject(e => {
-        const p = screenToWorld(e.sourceEvent.offsetX, e.sourceEvent.offsetY, canvas);
-        return getSimulation().find(p.x, p.y, 30);
-    }).on("start", e => {
-        if (!e.active) getSimulation().alphaTarget(0.3).restart();
-        e.subject.fx = e.subject.x; e.subject.fy = e.subject.y; selectNode(e.subject.id); 
-    }).on("drag", e => {
-        const p = screenToWorld(e.sourceEvent.offsetX, e.sourceEvent.offsetY, canvas);
-        e.subject.fx = p.x; e.subject.fy = p.y;
-    }).on("end", e => {
-        if (!e.active) getSimulation().alphaTarget(0);
-        e.subject.fx = null; e.subject.fy = null; saveState(); 
-    }));
-
+    // Boutons globaux
     document.getElementById('btnRelayout').onclick = () => { state.view = {x:0, y:0, scale: 0.5}; restartSim(); };
     const btnSim = document.getElementById('btnToggleSim'); if (btnSim) btnSim.style.display = 'none';
 
@@ -185,7 +96,6 @@ export function initUI() {
             restartSim(); refreshLists(); renderEditor(); saveState(); 
         });
     };
-    document.getElementById('chkLabels').onchange = (e) => { state.showLabels = e.target.checked; draw(); };
     document.getElementById('chkPerf').onchange = (e) => { state.performance = e.target.checked; draw(); };
     document.getElementById('chkLinkTypes').onchange = (e) => { state.showLinkTypes = e.target.checked; updateLinkLegend(); draw(); };
 
@@ -206,6 +116,91 @@ export function initUI() {
     document.getElementById('btnExport').onclick = exportGraph;
     document.getElementById('fileImport').onchange = importGraph;
     document.getElementById('fileMerge').onchange = mergeGraph;
+}
+
+// Fonction d'aide pour ne pas dupliquer le code canvas
+function setupCanvasEvents(canvas) {
+    // Zoom
+    canvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const screen = {x: e.offsetX, y: e.offsetY};
+        // Conversion basique puisque screenToWorld est dans utils maintenant, 
+        // mais pour le zoom D3 on peut faire simple :
+        const oldScale = state.view.scale;
+        const delta = clamp((e.deltaY < 0 ? 1.1 : 0.9), 0.2, 5);
+        const newScale = clamp(oldScale * delta, 0.1, 4.0);
+        
+        // Math zoom vers curseur (simplifié)
+        const mx = (screen.x - canvas.width/2 - state.view.x) / oldScale;
+        const my = (screen.y - canvas.height/2 - state.view.y) / oldScale;
+        
+        state.view.x -= mx * (newScale - oldScale);
+        state.view.y -= my * (newScale - oldScale);
+        state.view.scale = newScale;
+        
+        draw();
+    }, { passive: false });
+
+    // Drag and Click
+    let isPanning = false, lastPan = { x: 0, y: 0 }, dragLinkSource = null;
+
+    canvas.addEventListener('mousedown', (e) => {
+        const p = screenToWorld(e.offsetX, e.offsetY, canvas, state.view); // Utils doit avoir screenToWorld adapté
+        const hit = getSimulation().find(p.x, p.y, 30); 
+        if (e.shiftKey && hit) {
+            dragLinkSource = hit;
+            state.tempLink = { x1: hit.x, y1: hit.y, x2: hit.x, y2: hit.y };
+            draw(); e.stopImmediatePropagation(); return;
+        }
+        if (!hit) {
+            isPanning = true; lastPan = { x: e.clientX, y: e.clientY };
+            canvas.style.cursor = 'grabbing';
+            if (state.selection) { state.selection = null; renderEditor(); draw(); }
+        }
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+        const p = screenToWorld(e.offsetX, e.offsetY, canvas, state.view);
+        if (dragLinkSource) { state.tempLink.x2 = p.x; state.tempLink.y2 = p.y; draw(); return; }
+        if (isPanning) {
+            const dx = e.clientX - lastPan.x; const dy = e.clientY - lastPan.y;
+            lastPan = { x: e.clientX, y: e.clientY };
+            state.view.x += dx; state.view.y += dy; draw(); return; 
+        }
+        const hit = getSimulation().find(p.x, p.y, 25);
+        if (hit) { if (state.hoverId !== hit.id) { state.hoverId = hit.id; canvas.style.cursor = 'pointer'; draw(); } } 
+        else { if (state.hoverId !== null) { state.hoverId = null; canvas.style.cursor = 'default'; draw(); } }
+    });
+
+    canvas.addEventListener('mouseup', (e) => {
+        const p = screenToWorld(e.offsetX, e.offsetY, canvas, state.view);
+        if (dragLinkSource) {
+            const hit = getSimulation().find(p.x, p.y, 40); 
+            if (hit && hit.id !== dragLinkSource.id) {
+                const success = addLink(dragLinkSource, hit, null); 
+                if (success) selectNode(dragLinkSource.id);
+            }
+            dragLinkSource = null; state.tempLink = null; draw(); return;
+        }
+        if (isPanning) { isPanning = false; canvas.style.cursor = 'default'; }
+    });
+    
+    canvas.addEventListener('mouseleave', () => { isPanning = false; state.hoverId = null; dragLinkSource = null; state.tempLink = null; draw(); });
+
+    // D3 Drag
+    d3.select(canvas).call(d3.drag().container(canvas).filter(event => !event.shiftKey).subject(e => {
+        const p = screenToWorld(e.sourceEvent.offsetX, e.sourceEvent.offsetY, canvas, state.view);
+        return getSimulation().find(p.x, p.y, 30);
+    }).on("start", e => {
+        if (!e.active) getSimulation().alphaTarget(0.3).restart();
+        e.subject.fx = e.subject.x; e.subject.fy = e.subject.y; selectNode(e.subject.id); 
+    }).on("drag", e => {
+        const p = screenToWorld(e.sourceEvent.offsetX, e.sourceEvent.offsetY, canvas, state.view);
+        e.subject.fx = p.x; e.subject.fy = p.y;
+    }).on("end", e => {
+        if (!e.active) getSimulation().alphaTarget(0);
+        e.subject.fx = null; e.subject.fy = null; saveState(); 
+    }));
 }
 
 function createNode(type, baseName) {
@@ -259,7 +254,6 @@ export function refreshLists() {
 
 export function renderEditor() {
     const n = nodeById(state.selection);
-    
     if (!n) {
         ui.editorTitle.textContent = 'Aucune sélection';
         ui.editorBody.innerHTML = '<p style="padding:10px; opacity:0.6;">Cliquez sur un nœud pour afficher ses détails.</p>';
@@ -270,112 +264,10 @@ export function renderEditor() {
     ui.editorTitle.textContent = n.name;
     ui.editorBody.classList.remove('muted');
 
-    let colorInputHtml = '';
-    if (n.type === 'person') {
-        colorInputHtml = `<div style="font-size:0.8rem; padding-top:10px; color:#aaa;">Auto (Mix)</div>`;
-    } else {
-        colorInputHtml = `<input id="edColor" type="color" value="${safeHex(n.color)}" style="height:38px; width:100%;"/>`;
-    }
+    // TEMPLATE GENERE VIA templates.js
+    ui.editorBody.innerHTML = renderEditorHTML(n, state);
 
-    const getOptionsFor = (targetType) => {
-        let validKinds = [];
-        const sourceType = n.type;
-        if (sourceType === TYPES.PERSON && targetType === TYPES.PERSON) validKinds = PERSON_PERSON_KINDS;
-        else if (sourceType !== TYPES.PERSON && targetType !== TYPES.PERSON) validKinds = ORG_ORG_KINDS;
-        else validKinds = PERSON_ORG_KINDS;
-        return Array.from(validKinds).map(k => `<option value="${k}">${kindToLabel(k)}</option>`).join('');
-    };
-
-    ui.editorBody.innerHTML = `
-        <div class="flex-row-force" style="margin-bottom:15px;">
-            <button id="btnFocusNode" class="${state.focusMode ? 'primary' : ''}" style="flex:1; font-size:0.8rem;">
-                ${state.focusMode ? '🔍 Tout' : '🎯 Focus'}
-            </button>
-            <button id="btnCenterNode" style="flex:1; font-size:0.8rem;">📍 Centrer</button>
-            <button id="btnDelete" class="danger" style="flex:0 0 auto; width:40px; font-size:0.8rem;">🗑️</button>
-        </div>
-
-        <details open>
-            <summary>Propriétés</summary>
-            <div class="row">
-                <label>Nom</label>
-                <input id="edName" type="text" value="${escapeHtml(n.name)}"/>
-            </div>
-            
-            <div class="flex-row-force">
-                <div style="flex:1;">
-                    <label style="font-size:0.8rem; opacity:0.7;">Type</label>
-                    <select id="edType" style="width:100%;">
-                        <option value="person" ${n.type==='person'?'selected':''}>Personne</option>
-                        <option value="group" ${n.type==='group'?'selected':''}>Groupuscule</option>
-                        <option value="company" ${n.type==='company'?'selected':''}>Entreprise</option>
-                    </select>
-                </div>
-                <div style="flex:1;">
-                    <label style="font-size:0.8rem; opacity:0.7;">Couleur</label>
-                    ${colorInputHtml}
-                </div>
-            </div>
-
-            <div class="row" style="margin-top:5px;">
-                <label>Téléphone</label>
-                <input id="edNum" type="text" value="${escapeHtml(n.num||'')}"/>
-            </div>
-        </details>
-
-        <details open>
-            <summary>Informations</summary>
-            <textarea id="edNotes" class="notes-textarea" placeholder="Notes..." style="min-height:80px;">${escapeHtml(n.notes||'')}</textarea>
-        </details>
-        
-        <details open>
-            <summary>Ajouter / Créer relation</summary>
-            
-            <div style="margin-bottom:8px;">
-                <label style="font-size:0.8rem; color:#aaa;">Entreprise</label>
-                <div class="flex-row-force">
-                    <input id="inpCompany" list="datalist-companies" placeholder="Nom..." class="flex-grow-input" />
-                    <select id="selKindCompany" class="compact-select">${getOptionsFor(TYPES.COMPANY)}</select>
-                    <button id="btnAddCompany" class="primary mini-btn">+</button>
-                </div>
-            </div>
-
-            <div style="margin-bottom:8px;">
-                <label style="font-size:0.8rem; color:#aaa;">Groupuscule</label>
-                <div class="flex-row-force">
-                    <input id="inpGroup" list="datalist-groups" placeholder="Nom..." class="flex-grow-input" />
-                    <select id="selKindGroup" class="compact-select">${getOptionsFor(TYPES.GROUP)}</select>
-                    <button id="btnAddGroup" class="primary mini-btn">+</button>
-                </div>
-            </div>
-
-            <div style="margin-bottom:8px;">
-                <label style="font-size:0.8rem; color:#aaa;">Personnel</label>
-                <div class="flex-row-force">
-                    <input id="inpPerson" list="datalist-people" placeholder="Nom..." class="flex-grow-input" />
-                    <select id="selKindPerson" class="compact-select">${getOptionsFor(TYPES.PERSON)}</select>
-                    <button id="btnAddPerson" class="primary mini-btn">+</button>
-                </div>
-            </div>
-        </details>
-
-        <details>
-            <summary style="color:#ff5555;">Zone de Danger (Fusion)</summary>
-            <div style="font-size:0.75rem; color:#aaa; margin-bottom:5px;">
-                Fusionner <b>${escapeHtml(n.name)}</b> dans un autre point (ce point disparaîtra).
-            </div>
-            <div class="flex-row-force">
-               <input id="mergeTarget" list="datalist-all" placeholder="Vers qui fusionner ?" class="flex-grow-input" />
-               <button id="btnMerge" class="primary danger" style="padding:0 10px;">Fusionner</button>
-            </div>
-        </details>
-
-        <details open>
-            <summary>Liens Actifs</summary>
-            <div id="chipsLinks"></div>
-        </details>
-    `;
-
+    // --- LOGIQUE D'AJOUT ---
     const handleAdd = (inputId, selectId, targetType) => {
         const nameInput = document.getElementById(inputId);
         const kindSelect = document.getElementById(selectId);
@@ -404,16 +296,14 @@ export function renderEditor() {
     document.getElementById('btnAddGroup').onclick = () => handleAdd('inpGroup', 'selKindGroup', TYPES.GROUP);
     document.getElementById('btnAddPerson').onclick = () => handleAdd('inpPerson', 'selKindPerson', TYPES.PERSON);
 
+    // --- FUSION ---
     document.getElementById('btnMerge').onclick = () => {
         const targetName = document.getElementById('mergeTarget').value.trim();
         const target = state.nodes.find(x => x.name.toLowerCase() === targetName.toLowerCase());
         
         if (target) {
-            if (target.id === n.id) {
-                showCustomAlert("Impossible de fusionner avec soi-même.");
-                return;
-            }
-            showCustomConfirm(`Fusionner "${n.name}" DANS "${target.name}" ?\n"${n.name}" sera supprimé et ses liens transférés.`, () => {
+            if (target.id === n.id) { showCustomAlert("Impossible de fusionner avec soi-même."); return; }
+            showCustomConfirm(`Fusionner "${n.name}" DANS "${target.name}" ?\n"${n.name}" sera supprimé.`, () => {
                 mergeNodes(n.id, target.id);
                 selectNode(target.id); 
             });
@@ -422,6 +312,7 @@ export function renderEditor() {
         }
     };
 
+    // --- LISTENERS CLASSIQUES ---
     document.getElementById('btnFocusNode').onclick = () => {
         if (state.focusMode) {
             state.focusMode = false; state.focusSet.clear();
@@ -454,11 +345,7 @@ export function renderEditor() {
     
     const inpColor = document.getElementById('edColor');
     if (inpColor) {
-        inpColor.oninput = (e) => { 
-            n.color = e.target.value; 
-            updatePersonColors();
-            draw(); 
-        };
+        inpColor.oninput = (e) => { n.color = e.target.value; updatePersonColors(); draw(); };
     }
 
     document.getElementById('edNum').oninput = (e) => { n.num = e.target.value; if(n.type === TYPES.PERSON) propagateOrgNums(); };
@@ -492,7 +379,6 @@ export function renderEditor() {
             const s = (typeof l.source === 'object') ? l.source : nodeById(l.source);
             const t = (typeof l.target === 'object') ? l.target : nodeById(l.target);
             if (!s || !t) return;
-            
             const other = (s.id === n.id) ? t : s;
             groups[other.type].push({ link: l, other });
         });
@@ -534,12 +420,6 @@ export function renderEditor() {
         };
     });
     
-    // Pour la fusion, on a besoin de la datalist complete
-    const allNames = state.nodes.filter(x => x.id !== n.id).sort((a,b) => a.name.localeCompare(b.name));
-    let dl = document.getElementById('datalist-all');
-    if(!dl) { dl = document.createElement('datalist'); dl.id = 'datalist-all'; document.body.appendChild(dl); }
-    dl.innerHTML = allNames.map(x => `<option value="${escapeHtml(x.name)}"></option>`).join('');
-
     updateLinkLegend();
 }
 
