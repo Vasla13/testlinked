@@ -119,7 +119,7 @@ export function saveState() {
                 kind: l.kind
             })),
             view: state.view,
-            labelMode: state.labelMode, // Sauvegarde du mode
+            labelMode: state.labelMode, 
             showLinkTypes: state.showLinkTypes,
             nextId: state.nextId
         };
@@ -137,7 +137,6 @@ export function loadState() {
         if (data.view) state.view = data.view;
         if (data.nextId) state.nextId = data.nextId;
         
-        // Chargement du mode label (compatibilité avec anciennes versions)
         if (typeof data.labelMode === 'number') state.labelMode = data.labelMode;
         else if (typeof data.showLabels === 'boolean') state.labelMode = data.showLabels ? 1 : 0;
         
@@ -155,12 +154,20 @@ export function ensureNode(type, name, init = {}) {
     let n = state.nodes.find(x => x.name.toLowerCase() === name.toLowerCase());
     if (!n) {
         pushHistory(); 
+        
+        // CORRECTION ICI : On définit une position de départ
+        const startX = (Math.random()-0.5)*50;
+        const startY = (Math.random()-0.5)*50;
+
         n = { 
             id: uid(), 
             name, 
             type, 
-            x: (Math.random()-0.5)*50, 
-            y: (Math.random()-0.5)*50, 
+            x: startX, 
+            y: startY, 
+            // ON LE FIGE ICI (fx/fy) pour qu'il ne bouge pas à la création
+            fx: startX,
+            fy: startY,
             vx: 0, vy: 0, 
             color: (type === TYPES.PERSON ? '#ffffff' : (init.color || randomPastel())) 
         };
@@ -198,6 +205,14 @@ export function addLink(a, b, kind) {
         pushHistory(); 
         state.links.push({ source: A.id, target: B.id, kind });
         if (kind === KINDS.PATRON) propagateOrgNums();
+        
+        // CORRECTION ICI : On libère les points (fx=null) quand on crée un lien
+        // Pour qu'ils puissent être attirés par la physique vers leur cible
+        if (A.fx !== undefined) A.fx = null;
+        if (A.fy !== undefined) A.fy = null;
+        if (B.fx !== undefined) B.fx = null;
+        if (B.fy !== undefined) B.fy = null;
+
         updatePersonColors();
         restartSim();
         return true;

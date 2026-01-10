@@ -16,11 +16,8 @@ const ui = {
 // Fonction pour nettoyer les couleurs pour l'input HTML (Doit être #RRGGBB)
 function safeHex(color) {
     if (!color || typeof color !== 'string') return '#000000';
-    // Si format #123
     if (/^#[0-9A-F]{3}$/i.test(color)) return color;
-    // Si format #123456
     if (/^#[0-9A-F]{6}$/i.test(color)) return color;
-    // Si c'est un format bizarre (ex: 7 chars ou 8 chars), on coupe ou on renvoie noir
     if (color.length > 7 && color.startsWith('#')) return color.substring(0, 7);
     return '#000000';
 }
@@ -283,6 +280,9 @@ export function refreshLists() {
     fillDL('datalist-people', state.nodes.filter(isPerson));
     fillDL('datalist-groups', state.nodes.filter(isGroup));
     fillDL('datalist-companies', state.nodes.filter(isCompany));
+    
+    // CORRECTION : On met à jour la légende ici aussi
+    updateLinkLegend();
 }
 
 export function renderEditor() {
@@ -302,7 +302,6 @@ export function renderEditor() {
     if (n.type === 'person') {
         colorInputHtml = `<div style="font-size:0.8rem; padding-top:10px; color:#aaa;">Auto (via Entreprise)</div>`;
     } else {
-        // Utilisation de safeHex pour éviter le warning rouge dans la console
         colorInputHtml = `<input id="edColor" type="color" value="${safeHex(n.color)}" style="height:38px; width:100%;"/>`;
     }
 
@@ -387,7 +386,6 @@ export function renderEditor() {
         </details>
     `;
 
-    // Listeners
     const tryAddLink = (inputId, defaultKind) => {
         const targetName = document.getElementById(inputId).value;
         const target = state.nodes.find(x => x.name.toLowerCase() === targetName.toLowerCase());
@@ -459,7 +457,6 @@ export function renderEditor() {
     document.getElementById('edName').oninput = (e) => { n.name = e.target.value; refreshLists(); draw(); };
     document.getElementById('edType').onchange = (e) => { n.type = e.target.value; updatePersonColors(); restartSim(); draw(); refreshLists(); renderEditor(); };
     
-    // CORRECTION : Déclaration de inpColor récupérée depuis le DOM APRES son injection
     const inpColor = document.getElementById('edColor');
     if (inpColor) {
         inpColor.oninput = (e) => { 
@@ -484,7 +481,6 @@ export function renderEditor() {
 
     const chips = document.getElementById('chipsLinks');
     
-    // CORRECTION : Filtrage robuste des liens (ID vs Objet)
     const myLinks = state.links.filter(l => {
         const s = (typeof l.source === 'object') ? l.source.id : l.source;
         const t = (typeof l.target === 'object') ? l.target.id : l.target;
@@ -497,7 +493,6 @@ export function renderEditor() {
         chips.innerHTML = myLinks.map(l => {
             const s = (typeof l.source === 'object') ? l.source : nodeById(l.source);
             const t = (typeof l.target === 'object') ? l.target : nodeById(l.target);
-            // Sécurité si un lien est cassé
             if (!s || !t) return ''; 
             
             const other = (s.id === n.id) ? t : s;
@@ -519,6 +514,21 @@ export function renderEditor() {
             restartSim(); renderEditor();
         };
     });
+    
+    // CORRECTION : On met à jour la légende ici aussi car les liens actifs ont peut-être changé
+    updateLinkLegend();
+}
+
+export function updateLinkLegend() {
+    const el = ui.linkLegend;
+    if(!state.showLinkTypes) { el.innerHTML = ''; return; }
+    const usedKinds = new Set(state.links.map(l => l.kind));
+    if(usedKinds.size === 0) { el.innerHTML = ''; return; }
+    const html = [];
+    usedKinds.forEach(k => {
+        html.push(`<div class="legend-item"><span class="legend-emoji">${linkKindEmoji(k)}</span><span>${kindToLabel(k)}</span></div>`);
+    });
+    el.innerHTML = html.join('');
 }
 
 function exportGraph() {
