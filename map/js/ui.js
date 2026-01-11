@@ -1,173 +1,125 @@
 import { state } from './state.js';
-import { renderAll } from './render.js';
-import { leafletToPct } from './engine.js';
+import { renderMarkers, deselect } from './engine.js';
 
 const groupsList = document.getElementById('groups-list');
 const sidebarRight = document.getElementById('sidebar-right');
 const editorContent = document.getElementById('editor-content');
 
-// --- LISTE DES GROUPES ---
 export function renderGroupsList() {
     groupsList.innerHTML = '';
+
     state.groups.forEach((group, idx) => {
         const item = document.createElement('div');
         item.className = 'group-item';
         
-        item.innerHTML = `
-            <div class="group-header">
-                <input type="checkbox" class="vis-check" ${group.visible ? 'checked' : ''}>
-                <div class="color-dot" style="background:${group.color}; box-shadow:0 0 5px ${group.color}"></div>
-                <span style="flex:1; font-weight:bold; font-size:0.9rem;">${group.name}</span>
-                
-                <div style="display:flex; gap:5px;">
-                    <button class="mini-btn btn-add-route" title="Tracer Route">⚡</button>
-                    <button class="mini-btn btn-add-zone" title="Dessiner Zone">⬠</button>
-                </div>
-            </div>
-            <div style="font-size:0.65rem; color:#666; padding-left:28px; padding-bottom:5px;">
-                ${group.points.length} Pts · ${group.zones ? group.zones.length : 0} Zones · ${group.routes ? group.routes.length : 0} Routes
-            </div>
-        `;
-
-        // Events
-        item.querySelector('.vis-check').onclick = (e) => { e.stopPropagation(); group.visible = e.target.checked; renderAll(); };
+        // Header du groupe
+        const header = document.createElement('div');
+        header.className = 'group-header';
         
-        // Bouton ZONE
-        item.querySelector('.btn-add-zone').onclick = (e) => {
+        // Checkbox Visibilité
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = group.visible;
+        checkbox.style.width = 'auto'; checkbox.style.margin = '0';
+        checkbox.onclick = (e) => {
             e.stopPropagation();
-            startDrawing(idx, 'zone');
+            group.visible = e.target.checked;
+            renderMarkers(); // Redessine selon la visibilité
         };
 
-        // Bouton ROUTE
-        item.querySelector('.btn-add-route').onclick = (e) => {
-            e.stopPropagation();
-            startDrawing(idx, 'route');
-        };
+        // Indicateur couleur
+        const dot = document.createElement('div');
+        dot.className = 'color-dot';
+        dot.style.color = group.color;
+        dot.style.backgroundColor = group.color;
+
+        // Nom
+        const nameSpan = document.createElement('span');
+        nameSpan.innerText = `${group.name} (${group.points.length})`;
+        nameSpan.style.flex = '1';
+
+        header.append(checkbox, dot, nameSpan);
+        item.appendChild(header);
+        
+        // Clic sur le nom pour éditer le groupe (optionnel, à implémenter si besoin)
+        // header.onclick = () => { ... }
 
         groupsList.appendChild(item);
     });
 }
 
-// --- LOGIQUE DE DESSIN ---
-function startDrawing(groupIndex, type) {
-    state.drawingMode = true;
-    state.drawingType = type;
-    state.drawingGroupIndex = groupIndex;
-    state.tempPoints = [];
-    
-    // Curseur spécial
-    document.getElementById('map-world').style.cursor = 'crosshair';
-    deselect();
-    alert(`MODE DESSIN ACTIVÉ (${type.toUpperCase()})\n• Clic Gauche : Placer point\n• Clic Droit : Terminer`);
-}
-
-// Cette fonction doit être appelée depuis engine.js lors des clics map
-export function handleMapClick(latlng, isRightClick) {
-    if (!state.drawingMode) return false; // On ne fait rien si pas en mode dessin
-
-    if (isRightClick) {
-        // Finir le dessin
-        if (state.tempPoints.length >= 2) {
-            const group = state.groups[state.drawingGroupIndex];
-            const newItem = { name: (state.drawingType === 'zone' ? "Nouvelle Zone" : "Trajet"), points: [...state.tempPoints] };
-            
-            if (state.drawingType === 'zone') group.zones.push(newItem);
-            else group.routes.push(newItem);
-            
-            renderGroupsList();
-        }
-        // Reset
-        state.drawingMode = false;
-        state.tempPoints = [];
-        document.getElementById('map-world').style.cursor = '';
-        renderAll();
-        return true; // Stop propagation
-    } else {
-        // Ajouter point
-        state.tempPoints.push(leafletToPct(latlng));
-        renderAll(); // Affiche le trait temporaire
-        return true;
-    }
-}
-
-
-// --- SELECTION & EDITION ---
-export function selectItem(type, gIndex, itemIndex) {
-    state.selectedItem = { type, groupIndex: gIndex, itemIndex };
-    renderAll(); renderEditor();
-}
-
-export function deselect() {
-    state.selectedItem = null;
-    renderAll();
-    sidebarRight.classList.remove('active');
-}
-
 export function renderEditor() {
-    if (!state.selectedItem) { sidebarRight.classList.remove('active'); return; }
-    sidebarRight.classList.add('active');
-
-    const { type, groupIndex, itemIndex } = state.selectedItem;
-    const group = state.groups[groupIndex];
+    if (!state.selectedPoint) {
+        closeEditor();
+        return;
+    }
     
-    let data;
-    if (type === 'point') data = group.points[itemIndex];
-    else if (type === 'zone') data = group.zones[itemIndex];
-    else if (type === 'route') data = group.routes[itemIndex];
-
-    if (!data) return;
-
-    let title = "ÉLÉMENT";
-    if(type === 'point') title = "📍 POSITION";
-    if(type === 'zone') title = "⬠ TERRITOIRE";
-    if(type === 'route') title = "⚡ ITINÉRAIRE";
+    sidebarRight.classList.add('active');
+    
+    const { groupIndex, pointIndex } = state.selectedPoint;
+    const group = state.groups[groupIndex];
+    const point = group.points[pointIndex];
 
     editorContent.innerHTML = `
-        <div style="color:var(--accent-cyan); font-size:0.8rem; margin-bottom:10px; font-weight:bold;">${title}</div>
+        <label>NOM DU POINT</label>
+        <input type="text" id="edName" value="${point.name}">
         
-        <label>NOM</label>
-        <input type="text" id="edName" value="${data.name}">
-        
-        <label>CALQUE</label>
-        <select id="edGroup">${state.groups.map((g, i) => `<option value="${i}" ${i===groupIndex?'selected':''}>${g.name}</option>`).join('')}</select>
-
-        ${type === 'point' ? `
+        <label>COORDONNÉES (%)</label>
         <div style="display:flex; gap:10px;">
-            <input type="number" id="edX" value="${data.x.toFixed(2)}"><input type="number" id="edY" value="${data.y.toFixed(2)}">
-        </div>` : `<div style="font-size:0.7rem; color:#666; margin-bottom:10px;">Forme géométrique (${data.points.length} points)</div>`}
+            <input type="number" id="edX" value="${point.x.toFixed(2)}">
+            <input type="number" id="edY" value="${point.y.toFixed(2)}">
+        </div>
 
-        <button id="btnDelete" class="btn-danger">SUPPRIMER</button>
+        <label>CALQUE (GROUPE)</label>
+        <select id="edGroup">
+             ${state.groups.map((g, i) => `<option value="${i}" ${i===groupIndex ? 'selected':''}>${g.name}</option>`).join('')}
+        </select>
+        
+        <label style="margin-top:10px; color:var(--accent-cyan);">NOTES</label>
+        <input type="text" id="edType" value="${point.type || 'Standard'}" placeholder="Type...">
+
+        <button id="btnDelete" class="btn-danger">SUPPRIMER POSITION</button>
         <button id="btnClose" class="mini-btn" style="width:100%; margin-top:10px;">FERMER</button>
     `;
 
-    // Events simples
-    document.getElementById('edName').oninput = (e) => { data.name = e.target.value; renderAll(); };
+    // Events
+    const inpName = document.getElementById('edName');
+    inpName.oninput = (e) => { point.name = e.target.value; renderMarkers(); };
+
+    const inpX = document.getElementById('edX');
+    const inpY = document.getElementById('edY');
+    const updateCoords = () => {
+        point.x = parseFloat(inpX.value) || 0;
+        point.y = parseFloat(inpY.value) || 0;
+        renderMarkers();
+    };
+    inpX.oninput = updateCoords;
+    inpY.oninput = updateCoords;
+
+    const selGroup = document.getElementById('edGroup');
+    selGroup.onchange = (e) => {
+        const newGIndex = parseInt(e.target.value);
+        // Déplacer le point
+        group.points.splice(pointIndex, 1);
+        state.groups[newGIndex].points.push(point);
+        
+        // Mettre à jour la sélection vers le nouvel index
+        state.selectedPoint = { groupIndex: newGIndex, pointIndex: state.groups[newGIndex].points.length - 1 };
+        renderGroupsList();
+        renderMarkers();
+        renderEditor(); // Re-render pour update le select
+    };
+
     document.getElementById('btnDelete').onclick = () => {
-        if(confirm("Supprimer ?")) {
-            if(type==='point') group.points.splice(itemIndex, 1);
-            else if(type==='zone') group.zones.splice(itemIndex, 1);
-            else group.routes.splice(itemIndex, 1);
-            deselect(); renderGroupsList();
+        if(confirm("Supprimer définitivement ce point ?")) {
+            group.points.splice(pointIndex, 1);
+            deselect();
+            renderGroupsList();
         }
     };
     document.getElementById('btnClose').onclick = deselect;
-    
-    // Changement de groupe (Logic de transfert simplifiée)
-    document.getElementById('edGroup').onchange = (e) => {
-        const newIdx = parseInt(e.target.value);
-        if(newIdx === groupIndex) return;
-        
-        // Remove from old
-        if(type==='point') group.points.splice(itemIndex, 1);
-        else if(type==='zone') group.zones.splice(itemIndex, 1);
-        else group.routes.splice(itemIndex, 1);
-        
-        // Add to new
-        const newGrp = state.groups[newIdx];
-        if(type==='point') { newGrp.points.push(data); state.selectedItem = {type, groupIndex: newIdx, itemIndex: newGrp.points.length-1}; }
-        else if(type==='zone') { newGrp.zones.push(data); state.selectedItem = {type, groupIndex: newIdx, itemIndex: newGrp.zones.length-1}; }
-        else { newGrp.routes.push(data); state.selectedItem = {type, groupIndex: newIdx, itemIndex: newGrp.routes.length-1}; }
-        
-        renderGroupsList(); renderAll(); renderEditor();
-    };
+}
+
+export function closeEditor() {
+    sidebarRight.classList.remove('active');
 }

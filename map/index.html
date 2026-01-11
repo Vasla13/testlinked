@@ -3,11 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BNI LINKED // MAP TACTIQUE V2</title>
+    <title>BNI LINKED // MAP TACTIQUE</title>
     <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
-    
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
-    
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -15,7 +12,7 @@
     <div id="top-bar">
         <div class="logo-area">
             <span class="app-logo">💠</span>
-            <span class="app-title">LINKED <span style="color:var(--accent-pink)">// ATLAS</span></span>
+            <span class="app-title">LINKED <span style="color:var(--accent-pink)">// MAP</span></span>
         </div>
         <div class="toolbar">
             <input type="file" id="fileImport" accept=".json" style="display:none">
@@ -31,28 +28,34 @@
         <div id="sidebar-left">
             <div class="panel-header">
                 <span>CALQUES OPÉRATIONNELS</span>
-                <button id="btnAddGroup" class="mini-btn">＋</button>
+                <button id="btnAddGroup" class="mini-btn" title="Nouveau Groupe">＋</button>
             </div>
-            <div id="groups-list" class="scrollable-content"></div>
+            <div id="groups-list" class="scrollable-content">
+                </div>
         </div>
 
         <div id="viewport">
-            <div id="map-world"></div> 
+            <div id="map-world">
+                <img id="map-image" src="carte.jpg" alt="Carte Tactique">
+                <div id="markers-layer">
+                    </div>
+            </div>
             
             <div id="hud-bottom">
-                <div id="coords-display">LAT: 000 | LNG: 000</div>
+                <div id="coords-display">COORD: 00.00 | 00.00</div>
                 <button id="btnResetView" class="hud-btn">🎯 RECENTRER</button>
             </div>
         </div>
 
         <div id="sidebar-right">
             <div class="panel-header">DONNÉES CIBLE</div>
-            <div id="editor-content"></div>
+            <div id="editor-content">
+                <div class="empty-state">Aucune sélection</div>
+            </div>
         </div>
 
     </div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script type="module" src="./js/main.js"></script>
 </body>
 </html>

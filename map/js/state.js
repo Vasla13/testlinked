@@ -1,31 +1,36 @@
 export const state = {
+    // Liste des groupes de points
     groups: [],
-    view: { x: 0, y: 0, scale: 1 },
-    selectedItem: null, // { type: 'point' | 'zone' | 'route', groupIndex, itemIndex }
-    lastRightClickPos: null,
     
-    // État Dessin
-    drawingMode: false,     // true si on dessine
-    drawingType: null,      // 'zone' ou 'route' <--- NOUVEAU
-    drawingGroupIndex: null,
-    tempPoints: [],
+    // État de la vue (Caméra)
+    view: {
+        x: 0,
+        y: 0,
+        scale: 1
+    },
+    
+    // Interaction
+    isDragging: false,
+    lastMouse: { x: 0, y: 0 },
+    
+    // Sélection active
+    selectedPoint: null, // { groupIndex: number, pointIndex: number }
 
+    // Dimensions de l'image (pour calculs précis)
     mapWidth: 0,
     mapHeight: 0
 };
 
-// Fonction de mise à jour des groupes pour s'assurer que 'routes' existe
 export function setGroups(newGroups) {
-    newGroups.forEach(g => {
-        if (!g.points) g.points = [];
-        if (!g.zones) g.zones = [];
-        if (!g.routes) g.routes = []; // <--- NOUVEAU
-    });
     state.groups = newGroups;
 }
 
+// Fonction utilitaire pour sauvegarder
 export function exportToJSON() {
-    const data = { groups: state.groups };
+    const data = { 
+        meta: { date: new Date().toISOString() },
+        groups: state.groups 
+    };
     const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
