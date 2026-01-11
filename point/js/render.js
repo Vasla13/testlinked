@@ -211,15 +211,15 @@ export function draw() {
         let alpha = (isPath && state.pathPath.has(n.id)) ? 1.0 : (dimmed ? 0.4 : 1.0);
         let nodeColor = safeHex(n.color);
         
-        // --- LOGIQUE VISUELLE HVT (STATIQUE, SANS ANIMATION) ---
+        // --- LOGIQUE VISUELLE HVT (MODIFIÉE) ---
         let isBoss = false;
         if (isHVT) {
             const score = n.hvtScore || 0;
             if (score > 0.6) { 
-                // LE BOSS : Très gros, Rouge, Visible
+                // LE BOSS : Très gros, mais garde sa couleur
                 isBoss = true;
                 rad = rad * (1 + score * 0.8); // Grossissement statique
-                nodeColor = '#ff0000'; 
+                // nodeColor = '#ff0000';  <-- LIGNE SUPPRIMÉE, on garde n.color
                 alpha = 1.0;
             } else if (score < 0.2) { 
                 // LE PETIT : Très transparent
@@ -253,8 +253,10 @@ export function draw() {
             ctx.lineWidth = 3 / Math.sqrt(p.scale);
             ctx.stroke();
         } else if (isBoss) {
-            // Boss HVT : Contour rouge simple, pas de shadowBlur (trop lourd)
-            ctx.strokeStyle = '#ff0000';
+            // Boss HVT : Contour de sa propre couleur (plus lumineux) ou blanc
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = nodeColor; // Glow de la couleur du point
+            ctx.strokeStyle = '#ffffff'; // Contour blanc pour bien détacher
             ctx.lineWidth = 3 / Math.sqrt(p.scale);
             ctx.stroke();
         } else {
@@ -324,8 +326,8 @@ export function draw() {
                 let strokeColor = safeHex(n.color);
                 if (isPathNode || isPathfindingNode) strokeColor = '#00ffff';
                 if (isPathStart) strokeColor = '#ffff00';
-                if (isHVT && n.hvtScore > 0.6) strokeColor = '#ff0000'; 
-
+                // En HVT, le label garde la couleur du point (pas de rouge forcé)
+                
                 ctx.strokeStyle = strokeColor;
                 ctx.lineWidth = ((isPathNode || isPathfindingNode || isPathStart || (isHVT && n.hvtScore > 0.6)) ? 2 : 1) / Math.sqrt(p.scale);
                 ctx.stroke();
