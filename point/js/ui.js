@@ -1,5 +1,5 @@
 import { state, saveState, nodeById, isPerson, isCompany, isGroup, undo, pushHistory } from './state.js';
-import { ensureNode, addLink as logicAddLink, calculatePath, clearPath, calculateHVT } from './logic.js';
+import { ensureNode, addLink as logicAddLink, calculatePath, clearPath, calculateHVT, updatePersonColors } from './logic.js';
 import { renderPathfindingSidebar } from './templates.js';
 import { restartSim } from './physics.js';
 import { draw, updateDegreeCache, resizeCanvas } from './render.js';

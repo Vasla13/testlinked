@@ -6,81 +6,152 @@ function getLinkOptions() {
     return Object.entries(KIND_LABELS).map(([k, label]) => `<option value="${k}">${label}</option>`).join('');
 }
 
-// --- 1. BARRE LATÉRALE GAUCHE (LIAISON IA) ---
-// Correspond à ton image : image_c4a450.png
+// --- 1. BARRE LATÉRALE GAUCHE (LIAISON IA - DESIGN CYBERPUNK) ---
 export function renderPathfindingSidebar(state, selectedNode) {
-    // Cas 1 : Aucune source définie
+    const cyan = 'var(--accent-cyan)';
+    const pink = 'var(--accent-pink)';
+    const bgPanel = 'rgba(10, 15, 30, 0.6)';
+    
+    // Helper pour créer une "boîte" de données
+    const renderDataBox = (label, value, color, isActive, icon) => `
+        <div style="
+            flex: 1;
+            background: ${isActive ? `rgba(${color === cyan ? '115, 251, 247' : '255, 107, 129'}, 0.1)` : 'rgba(0,0,0,0.3)'};
+            border: 1px solid ${isActive ? color : 'rgba(255,255,255,0.1)'};
+            border-radius: 4px;
+            padding: 8px;
+            display: flex; flex-direction: column; justify-content: center;
+            box-shadow: ${isActive ? `0 0 10px rgba(${color === cyan ? '115, 251, 247' : '255, 107, 129'}, 0.15)` : 'none'};
+            transition: all 0.3s ease;
+        ">
+            <div style="font-size:0.65rem; color:${color}; text-transform:uppercase; letter-spacing:1px; margin-bottom:2px; opacity:0.8;">
+                ${label}
+            </div>
+            <div style="font-size:0.9rem; font-weight:bold; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                ${icon} ${value}
+            </div>
+        </div>
+    `;
+
+    // --- ÉTAT 1 : PAS DE SOURCE ---
     if (!state.pathfinding.startId) {
         if (selectedNode) {
-            // Un nœud est sélectionné -> On propose de le définir comme source
+            // Nœud sélectionné -> Proposition de définir comme source
             return `
-                <div style="padding:15px; border:1px solid rgba(115, 251, 247, 0.2); background:rgba(0,0,0,0.3); border-radius:8px; text-align:center;">
-                    <div style="font-size:0.8rem; color:#888; margin-bottom:10px;">Point de départ :</div>
-                    <div style="font-size:1.1rem; font-weight:bold; color:#fff; margin-bottom:15px;">${escapeHtml(selectedNode.name)}</div>
+                <div style="display:flex; flex-direction:column; gap:10px; padding:10px; border:1px solid rgba(255,255,255,0.1); border-radius:8px; background:${bgPanel};">
+                    <div style="color:${cyan}; font-size:0.8rem; text-transform:uppercase; letter-spacing:2px; border-bottom:1px solid rgba(115,251,247,0.2); padding-bottom:5px; margin-bottom:5px;">
+                        /// SYSTÈME DE TRAÇAGE
+                    </div>
                     
-                    <button id="btnPathStart" class="primary" style="width:100%; font-weight:bold; padding:10px; border:1px solid var(--accent-cyan); box-shadow: 0 0 10px rgba(115,251,247,0.2);">
-                        🚩 DÉFINIR COMME SOURCE
+                    ${renderDataBox('Candidat Source', escapeHtml(selectedNode.name), cyan, true, '👤')}
+                    
+                    <button id="btnPathStart" class="primary" style="
+                        width:100%; margin-top:5px; padding:10px;
+                        background: linear-gradient(90deg, rgba(115,251,247,0.1), rgba(115,251,247,0.2));
+                        border: 1px solid ${cyan}; color: ${cyan};
+                        font-weight:bold; letter-spacing:1px;
+                        clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+                        transition: all 0.2s; cursor: pointer;
+                    ">
+                        [ INITIALISER SOURCE ]
                     </button>
                 </div>
             `;
         } else {
-            // Rien n'est sélectionné -> Message d'attente
+            // Rien de sélectionné -> État vide
             return `
-                <div style="padding:20px; text-align:center; opacity:0.6;">
-                    <div style="font-size:2rem; margin-bottom:10px;">🚩</div>
-                    <div style="font-style:italic;">Sélectionnez une personne sur la carte pour commencer.</div>
+                <div style="
+                    padding:25px; text-align:center; border:1px dashed rgba(255,255,255,0.2); 
+                    border-radius:8px; color:#666; font-style:italic; background:rgba(0,0,0,0.2);
+                ">
+                    <div style="font-size:1.5rem; margin-bottom:10px; opacity:0.5;">📡</div>
+                    <div>En attente de signal...</div>
+                    <div style="font-size:0.75rem; margin-top:5px;">Sélectionnez une entité sur la carte.</div>
                 </div>
             `;
         }
     }
 
-    // Cas 2 : Source définie -> On cherche une cible
+    // --- ÉTAT 2 & 3 : SOURCE DÉFINIE (RECHERCHE CIBLE OU CHEMIN ACTIF) ---
     const startNode = state.nodes.find(n => n.id === state.pathfinding.startId);
-    const startName = startNode ? escapeHtml(startNode.name) : "Inconnu";
+    const startName = startNode ? escapeHtml(startNode.name) : "ERR_UNKNOWN";
     
     // La cible est la sélection actuelle (si différente du départ)
     const targetNode = (selectedNode && selectedNode.id !== state.pathfinding.startId) ? selectedNode : null;
+    const hasTarget = !!targetNode;
+
+    let statusDisplay = '';
     
-    let targetHtml = '';
-    let actionBtnHtml = '';
-
-    if (targetNode) {
-        targetHtml = `<b style="color:#fff; font-size:1rem;">${escapeHtml(targetNode.name)}</b>`;
-        actionBtnHtml = `<button id="btnPathCalc" class="primary" style="width:100%; margin-top:10px;">⚡ CALCULER LE CHEMIN</button>`;
-    } else {
-        targetHtml = `<span style="color:#666; font-style:italic;">(Sélectionnez une cible...)</span>`;
-        actionBtnHtml = `<button disabled style="width:100%; margin-top:10px; opacity:0.5; cursor:not-allowed;">En attente de cible...</button>`;
-    }
-
     if (state.pathfinding.active) {
-        actionBtnHtml = `<div style="text-align:center; color:#00ff00; margin:10px 0; font-weight:bold;">✅ Chemin affiché</div>`;
+        statusDisplay = `
+            <div style="
+                margin-top:10px; padding:8px; background:rgba(0, 255, 0, 0.1); 
+                border:1px solid #00ff00; border-radius:4px; text-align:center;
+                color:#00ff00; font-weight:bold; font-size:0.8rem; letter-spacing:1px;
+                box-shadow: 0 0 15px rgba(0,255,0,0.1); text-transform:uppercase;
+            ">
+                ✅ Liaison Établie
+            </div>`;
+    } else if (hasTarget) {
+         statusDisplay = `
+            <button id="btnPathCalc" style="
+                width:100%; margin-top:10px; padding:10px;
+                background: linear-gradient(90deg, rgba(255,107,129,0.1), rgba(255,107,129,0.2));
+                border: 1px solid ${pink}; color: ${pink};
+                font-weight:bold; letter-spacing:1px; text-transform:uppercase;
+                clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+                cursor: pointer; transition: all 0.2s;
+            " onmouseover="this.style.background='${pink}'; this.style.color='#000';" onmouseout="this.style.background='rgba(255,107,129,0.1)'; this.style.color='${pink}';">
+                ⚡ CALCULER ROUTE
+            </button>`;
+    } else {
+        statusDisplay = `
+            <div style="margin-top:10px; padding:8px; border:1px solid rgba(255,255,255,0.1); border-radius:4px; text-align:center; color:#666; font-size:0.75rem; font-style:italic;">
+                En attente de cible...
+            </div>`;
     }
 
     return `
-        <div style="border:1px solid rgba(115, 251, 247, 0.3); border-radius:8px; overflow:hidden;">
-            <div style="background:rgba(115, 251, 247, 0.1); padding:8px 12px; border-bottom:1px solid rgba(115, 251, 247, 0.2);">
-                <div style="font-size:0.7rem; color:#73fbf7; text-transform:uppercase;">Source</div>
-                <div style="font-weight:bold; color:#fff;">${startName}</div>
-            </div>
+        <div style="border:1px solid rgba(115, 251, 247, 0.3); border-radius:6px; overflow:hidden; background:rgba(5,7,10,0.4); backdrop-filter:blur(5px);">
             
-            <div style="text-align:center; color:#666; padding:4px;">⬇️</div>
+            <div style="
+                background: linear-gradient(90deg, rgba(115, 251, 247, 0.1), transparent);
+                padding: 6px 10px; border-bottom:1px solid rgba(115, 251, 247, 0.2);
+                display:flex; justify-content:space-between; align-items:center;
+            ">
+                <span style="font-size:0.75rem; color:${cyan}; font-weight:bold; letter-spacing:2px;">/// NET.LINK</span>
+                <span style="width:6px; height:6px; background:${state.pathfinding.active ? '#0f0' : '#f00'}; border-radius:50%; box-shadow:0 0 5px currentColor;"></span>
+            </div>
 
-            <div style="padding:8px 12px;">
-                <div style="font-size:0.7rem; color:#888; text-transform:uppercase;">Destination</div>
-                ${targetHtml}
+            <div style="padding:12px; display:flex; flex-direction:column; gap:10px;">
+                
+                ${renderDataBox('Source (A)', startName, cyan, true, '🚩')}
+
+                <div style="display:flex; align-items:center; justify-content:center; opacity:0.6;">
+                    <div style="height:20px; width:1px; background:linear-gradient(to bottom, ${cyan}, ${pink});"></div>
+                    <div style="font-size:0.8rem; color:#fff; margin:0 5px;">▼</div>
+                    <div style="height:20px; width:1px; background:linear-gradient(to bottom, ${cyan}, ${pink});"></div>
+                </div>
+
+                ${renderDataBox('Destination (B)', targetNode ? escapeHtml(targetNode.name) : 'Sélectionner...', pink, hasTarget, '🎯')}
+
+                ${statusDisplay}
+
+                <button id="btnPathCancel" style="
+                    width:100%; margin-top:5px; padding:6px;
+                    background: transparent; border: 1px solid #444; color: #888;
+                    font-size:0.7rem; text-transform:uppercase; letter-spacing:1px;
+                    border-radius:4px; cursor: pointer; transition: all 0.2s;
+                " onmouseover="this.style.borderColor='#fff'; this.style.color='#fff';" onmouseout="this.style.borderColor='#444'; this.style.color='#888';">
+                    ✖ Annuler séquence
+                </button>
             </div>
         </div>
-
-        ${actionBtnHtml}
-
-        <button id="btnPathCancel" style="width:100%; margin-top:10px; background:rgba(255, 80, 80, 0.1); color:#ff5050; border:1px solid #ff5050;">
-            ✖ RESET / ANNULER
-        </button>
     `;
 }
 
 // --- 2. BARRE LATÉRALE DROITE (EDITEUR) ---
-// Correspond à tes images : image_c4a433.png et image_c4986f.png
+// Note: Le code de l'éditeur reste inchangé mais je le remets pour que tu aies le fichier complet
 export function renderEditorHTML(n, state) {
     const isP = (n.type === TYPES.PERSON);
     
@@ -188,7 +259,7 @@ export function renderEditorHTML(n, state) {
 
     <div style="margin-top:20px; text-align:center;">
         <button id="btnExportRP" style="font-size:0.8rem; background:transparent; border:1px dashed #444; color:#888; width:100%;">
-            📄 Copier Dossier RP
+            📄 Copier Dossier 
         </button>
     </div>
 
