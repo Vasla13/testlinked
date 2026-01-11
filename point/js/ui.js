@@ -3,7 +3,7 @@ import { ensureNode, addLink as logicAddLink, mergeNodes, updatePersonColors, ca
 import { renderEditorHTML, renderPathfindingSidebar } from './templates.js';
 import { restartSim, getSimulation } from './physics.js';
 import { draw, updateDegreeCache, resizeCanvas } from './render.js';
-import { escapeHtml, toColorInput, kindToLabel, linkKindEmoji, computeLinkColor } from './utils.js';
+import { escapeHtml, clamp, screenToWorld, kindToLabel, linkKindEmoji, computeLinkColor } from './utils.js';
 import { TYPES, KINDS, FILTERS } from './constants.js';
 import { injectStyles } from './styles.js';
 import { setupCanvasEvents } from './interaction.js';
@@ -95,6 +95,9 @@ export function initUI() {
             restartSim(); refreshLists(); renderEditor(); saveState(); 
         });
     };
+    
+    // Expose zoomToNode globalement pour les onclick HTML (active links)
+    window.zoomToNode = zoomToNode;
 }
 
 // --- HELPERS INIT ---
@@ -105,18 +108,20 @@ function setupHudButtons() {
     document.getElementById('chkPerf').onchange = (e) => { state.performance = e.target.checked; draw(); };
     document.getElementById('chkLinkTypes').onchange = (e) => { state.showLinkTypes = e.target.checked; updateLinkLegend(); draw(); };
 
-    // --- NOUVEAU : BOUTON GLOBE ---
+    // BOUTON GLOBE
     const hud = document.getElementById('hud');
-    const lblGlobe = document.createElement('label');
-    lblGlobe.title = "Restreindre à la planète";
-    lblGlobe.style.cursor = "pointer";
-    lblGlobe.innerHTML = `<input id="chkGlobe" type="checkbox" ${state.globeMode ? 'checked' : ''}/> 🌍 Globe`;
-    lblGlobe.querySelector('input').onchange = (e) => {
-        state.globeMode = e.target.checked;
-        restartSim(); // Relancer la physique pour appliquer le changement
-    };
-    // On l'insère avant les autres options pour la visibilité
-    hud.insertBefore(lblGlobe, document.getElementById('chkLabels').parentNode);
+    // Vérification pour ne pas dupliquer si refresh
+    if (!document.getElementById('chkGlobe')) {
+        const lblGlobe = document.createElement('label');
+        lblGlobe.title = "Restreindre à la planète";
+        lblGlobe.style.cursor = "pointer";
+        lblGlobe.innerHTML = `<input id="chkGlobe" type="checkbox" ${state.globeMode ? 'checked' : ''}/> 🌍 Globe`;
+        lblGlobe.querySelector('input').onchange = (e) => {
+            state.globeMode = e.target.checked;
+            restartSim(); 
+        };
+        hud.insertBefore(lblGlobe, document.getElementById('chkLabels').parentNode);
+    }
 
     const btnLabel = document.getElementById('chkLabels');
     if (btnLabel) {
@@ -135,11 +140,18 @@ function setupSearch() {
         const found = state.nodes.filter(n => n.name.toLowerCase().includes(q));
         if(found.length === 0) { res.innerHTML = '<span style="color:#666;">Aucun résultat</span>'; return; }
         res.innerHTML = found.slice(0, 10).map(n => `<span class="search-hit" data-id="${n.id}">${escapeHtml(n.name)}</span>`).join(' · ');
-        res.querySelectorAll('.search-hit').forEach(el => el.onclick = () => { zoomToNode(+el.dataset.id); e.target.value = ''; res.textContent = ''; });
+        res.querySelectorAll('.search-hit').forEach(el => el.onclick = () => { 
+            zoomToNode(+el.dataset.id); 
+            e.target.value = ''; 
+            res.textContent = ''; 
+        });
     });
 }
 
 function createFilterBar() {
+    // Évite les doublons
+    if(document.getElementById('filter-bar')) return;
+
     const bar = document.createElement('div');
     bar.id = 'filter-bar';
     const buttons = [
@@ -168,7 +180,9 @@ function createNode(type, baseName) {
     let name = baseName, i = 1;
     while(state.nodes.find(n => n.name === name)) { name = `${baseName} ${++i}`; }
     const n = ensureNode(type, name);
-    zoomToNode(n.id); refreshLists(); restartSim();
+    zoomToNode(n.id); 
+    // Ici on garde le restartSim car c'est une création, faut que ça bouge pour se placer
+    restartSim(); 
 }
 
 export function addLink(a, b, kind) {
@@ -188,12 +202,18 @@ function zoomToNode(id) {
     const n = nodeById(id);
     if (!n) return;
     state.selection = id;
+    
+    // Zoom mathématique sans secousse
     state.view.scale = 1.6;
     state.view.x = -n.x * 1.6;
     state.view.y = -n.y * 1.6;
-    restartSim();
+    
+    // CORRECTION BUG 1 : On enlève restartSim() pour ne pas reset la physique
+    // restartSim(); <--- SUPPRIMÉ
+    
     renderEditor();
     updatePathfindingPanel();
+    draw(); // On redessine juste
 }
 
 // --- PANNEAUX ---
@@ -345,10 +365,12 @@ function renderActiveLinks(n) {
             const linkColor = computeLinkColor(item.link);
             const typeLabel = kindToLabel(item.link.kind);
             const emoji = linkKindEmoji(item.link.kind);
+            
+            // CORRECTION BUG 2 : window.zoomToNode au lieu de window.selectNode
             html += `
             <div class="chip" style="border-left-color: ${linkColor};">
                 <div class="chip-content">
-                    <span class="chip-name" onclick="window.selectNode(${item.other.id})">${escapeHtml(item.other.name)}</span>
+                    <span class="chip-name" onclick="window.zoomToNode(${item.other.id})">${escapeHtml(item.other.name)}</span>
                     <div class="chip-meta"><span class="chip-badge" style="color: ${linkColor};">${emoji} ${typeLabel}</span></div>
                 </div>
                 <div class="x" title="Supprimer le lien" data-s="${item.link.source.id||item.link.source}" data-t="${item.link.target.id||item.link.target}">×</div>
@@ -372,8 +394,6 @@ function renderActiveLinks(n) {
             updatePersonColors(); restartSim(); renderEditor(); updatePathfindingPanel();
         };
     });
-    
-    window.selectNode = selectNode;
 }
 
 // --- LEGEND & LISTS ---
