@@ -1,7 +1,6 @@
 import { escapeHtml, safeHex, kindToLabel } from './utils.js';
 import { TYPES, PERSON_PERSON_KINDS, PERSON_ORG_KINDS, ORG_ORG_KINDS } from './constants.js';
 
-// Helper pour les options de select
 export function getLinkOptions(sourceType, targetType) {
     let validKinds = [];
     if (sourceType === TYPES.PERSON && targetType === TYPES.PERSON) validKinds = PERSON_PERSON_KINDS;
@@ -10,50 +9,83 @@ export function getLinkOptions(sourceType, targetType) {
     return Array.from(validKinds).map(k => `<option value="${k}">${kindToLabel(k)}</option>`).join('');
 }
 
-// --- FONCTION MANQUANTE : COLONNE GAUCHE (PATHFINDING) ---
+// --- FONCTION REFONDUE : LAYOUT HORIZONTAL ---
 export function renderPathfindingSidebar(state, selectedNode) {
     let html = '';
 
-    // État 1 : Pas de départ défini
+    // État 1 : Rien de défini (Bouton initial)
     if (state.pathfinding.startId === null) {
         if (selectedNode) {
             html += `
-                <div style="margin-bottom:5px; font-size:0.8rem;">Départ : <span style="color:var(--text-light); font-weight:bold;">${escapeHtml(selectedNode.name)}</span></div>
-                <button id="btnPathStart" class="action-btn primary" style="width:100%;">🚩 Définir comme Source</button>
+                <div style="margin-bottom:6px; font-size:0.8rem; color:#aaa;">
+                    Point de départ : <b style="color:#fff;">${escapeHtml(selectedNode.name)}</b>
+                </div>
+                <button id="btnPathStart" class="action-btn primary" style="width:100%; display:flex; justify-content:center; align-items:center; gap:6px;">
+                    🚩 Définir comme Source
+                </button>
             `;
         } else {
             html += `
-                <div style="padding:10px; background:rgba(255,255,255,0.05); border-radius:4px; font-size:0.8rem; color:#888; text-align:center;">
-                    Sélectionnez un point sur la carte pour définir le départ.
+                <div style="padding:12px; background:rgba(255,255,255,0.03); border:1px dashed #444; border-radius:6px; font-size:0.75rem; color:#777; text-align:center;">
+                    Sélectionnez un point sur la carte pour commencer.
                 </div>
             `;
         }
     } 
-    // État 2 : Départ défini
+    // État 2 : Source définie, en attente de cible ou calculé
     else {
-        // On cherche le nom du point de départ
         const startNodeName = state.nodes.find(n => n.id === state.pathfinding.startId)?.name || "Inconnu";
+        const targetNode = (selectedNode && selectedNode.id !== state.pathfinding.startId) ? selectedNode : null;
         
+        // --- LAYOUT CÔTE À CÔTE ---
         html += `
-            <div style="margin-bottom:8px; padding:8px; background:rgba(0,255,255,0.1); border:1px solid var(--accent-cyan); border-radius:4px;">
-                <div style="font-size:0.7rem; color:var(--accent-cyan); text-transform:uppercase;">Source</div>
-                <div style="font-weight:bold; font-size:0.9rem;">${escapeHtml(startNodeName)}</div>
+            <div style="display:flex; align-items:stretch; gap:4px; margin-bottom:8px;">
+                
+                <div style="flex:1; width:0; background:rgba(0, 255, 255, 0.08); border:1px solid var(--accent-cyan); border-radius:6px; padding:6px 4px; display:flex; flex-direction:column; justify-content:center;">
+                    <div style="font-size:0.6rem; color:var(--accent-cyan); text-transform:uppercase; letter-spacing:1px; margin-bottom:2px;">Source</div>
+                    <div style="font-weight:bold; font-size:0.8rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(startNodeName)}">
+                        ${escapeHtml(startNodeName)}
+                    </div>
+                </div>
+
+                <div style="display:flex; align-items:center; color:#666; font-size:0.9rem;">➤</div>
+
+                <div style="flex:1; width:0; background:${targetNode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.2)'}; border:1px solid ${targetNode ? '#fff' : '#333'}; border-radius:6px; padding:6px 4px; display:flex; flex-direction:column; justify-content:center;">
+                    <div style="font-size:0.6rem; color:${targetNode ? '#fff' : '#555'}; text-transform:uppercase; letter-spacing:1px; margin-bottom:2px;">Cible</div>
+                    <div style="font-weight:bold; font-size:0.8rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:${targetNode ? '#fff' : '#555'};">
+                        ${targetNode ? escapeHtml(targetNode.name) : '(Choisir)'}
+                    </div>
+                </div>
+
             </div>
         `;
 
-        if (selectedNode && selectedNode.id !== state.pathfinding.startId) {
+        // --- BOUTONS D'ACTION ---
+        if (targetNode) {
             html += `
-                <div style="text-align:center; margin:5px 0;">⬇️</div>
-                <div style="margin-bottom:5px; font-size:0.8rem;">Cible : <span style="color:var(--text-light); font-weight:bold;">${escapeHtml(selectedNode.name)}</span></div>
-                <button id="btnPathCalc" class="action-btn primary" style="width:100%;">⚡ Calculer la Liaison</button>
+                <div style="display:flex; gap:5px;">
+                    <button id="btnPathCalc" class="action-btn primary" style="flex:2;">⚡ Calculer</button>
+                    <button id="btnPathCancel" class="action-btn danger" style="flex:1;">✖</button>
+                </div>
             `;
         } else if (state.pathfinding.active) {
-             html += `<div style="text-align:center; color:#00ff00; font-size:0.8rem; margin:10px 0;">✅ Chemin affiché</div>`;
+             html += `
+                <div style="background:rgba(0,255,0,0.1); border:1px solid #00ff00; color:#00ff00; border-radius:4px; padding:6px; text-align:center; font-size:0.8rem; margin-bottom:5px;">
+                    ✅ Chemin affiché
+                </div>
+                <button id="btnPathCancel" class="action-btn" style="width:100%;">Reset</button>
+             `;
         } else {
-            html += `<div style="font-size:0.8rem; color:#888; margin-top:5px;">Sélectionnez un autre point pour tracer le chemin.</div>`;
+            // Pas de cible sélectionnée
+            html += `
+                <div style="display:flex; gap:5px; align-items:center;">
+                    <div style="flex:1; font-size:0.7rem; color:#666; font-style:italic; line-height:1.2;">
+                        Sélectionnez un autre point sur le graphe...
+                    </div>
+                    <button id="btnPathCancel" class="action-btn" style="padding:4px 8px; font-size:0.75rem;">Annuler</button>
+                </div>
+            `;
         }
-
-        html += `<button id="btnPathCancel" class="action-btn danger" style="width:100%; margin-top:10px;">❌ Annuler / Reset</button>`;
     }
 
     return html;

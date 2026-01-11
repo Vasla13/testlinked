@@ -97,7 +97,8 @@ export function draw() {
     }
 
     function isDimmed(objType, obj) {
-        // MODIF: Si on est en train de sélectionner (startId défini mais pas active), pas de dim
+        // REGLE IMPORTANTE : Si on est en mode "Sélection de Cible" (startId défini mais chemin pas encore calculé), 
+        // on ne grise RIEN pour permettre de cliquer facilement.
         if (state.pathfinding.startId !== null && !state.pathfinding.active) {
             return false;
         }
@@ -133,8 +134,6 @@ export function draw() {
         
         const dimmed = isDimmed('link', l);
         const isPathLink = state.pathfinding.active && !dimmed;
-        
-        // MODIF: Opacité des grisés un peu plus visible (0.2 au lieu de 0.05)
         const globalAlpha = dimmed ? 0.2 : 0.8;
 
         ctx.beginPath();
@@ -202,7 +201,6 @@ export function draw() {
         const dimmed = isDimmed('node', n);
         const rad = nodeRadius(n); 
         
-        // MODIF: Opacité des nœuds grisés plus visible (0.4 au lieu de 0.1)
         ctx.globalAlpha = (isPath && state.pathPath.has(n.id)) ? 1.0 : (dimmed ? 0.4 : 1.0);
 
         ctx.beginPath();
@@ -214,7 +212,7 @@ export function draw() {
         const isPathNode = isPath && state.pathPath.has(n.id);
         const isPathfindingNode = state.pathfinding.active && state.pathfinding.pathNodes.has(n.id);
         
-        // MODIF: Contour spécial pour le point de départ
+        // C'est le point de départ sélectionné
         const isPathStart = state.pathfinding.startId === n.id;
 
         if (state.selection === n.id || state.hoverId === n.id || isPathNode || isPathfindingNode || isPathStart) {
@@ -222,7 +220,7 @@ export function draw() {
             
             let strokeColor = '#ffffff';
             if (isPathNode || isPathfindingNode) strokeColor = '#00ffff';
-            if (isPathStart) strokeColor = '#ffff00'; // Jaune pour le départ
+            if (isPathStart) strokeColor = '#ffff00'; // JAUNE POUR LA SOURCE
 
             ctx.shadowColor = strokeColor;
             ctx.strokeStyle = strokeColor;
