@@ -18,13 +18,7 @@ export function injectStyles() {
 
         .link-category { margin-top: 10px; margin-bottom: 2px; font-size: 0.65rem; color: #888; text-transform: uppercase; border-bottom: 1px solid #333; }
         
-        /* CHIPS COMPACTS (STYLE EXCEL/CYBER) */
-        .chip { 
-            display: flex; align-items: center; justify-content: space-between; 
-            background: rgba(20, 20, 30, 0.4); border-left: 3px solid #888; 
-            border-radius: 0 3px 3px 0; padding: 2px 6px; margin-bottom: 3px; 
-            transition: all 0.2s; height: 24px;
-        }
+        .chip { display: flex; align-items: center; justify-content: space-between; background: rgba(20, 20, 30, 0.4); border-left: 3px solid #888; border-radius: 0 3px 3px 0; padding: 2px 6px; margin-bottom: 3px; transition: all 0.2s; height: 24px; }
         .chip:hover { background: rgba(255,255,255,0.08); }
         .chip-content { display: flex; align-items: center; flex: 1; min-width: 0; gap: 8px; }
         .chip-name { font-weight: 500; font-size: 0.8rem; cursor: pointer; color: #ddd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -34,7 +28,6 @@ export function injectStyles() {
         .x { padding: 0 0 0 8px; cursor: pointer; color: #666; font-size: 1rem; font-weight: bold; }
         .x:hover { color: #ff5555; }
 
-        /* FILTER BAR DOCK STYLE */
         #filter-bar {
             position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
             background: rgba(10, 15, 30, 0.9); border: 1px solid rgba(0, 255, 255, 0.2);
@@ -48,13 +41,50 @@ export function injectStyles() {
             min-width: 80px; text-align: center;
         }
         .filter-btn:hover { color: #fff; background: rgba(255,255,255,0.1); }
-        .filter-btn.active { 
-            background: rgba(0, 255, 255, 0.15); color: var(--accent-cyan); 
-            border-color: var(--accent-cyan); box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
-        }
+        .filter-btn.active { background: rgba(0, 255, 255, 0.15); color: var(--accent-cyan); border-color: var(--accent-cyan); box-shadow: 0 0 10px rgba(0, 255, 255, 0.2); }
         
-        /* HUD REMONTÉ */
         #hud { bottom: 70px; border-radius: 8px; padding: 5px 15px; }
+
+        /* --- MENU CONTEXTUEL (CLIC DROIT) --- */
+        #context-menu {
+            position: fixed; z-index: 9999; 
+            background: rgba(10, 15, 30, 0.95);
+            border: 1px solid var(--accent-cyan);
+            border-radius: 8px;
+            padding: 5px 0;
+            min-width: 180px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.8);
+            backdrop-filter: blur(10px);
+            display: none;
+            flex-direction: column;
+        }
+        .ctx-item {
+            padding: 8px 15px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            color: #eee;
+            display: flex; align-items: center; gap: 10px;
+            transition: background 0.1s;
+        }
+        .ctx-item:hover { background: rgba(0, 255, 255, 0.15); color: #fff; }
+        .ctx-item.danger { color: #ff5555; }
+        .ctx-item.danger:hover { background: rgba(255, 80, 80, 0.2); }
+        .ctx-divider { height: 1px; background: rgba(255,255,255,0.1); margin: 4px 0; }
+
+        /* --- PANNEAU REGLAGES PHYSIQUE --- */
+        #settings-panel {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 350px; background: rgba(10, 15, 30, 0.95);
+            border: 1px solid var(--accent-cyan); border-radius: 12px;
+            padding: 20px; z-index: 10000; display: none;
+            box-shadow: 0 0 50px rgba(0,0,0,0.8);
+            backdrop-filter: blur(15px);
+        }
+        .setting-row { margin-bottom: 15px; }
+        .setting-row label { display: block; font-size: 0.8rem; color: #aaa; margin-bottom: 5px; }
+        .setting-row input[type="range"] { width: 100%; cursor: pointer; accent-color: var(--accent-cyan); }
+        .setting-val { float: right; color: var(--accent-cyan); font-weight: bold; }
+        .settings-close { position: absolute; top: 10px; right: 10px; cursor: pointer; color: #fff; font-weight: bold; }
     `;
     document.head.appendChild(style);
 }

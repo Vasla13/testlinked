@@ -3,12 +3,11 @@ import { ensureNode, addLink as logicAddLink, mergeNodes, updatePersonColors, ca
 import { renderEditorHTML, renderPathfindingSidebar } from './templates.js';
 import { restartSim, getSimulation } from './physics.js';
 import { draw, updateDegreeCache, resizeCanvas } from './render.js';
-import { escapeHtml, clamp, screenToWorld, kindToLabel, linkKindEmoji, computeLinkColor } from './utils.js';
+import { escapeHtml, toColorInput, kindToLabel, linkKindEmoji, computeLinkColor } from './utils.js';
 import { TYPES, KINDS, FILTERS } from './constants.js';
 import { injectStyles } from './styles.js';
 import { setupCanvasEvents } from './interaction.js';
 
-// Références DOM
 const ui = {
     listCompanies: document.getElementById('listCompanies'),
     listGroups: document.getElementById('listGroups'),
@@ -19,8 +18,11 @@ const ui = {
     pathfindingContainer: document.getElementById('pathfinding-ui')
 };
 
-// --- MODALES ---
+// --- MODALES & MENUS ---
 let modalOverlay = null;
+let contextMenu = null;
+let settingsPanel = null;
+
 function createModal() {
     if (document.getElementById('custom-modal')) return;
     modalOverlay = document.createElement('div');
@@ -34,6 +36,281 @@ function createModal() {
     document.body.appendChild(modalOverlay);
 }
 
+function createContextMenu() {
+    if (document.getElementById('context-menu')) return;
+    contextMenu = document.createElement('div');
+    contextMenu.id = 'context-menu';
+    document.body.appendChild(contextMenu);
+}
+
+// --- CREATION DU PANNEAU REGLAGES ---
+function createSettingsPanel() {
+    if (document.getElementById('settings-panel')) return;
+    settingsPanel = document.createElement('div');
+    settingsPanel.id = 'settings-panel';
+    settingsPanel.innerHTML = `
+        <div class="settings-close" onclick="document.getElementById('settings-panel').style.display='none'">✕</div>
+        <h3 style="margin-top:0; color:var(--accent-cyan); text-transform:uppercase; font-size:1rem;">Réglages Physique</h3>
+        
+        <div class="setting-row">
+            <label>Répulsion <span id="val-repulsion" class="setting-val"></span></label>
+            <input type="range" id="sl-repulsion" min="100" max="5000" step="50">
+        </div>
+        <div class="setting-row">
+            <label>Gravité Centrale <span id="val-gravity" class="setting-val"></span></label>
+            <input type="range" id="sl-gravity" min="0" max="0.1" step="0.001">
+        </div>
+        <div class="setting-row">
+            <label>Longueur Liens <span id="val-linkLength" class="setting-val"></span></label>
+            <input type="range" id="sl-linkLength" min="50" max="600" step="10">
+        </div>
+        <div class="setting-row">
+            <label>Collision (Espace) <span id="val-collision" class="setting-val"></span></label>
+            <input type="range" id="sl-collision" min="0" max="200" step="5">
+        </div>
+        <div class="setting-row">
+            <label>Friction (0=Glace) <span id="val-friction" class="setting-val"></span></label>
+            <input type="range" id="sl-friction" min="0.1" max="0.9" step="0.05">
+        </div>
+        <button class="primary" style="width:100%; margin-top:10px;" onclick="window.resetPhysicsDefaults()">Rétablir par défaut</button>
+    `;
+    document.body.appendChild(settingsPanel);
+
+    const bindSlider = (id, key) => {
+        const sl = document.getElementById(id);
+        const val = document.getElementById(id.replace('sl-', 'val-'));
+        
+        // Initialisation si settings pas chargés
+        if(!state.physicsSettings) state.physicsSettings = { repulsion: 1200, gravity: 0.005, linkLength: 220, friction: 0.3, collision: 50 };
+        
+        sl.value = state.physicsSettings[key];
+        val.innerText = state.physicsSettings[key];
+        
+        sl.oninput = (e) => {
+            const v = parseFloat(e.target.value);
+            state.physicsSettings[key] = v;
+            val.innerText = v;
+            restartSim(); // Applique immédiatement
+        };
+    };
+
+    window.updateSettingsUI = () => {
+        bindSlider('sl-repulsion', 'repulsion');
+        bindSlider('sl-gravity', 'gravity');
+        bindSlider('sl-linkLength', 'linkLength');
+        bindSlider('sl-collision', 'collision');
+        bindSlider('sl-friction', 'friction');
+    };
+
+    window.resetPhysicsDefaults = () => {
+        state.physicsSettings = { repulsion: 1200, gravity: 0.005, linkLength: 220, friction: 0.3, collision: 50 };
+        window.updateSettingsUI();
+        restartSim();
+    };
+}
+
+export function showContextMenu(node, x, y) {
+    if(!contextMenu) createContextMenu();
+    contextMenu.innerHTML = `
+        <div class="ctx-item" onclick="window.menuAction('link', ${node.id})">🔗 Lier à...</div>
+        <div class="ctx-item" onclick="window.menuAction('source', ${node.id})">🚩 Définir Source IA</div>
+        <div class="ctx-item" onclick="window.menuAction('color', ${node.id})">🎨 Changer couleur</div>
+        <div class="ctx-divider"></div>
+        <div class="ctx-item danger" onclick="window.menuAction('delete', ${node.id})">🗑️ Supprimer</div>
+    `;
+    const menuWidth = 180; const menuHeight = 160;
+    let posX = x; let posY = y;
+    if (x + menuWidth > window.innerWidth) posX = x - menuWidth;
+    if (y + menuHeight > window.innerHeight) posY = y - menuHeight;
+    contextMenu.style.left = posX + 'px'; contextMenu.style.top = posY + 'px';
+    contextMenu.style.display = 'flex';
+
+    window.menuAction = (action, id) => {
+        const n = nodeById(id);
+        if(!n) return;
+        hideContextMenu();
+        if (action === 'delete') {
+            showCustomConfirm(`Supprimer "${n.name}" ?`, () => {
+                pushHistory(); state.nodes = state.nodes.filter(x => x.id !== n.id);
+                state.links = state.links.filter(l => l.source.id !== n.id && l.target.id !== n.id);
+                state.selection = null; restartSim(); refreshLists(); renderEditor(); updatePathfindingPanel();
+            });
+        }
+        else if (action === 'source') {
+            state.pathfinding.startId = n.id; state.pathfinding.active = false; updatePathfindingPanel(); draw();
+        }
+        else if (action === 'link') {
+            selectNode(n.id); const details = document.querySelectorAll('details'); if(details[2]) details[2].open = true;
+        }
+        else if (action === 'color') {
+            selectNode(n.id); setTimeout(() => { const col = document.getElementById('edColor'); if(col) col.click(); }, 100);
+        }
+    };
+}
+
+export function hideContextMenu() {
+    if(contextMenu) contextMenu.style.display = 'none';
+}
+
+export function showSettings() {
+    if(!settingsPanel) createSettingsPanel();
+    window.updateSettingsUI();
+    settingsPanel.style.display = 'block';
+}
+
+// --- INIT ---
+export function initUI() {
+    createModal();
+    createContextMenu();
+    createSettingsPanel();
+    injectStyles();
+    createFilterBar();
+    updatePathfindingPanel();
+
+    const canvas = document.getElementById('graph');
+    window.addEventListener('resize', resizeCanvas);
+    
+    document.addEventListener('keydown', (e) => { 
+        if ((e.ctrlKey || e.metaKey) && e.key === 'z') { 
+            e.preventDefault(); undo(); refreshLists(); 
+            if (state.selection) renderEditor(); 
+            draw(); 
+        } 
+    });
+
+    setupCanvasEvents(canvas, {
+        selectNode,
+        renderEditor, 
+        updatePathfindingPanel,
+        addLink,
+        showContextMenu,
+        hideContextMenu
+    });
+
+    setupHudButtons();
+    
+    document.getElementById('createPerson').onclick = () => createNode(TYPES.PERSON, 'Nouvelle personne');
+    document.getElementById('createGroup').onclick = () => createNode(TYPES.GROUP, 'Nouveau groupe');
+    document.getElementById('createCompany').onclick = () => createNode(TYPES.COMPANY, 'Nouvelle entreprise');
+
+    setupSearch();
+
+    document.getElementById('btnExport').onclick = exportGraph;
+    document.getElementById('fileImport').onchange = importGraph;
+    document.getElementById('fileMerge').onchange = mergeGraph;
+    document.getElementById('btnClearAll').onclick = () => { 
+        showCustomConfirm('Attention : Voulez-vous vraiment tout effacer ?', () => { 
+            pushHistory(); state.nodes=[]; state.links=[]; state.selection = null; state.nextId = 1;
+            restartSim(); refreshLists(); renderEditor(); saveState(); 
+        });
+    };
+    
+    window.zoomToNode = zoomToNode;
+}
+
+// --- HELPERS INIT ---
+function setupHudButtons() {
+    document.getElementById('btnRelayout').onclick = () => { state.view = {x:0, y:0, scale: 0.5}; restartSim(); };
+    const btnSim = document.getElementById('btnToggleSim'); if (btnSim) btnSim.style.display = 'none';
+    document.getElementById('chkPerf').onchange = (e) => { state.performance = e.target.checked; draw(); };
+    document.getElementById('chkLinkTypes').onchange = (e) => { state.showLinkTypes = e.target.checked; updateLinkLegend(); draw(); };
+
+    const hud = document.getElementById('hud');
+    if (!document.getElementById('chkGlobe')) {
+        const lblGlobe = document.createElement('label');
+        lblGlobe.title = "Restreindre à la planète";
+        lblGlobe.style.cursor = "pointer";
+        lblGlobe.innerHTML = `<input id="chkGlobe" type="checkbox" ${state.globeMode ? 'checked' : ''}/> 🌍 Globe`;
+        lblGlobe.querySelector('input').onchange = (e) => {
+            state.globeMode = e.target.checked;
+            restartSim(); 
+        };
+        hud.insertBefore(lblGlobe, document.getElementById('chkLabels').parentNode);
+    }
+    // BOUTON REGLAGES
+    if (!document.getElementById('btnSettings')) {
+        const btnSettings = document.createElement('button');
+        btnSettings.id = 'btnSettings';
+        btnSettings.innerText = '⚙️';
+        btnSettings.title = "Réglages Physique";
+        btnSettings.onclick = showSettings; 
+        hud.appendChild(btnSettings);
+    }
+    const btnLabel = document.getElementById('chkLabels');
+    if (btnLabel) {
+        btnLabel.type = 'button'; btnLabel.style.width = "100px"; btnLabel.style.textAlign = "center";
+        const updateLabelBtn = () => { const modes = ['❌ Aucun', '✨ Auto', '👁️ Toujours']; btnLabel.value = modes[state.labelMode]; btnLabel.innerText = modes[state.labelMode]; };
+        updateLabelBtn();
+        btnLabel.onclick = (e) => { e.preventDefault(); state.labelMode = (state.labelMode + 1) % 3; updateLabelBtn(); draw(); };
+    }
+}
+
+function setupSearch() {
+    document.getElementById('searchInput').addEventListener('input', (e) => {
+        const q = e.target.value.trim().toLowerCase();
+        const res = document.getElementById('searchResult');
+        if(!q) { res.textContent = ''; return; }
+        const found = state.nodes.filter(n => n.name.toLowerCase().includes(q));
+        if(found.length === 0) { res.innerHTML = '<span style="color:#666;">Aucun résultat</span>'; return; }
+        res.innerHTML = found.slice(0, 10).map(n => `<span class="search-hit" data-id="${n.id}">${escapeHtml(n.name)}</span>`).join(' · ');
+        res.querySelectorAll('.search-hit').forEach(el => el.onclick = () => { zoomToNode(+el.dataset.id); e.target.value = ''; res.textContent = ''; });
+    });
+}
+
+function createFilterBar() {
+    if(document.getElementById('filter-bar')) return;
+    const bar = document.createElement('div');
+    bar.id = 'filter-bar';
+    const buttons = [ { id: FILTERS.ALL, label: '🌐 Global' }, { id: FILTERS.BUSINESS, label: '💼 Business' }, { id: FILTERS.ILLEGAL, label: '⚔️ Conflit' }, { id: FILTERS.SOCIAL, label: '❤️ Social' } ];
+    buttons.forEach(btn => {
+        const b = document.createElement('button');
+        b.className = `filter-btn ${state.activeFilter === btn.id ? 'active' : ''}`;
+        b.innerText = btn.label;
+        b.onclick = () => {
+            state.activeFilter = btn.id;
+            document.querySelectorAll('.filter-btn').forEach(el => el.classList.remove('active'));
+            b.classList.add('active');
+            draw();
+        };
+        bar.appendChild(b);
+    });
+    document.body.appendChild(bar);
+}
+
+// --- LOGIQUE ---
+function createNode(type, baseName) {
+    let name = baseName, i = 1;
+    while(state.nodes.find(n => n.name === name)) { name = `${baseName} ${++i}`; }
+    const n = ensureNode(type, name);
+    zoomToNode(n.id); restartSim(); 
+}
+
+export function addLink(a, b, kind) {
+    const res = logicAddLink(a, b, kind);
+    if(res) { refreshLists(); renderEditor(); }
+    return res;
+}
+
+export function selectNode(id) {
+    state.selection = id;
+    renderEditor();
+    updatePathfindingPanel();
+    draw();
+}
+
+function zoomToNode(id) {
+    const n = nodeById(id);
+    if (!n) return;
+    state.selection = id;
+    state.view.scale = 1.6;
+    state.view.x = -n.x * 1.6;
+    state.view.y = -n.y * 1.6;
+    renderEditor();
+    updatePathfindingPanel();
+    draw();
+}
+
+// --- COMMONS ---
 export function showCustomAlert(msg) {
     if(!modalOverlay) createModal();
     const msgEl = document.getElementById('modal-msg');
@@ -59,200 +336,104 @@ export function showCustomConfirm(msg, onYes) {
     }
 }
 
-// --- INIT ---
-export function initUI() {
-    createModal();
-    injectStyles();
-    createFilterBar();
-    updatePathfindingPanel();
+// --- IMPORTS/EXPORTS ---
+export function updateLinkLegend() {
+    const el = ui.linkLegend;
+    if(!state.showLinkTypes) { el.innerHTML = ''; return; }
+    const usedKinds = new Set(state.links.map(l => l.kind));
+    if(usedKinds.size === 0) { el.innerHTML = ''; return; }
+    const html = [];
+    usedKinds.forEach(k => { html.push(`<div class="legend-item"><span class="legend-emoji">${linkKindEmoji(k)}</span><span>${kindToLabel(k)}</span></div>`); });
+    el.innerHTML = html.join('');
+}
 
-    const canvas = document.getElementById('graph');
-    window.addEventListener('resize', resizeCanvas);
-    
-    document.addEventListener('keydown', (e) => { 
-        if ((e.ctrlKey || e.metaKey) && e.key === 'z') { 
-            e.preventDefault(); undo(); refreshLists(); 
-            if (state.selection) renderEditor(); 
-            draw(); 
-        } 
-    });
-
-    setupCanvasEvents(canvas);
-    setupHudButtons();
-    
-    document.getElementById('createPerson').onclick = () => createNode(TYPES.PERSON, 'Nouvelle personne');
-    document.getElementById('createGroup').onclick = () => createNode(TYPES.GROUP, 'Nouveau groupe');
-    document.getElementById('createCompany').onclick = () => createNode(TYPES.COMPANY, 'Nouvelle entreprise');
-
-    setupSearch();
-
-    document.getElementById('btnExport').onclick = exportGraph;
-    document.getElementById('fileImport').onchange = importGraph;
-    document.getElementById('fileMerge').onchange = mergeGraph;
-    document.getElementById('btnClearAll').onclick = () => { 
-        showCustomConfirm('Attention : Voulez-vous vraiment tout effacer ?', () => { 
-            pushHistory(); state.nodes=[]; state.links=[]; state.selection = null; state.nextId = 1;
-            restartSim(); refreshLists(); renderEditor(); saveState(); 
+export function refreshLists() {
+    updateDegreeCache();
+    const fill = (ul, arr) => {
+        if(!ul) return;
+        ul.innerHTML = '';
+        arr.sort((a,b) => a.name.localeCompare(b.name)).forEach(n => {
+            const li = document.createElement('li');
+            li.innerHTML = `<div class="list-item"><span class="bullet" style="background:${n.color}"></span>${escapeHtml(n.name)}</div>`;
+            li.onclick = () => zoomToNode(n.id);
+            ul.appendChild(li);
         });
     };
-    
-    // Expose zoomToNode globalement pour les onclick HTML (active links)
-    window.zoomToNode = zoomToNode;
+    fill(ui.listCompanies, state.nodes.filter(isCompany));
+    fill(ui.listGroups, state.nodes.filter(isGroup));
+    fill(ui.listPeople, state.nodes.filter(isPerson));
+    const fillDL = (id, arr) => {
+        const el = document.getElementById(id);
+        if(el) el.innerHTML = arr.map(n => `<option value="${escapeHtml(n.name)}"></option>`).join('');
+    };
+    fillDL('datalist-people', state.nodes.filter(isPerson));
+    fillDL('datalist-groups', state.nodes.filter(isGroup));
+    fillDL('datalist-companies', state.nodes.filter(isCompany));
+    updateLinkLegend();
 }
 
-// --- HELPERS INIT ---
-function setupHudButtons() {
-    document.getElementById('btnRelayout').onclick = () => { state.view = {x:0, y:0, scale: 0.5}; restartSim(); };
-    const btnSim = document.getElementById('btnToggleSim'); if (btnSim) btnSim.style.display = 'none';
-    
-    document.getElementById('chkPerf').onchange = (e) => { state.performance = e.target.checked; draw(); };
-    document.getElementById('chkLinkTypes').onchange = (e) => { state.showLinkTypes = e.target.checked; updateLinkLegend(); draw(); };
-
-    // BOUTON GLOBE
-    const hud = document.getElementById('hud');
-    // Vérification pour ne pas dupliquer si refresh
-    if (!document.getElementById('chkGlobe')) {
-        const lblGlobe = document.createElement('label');
-        lblGlobe.title = "Restreindre à la planète";
-        lblGlobe.style.cursor = "pointer";
-        lblGlobe.innerHTML = `<input id="chkGlobe" type="checkbox" ${state.globeMode ? 'checked' : ''}/> 🌍 Globe`;
-        lblGlobe.querySelector('input').onchange = (e) => {
-            state.globeMode = e.target.checked;
-            restartSim(); 
-        };
-        hud.insertBefore(lblGlobe, document.getElementById('chkLabels').parentNode);
-    }
-
-    const btnLabel = document.getElementById('chkLabels');
-    if (btnLabel) {
-        btnLabel.type = 'button'; btnLabel.style.width = "100px"; btnLabel.style.textAlign = "center";
-        const updateLabelBtn = () => { const modes = ['❌ Aucun', '✨ Auto', '👁️ Toujours']; btnLabel.value = modes[state.labelMode]; btnLabel.innerText = modes[state.labelMode]; };
-        updateLabelBtn();
-        btnLabel.onclick = (e) => { e.preventDefault(); state.labelMode = (state.labelMode + 1) % 3; updateLabelBtn(); draw(); };
-    }
+function exportGraph() {
+    const data = { 
+        meta: { date: new Date().toISOString() },
+        nodes: state.nodes.map(n => ({ id: n.id, name: n.name, type: n.type, color: n.color, num: n.num, notes: n.notes, x: n.x, y: n.y })), 
+        links: state.links.map(l => ({ source: (typeof l.source === 'object') ? l.source.id : l.source, target: (typeof l.target === 'object') ? l.target.id : l.target, kind: l.kind })),
+        physicsSettings: state.physicsSettings
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'graph_neural_link.json'; a.click();
 }
 
-function setupSearch() {
-    document.getElementById('searchInput').addEventListener('input', (e) => {
-        const q = e.target.value.trim().toLowerCase();
-        const res = document.getElementById('searchResult');
-        if(!q) { res.textContent = ''; return; }
-        const found = state.nodes.filter(n => n.name.toLowerCase().includes(q));
-        if(found.length === 0) { res.innerHTML = '<span style="color:#666;">Aucun résultat</span>'; return; }
-        res.innerHTML = found.slice(0, 10).map(n => `<span class="search-hit" data-id="${n.id}">${escapeHtml(n.name)}</span>`).join(' · ');
-        res.querySelectorAll('.search-hit').forEach(el => el.onclick = () => { 
-            zoomToNode(+el.dataset.id); 
-            e.target.value = ''; 
-            res.textContent = ''; 
-        });
-    });
+function importGraph(e) {
+    const f = e.target.files[0];
+    if(!f) return;
+    const r = new FileReader();
+    r.onload = () => {
+        try {
+            const d = JSON.parse(r.result);
+            state.nodes = d.nodes; state.links = d.links;
+            if(d.physicsSettings) state.physicsSettings = d.physicsSettings;
+            const maxId = state.nodes.reduce((max, n) => Math.max(max, n.id), 0);
+            state.nextId = maxId + 1;
+            updatePersonColors();
+            restartSim(); refreshLists(); showCustomAlert('Import réussi !');
+        } catch(err) { console.error(err); showCustomAlert('Erreur import JSON.'); }
+    };
+    r.readAsText(f);
 }
 
-function createFilterBar() {
-    // Évite les doublons
-    if(document.getElementById('filter-bar')) return;
-
-    const bar = document.createElement('div');
-    bar.id = 'filter-bar';
-    const buttons = [
-        { id: FILTERS.ALL, label: '🌐 Global' },
-        { id: FILTERS.BUSINESS, label: '💼 Business' },
-        { id: FILTERS.ILLEGAL, label: '⚔️ Conflit' },
-        { id: FILTERS.SOCIAL, label: '❤️ Social' }
-    ];
-    buttons.forEach(btn => {
-        const b = document.createElement('button');
-        b.className = `filter-btn ${state.activeFilter === btn.id ? 'active' : ''}`;
-        b.innerText = btn.label;
-        b.onclick = () => {
-            state.activeFilter = btn.id;
-            document.querySelectorAll('.filter-btn').forEach(el => el.classList.remove('active'));
-            b.classList.add('active');
-            draw();
-        };
-        bar.appendChild(b);
-    });
-    document.body.appendChild(bar);
+function mergeGraph(e) {
+    const f = e.target.files[0];
+    if(!f) return;
+    const r = new FileReader();
+    r.onload = () => {
+        try {
+            const d = JSON.parse(r.result);
+            let addedNodes = 0;
+            d.nodes.forEach(n => {
+                if(!state.nodes.find(x => x.name.toLowerCase() === n.name.toLowerCase())) {
+                    const newId = state.nextId++;
+                    n.id = newId; n.x = (Math.random()-0.5)*100; n.y = (Math.random()-0.5)*100;
+                    state.nodes.push(n); addedNodes++;
+                }
+            });
+            updatePersonColors();
+            restartSim(); refreshLists(); showCustomAlert(`Fusion terminée : ${addedNodes} nœuds ajoutés.`);
+        } catch(err) { console.error(err); showCustomAlert('Erreur fusion.'); }
+    };
+    r.readAsText(f);
 }
 
-// --- LOGIQUE ---
-function createNode(type, baseName) {
-    let name = baseName, i = 1;
-    while(state.nodes.find(n => n.name === name)) { name = `${baseName} ${++i}`; }
-    const n = ensureNode(type, name);
-    zoomToNode(n.id); 
-    // Ici on garde le restartSim car c'est une création, faut que ça bouge pour se placer
-    restartSim(); 
-}
-
-export function addLink(a, b, kind) {
-    const res = logicAddLink(a, b, kind);
-    if(res) { refreshLists(); renderEditor(); }
-    return res;
-}
-
-export function selectNode(id) {
-    state.selection = id;
-    renderEditor();
-    updatePathfindingPanel();
-    draw();
-}
-
-function zoomToNode(id) {
-    const n = nodeById(id);
-    if (!n) return;
-    state.selection = id;
-    
-    // Zoom mathématique sans secousse
-    state.view.scale = 1.6;
-    state.view.x = -n.x * 1.6;
-    state.view.y = -n.y * 1.6;
-    
-    // CORRECTION BUG 1 : On enlève restartSim() pour ne pas reset la physique
-    // restartSim(); <--- SUPPRIMÉ
-    
-    renderEditor();
-    updatePathfindingPanel();
-    draw(); // On redessine juste
-}
-
-// --- PANNEAUX ---
 export function updatePathfindingPanel() {
     const el = ui.pathfindingContainer;
     if(!el) return;
     const selectedNode = nodeById(state.selection);
     el.innerHTML = renderPathfindingSidebar(state, selectedNode);
-
     const btnStart = document.getElementById('btnPathStart');
-    if(btnStart) btnStart.onclick = () => {
-        if(!selectedNode) return;
-        state.pathfinding.startId = selectedNode.id;
-        state.pathfinding.active = false;
-        updatePathfindingPanel();
-        draw(); 
-    };
+    if(btnStart) btnStart.onclick = () => { if(!selectedNode) return; state.pathfinding.startId = selectedNode.id; state.pathfinding.active = false; updatePathfindingPanel(); draw(); };
     const btnCancel = document.getElementById('btnPathCancel');
-    if(btnCancel) btnCancel.onclick = () => {
-        state.pathfinding.startId = null;
-        state.pathfinding.active = false;
-        clearPath();
-        draw();
-        updatePathfindingPanel();
-    };
+    if(btnCancel) btnCancel.onclick = () => { state.pathfinding.startId = null; state.pathfinding.active = false; clearPath(); draw(); updatePathfindingPanel(); };
     const btnCalc = document.getElementById('btnPathCalc');
-    if(btnCalc) btnCalc.onclick = () => {
-        if(!selectedNode || !state.pathfinding.startId) return;
-        const result = calculatePath(state.pathfinding.startId, selectedNode.id);
-        if (result) {
-            state.pathfinding.pathNodes = result.pathNodes;
-            state.pathfinding.pathLinks = result.pathLinks;
-            state.pathfinding.active = true;
-            draw();
-            updatePathfindingPanel();
-        } else {
-            showCustomAlert("Aucune connexion trouvée (hors ennemis).");
-        }
-    };
+    if(btnCalc) btnCalc.onclick = () => { if(!selectedNode || !state.pathfinding.startId) return; const result = calculatePath(state.pathfinding.startId, selectedNode.id); if (result) { state.pathfinding.pathNodes = result.pathNodes; state.pathfinding.pathLinks = result.pathLinks; state.pathfinding.active = true; draw(); updatePathfindingPanel(); } else { showCustomAlert("Aucune connexion trouvée (hors ennemis)."); } };
 }
 
 export function renderEditor() {
@@ -365,8 +546,6 @@ function renderActiveLinks(n) {
             const linkColor = computeLinkColor(item.link);
             const typeLabel = kindToLabel(item.link.kind);
             const emoji = linkKindEmoji(item.link.kind);
-            
-            // CORRECTION BUG 2 : window.zoomToNode au lieu de window.selectNode
             html += `
             <div class="chip" style="border-left-color: ${linkColor};">
                 <div class="chip-content">
@@ -394,91 +573,6 @@ function renderActiveLinks(n) {
             updatePersonColors(); restartSim(); renderEditor(); updatePathfindingPanel();
         };
     });
-}
-
-// --- LEGEND & LISTS ---
-export function updateLinkLegend() {
-    const el = ui.linkLegend;
-    if(!state.showLinkTypes) { el.innerHTML = ''; return; }
-    const usedKinds = new Set(state.links.map(l => l.kind));
-    if(usedKinds.size === 0) { el.innerHTML = ''; return; }
-    const html = [];
-    usedKinds.forEach(k => {
-        html.push(`<div class="legend-item"><span class="legend-emoji">${linkKindEmoji(k)}</span><span>${kindToLabel(k)}</span></div>`);
-    });
-    el.innerHTML = html.join('');
-}
-
-export function refreshLists() {
-    updateDegreeCache();
-    const fill = (ul, arr) => {
-        if(!ul) return;
-        ul.innerHTML = '';
-        arr.sort((a,b) => a.name.localeCompare(b.name)).forEach(n => {
-            const li = document.createElement('li');
-            li.innerHTML = `<div class="list-item"><span class="bullet" style="background:${n.color}"></span>${escapeHtml(n.name)}</div>`;
-            li.onclick = () => zoomToNode(n.id);
-            ul.appendChild(li);
-        });
-    };
-    fill(ui.listCompanies, state.nodes.filter(isCompany));
-    fill(ui.listGroups, state.nodes.filter(isGroup));
-    fill(ui.listPeople, state.nodes.filter(isPerson));
-    const fillDL = (id, arr) => {
-        const el = document.getElementById(id);
-        if(el) el.innerHTML = arr.map(n => `<option value="${escapeHtml(n.name)}"></option>`).join('');
-    };
-    fillDL('datalist-people', state.nodes.filter(isPerson));
-    fillDL('datalist-groups', state.nodes.filter(isGroup));
-    fillDL('datalist-companies', state.nodes.filter(isCompany));
-    updateLinkLegend();
-}
-
-function exportGraph() {
-    const data = { 
-        meta: { date: new Date().toISOString() },
-        nodes: state.nodes.map(n => ({ id: n.id, name: n.name, type: n.type, color: n.color, num: n.num, notes: n.notes, x: n.x, y: n.y })), 
-        links: state.links.map(l => ({ source: (typeof l.source === 'object') ? l.source.id : l.source, target: (typeof l.target === 'object') ? l.target.id : l.target, kind: l.kind })) 
-    };
-    const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'graph_neural_link.json'; a.click();
-}
-
-function importGraph(e) {
-    const f = e.target.files[0];
-    if(!f) return;
-    const r = new FileReader();
-    r.onload = () => {
-        try {
-            const d = JSON.parse(r.result);
-            state.nodes = d.nodes; state.links = d.links;
-            const maxId = state.nodes.reduce((max, n) => Math.max(max, n.id), 0);
-            state.nextId = maxId + 1;
-            updatePersonColors();
-            restartSim(); refreshLists(); showCustomAlert('Import réussi !');
-        } catch(err) { console.error(err); showCustomAlert('Erreur import JSON.'); }
-    };
-    r.readAsText(f);
-}
-
-function mergeGraph(e) {
-    const f = e.target.files[0];
-    if(!f) return;
-    const r = new FileReader();
-    r.onload = () => {
-        try {
-            const d = JSON.parse(r.result);
-            let addedNodes = 0;
-            d.nodes.forEach(n => {
-                if(!state.nodes.find(x => x.name.toLowerCase() === n.name.toLowerCase())) {
-                    const newId = state.nextId++;
-                    n.id = newId; n.x = (Math.random()-0.5)*100; n.y = (Math.random()-0.5)*100;
-                    state.nodes.push(n); addedNodes++;
-                }
-            });
-            updatePersonColors();
-            restartSim(); refreshLists(); showCustomAlert(`Fusion terminée : ${addedNodes} nœuds ajoutés.`);
-        } catch(err) { console.error(err); showCustomAlert('Erreur fusion.'); }
-    };
-    r.readAsText(f);
+    
+    window.selectNode = selectNode;
 }

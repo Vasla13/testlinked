@@ -20,8 +20,17 @@ export const state = {
     // Filtre actif
     activeFilter: 'ALL',
 
-    // NOUVEAU : Mode Globe (Restriction de terrain)
+    // Mode Globe
     globeMode: true, 
+
+    // --- NOUVEAU : PARAMÈTRES PHYSIQUES ---
+    physicsSettings: {
+        repulsion: 1200,    // Force de répulsion globale
+        gravity: 0.005,     // Gravité vers le centre
+        linkLength: 220,    // Longueur des liens
+        friction: 0.3,      // Friction (0 = glace, 1 = mélasse)
+        collision: 50       // Espace entre les points
+    },
 
     history: [], 
     tempLink: null,
@@ -32,7 +41,7 @@ export const state = {
     forceSimulation: false
 };
 
-const STORAGE_KEY = 'pointPageState_v10'; // Incrémenté
+const STORAGE_KEY = 'pointPageState_v11'; 
 
 export function saveState() {
     try {
@@ -50,7 +59,8 @@ export function saveState() {
             labelMode: state.labelMode, 
             showLinkTypes: state.showLinkTypes,
             activeFilter: state.activeFilter,
-            globeMode: state.globeMode, // Sauvegarde
+            globeMode: state.globeMode,
+            physicsSettings: state.physicsSettings, // Sauvegarde des réglages
             nextId: state.nextId
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -71,9 +81,12 @@ export function loadState() {
         else if (typeof data.showLabels === 'boolean') state.labelMode = data.showLabels ? 1 : 0;
         
         if (data.activeFilter) state.activeFilter = data.activeFilter;
-        
-        // Chargement du mode globe (true par défaut)
         if (typeof data.globeMode === 'boolean') state.globeMode = data.globeMode;
+
+        // Chargement des réglages physiques
+        if (data.physicsSettings) {
+            state.physicsSettings = { ...state.physicsSettings, ...data.physicsSettings };
+        }
 
         state.pathfinding = { startId: null, active: false, pathNodes: new Set(), pathLinks: new Set() };
 
