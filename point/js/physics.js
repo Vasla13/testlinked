@@ -35,11 +35,11 @@ export function restartSim() {
         connectedPairs.add(`${t}-${s}`);
     });
 
-    // 1. LIENS (Constraintes élastiques)
+    // 1. LIENS
     simulation.force("link", d3.forceLink(state.links)
         .id(d => d.id)
         .distance(l => {
-            if (l.kind === KINDS.ENNEMI) return 0; // On gère la distance manuellement
+            if (l.kind === KINDS.ENNEMI) return 0;
             if (l.kind === KINDS.AFFILIATION) return 500; 
             if (l.kind === KINDS.PATRON) return 60;
             if (l.kind === KINDS.HAUT_GRADE) return 90;
@@ -47,14 +47,13 @@ export function restartSim() {
             return 200;
         })
         .strength(l => {
-            // Force nulle pour les ennemis (pas d'élastique)
             if (l.kind === KINDS.ENNEMI) return 0; 
             if (l.kind === KINDS.PATRON) return 1.2;
             return 0.2; 
         })
     );
 
-    // 2. FORCE DE HAINE DYNAMIQUE (Grosse modif ici)
+    // 2. FORCE DE HAINE (VERSION EXTRÊME)
     const enemyRepulsion = (alpha) => {
         state.links.forEach(l => {
             if (l.kind !== KINDS.ENNEMI) return;
@@ -63,40 +62,44 @@ export function restartSim() {
             const t = l.target;
             if (!s.x || !t.x) return;
 
-            // Détection si c'est des "Gros" (Entreprises ou Groupes)
             const isBigS = (s.type === TYPES.COMPANY || s.type === TYPES.GROUP);
             const isBigT = (t.type === TYPES.COMPANY || t.type === TYPES.GROUP);
             
-            // Calcul du rayon d'influence de la haine
-            let hateRadius = 800; // Base pour des humains
-            let forceMultiplier = 2.0; // Force de base
+            // Configuration de la violence de la répulsion
+            let hateRadius = 800; 
+            let forceMultiplier = 2.0;
 
-            // Si deux gros s'affrontent (ex: Atelis vs Cerberus)
             if (isBigS && isBigT) {
-                hateRadius = 2500; // Ils se repoussent de TRES loin (toute la map quasiment)
-                forceMultiplier = 20.0; // Poussée ultra violente
+                // CAS : ENTREPRISE CONTRE ENTREPRISE
+                hateRadius = 5000; // Rayon infini (toute la map)
+                forceMultiplier = 300.0; // FORCE NUCLÉAIRE : Elles vont voler aux opposés
             } 
-            // Si un gros contre un petit
             else if (isBigS || isBigT) {
-                hateRadius = 1500;
-                forceMultiplier = 8.0;
+                // CAS : INDIVIDU CONTRE ENTREPRISE
+                hateRadius = 2000;
+                forceMultiplier = 20.0; // Forte répulsion
             }
 
-            const dx = t.x - s.x;
-            const dy = t.y - s.y;
+            // Ajout d'un petit bruit aléatoire (jitter) pour éviter le blocage parfait
+            // si deux points sont exactement l'un sur l'autre (0,0)
+            let dx = t.x - s.x || (Math.random() - 0.5);
+            let dy = t.y - s.y || (Math.random() - 0.5);
+            
             let distSq = dx*dx + dy*dy; 
-            if(distSq === 0) distSq = 0.1;
             const dist = Math.sqrt(distSq);
             
             if (dist < hateRadius) {
-                // Plus ils sont proches, plus ça pousse fort (linéaire)
+                // Calcul linéaire de la force
+                // Plus c'est proche, plus c'est fort (proche de 1.0)
                 const strength = (hateRadius - dist) / hateRadius; 
+                
+                // Formule physique : Force vectorielle
                 const force = strength * alpha * forceMultiplier; 
 
                 const fx = (dx / dist) * force;
                 const fy = (dy / dist) * force;
 
-                // Application de la force
+                // Application
                 t.vx += fx; t.vy += fy;
                 s.vx -= fx; s.vy -= fy;
             }
@@ -104,11 +107,10 @@ export function restartSim() {
     };
     simulation.force("enemyRepulsion", enemyRepulsion);
 
-    // 3. CHARGE GLOBALE (Gravité inverse)
+    // 3. CHARGE GLOBALE
     simulation.force("charge", d3.forceManyBody()
         .strength(n => {
             let strength = -800; 
-            // Les entreprises se repoussent naturellement plus fort
             if (n.type === TYPES.COMPANY) strength = -5000; 
             if (n.type === TYPES.GROUP) strength = -3000;
             const degree = nodeDegree.get(n.id) || 0;
@@ -119,14 +121,15 @@ export function restartSim() {
         .distanceMin(50) 
     );
 
-    // 4. COLLISION (Anti-chevauchement)
+    // 4. COLLISION
     simulation.force("collide", d3.forceCollide()
         .radius(n => nodeRadius(n) + 40)
         .iterations(4)
     );
 
-    // 5. BARRIÈRE (Pour ne pas qu'ils partent à l'infini si Globe activé)
-    const worldRadius = 3500; // Un peu plus large pour laisser la place aux guerres
+    // 5. BARRIÈRE (Pour les empêcher de partir à l'infini)
+    // On agrandit un peu le monde pour laisser la place à la guerre
+    const worldRadius = 4000; 
     simulation.force("boundary", () => {
         if (!state.globeMode) return; 
 
@@ -135,13 +138,14 @@ export function restartSim() {
             if (d > worldRadius) {
                 const excess = d - worldRadius;
                 const angle = Math.atan2(n.y, n.x);
-                n.vx -= Math.cos(angle) * (excess * 0.2);
-                n.vy -= Math.sin(angle) * (excess * 0.2);
+                // Rebond un peu plus rigide
+                n.vx -= Math.cos(angle) * (excess * 0.5);
+                n.vy -= Math.sin(angle) * (excess * 0.5);
             }
         }
     });
 
-    // 6. TERRITOIRE (Les membres tournent autour de leur chef)
+    // 6. TERRITOIRE
     simulation.force("territory", () => {
         const structures = state.nodes.filter(n => n.type === TYPES.COMPANY || n.type === TYPES.GROUP);
         for (const struct of structures) {
@@ -149,7 +153,7 @@ export function restartSim() {
             for (const n of state.nodes) {
                 if (n.id === struct.id || n.type === TYPES.COMPANY || n.type === TYPES.GROUP) continue;
                 if (n.fx != null) continue;
-                if (connectedPairs.has(`${n.id}-${struct.id}`)) continue; // Si lié, géré par le lien
+                if (connectedPairs.has(`${n.id}-${struct.id}`)) continue;
 
                 const dx = n.x - struct.x; const dy = n.y - struct.y;
                 const distSq = dx*dx + dy*dy; 
