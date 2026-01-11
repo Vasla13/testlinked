@@ -29,10 +29,7 @@ export function updatePersonColors() {
                 if (other.type !== TYPES.PERSON || other.color) { 
                     const weight = (nodeWeights.get(other.id) || 1); 
                     const rgb = hexToRgb(other.color || '#ffffff');
-                    
-                    totalR += rgb.r * weight;
-                    totalG += rgb.g * weight;
-                    totalB += rgb.b * weight;
+                    totalR += rgb.r * weight; totalG += rgb.g * weight; totalB += rgb.b * weight;
                     totalWeight += weight;
                 }
             });
@@ -182,8 +179,12 @@ export function calculatePath(startId, endId) {
 
         const neighbors = [];
         state.links.forEach(l => {
+            // MODIF : On ignore les ennemis pour le chemin
+            if (l.kind === KINDS.ENNEMI) return;
+
             const s = (typeof l.source === 'object') ? l.source.id : l.source;
             const t = (typeof l.target === 'object') ? l.target.id : l.target;
+            
             if (s === node && !visited.has(t)) neighbors.push(t);
             else if (t === node && !visited.has(s)) neighbors.push(s);
         });

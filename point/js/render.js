@@ -97,6 +97,11 @@ export function draw() {
     }
 
     function isDimmed(objType, obj) {
+        // MODIF: Si on est en train de sélectionner (startId défini mais pas active), pas de dim
+        if (state.pathfinding.startId !== null && !state.pathfinding.active) {
+            return false;
+        }
+
         if (state.pathfinding.active) {
             if (objType === 'node') return !state.pathfinding.pathNodes.has(obj.id);
             if (objType === 'link') {
@@ -129,10 +134,8 @@ export function draw() {
         const dimmed = isDimmed('link', l);
         const isPathLink = state.pathfinding.active && !dimmed;
         
-        // MODIFICATION ICI : Opacité augmentée pour les éléments grisés
-        // Avant : dimmed ? 0.05 : 0.8
-        // Après : dimmed ? 0.25 : 0.8  (Beaucoup plus visible)
-        const globalAlpha = dimmed ? 0.25 : 0.8; 
+        // MODIF: Opacité des grisés un peu plus visible (0.2 au lieu de 0.05)
+        const globalAlpha = dimmed ? 0.2 : 0.8;
 
         ctx.beginPath();
         ctx.moveTo(l.source.x, l.source.y);
@@ -199,9 +202,7 @@ export function draw() {
         const dimmed = isDimmed('node', n);
         const rad = nodeRadius(n); 
         
-        // MODIFICATION ICI : Opacité augmentée pour les nœuds grisés
-        // Avant : dimmed ? 0.1 : 1.0
-        // Après : dimmed ? 0.4 : 1.0 (On voit bien ce qu'on fait)
+        // MODIF: Opacité des nœuds grisés plus visible (0.4 au lieu de 0.1)
         ctx.globalAlpha = (isPath && state.pathPath.has(n.id)) ? 1.0 : (dimmed ? 0.4 : 1.0);
 
         ctx.beginPath();
@@ -212,12 +213,20 @@ export function draw() {
         ctx.fillStyle = safeHex(n.color);
         const isPathNode = isPath && state.pathPath.has(n.id);
         const isPathfindingNode = state.pathfinding.active && state.pathfinding.pathNodes.has(n.id);
+        
+        // MODIF: Contour spécial pour le point de départ
+        const isPathStart = state.pathfinding.startId === n.id;
 
-        if (state.selection === n.id || state.hoverId === n.id || isPathNode || isPathfindingNode) {
-            ctx.shadowBlur = (isPathNode || isPathfindingNode) ? 30 : 20; 
-            ctx.shadowColor = (isPathNode || isPathfindingNode) ? '#00ffff' : safeHex(n.color); 
-            ctx.strokeStyle = "#ffffff";
-            ctx.lineWidth = ((isPathNode || isPathfindingNode) ? 6 : 4) / Math.sqrt(p.scale);
+        if (state.selection === n.id || state.hoverId === n.id || isPathNode || isPathfindingNode || isPathStart) {
+            ctx.shadowBlur = (isPathNode || isPathfindingNode || isPathStart) ? 30 : 20; 
+            
+            let strokeColor = '#ffffff';
+            if (isPathNode || isPathfindingNode) strokeColor = '#00ffff';
+            if (isPathStart) strokeColor = '#ffff00'; // Jaune pour le départ
+
+            ctx.shadowColor = strokeColor;
+            ctx.strokeStyle = strokeColor;
+            ctx.lineWidth = ((isPathNode || isPathfindingNode || isPathStart) ? 6 : 4) / Math.sqrt(p.scale);
             ctx.stroke();
         } else {
             ctx.shadowBlur = 0;
@@ -255,13 +264,14 @@ export function draw() {
             const isPathNode = isPath && state.pathPath.has(n.id);
             const isPathfindingNode = state.pathfinding.active && state.pathfinding.pathNodes.has(n.id);
             const isHover = (state.hoverId === n.id || state.selection === n.id);
+            const isPathStart = state.pathfinding.startId === n.id;
             
             let showName = false;
             if (labelMode === 2) showName = true;
-            else if (labelMode === 1) showName = isHover || isPathNode || isPathfindingNode || (p.scale > 0.5 || isImportant);
+            else if (labelMode === 1) showName = isHover || isPathNode || isPathfindingNode || isPathStart || (p.scale > 0.5 || isImportant);
 
             if (showName) {
-                const fontSize = (isPathNode || isPathfindingNode ? 16 : 13) / Math.sqrt(p.scale);
+                const fontSize = (isPathNode || isPathfindingNode || isPathStart ? 16 : 13) / Math.sqrt(p.scale);
                 ctx.font = `600 ${fontSize}px "Rajdhani", sans-serif`; 
                 const label = n.name;
                 const metrics = ctx.measureText(label);
@@ -276,8 +286,13 @@ export function draw() {
                 if(ctx.roundRect) ctx.roundRect(boxX, boxY, textW + padding*2, textH + padding, 6);
                 else ctx.rect(boxX, boxY, textW + padding*2, textH + padding);
                 ctx.fill();
-                ctx.strokeStyle = (isPathNode || isPathfindingNode) ? '#00ffff' : safeHex(n.color);
-                ctx.lineWidth = ((isPathNode || isPathfindingNode) ? 3 : 1) / Math.sqrt(p.scale);
+                
+                let strokeColor = safeHex(n.color);
+                if (isPathNode || isPathfindingNode) strokeColor = '#00ffff';
+                if (isPathStart) strokeColor = '#ffff00';
+
+                ctx.strokeStyle = strokeColor;
+                ctx.lineWidth = ((isPathNode || isPathfindingNode || isPathStart) ? 3 : 1) / Math.sqrt(p.scale);
                 ctx.stroke();
                 ctx.globalAlpha = 1.0; ctx.fillStyle = '#ffffff';
                 ctx.fillText(label, n.x, boxY + textH/2 + padding/2);

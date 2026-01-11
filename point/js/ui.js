@@ -1,6 +1,6 @@
 import { state, saveState, nodeById, isPerson, isCompany, isGroup, undo, pushHistory } from './state.js';
 import { ensureNode, addLink, mergeNodes, updatePersonColors, calculatePath, clearPath } from './logic.js';
-import { renderEditorHTML, renderPathfindingSidebar } from './templates.js'; // IMPORTANT : Import renderPathfindingSidebar
+import { renderEditorHTML, renderPathfindingSidebar } from './templates.js';
 import { restartSim, getSimulation } from './physics.js';
 import { draw, updateDegreeCache, resizeCanvas } from './render.js';
 import { escapeHtml, clamp, screenToWorld, kindToLabel, linkKindEmoji, computeLinkColor } from './utils.js';
@@ -13,7 +13,7 @@ const ui = {
     editorTitle: document.getElementById('editorTitle'),
     editorBody: document.getElementById('editorBody'),
     linkLegend: document.getElementById('linkLegend'),
-    pathfindingContainer: document.getElementById('pathfinding-ui') // Nouveau container
+    pathfindingContainer: document.getElementById('pathfinding-ui')
 };
 
 function safeHex(color) {
@@ -24,6 +24,7 @@ function safeHex(color) {
     return '#000000';
 }
 
+// --- MODAL SYSTEM ---
 let modalOverlay = null;
 function createModal() {
     modalOverlay = document.createElement('div');
@@ -52,8 +53,9 @@ function showCustomConfirm(msg, onYes) {
 export function initUI() {
     createModal();
     createFilterBar();
-    updatePathfindingPanel(); // Init panel vide
+    updatePathfindingPanel();
 
+    // INJECTION CSS
     const style = document.createElement('style');
     style.innerHTML = `
         .editor { width: 380px !important; }
@@ -73,7 +75,13 @@ export function initUI() {
 
         .link-category { margin-top: 10px; margin-bottom: 2px; font-size: 0.65rem; color: #888; text-transform: uppercase; border-bottom: 1px solid #333; }
         
-        .chip { display: flex; align-items: center; justify-content: space-between; background: rgba(20, 20, 30, 0.4); border-left: 3px solid #888; border-radius: 0 3px 3px 0; padding: 2px 6px; margin-bottom: 3px; transition: all 0.2s; height: 24px; }
+        /* CHIPS COMPACTS (STYLE EXCEL/CYBER) */
+        .chip { 
+            display: flex; align-items: center; justify-content: space-between; 
+            background: rgba(20, 20, 30, 0.4); border-left: 3px solid #888; 
+            border-radius: 0 3px 3px 0; padding: 2px 6px; margin-bottom: 3px; 
+            transition: all 0.2s; height: 24px;
+        }
         .chip:hover { background: rgba(255,255,255,0.08); }
         .chip-content { display: flex; align-items: center; flex: 1; min-width: 0; gap: 8px; }
         .chip-name { font-weight: 500; font-size: 0.8rem; cursor: pointer; color: #ddd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -83,25 +91,34 @@ export function initUI() {
         .x { padding: 0 0 0 8px; cursor: pointer; color: #666; font-size: 1rem; font-weight: bold; }
         .x:hover { color: #ff5555; }
 
+        /* FILTER BAR DOCK STYLE */
         #filter-bar {
-            position: fixed; bottom: 85px; left: 50%; transform: translateX(-50%);
-            background: rgba(10, 15, 30, 0.85); border: 1px solid rgba(0, 255, 255, 0.2);
-            border-radius: 50px; padding: 8px 15px; display: flex; gap: 10px;
-            backdrop-filter: blur(5px); z-index: 1000; box-shadow: 0 5px 20px rgba(0,0,0,0.5);
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            background: rgba(10, 15, 30, 0.9); border: 1px solid rgba(0, 255, 255, 0.2);
+            border-radius: 12px; padding: 6px; display: flex; gap: 5px;
+            backdrop-filter: blur(5px); z-index: 1000; box-shadow: 0 5px 20px rgba(0,0,0,0.6);
         }
         .filter-btn {
-            background: transparent; border: 1px solid transparent; color: #aaa;
-            padding: 6px 16px; border-radius: 20px; cursor: pointer; font-size: 0.8rem;
+            background: rgba(255,255,255,0.05); border: 1px solid transparent; color: #aaa;
+            padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 0.75rem;
             font-weight: bold; text-transform: uppercase; transition: all 0.2s;
+            min-width: 80px; text-align: center;
         }
         .filter-btn:hover { color: #fff; background: rgba(255,255,255,0.1); }
-        .filter-btn.active { background: var(--accent-cyan); color: #000; box-shadow: 0 0 10px var(--accent-cyan); }
+        .filter-btn.active { 
+            background: rgba(0, 255, 255, 0.15); color: var(--accent-cyan); 
+            border-color: var(--accent-cyan); box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
+        }
+        
+        /* HUD REMONTÉ */
+        #hud { bottom: 70px; border-radius: 8px; padding: 5px 15px; }
     `;
     document.head.appendChild(style);
 
     const canvas = document.getElementById('graph');
     window.addEventListener('resize', resizeCanvas);
     
+    // Bouton Labels
     const btnLabel = document.getElementById('chkLabels');
     if (btnLabel) {
         btnLabel.type = 'button'; btnLabel.style.width = "100px"; btnLabel.style.textAlign = "center";
@@ -145,57 +162,7 @@ export function initUI() {
     document.getElementById('fileMerge').onchange = mergeGraph;
 }
 
-// --- NOUVELLE FONCTION DE GESTION DU PANNEAU PATHFINDING ---
-function updatePathfindingPanel() {
-    const el = ui.pathfindingContainer;
-    if(!el) return;
-
-    // Quel noeud est sélectionné ?
-    const selectedNode = nodeById(state.selection);
-    
-    // Génère le HTML via templates.js
-    el.innerHTML = renderPathfindingSidebar(state, selectedNode);
-
-    // Attache les events
-    const btnStart = document.getElementById('btnPathStart');
-    if(btnStart) {
-        btnStart.onclick = () => {
-            if(!selectedNode) return;
-            state.pathfinding.startId = selectedNode.id;
-            state.pathfinding.active = false;
-            updatePathfindingPanel(); // Refresh UI
-        };
-    }
-
-    const btnCancel = document.getElementById('btnPathCancel');
-    if(btnCancel) {
-        btnCancel.onclick = () => {
-            state.pathfinding.startId = null;
-            state.pathfinding.active = false;
-            clearPath(); // Nettoie le path
-            draw(); // Redessine
-            updatePathfindingPanel(); // Refresh UI
-        };
-    }
-
-    const btnCalc = document.getElementById('btnPathCalc');
-    if(btnCalc) {
-        btnCalc.onclick = () => {
-            if(!selectedNode || !state.pathfinding.startId) return;
-            const result = calculatePath(state.pathfinding.startId, selectedNode.id);
-            if (result) {
-                state.pathfinding.pathNodes = result.pathNodes;
-                state.pathfinding.pathLinks = result.pathLinks;
-                state.pathfinding.active = true;
-                draw(); // Dessine le chemin
-                updatePathfindingPanel();
-            } else {
-                showCustomAlert("Aucune connexion trouvée entre ces deux points.");
-            }
-        };
-    }
-}
-
+// --- BARRE DE FILTRES ---
 function createFilterBar() {
     const bar = document.createElement('div');
     bar.id = 'filter-bar';
@@ -203,7 +170,7 @@ function createFilterBar() {
     const buttons = [
         { id: FILTERS.ALL, label: '🌐 Global' },
         { id: FILTERS.BUSINESS, label: '💼 Business' },
-        { id: FILTERS.ILLEGAL, label: '⚔️ Conflit/Illégal' },
+        { id: FILTERS.ILLEGAL, label: '⚔️ Conflit' },
         { id: FILTERS.SOCIAL, label: '❤️ Social' }
     ];
 
@@ -223,6 +190,55 @@ function createFilterBar() {
     document.body.appendChild(bar);
 }
 
+// --- GESTION PANNEAU PATHFINDING ---
+function updatePathfindingPanel() {
+    const el = ui.pathfindingContainer;
+    if(!el) return;
+
+    const selectedNode = nodeById(state.selection);
+    el.innerHTML = renderPathfindingSidebar(state, selectedNode);
+
+    const btnStart = document.getElementById('btnPathStart');
+    if(btnStart) {
+        btnStart.onclick = () => {
+            if(!selectedNode) return;
+            state.pathfinding.startId = selectedNode.id;
+            state.pathfinding.active = false;
+            updatePathfindingPanel();
+            draw(); // Redessiner pour montrer la surbrillance
+        };
+    }
+
+    const btnCancel = document.getElementById('btnPathCancel');
+    if(btnCancel) {
+        btnCancel.onclick = () => {
+            state.pathfinding.startId = null;
+            state.pathfinding.active = false;
+            clearPath();
+            draw();
+            updatePathfindingPanel();
+        };
+    }
+
+    const btnCalc = document.getElementById('btnPathCalc');
+    if(btnCalc) {
+        btnCalc.onclick = () => {
+            if(!selectedNode || !state.pathfinding.startId) return;
+            const result = calculatePath(state.pathfinding.startId, selectedNode.id);
+            if (result) {
+                state.pathfinding.pathNodes = result.pathNodes;
+                state.pathfinding.pathLinks = result.pathLinks;
+                state.pathfinding.active = true;
+                draw();
+                updatePathfindingPanel();
+            } else {
+                showCustomAlert("Aucune connexion trouvée entre ces deux points.");
+            }
+        };
+    }
+}
+
+// --- CANVAS EVENTS ---
 function setupCanvasEvents(canvas) {
     canvas.addEventListener('wheel', (e) => {
         e.preventDefault();
@@ -246,7 +262,7 @@ function setupCanvasEvents(canvas) {
         if (!hit) {
             isPanning = true; lastPan = { x: e.clientX, y: e.clientY };
             canvas.style.cursor = 'grabbing';
-            if (state.selection) { state.selection = null; renderEditor(); draw(); }
+            if (state.selection) { state.selection = null; renderEditor(); updatePathfindingPanel(); draw(); }
         }
     });
 
@@ -302,13 +318,8 @@ function createNode(type, baseName) {
 
 export function selectNode(id) {
     state.selection = id;
-    
-    // Met à jour l'éditeur à droite
     renderEditor();
-    
-    // Met à jour le panneau de liaison à gauche
     updatePathfindingPanel();
-    
     draw();
 }
 
@@ -379,11 +390,13 @@ export function renderEditor() {
                 addLink(n, target, kind);
                 nameInput.value = '';
                 renderEditor();
+                updatePathfindingPanel();
             });
         } else {
             addLink(n, target, kind);
             nameInput.value = '';
             renderEditor();
+            updatePathfindingPanel();
         }
     };
 
@@ -449,10 +462,11 @@ export function renderEditor() {
             state.nodes = state.nodes.filter(x => x.id !== n.id);
             state.links = state.links.filter(l => l.source.id !== n.id && l.target.id !== n.id);
             state.selection = null;
-            restartSim(); refreshLists(); renderEditor();
+            restartSim(); refreshLists(); renderEditor(); updatePathfindingPanel();
         });
     };
 
+    // --- LIENS ACTIFS (RENDU COMPACT) ---
     const chipsContainer = document.getElementById('chipsLinks');
     const myLinks = state.links.filter(l => {
         const s = (typeof l.source === 'object') ? l.source.id : l.source;
@@ -517,7 +531,7 @@ export function renderEditor() {
                 return !((s === sId && t === tId) || (s === tId && t === sId));
             });
             updatePersonColors();
-            restartSim(); renderEditor();
+            restartSim(); renderEditor(); updatePathfindingPanel();
         };
     });
     
