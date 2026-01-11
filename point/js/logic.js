@@ -3,7 +3,6 @@ import { restartSim } from './physics.js';
 import { uid, randomPastel, hexToRgb, rgbToHex } from './utils.js';
 import { TYPES, KINDS } from './constants.js';
 
-// --- COULEURS (MIX) ---
 export function updatePersonColors() {
     const nodeWeights = new Map();
     state.links.forEach(l => {
@@ -15,17 +14,13 @@ export function updatePersonColors() {
 
     state.nodes.forEach(n => {
         if (n.type === TYPES.PERSON) {
-            let totalR = 0, totalG = 0, totalB = 0;
-            let totalWeight = 0;
-
+            let totalR = 0, totalG = 0, totalB = 0, totalWeight = 0;
             state.links.forEach(l => {
                 const s = (typeof l.source === 'object') ? l.source : nodeById(l.source);
                 const t = (typeof l.target === 'object') ? l.target : nodeById(l.target);
                 if (!s || !t) return;
-
                 let other = (s.id === n.id) ? t : ((t.id === n.id) ? s : null);
                 if (!other) return;
-
                 if (other.type !== TYPES.PERSON || other.color) { 
                     const weight = (nodeWeights.get(other.id) || 1); 
                     const rgb = hexToRgb(other.color || '#ffffff');
@@ -33,7 +28,6 @@ export function updatePersonColors() {
                     totalWeight += weight;
                 }
             });
-
             if (totalWeight > 0) {
                 n.color = rgbToHex(totalR / totalWeight, totalG / totalWeight, totalB / totalWeight);
             } else {
@@ -43,7 +37,6 @@ export function updatePersonColors() {
     });
 }
 
-// --- GESTION NOEUDS/LIENS ---
 export function ensureNode(type, name) {
     let n = state.nodes.find(x => x.name.toLowerCase() === name.toLowerCase());
     if (!n) {
@@ -96,37 +89,31 @@ export function addLink(a, b, kind) {
 export function mergeNodes(sourceId, targetId) {
     if (sourceId === targetId) return;
     pushHistory(); 
-
     const linksToMove = state.links.filter(l => {
         const s = (typeof l.source === 'object') ? l.source.id : l.source;
         const t = (typeof l.target === 'object') ? l.target.id : l.target;
         return s === sourceId || t === sourceId;
     });
-
     linksToMove.forEach(l => {
         const s = (typeof l.source === 'object') ? l.source.id : l.source;
         const t = (typeof l.target === 'object') ? l.target.id : l.target;
         const otherId = (s === sourceId) ? t : s;
         if (otherId === targetId) return; 
-
         const exists = state.links.find(ex => {
             const es = (typeof ex.source === 'object') ? ex.source.id : ex.source;
             const et = (typeof ex.target === 'object') ? ex.target.id : ex.target;
             return (es === targetId && et === otherId) || (es === otherId && et === targetId);
         });
-
         if (!exists) {
             state.links.push({ source: targetId, target: otherId, kind: l.kind });
         }
     });
-
     state.links = state.links.filter(l => {
         const s = (typeof l.source === 'object') ? l.source.id : l.source;
         const t = (typeof l.target === 'object') ? l.target.id : l.target;
         return s !== sourceId && t !== sourceId;
     });
     state.nodes = state.nodes.filter(n => n.id !== sourceId);
-
     updatePersonColors();
     restartSim();
 }
@@ -144,7 +131,7 @@ export function propagateOrgNums() {
     }
 }
 
-// --- PATHFINDING ---
+// --- ALGORITHME DE CORRÉLATION (PATHFINDING) ---
 export function calculatePath(startId, endId) {
     if (!startId || !endId || startId === endId) return null;
 
@@ -167,7 +154,7 @@ export function calculatePath(startId, endId) {
                     const t = (typeof l.target === 'object') ? l.target.id : l.target;
                     return (s === u && t === v) || (s === v && t === u);
                 });
-                if (link) {
+                if (link && link.kind !== KINDS.ENNEMI) { // Sécurité double
                     const s = (typeof link.source === 'object') ? link.source.id : link.source;
                     const t = (typeof link.target === 'object') ? link.target.id : link.target;
                     pathLinks.add(`${s}-${t}`);
@@ -179,12 +166,11 @@ export function calculatePath(startId, endId) {
 
         const neighbors = [];
         state.links.forEach(l => {
-            // MODIF : On ignore les ennemis pour le chemin
+            // --- CORRECTION : ON IGNORE LES ENNEMIS ---
             if (l.kind === KINDS.ENNEMI) return;
 
             const s = (typeof l.source === 'object') ? l.source.id : l.source;
             const t = (typeof l.target === 'object') ? l.target.id : l.target;
-            
             if (s === node && !visited.has(t)) neighbors.push(t);
             else if (t === node && !visited.has(s)) neighbors.push(s);
         });

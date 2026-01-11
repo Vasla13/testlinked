@@ -97,8 +97,7 @@ export function draw() {
     }
 
     function isDimmed(objType, obj) {
-        // REGLE IMPORTANTE : Si on est en mode "Sélection de Cible" (startId défini mais chemin pas encore calculé), 
-        // on ne grise RIEN pour permettre de cliquer facilement.
+        // --- CORRECTION VISUELLE : Pas de grisement pendant le choix de la cible ---
         if (state.pathfinding.startId !== null && !state.pathfinding.active) {
             return false;
         }
@@ -134,7 +133,7 @@ export function draw() {
         
         const dimmed = isDimmed('link', l);
         const isPathLink = state.pathfinding.active && !dimmed;
-        const globalAlpha = dimmed ? 0.2 : 0.8;
+        const globalAlpha = dimmed ? 0.2 : 0.8; // Grisé mais visible
 
         ctx.beginPath();
         ctx.moveTo(l.source.x, l.source.y);
@@ -200,8 +199,7 @@ export function draw() {
         if (isFocus && !state.focusSet.has(n.id)) continue;
         const dimmed = isDimmed('node', n);
         const rad = nodeRadius(n); 
-        
-        ctx.globalAlpha = (isPath && state.pathPath.has(n.id)) ? 1.0 : (dimmed ? 0.4 : 1.0);
+        ctx.globalAlpha = (isPath && state.pathPath.has(n.id)) ? 1.0 : (dimmed ? 0.4 : 1.0); // Nœuds grisés plus visibles
 
         ctx.beginPath();
         if (isGroup(n)) drawPolygon(ctx, n.x, n.y, rad * 1.2, 4); 
@@ -211,16 +209,15 @@ export function draw() {
         ctx.fillStyle = safeHex(n.color);
         const isPathNode = isPath && state.pathPath.has(n.id);
         const isPathfindingNode = state.pathfinding.active && state.pathfinding.pathNodes.has(n.id);
-        
-        // C'est le point de départ sélectionné
-        const isPathStart = state.pathfinding.startId === n.id;
+        const isPathStart = state.pathfinding.startId === n.id; // Le point de départ
 
+        // --- CONTOUR DE SELECTION ---
         if (state.selection === n.id || state.hoverId === n.id || isPathNode || isPathfindingNode || isPathStart) {
             ctx.shadowBlur = (isPathNode || isPathfindingNode || isPathStart) ? 30 : 20; 
             
-            let strokeColor = '#ffffff';
+            let strokeColor = '#ffffff'; // Blanc par défaut pour la sélection simple
             if (isPathNode || isPathfindingNode) strokeColor = '#00ffff';
-            if (isPathStart) strokeColor = '#ffff00'; // JAUNE POUR LA SOURCE
+            if (isPathStart) strokeColor = '#ffff00'; // Jaune pour le départ
 
             ctx.shadowColor = strokeColor;
             ctx.strokeStyle = strokeColor;

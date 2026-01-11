@@ -6,8 +6,8 @@ let simulation;
 
 export function initPhysics() {
     simulation = d3.forceSimulation()
-        .alphaDecay(0.015)     
-        .velocityDecay(0.4)    
+        .alphaDecay(0.02)      
+        .velocityDecay(0.4)
         .on("tick", ticked);
 }
 
@@ -25,6 +25,7 @@ export function restartSim() {
     const connectedPairs = new Set();
 
     state.nodes.forEach(n => nodeDegree.set(n.id, 0));
+    
     state.links.forEach(l => {
         const s = (typeof l.source === 'object') ? l.source.id : l.source;
         const t = (typeof l.target === 'object') ? l.target.id : l.target;
@@ -34,10 +35,11 @@ export function restartSim() {
         connectedPairs.add(`${t}-${s}`);
     });
 
+    // 1. LIENS (Constraintes)
     simulation.force("link", d3.forceLink(state.links)
         .id(d => d.id)
         .distance(l => {
-            if (l.kind === KINDS.ENNEMI) return 1200; // Ennemis très loin
+            if (l.kind === KINDS.ENNEMI) return 0; // Distance ignorée car force nulle
             if (l.kind === KINDS.AFFILIATION) return 500; 
             if (l.kind === KINDS.PATRON) return 60;
             if (l.kind === KINDS.HAUT_GRADE) return 90;
@@ -45,12 +47,53 @@ export function restartSim() {
             return 200;
         })
         .strength(l => {
-            if (l.kind === KINDS.ENNEMI) return 1.0; 
+            // --- CORRECTION CLÉ ---
+            // On met la force à 0 pour les ennemis. 
+            // Ils ne sont plus "liés" physiquement, donc bouger l'un ne tire pas l'autre.
+            if (l.kind === KINDS.ENNEMI) return 0; 
+            
             if (l.kind === KINDS.PATRON) return 1.2;
             return 0.2; 
         })
     );
 
+    // 2. FORCE DE HAINE (Répulsion spéciale Ennemis)
+    // Remplace le lien par une force qui ne fait que pousser si trop près.
+    const enemyRepulsion = (alpha) => {
+        state.links.forEach(l => {
+            if (l.kind !== KINDS.ENNEMI) return;
+            const s = l.source;
+            const t = l.target;
+            if (!s.x || !t.x) return;
+
+            const dx = t.x - s.x;
+            const dy = t.y - s.y;
+            let distSq = dx*dx + dy*dy;
+            if(distSq === 0) distSq = 0.1;
+            const dist = Math.sqrt(distSq);
+            
+            const hateRadius = 800; // Zone de répulsion
+
+            if (dist < hateRadius) {
+                // Force linéaire : plus on est près, plus ça pousse fort
+                const strength = (hateRadius - dist) / hateRadius; 
+                const force = strength * alpha * 2.0; // Puissance de la poussée
+
+                const fx = (dx / dist) * force;
+                const fy = (dy / dist) * force;
+
+                // On pousse t
+                t.vx += fx;
+                t.vy += fy;
+                // On pousse s (sens inverse)
+                s.vx -= fx;
+                s.vy -= fy;
+            }
+        });
+    };
+    simulation.force("enemyRepulsion", enemyRepulsion);
+
+    // 3. CHARGE GLOBALE
     simulation.force("charge", d3.forceManyBody()
         .strength(n => {
             let strength = -800; 
@@ -64,9 +107,14 @@ export function restartSim() {
         .distanceMin(50) 
     );
 
-    simulation.force("collide", d3.forceCollide().radius(n => nodeRadius(n) + 40).iterations(4));
+    // 4. COLLISION
+    simulation.force("collide", d3.forceCollide()
+        .radius(n => nodeRadius(n) + 40)
+        .iterations(4)
+    );
 
-    const worldRadius = 2500;
+    // 5. BARRIÈRE
+    const worldRadius = 3000;
     simulation.force("boundary", () => {
         for (const n of state.nodes) {
             const d = Math.sqrt(n.x * n.x + n.y * n.y);
@@ -79,6 +127,7 @@ export function restartSim() {
         }
     });
 
+    // 6. TERRITOIRE
     simulation.force("territory", () => {
         const structures = state.nodes.filter(n => n.type === TYPES.COMPANY || n.type === TYPES.GROUP);
         for (const struct of structures) {
@@ -87,10 +136,12 @@ export function restartSim() {
                 if (n.id === struct.id || n.type === TYPES.COMPANY || n.type === TYPES.GROUP) continue;
                 if (n.fx != null) continue;
                 if (connectedPairs.has(`${n.id}-${struct.id}`)) continue;
+
                 const dx = n.x - struct.x;
                 const dy = n.y - struct.y;
                 const distSq = dx*dx + dy*dy; 
                 const minDistSq = territoryRadius * territoryRadius;
+
                 if (distSq < minDistSq) {
                     const dist = Math.sqrt(distSq);
                     const push = (territoryRadius - dist) * 0.1;
