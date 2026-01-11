@@ -21,6 +21,24 @@ export const KINDS = {
     RELATION: 'relation'
 };
 
+// AJOUT DE L'EXPORT MANQUANT
+export const KIND_LABELS = {
+    [KINDS.PATRON]: '👑 Patron',
+    [KINDS.EMPLOYE]: '💼 Employé',
+    [KINDS.COLLEGUE]: '🤝 Collègue',
+    [KINDS.PARTENAIRE]: '🤝 Partenaire',
+    [KINDS.FAMILLE]: '🏠 Famille',
+    [KINDS.COUPLE]: '❤️ Couple',
+    [KINDS.AMOUR]: '💘 Amour',
+    [KINDS.AMI]: '🍻 Ami',
+    [KINDS.ENNEMI]: '⚔️ Ennemi',
+    [KINDS.RIVAL]: '⚡ Rival',
+    [KINDS.CONNAISSANCE]: '👋 Connaissance',
+    [KINDS.AFFILIATION]: '🏴 Affiliation',
+    [KINDS.MEMBRE]: '👤 Membre',
+    [KINDS.RELATION]: '🔗 Relation'
+};
+
 export const PERSON_PERSON_KINDS = new Set([
     KINDS.FAMILLE, KINDS.COUPLE, KINDS.AMOUR, KINDS.AMI, 
     KINDS.ENNEMI, KINDS.RIVAL, KINDS.CONNAISSANCE, KINDS.COLLEGUE

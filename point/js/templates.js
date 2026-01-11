@@ -1,192 +1,198 @@
-import { escapeHtml, safeHex, kindToLabel } from './utils.js';
-import { TYPES, PERSON_PERSON_KINDS, PERSON_ORG_KINDS, ORG_ORG_KINDS } from './constants.js';
+import { TYPES, KIND_LABELS } from './constants.js';
+import { escapeHtml, safeHex } from './utils.js';
 
-export function getLinkOptions(sourceType, targetType) {
-    let validKinds = [];
-    if (sourceType === TYPES.PERSON && targetType === TYPES.PERSON) validKinds = PERSON_PERSON_KINDS;
-    else if (sourceType !== TYPES.PERSON && targetType !== TYPES.PERSON) validKinds = ORG_ORG_KINDS;
-    else validKinds = PERSON_ORG_KINDS;
-    return Array.from(validKinds).map(k => `<option value="${k}">${kindToLabel(k)}</option>`).join('');
+// Génère les options pour les listes déroulantes de liens
+function getLinkOptions() {
+    return Object.entries(KIND_LABELS).map(([k, label]) => `<option value="${k}">${label}</option>`).join('');
 }
 
-// --- FONCTION REFONDUE : LAYOUT HORIZONTAL ---
+// --- 1. BARRE LATÉRALE GAUCHE (LIAISON IA) ---
+// Correspond à ton image : image_c4a450.png
 export function renderPathfindingSidebar(state, selectedNode) {
-    let html = '';
-
-    // État 1 : Rien de défini (Bouton initial)
-    if (state.pathfinding.startId === null) {
+    // Cas 1 : Aucune source définie
+    if (!state.pathfinding.startId) {
         if (selectedNode) {
-            html += `
-                <div style="margin-bottom:6px; font-size:0.8rem; color:#aaa;">
-                    Point de départ : <b style="color:#fff;">${escapeHtml(selectedNode.name)}</b>
+            // Un nœud est sélectionné -> On propose de le définir comme source
+            return `
+                <div style="padding:15px; border:1px solid rgba(115, 251, 247, 0.2); background:rgba(0,0,0,0.3); border-radius:8px; text-align:center;">
+                    <div style="font-size:0.8rem; color:#888; margin-bottom:10px;">Point de départ :</div>
+                    <div style="font-size:1.1rem; font-weight:bold; color:#fff; margin-bottom:15px;">${escapeHtml(selectedNode.name)}</div>
+                    
+                    <button id="btnPathStart" class="primary" style="width:100%; font-weight:bold; padding:10px; border:1px solid var(--accent-cyan); box-shadow: 0 0 10px rgba(115,251,247,0.2);">
+                        🚩 DÉFINIR COMME SOURCE
+                    </button>
                 </div>
-                <button id="btnPathStart" class="action-btn primary" style="width:100%; display:flex; justify-content:center; align-items:center; gap:6px;">
-                    🚩 Définir comme Source
-                </button>
             `;
         } else {
-            html += `
-                <div style="padding:12px; background:rgba(255,255,255,0.03); border:1px dashed #444; border-radius:6px; font-size:0.75rem; color:#777; text-align:center;">
-                    Sélectionnez un point sur la carte pour commencer.
-                </div>
-            `;
-        }
-    } 
-    // État 2 : Source définie, en attente de cible ou calculé
-    else {
-        const startNodeName = state.nodes.find(n => n.id === state.pathfinding.startId)?.name || "Inconnu";
-        const targetNode = (selectedNode && selectedNode.id !== state.pathfinding.startId) ? selectedNode : null;
-        
-        // --- LAYOUT CÔTE À CÔTE ---
-        html += `
-            <div style="display:flex; align-items:stretch; gap:4px; margin-bottom:8px;">
-                
-                <div style="flex:1; width:0; background:rgba(0, 255, 255, 0.08); border:1px solid var(--accent-cyan); border-radius:6px; padding:6px 4px; display:flex; flex-direction:column; justify-content:center;">
-                    <div style="font-size:0.6rem; color:var(--accent-cyan); text-transform:uppercase; letter-spacing:1px; margin-bottom:2px;">Source</div>
-                    <div style="font-weight:bold; font-size:0.8rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(startNodeName)}">
-                        ${escapeHtml(startNodeName)}
-                    </div>
-                </div>
-
-                <div style="display:flex; align-items:center; color:#666; font-size:0.9rem;">➤</div>
-
-                <div style="flex:1; width:0; background:${targetNode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.2)'}; border:1px solid ${targetNode ? '#fff' : '#333'}; border-radius:6px; padding:6px 4px; display:flex; flex-direction:column; justify-content:center;">
-                    <div style="font-size:0.6rem; color:${targetNode ? '#fff' : '#555'}; text-transform:uppercase; letter-spacing:1px; margin-bottom:2px;">Cible</div>
-                    <div style="font-weight:bold; font-size:0.8rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:${targetNode ? '#fff' : '#555'};">
-                        ${targetNode ? escapeHtml(targetNode.name) : '(Choisir)'}
-                    </div>
-                </div>
-
-            </div>
-        `;
-
-        // --- BOUTONS D'ACTION ---
-        if (targetNode) {
-            html += `
-                <div style="display:flex; gap:5px;">
-                    <button id="btnPathCalc" class="action-btn primary" style="flex:2;">⚡ Calculer</button>
-                    <button id="btnPathCancel" class="action-btn danger" style="flex:1;">✖</button>
-                </div>
-            `;
-        } else if (state.pathfinding.active) {
-             html += `
-                <div style="background:rgba(0,255,0,0.1); border:1px solid #00ff00; color:#00ff00; border-radius:4px; padding:6px; text-align:center; font-size:0.8rem; margin-bottom:5px;">
-                    ✅ Chemin affiché
-                </div>
-                <button id="btnPathCancel" class="action-btn" style="width:100%;">Reset</button>
-             `;
-        } else {
-            // Pas de cible sélectionnée
-            html += `
-                <div style="display:flex; gap:5px; align-items:center;">
-                    <div style="flex:1; font-size:0.7rem; color:#666; font-style:italic; line-height:1.2;">
-                        Sélectionnez un autre point sur le graphe...
-                    </div>
-                    <button id="btnPathCancel" class="action-btn" style="padding:4px 8px; font-size:0.75rem;">Annuler</button>
+            // Rien n'est sélectionné -> Message d'attente
+            return `
+                <div style="padding:20px; text-align:center; opacity:0.6;">
+                    <div style="font-size:2rem; margin-bottom:10px;">🚩</div>
+                    <div style="font-style:italic;">Sélectionnez une personne sur la carte pour commencer.</div>
                 </div>
             `;
         }
     }
 
-    return html;
-}
+    // Cas 2 : Source définie -> On cherche une cible
+    const startNode = state.nodes.find(n => n.id === state.pathfinding.startId);
+    const startName = startNode ? escapeHtml(startNode.name) : "Inconnu";
+    
+    // La cible est la sélection actuelle (si différente du départ)
+    const targetNode = (selectedNode && selectedNode.id !== state.pathfinding.startId) ? selectedNode : null;
+    
+    let targetHtml = '';
+    let actionBtnHtml = '';
 
-// --- FONCTION COLONNE DROITE (EDITEUR) ---
-export function renderEditorHTML(n, state) {
-    let colorInputHtml = '';
-    if (n.type === 'person') {
-        colorInputHtml = `<div style="font-size:0.8rem; padding-top:10px; color:#aaa;">Auto (Mix)</div>`;
+    if (targetNode) {
+        targetHtml = `<b style="color:#fff; font-size:1rem;">${escapeHtml(targetNode.name)}</b>`;
+        actionBtnHtml = `<button id="btnPathCalc" class="primary" style="width:100%; margin-top:10px;">⚡ CALCULER LE CHEMIN</button>`;
     } else {
-        colorInputHtml = `<input id="edColor" type="color" value="${safeHex(n.color)}" style="height:38px; width:100%;"/>`;
+        targetHtml = `<span style="color:#666; font-style:italic;">(Sélectionnez une cible...)</span>`;
+        actionBtnHtml = `<button disabled style="width:100%; margin-top:10px; opacity:0.5; cursor:not-allowed;">En attente de cible...</button>`;
+    }
+
+    if (state.pathfinding.active) {
+        actionBtnHtml = `<div style="text-align:center; color:#00ff00; margin:10px 0; font-weight:bold;">✅ Chemin affiché</div>`;
     }
 
     return `
-        <div class="flex-row-force" style="margin-bottom:15px;">
-            <button id="btnFocusNode" class="${state.focusMode ? 'primary' : ''}" style="flex:1; font-size:0.8rem;">
-                ${state.focusMode ? '🔍 Tout' : '🎯 Focus'}
-            </button>
-            <button id="btnCenterNode" style="flex:1; font-size:0.8rem;">📍 Centrer</button>
-            <button id="btnDelete" class="danger" style="flex:0 0 auto; width:40px; font-size:0.8rem;">🗑️</button>
+        <div style="border:1px solid rgba(115, 251, 247, 0.3); border-radius:8px; overflow:hidden;">
+            <div style="background:rgba(115, 251, 247, 0.1); padding:8px 12px; border-bottom:1px solid rgba(115, 251, 247, 0.2);">
+                <div style="font-size:0.7rem; color:#73fbf7; text-transform:uppercase;">Source</div>
+                <div style="font-weight:bold; color:#fff;">${startName}</div>
+            </div>
+            
+            <div style="text-align:center; color:#666; padding:4px;">⬇️</div>
+
+            <div style="padding:8px 12px;">
+                <div style="font-size:0.7rem; color:#888; text-transform:uppercase;">Destination</div>
+                ${targetHtml}
+            </div>
         </div>
 
-        <details open>
-            <summary>Propriétés</summary>
-            <div class="row">
-                <label>Nom</label>
-                <input id="edName" type="text" value="${escapeHtml(n.name)}"/>
-            </div>
-            
-            <div class="flex-row-force">
-                <div style="flex:1;">
-                    <label style="font-size:0.8rem; opacity:0.7;">Type</label>
-                    <select id="edType" style="width:100%;">
-                        <option value="person" ${n.type==='person'?'selected':''}>Personne</option>
-                        <option value="group" ${n.type==='group'?'selected':''}>Groupuscule</option>
-                        <option value="company" ${n.type==='company'?'selected':''}>Entreprise</option>
-                    </select>
-                </div>
-                <div style="flex:1;">
-                    <label style="font-size:0.8rem; opacity:0.7;">Couleur</label>
-                    ${colorInputHtml}
-                </div>
-            </div>
+        ${actionBtnHtml}
 
-            <div class="row" style="margin-top:5px;">
-                <label>Téléphone</label>
-                <input id="edNum" type="text" value="${escapeHtml(n.num||'')}"/>
-            </div>
-        </details>
+        <button id="btnPathCancel" style="width:100%; margin-top:10px; background:rgba(255, 80, 80, 0.1); color:#ff5050; border:1px solid #ff5050;">
+            ✖ RESET / ANNULER
+        </button>
+    `;
+}
 
-        <details open>
-            <summary>Informations</summary>
-            <textarea id="edNotes" class="notes-textarea" placeholder="Notes..." style="min-height:80px;">${escapeHtml(n.notes||'')}</textarea>
-        </details>
+// --- 2. BARRE LATÉRALE DROITE (EDITEUR) ---
+// Correspond à tes images : image_c4a433.png et image_c4986f.png
+export function renderEditorHTML(n, state) {
+    const isP = (n.type === TYPES.PERSON);
+    
+    // Dropdown Type
+    const typeOptions = `
+        <option value="${TYPES.PERSON}" ${n.type===TYPES.PERSON?'selected':''}>Personne</option>
+        <option value="${TYPES.GROUP}" ${n.type===TYPES.GROUP?'selected':''}>Groupe</option>
+        <option value="${TYPES.COMPANY}" ${n.type===TYPES.COMPANY?'selected':''}>Entreprise</option>
+    `;
+
+    return `
+    <h3 style="margin:0 0 10px 0; color:var(--accent-cyan); text-transform:uppercase; letter-spacing:1px; border-bottom:1px solid var(--border-color); padding-bottom:5px;">
+        ${escapeHtml(n.name)}
+    </h3>
+
+    <div style="display:flex; gap:5px; margin-bottom:15px;">
+        <button id="btnFocusNode" class="mini-btn ${state.focusMode ? 'active' : ''}" style="flex:1;">
+            ${state.focusMode ? '🔍 Tout voir' : '🎯 Focus'}
+        </button>
+        <button id="btnCenterNode" class="mini-btn" style="flex:1;">📍 Centrer</button>
+        <button id="btnDelete" class="mini-btn danger" style="width:40px;">🗑️</button>
+    </div>
+
+    <div style="border:1px solid var(--border-color); border-radius:8px; padding:10px; background:rgba(0,0,0,0.2); margin-bottom:10px;">
+        <div style="font-size:0.75rem; color:#73fbf7; margin-bottom:5px; font-weight:bold;">PROPRIÉTÉS</div>
         
-        <details open>
-            <summary>Ajouter / Créer relation</summary>
-            
-            <div style="margin-bottom:8px;">
-                <label style="font-size:0.8rem; color:#aaa;">Entreprise</label>
-                <div class="flex-row-force">
-                    <input id="inpCompany" list="datalist-companies" placeholder="Nom..." class="flex-grow-input" />
-                    <select id="selKindCompany" class="compact-select">${getLinkOptions(n.type, TYPES.COMPANY)}</select>
-                    <button id="btnAddCompany" class="primary mini-btn">+</button>
-                </div>
-            </div>
+        <div style="margin-bottom:8px;">
+            <label style="font-size:0.7rem; color:#888;">Nom</label>
+            <input type="text" id="edName" value="${escapeHtml(n.name)}" style="font-weight:bold;">
+        </div>
 
-            <div style="margin-bottom:8px;">
-                <label style="font-size:0.8rem; color:#aaa;">Groupuscule</label>
-                <div class="flex-row-force">
-                    <input id="inpGroup" list="datalist-groups" placeholder="Nom..." class="flex-grow-input" />
-                    <select id="selKindGroup" class="compact-select">${getLinkOptions(n.type, TYPES.GROUP)}</select>
-                    <button id="btnAddGroup" class="primary mini-btn">+</button>
-                </div>
+        <div class="flex-row-force" style="gap:10px; margin-bottom:8px;">
+            <div style="flex:1;">
+                <label style="font-size:0.7rem; color:#888;">Type</label>
+                <select id="edType">${typeOptions}</select>
             </div>
+            <div style="width:60px;">
+                <label style="font-size:0.7rem; color:#888;">Couleur</label>
+                <input type="color" id="edColor" value="${safeHex(n.color)}" style="height:38px; padding:0; cursor:pointer;">
+            </div>
+        </div>
 
-            <div style="margin-bottom:8px;">
-                <label style="font-size:0.8rem; color:#aaa;">Personnel</label>
-                <div class="flex-row-force">
-                    <input id="inpPerson" list="datalist-people" placeholder="Nom..." class="flex-grow-input" />
-                    <select id="selKindPerson" class="compact-select">${getLinkOptions(n.type, TYPES.PERSON)}</select>
-                    <button id="btnAddPerson" class="primary mini-btn">+</button>
-                </div>
-            </div>
-        </details>
+        ${isP ? `
+        <div>
+            <label style="font-size:0.7rem; color:#888;">Téléphone</label>
+            <input type="text" id="edNum" value="${escapeHtml(n.num || '')}" placeholder="555-...">
+        </div>` : ''}
+    </div>
 
-        <details>
-            <summary style="color:#ff5555;">Zone de Danger (Fusion)</summary>
-            <div style="font-size:0.75rem; color:#aaa; margin-bottom:5px;">
-                Fusionner <b>${escapeHtml(n.name)}</b> dans un autre point.
-            </div>
+    <div style="border:1px solid var(--border-color); border-radius:8px; padding:10px; background:rgba(0,0,0,0.2); margin-bottom:10px;">
+        <div style="font-size:0.75rem; color:#73fbf7; margin-bottom:5px; font-weight:bold;">INFORMATIONS</div>
+        <textarea id="edNotes" rows="3" placeholder="Notes..." style="background:rgba(0,0,0,0.3); font-size:0.85rem;">${escapeHtml(n.notes || '')}</textarea>
+    </div>
+
+    <div style="border:1px solid var(--border-color); border-radius:8px; padding:10px; background:rgba(0,0,0,0.2); margin-bottom:10px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+            <div style="font-size:0.75rem; color:#73fbf7; font-weight:bold;">AJOUTER / CRÉER RELATION</div>
+        </div>
+
+        <div style="margin-bottom:6px;">
+            <label style="font-size:0.7rem; color:#aaa;">Entreprise</label>
             <div class="flex-row-force">
-               <input id="mergeTarget" list="datalist-all" placeholder="Vers qui fusionner ?" class="flex-grow-input" />
-               <button id="btnMerge" class="primary danger" style="padding:0 10px;">Fusionner</button>
+                <input id="inpCompany" list="datalist-companies" placeholder="Nom..." class="flex-grow-input" style="font-size:0.85rem;">
+                <select id="selKindCompany" class="compact-select" style="width:90px;">${getLinkOptions()}</select>
+                <button id="btnAddCompany" class="mini-btn primary" style="width:30px;">+</button>
             </div>
-        </details>
+        </div>
 
-        <details open>
-            <summary>Liens Actifs</summary>
-            <div id="chipsLinks"></div>
-        </details>
+        <div style="margin-bottom:6px;">
+            <label style="font-size:0.7rem; color:#aaa;">Groupuscule</label>
+            <div class="flex-row-force">
+                <input id="inpGroup" list="datalist-groups" placeholder="Nom..." class="flex-grow-input" style="font-size:0.85rem;">
+                <select id="selKindGroup" class="compact-select" style="width:90px;">${getLinkOptions()}</select>
+                <button id="btnAddGroup" class="mini-btn primary" style="width:30px;">+</button>
+            </div>
+        </div>
+
+        <div>
+            <label style="font-size:0.7rem; color:#aaa;">Personnel</label>
+            <div class="flex-row-force">
+                <input id="inpPerson" list="datalist-people" placeholder="Nom..." class="flex-grow-input" style="font-size:0.85rem;">
+                <select id="selKindPerson" class="compact-select" style="width:90px;">${getLinkOptions()}</select>
+                <button id="btnAddPerson" class="mini-btn primary" style="width:30px;">+</button>
+            </div>
+        </div>
+    </div>
+
+    <details style="background:rgba(255, 0, 0, 0.05); border-color:rgba(255,0,0,0.2);">
+        <summary style="color:#ff5555; font-size:0.75rem;">ZONE DE DANGER (FUSION)</summary>
+        <div style="padding-top:10px;">
+            <div class="flex-row-force">
+               <input id="mergeTarget" list="datalist-all" placeholder="Vers qui fusionner ?" class="flex-grow-input" style="border-color:#ff5555;">
+               <button id="btnMerge" class="mini-btn danger" style="width:40px;">⚗️</button>
+            </div>
+            <div style="font-size:0.7rem; color:#aaa; margin-top:5px; font-style:italic;">
+                ⚠️ Fusionner déplacera tous les liens vers la cible et supprimera ce nœud.
+            </div>
+        </div>
+    </details>
+
+    <div style="margin-top:15px;">
+        <div style="font-size:0.75rem; color:#73fbf7; margin-bottom:5px; font-weight:bold;">LIENS ACTIFS</div>
+        <div id="chipsLinks"></div>
+    </div>
+
+    <div style="margin-top:20px; text-align:center;">
+        <button id="btnExportRP" style="font-size:0.8rem; background:transparent; border:1px dashed #444; color:#888; width:100%;">
+            📄 Copier Dossier RP
+        </button>
+    </div>
+
+    <datalist id="datalist-all">
+        </datalist>
     `;
 }

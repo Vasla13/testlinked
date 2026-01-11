@@ -7,19 +7,44 @@ export function injectStyles() {
         #editorBody::-webkit-scrollbar { width: 5px; }
         #editorBody::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
         
-        details { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; margin-bottom: 8px; padding: 5px; }
-        summary { cursor: pointer; font-weight: bold; font-size: 0.85rem; color: var(--accent-cyan); padding: 4px 0; list-style: none; display: flex; align-items: center; justify-content: space-between; }
-        summary::after { content: '+'; font-size: 1rem; font-weight: bold; }
+        details { 
+            background: rgba(255,255,255,0.02); 
+            border: 1px solid rgba(255,255,255,0.05); 
+            border-radius: 6px; 
+            margin-bottom: 8px; 
+            padding: 8px; 
+        }
+        summary { 
+            cursor: pointer; font-weight: bold; font-size: 0.8rem; 
+            color: var(--accent-cyan); 
+            list-style: none; display: flex; align-items: center; justify-content: space-between; 
+        }
+        summary::after { content: '+'; font-size: 1rem; font-weight: bold; opacity:0.5; }
         details[open] summary::after { content: '-'; }
         
         .flex-row-force { display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; align-items: center !important; width: 100% !important; gap: 5px !important; }
         .flex-grow-input { flex: 1 1 auto !important; min-width: 0 !important; width: 100% !important; }
-        .compact-select { flex: 0 0 100px !important; width: 100px !important; font-size: 0.75rem !important; padding: 2px !important; }
-        .mini-btn { flex: 0 0 30px !important; width: 30px !important; padding: 0 !important; text-align: center !important; justify-content: center !important; }
-
-        .link-category { margin-top: 10px; margin-bottom: 2px; font-size: 0.65rem; color: #888; text-transform: uppercase; border-bottom: 1px solid #333; }
+        .compact-select { flex: 0 0 auto !important; font-size: 0.75rem !important; padding: 2px !important; }
         
-        .chip { display: flex; align-items: center; justify-content: space-between; background: rgba(20, 20, 30, 0.4); border-left: 3px solid #888; border-radius: 0 3px 3px 0; padding: 2px 6px; margin-bottom: 3px; transition: all 0.2s; height: 24px; }
+        /* MINI BOUTONS REFAITS */
+        .mini-btn { 
+            flex: 0 0 auto; 
+            padding: 4px 8px; 
+            text-align: center; 
+            justify-content: center; 
+            font-size: 0.75rem;
+            border-radius: 4px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: #ccc;
+        }
+        .mini-btn:hover { background: rgba(255,255,255,0.1); color:#fff; }
+        .mini-btn.active { background: var(--accent-cyan); color:#000; border-color:var(--accent-cyan); }
+        .mini-btn.primary { background: rgba(115, 251, 247, 0.2); border-color: var(--accent-cyan); color: var(--accent-cyan); }
+
+        .link-category { margin-top: 10px; margin-bottom: 4px; font-size: 0.65rem; color: #666; text-transform: uppercase; font-weight:bold; letter-spacing:1px; }
+        
+        .chip { display: flex; align-items: center; justify-content: space-between; background: rgba(20, 20, 30, 0.4); border-left: 3px solid #888; border-radius: 0 3px 3px 0; padding: 2px 6px; margin-bottom: 3px; transition: all 0.2s; height: 26px; }
         .chip:hover { background: rgba(255,255,255,0.08); }
         .chip-content { display: flex; align-items: center; flex: 1; min-width: 0; gap: 8px; }
         .chip-name { font-weight: 500; font-size: 0.8rem; cursor: pointer; color: #ddd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -29,7 +54,7 @@ export function injectStyles() {
         .x { padding: 0 0 0 8px; cursor: pointer; color: #666; font-size: 1rem; font-weight: bold; }
         .x:hover { color: #ff5555; }
 
-        /* --- HUD & DOCK --- */
+        /* HUD & DOCK */
         #filter-bar {
             position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
             background: rgba(5, 7, 20, 0.9); border: 1px solid rgba(115, 251, 247, 0.3);
@@ -108,13 +133,9 @@ export function injectStyles() {
         .ctx-item.danger:hover { background: rgba(255, 80, 80, 0.2); }
         .ctx-divider { height: 1px; background: rgba(255,255,255,0.1); margin: 4px 0; }
 
-        /* --- PANNEAU REGLAGES (CORRIGÉ : Haut-Gauche) --- */
+        /* --- PANNEAU REGLAGES (HAUT GAUCHE) --- */
         #settings-panel {
-            position: fixed; 
-            top: 20px; /* Collé en haut */
-            left: 20px; /* Collé à gauche */
-            transform: none; /* On enlève le centrage */
-            
+            position: fixed; top: 20px; left: 20px;
             width: 380px; 
             background: rgba(5, 7, 20, 0.98);
             border: 1px solid var(--accent-cyan); border-radius: 12px;
