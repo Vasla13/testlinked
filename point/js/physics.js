@@ -6,8 +6,8 @@ let simulation;
 
 export function initPhysics() {
     simulation = d3.forceSimulation()
-        .alphaDecay(0.02)      
-        .velocityDecay(0.4)
+        .alphaDecay(0.01) // Ralenti un peu pour laisser le temps de se placer
+        .velocityDecay(0.3) // Moins de friction pour que ça glisse mieux vers l'extérieur
         .on("tick", ticked);
 }
 
@@ -35,71 +35,61 @@ export function restartSim() {
         connectedPairs.add(`${t}-${s}`);
     });
 
-    // 1. LIENS
+    // 1. LIENS (Structure élastique)
     simulation.force("link", d3.forceLink(state.links)
         .id(d => d.id)
         .distance(l => {
-            if (l.kind === KINDS.ENNEMI) return 0;
-            if (l.kind === KINDS.AFFILIATION) return 500; 
-            if (l.kind === KINDS.PATRON) return 60;
-            if (l.kind === KINDS.HAUT_GRADE) return 90;
-            if (l.kind === KINDS.EMPLOYE) return 250; 
-            return 200;
+            if (l.kind === KINDS.ENNEMI) return 0; 
+            if (l.kind === KINDS.AFFILIATION) return 450; 
+            if (l.kind === KINDS.PATRON) return 70;
+            if (l.kind === KINDS.HAUT_GRADE) return 100;
+            if (l.kind === KINDS.EMPLOYE) return 200; 
+            return 220; // Un peu plus long pour aérer
         })
         .strength(l => {
             if (l.kind === KINDS.ENNEMI) return 0; 
-            if (l.kind === KINDS.PATRON) return 1.2;
-            return 0.2; 
+            if (l.kind === KINDS.PATRON) return 1.0;
+            return 0.25; 
         })
     );
 
-    // 2. FORCE DE HAINE (VERSION EXTRÊME)
+    // 2. GRAVITÉ CENTRALE DOUCE (Le Juste Milieu)
+    // Suffisant pour ramener les isolés, mais trop faible pour écraser le graphe
+    simulation.force("gravityX", d3.forceX(0).strength(0.005));
+    simulation.force("gravityY", d3.forceY(0).strength(0.005));
+
+
+    // 3. FORCE DE HAINE (ENNEMIS) - Toujours violent
     const enemyRepulsion = (alpha) => {
         state.links.forEach(l => {
             if (l.kind !== KINDS.ENNEMI) return;
-            
-            const s = l.source; 
-            const t = l.target;
+            const s = l.source; const t = l.target;
             if (!s.x || !t.x) return;
 
             const isBigS = (s.type === TYPES.COMPANY || s.type === TYPES.GROUP);
             const isBigT = (t.type === TYPES.COMPANY || t.type === TYPES.GROUP);
             
-            // Configuration de la violence de la répulsion
-            let hateRadius = 800; 
-            let forceMultiplier = 2.0;
+            let hateRadius = 900; 
+            let forceMultiplier = 3.0;
 
             if (isBigS && isBigT) {
-                // CAS : ENTREPRISE CONTRE ENTREPRISE
-                hateRadius = 5000; // Rayon infini (toute la map)
-                forceMultiplier = 300.0; // FORCE NUCLÉAIRE : Elles vont voler aux opposés
+                hateRadius = 5000; // Toute la map
+                forceMultiplier = 300.0; // Explosion
             } 
             else if (isBigS || isBigT) {
-                // CAS : INDIVIDU CONTRE ENTREPRISE
-                hateRadius = 2000;
-                forceMultiplier = 20.0; // Forte répulsion
+                hateRadius = 2500;
+                forceMultiplier = 30.0;
             }
 
-            // Ajout d'un petit bruit aléatoire (jitter) pour éviter le blocage parfait
-            // si deux points sont exactement l'un sur l'autre (0,0)
             let dx = t.x - s.x || (Math.random() - 0.5);
             let dy = t.y - s.y || (Math.random() - 0.5);
-            
             let distSq = dx*dx + dy*dy; 
             const dist = Math.sqrt(distSq);
             
             if (dist < hateRadius) {
-                // Calcul linéaire de la force
-                // Plus c'est proche, plus c'est fort (proche de 1.0)
                 const strength = (hateRadius - dist) / hateRadius; 
-                
-                // Formule physique : Force vectorielle
                 const force = strength * alpha * forceMultiplier; 
-
-                const fx = (dx / dist) * force;
-                const fy = (dy / dist) * force;
-
-                // Application
+                const fx = (dx / dist) * force; const fy = (dy / dist) * force;
                 t.vx += fx; t.vy += fy;
                 s.vx -= fx; s.vy -= fy;
             }
@@ -107,29 +97,35 @@ export function restartSim() {
     };
     simulation.force("enemyRepulsion", enemyRepulsion);
 
-    // 3. CHARGE GLOBALE
+    // 4. CHARGE GLOBALE (Répulsion générale)
+    // C'est ici qu'on règle l'espacement "entre-deux"
     simulation.force("charge", d3.forceManyBody()
         .strength(n => {
-            let strength = -800; 
-            if (n.type === TYPES.COMPANY) strength = -5000; 
-            if (n.type === TYPES.GROUP) strength = -3000;
+            let strength = -1200; // Assez fort pour bien écarter les nœuds
+            if (n.type === TYPES.COMPANY) strength = -6000; 
+            if (n.type === TYPES.GROUP) strength = -4000;
+            
+            // Plus un nœud a de liens, plus il repousse les autres pour faire de la place
             const degree = nodeDegree.get(n.id) || 0;
-            strength -= (degree * 200); 
+            strength -= (degree * 150); 
+            
             return strength;
         })
+        // On augmente la distance max pour que les points se sentent de plus loin
+        // Cela évite l'effet "paquet compact" au centre
         .distanceMax(2000) 
         .distanceMin(50) 
     );
 
-    // 4. COLLISION
+    // 5. COLLISION (Pour ne pas se marcher dessus)
     simulation.force("collide", d3.forceCollide()
-        .radius(n => nodeRadius(n) + 40)
-        .iterations(4)
+        .radius(n => nodeRadius(n) + 50) // Marge confortable
+        .iterations(2)
     );
 
-    // 5. BARRIÈRE (Pour les empêcher de partir à l'infini)
-    // On agrandit un peu le monde pour laisser la place à la guerre
-    const worldRadius = 4000; 
+    // 6. BARRIÈRE (GLOBE)
+    // Assez large pour permettre l'expansion
+    const worldRadius = 3800; 
     simulation.force("boundary", () => {
         if (!state.globeMode) return; 
 
@@ -138,18 +134,17 @@ export function restartSim() {
             if (d > worldRadius) {
                 const excess = d - worldRadius;
                 const angle = Math.atan2(n.y, n.x);
-                // Rebond un peu plus rigide
-                n.vx -= Math.cos(angle) * (excess * 0.5);
-                n.vy -= Math.sin(angle) * (excess * 0.5);
+                n.vx -= Math.cos(angle) * (excess * 0.1); // Rebond très doux
+                n.vy -= Math.sin(angle) * (excess * 0.1);
             }
         }
     });
 
-    // 6. TERRITOIRE
+    // 7. TERRITOIRE
     simulation.force("territory", () => {
         const structures = state.nodes.filter(n => n.type === TYPES.COMPANY || n.type === TYPES.GROUP);
         for (const struct of structures) {
-            const territoryRadius = (struct.type === TYPES.COMPANY) ? 400 : 300; 
+            const territoryRadius = (struct.type === TYPES.COMPANY) ? 450 : 350; 
             for (const n of state.nodes) {
                 if (n.id === struct.id || n.type === TYPES.COMPANY || n.type === TYPES.GROUP) continue;
                 if (n.fx != null) continue;
@@ -161,7 +156,7 @@ export function restartSim() {
 
                 if (distSq < minDistSq) {
                     const dist = Math.sqrt(distSq);
-                    const push = (territoryRadius - dist) * 0.1;
+                    const push = (territoryRadius - dist) * 0.08; 
                     const angle = Math.atan2(dy, dx);
                     n.vx += Math.cos(angle) * push; n.vy += Math.sin(angle) * push;
                 }
@@ -169,7 +164,6 @@ export function restartSim() {
         }
     });
 
-    simulation.force("center", null);
     simulation.alpha(1).restart();
 }
 
