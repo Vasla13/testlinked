@@ -9,7 +9,7 @@ export const state = {
     focusMode: false,
     focusSet: new Set(),
     
-    // Pathfinding data
+    // Pathfinding
     pathfinding: {
         startId: null,      
         active: false,      
@@ -17,8 +17,11 @@ export const state = {
         pathLinks: new Set()  
     },
 
-    // Filtre actif (Dashboard)
+    // Filtre actif
     activeFilter: 'ALL',
+
+    // NOUVEAU : Mode Globe (Restriction de terrain)
+    globeMode: true, 
 
     history: [], 
     tempLink: null,
@@ -29,7 +32,7 @@ export const state = {
     forceSimulation: false
 };
 
-const STORAGE_KEY = 'pointPageState_v9'; 
+const STORAGE_KEY = 'pointPageState_v10'; // Incrémenté
 
 export function saveState() {
     try {
@@ -47,6 +50,7 @@ export function saveState() {
             labelMode: state.labelMode, 
             showLinkTypes: state.showLinkTypes,
             activeFilter: state.activeFilter,
+            globeMode: state.globeMode, // Sauvegarde
             nextId: state.nextId
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -67,6 +71,9 @@ export function loadState() {
         else if (typeof data.showLabels === 'boolean') state.labelMode = data.showLabels ? 1 : 0;
         
         if (data.activeFilter) state.activeFilter = data.activeFilter;
+        
+        // Chargement du mode globe (true par défaut)
+        if (typeof data.globeMode === 'boolean') state.globeMode = data.globeMode;
 
         state.pathfinding = { startId: null, active: false, pathNodes: new Set(), pathLinks: new Set() };
 

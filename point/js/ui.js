@@ -105,6 +105,19 @@ function setupHudButtons() {
     document.getElementById('chkPerf').onchange = (e) => { state.performance = e.target.checked; draw(); };
     document.getElementById('chkLinkTypes').onchange = (e) => { state.showLinkTypes = e.target.checked; updateLinkLegend(); draw(); };
 
+    // --- NOUVEAU : BOUTON GLOBE ---
+    const hud = document.getElementById('hud');
+    const lblGlobe = document.createElement('label');
+    lblGlobe.title = "Restreindre à la planète";
+    lblGlobe.style.cursor = "pointer";
+    lblGlobe.innerHTML = `<input id="chkGlobe" type="checkbox" ${state.globeMode ? 'checked' : ''}/> 🌍 Globe`;
+    lblGlobe.querySelector('input').onchange = (e) => {
+        state.globeMode = e.target.checked;
+        restartSim(); // Relancer la physique pour appliquer le changement
+    };
+    // On l'insère avant les autres options pour la visibilité
+    hud.insertBefore(lblGlobe, document.getElementById('chkLabels').parentNode);
+
     const btnLabel = document.getElementById('chkLabels');
     if (btnLabel) {
         btnLabel.type = 'button'; btnLabel.style.width = "100px"; btnLabel.style.textAlign = "center";
