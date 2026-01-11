@@ -2,7 +2,7 @@ import { state, saveState } from './state.js';
 import { getSimulation } from './physics.js';
 import { draw } from './render.js';
 import { screenToWorld, clamp } from './utils.js';
-import { selectNode, renderEditor, updatePathfindingPanel, addLink } from './ui.js'; // Import cyclique géré par les modules
+import { selectNode, renderEditor, updatePathfindingPanel, addLink } from './ui.js';
 
 export function setupCanvasEvents(canvas) {
     
@@ -22,8 +22,12 @@ export function setupCanvasEvents(canvas) {
     let dragLinkSource = null;
 
     canvas.addEventListener('mousedown', (e) => {
+        const sim = getSimulation();
+        // SÉCURITÉ : Si la simu n'est pas prête, on ne fait rien
+        if (!sim) return; 
+
         const p = screenToWorld(e.offsetX, e.offsetY, canvas, state.view);
-        const hit = getSimulation().find(p.x, p.y, 30); 
+        const hit = sim.find(p.x, p.y, 30); 
         
         // Mode Création de lien (Shift + Click)
         if (e.shiftKey && hit) {
@@ -72,28 +76,32 @@ export function setupCanvasEvents(canvas) {
         }
         
         // Hover Effect
-        const hit = getSimulation().find(p.x, p.y, 25);
-        if (hit) { 
-            if (state.hoverId !== hit.id) { 
-                state.hoverId = hit.id; 
-                canvas.style.cursor = 'pointer'; 
-                draw(); 
-            } 
-        } else { 
-            if (state.hoverId !== null) { 
-                state.hoverId = null; 
-                canvas.style.cursor = 'default'; 
-                draw(); 
-            } 
+        const sim = getSimulation();
+        if (sim) {
+            const hit = sim.find(p.x, p.y, 25);
+            if (hit) { 
+                if (state.hoverId !== hit.id) { 
+                    state.hoverId = hit.id; 
+                    canvas.style.cursor = 'pointer'; 
+                    draw(); 
+                } 
+            } else { 
+                if (state.hoverId !== null) { 
+                    state.hoverId = null; 
+                    canvas.style.cursor = 'default'; 
+                    draw(); 
+                } 
+            }
         }
     });
 
     canvas.addEventListener('mouseup', (e) => {
         const p = screenToWorld(e.offsetX, e.offsetY, canvas, state.view);
-        
+        const sim = getSimulation();
+
         // Fin création lien
-        if (dragLinkSource) {
-            const hit = getSimulation().find(p.x, p.y, 40); 
+        if (dragLinkSource && sim) {
+            const hit = sim.find(p.x, p.y, 40); 
             if (hit && hit.id !== dragLinkSource.id) {
                 // Utilise la fonction addLink importée de UI/Logic
                 const success = addLink(dragLinkSource, hit, null); 
@@ -121,30 +129,42 @@ export function setupCanvasEvents(canvas) {
     });
 
     // 3. D3 DRAG (Pour déplacer les nœuds physique)
-    // Nécessite d3 global
+    // On ajoute une vérif interne pour éviter le crash si simu pas prête
     d3.select(canvas).call(d3.drag()
         .container(canvas)
-        .filter(event => !event.shiftKey) // Ignore si shift (car c'est pour créer un lien)
+        .filter(event => !event.shiftKey)
         .subject(e => {
+            const sim = getSimulation();
+            if (!sim) return null;
             const p = screenToWorld(e.sourceEvent.offsetX, e.sourceEvent.offsetY, canvas, state.view);
-            return getSimulation().find(p.x, p.y, 30);
+            return sim.find(p.x, p.y, 30);
         })
         .on("start", e => {
-            if (!e.active) getSimulation().alphaTarget(0.3).restart();
-            e.subject.fx = e.subject.x; 
-            e.subject.fy = e.subject.y; 
-            selectNode(e.subject.id); 
+            const sim = getSimulation();
+            if (!sim) return;
+            if (!e.active) sim.alphaTarget(0.3).restart();
+            if (e.subject) {
+                e.subject.fx = e.subject.x; 
+                e.subject.fy = e.subject.y; 
+                selectNode(e.subject.id); 
+            }
         })
         .on("drag", e => {
-            const p = screenToWorld(e.sourceEvent.offsetX, e.sourceEvent.offsetY, canvas, state.view);
-            e.subject.fx = p.x; 
-            e.subject.fy = p.y;
+            if (e.subject) {
+                const p = screenToWorld(e.sourceEvent.offsetX, e.sourceEvent.offsetY, canvas, state.view);
+                e.subject.fx = p.x; 
+                e.subject.fy = p.y;
+            }
         })
         .on("end", e => {
-            if (!e.active) getSimulation().alphaTarget(0);
-            e.subject.fx = null; 
-            e.subject.fy = null; 
-            saveState(); 
+            const sim = getSimulation();
+            if (!sim) return;
+            if (!e.active) sim.alphaTarget(0);
+            if (e.subject) {
+                e.subject.fx = null; 
+                e.subject.fy = null; 
+                saveState(); 
+            }
         })
     );
 }

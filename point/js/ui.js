@@ -1,7 +1,7 @@
 import { state, saveState, nodeById, isPerson, isCompany, isGroup, undo, pushHistory } from './state.js';
 import { ensureNode, addLink as logicAddLink, mergeNodes, updatePersonColors, calculatePath, clearPath } from './logic.js';
 import { renderEditorHTML, renderPathfindingSidebar } from './templates.js';
-import { restartSim } from './physics.js';
+import { restartSim, getSimulation } from './physics.js';
 import { draw, updateDegreeCache, resizeCanvas } from './render.js';
 import { escapeHtml, toColorInput, kindToLabel, linkKindEmoji, computeLinkColor } from './utils.js';
 import { TYPES, KINDS, FILTERS } from './constants.js';
@@ -19,17 +19,56 @@ const ui = {
     pathfindingContainer: document.getElementById('pathfinding-ui')
 };
 
-// --- INITIALISATION GLOBALE ---
+// --- MODALES ---
+let modalOverlay = null;
+function createModal() {
+    if (document.getElementById('custom-modal')) return;
+    modalOverlay = document.createElement('div');
+    modalOverlay.id = 'custom-modal';
+    modalOverlay.style.cssText = `position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 9999; display: none; align-items: center; justify-content: center;`;
+    modalOverlay.innerHTML = `
+        <div style="background: #1a1a2e; border: 1px solid var(--accent-cyan); padding: 20px; border-radius: 8px; min-width: 300px; text-align: center; box-shadow: 0 0 20px rgba(0,0,0,0.8);">
+            <div id="modal-msg" style="margin-bottom: 20px; color: #fff; font-size: 1rem;"></div>
+            <div id="modal-actions" style="display: flex; gap: 10px; justify-content: center;"></div>
+        </div>`;
+    document.body.appendChild(modalOverlay);
+}
+
+export function showCustomAlert(msg) {
+    if(!modalOverlay) createModal();
+    const msgEl = document.getElementById('modal-msg');
+    const actEl = document.getElementById('modal-actions');
+    if(msgEl && actEl) {
+        msgEl.innerText = msg;
+        actEl.innerHTML = `<button onclick="document.getElementById('custom-modal').style.display='none'" class="primary">OK</button>`;
+        modalOverlay.style.display = 'flex';
+    }
+}
+
+export function showCustomConfirm(msg, onYes) {
+    if(!modalOverlay) createModal();
+    const msgEl = document.getElementById('modal-msg');
+    const actEl = document.getElementById('modal-actions');
+    if(msgEl && actEl) {
+        msgEl.innerText = msg;
+        actEl.innerHTML = '';
+        const btnNo = document.createElement('button'); btnNo.innerText = 'Non'; btnNo.onclick = () => { modalOverlay.style.display='none'; };
+        const btnYes = document.createElement('button'); btnYes.className = 'primary danger'; btnYes.innerText = 'Oui'; btnYes.onclick = () => { modalOverlay.style.display='none'; onYes(); };
+        actEl.appendChild(btnNo); actEl.appendChild(btnYes);
+        modalOverlay.style.display = 'flex';
+    }
+}
+
+// --- INIT ---
 export function initUI() {
     createModal();
-    injectStyles(); // Appel du nouveau fichier styles.js
+    injectStyles();
     createFilterBar();
     updatePathfindingPanel();
 
     const canvas = document.getElementById('graph');
     window.addEventListener('resize', resizeCanvas);
     
-    // Init Clavier (Ctrl+Z)
     document.addEventListener('keydown', (e) => { 
         if ((e.ctrlKey || e.metaKey) && e.key === 'z') { 
             e.preventDefault(); undo(); refreshLists(); 
@@ -38,21 +77,15 @@ export function initUI() {
         } 
     });
 
-    // Init Interactions Canvas (Zoom/Drag)
     setupCanvasEvents(canvas);
-
-    // Boutons du HUD
     setupHudButtons();
     
-    // Boutons de création rapide
     document.getElementById('createPerson').onclick = () => createNode(TYPES.PERSON, 'Nouvelle personne');
     document.getElementById('createGroup').onclick = () => createNode(TYPES.GROUP, 'Nouveau groupe');
     document.getElementById('createCompany').onclick = () => createNode(TYPES.COMPANY, 'Nouvelle entreprise');
 
-    // Recherche
     setupSearch();
 
-    // Import/Export
     document.getElementById('btnExport').onclick = exportGraph;
     document.getElementById('fileImport').onchange = importGraph;
     document.getElementById('fileMerge').onchange = mergeGraph;
@@ -64,8 +97,7 @@ export function initUI() {
     };
 }
 
-// --- SOUS-FONCTIONS D'INIT ---
-
+// --- HELPERS INIT ---
 function setupHudButtons() {
     document.getElementById('btnRelayout').onclick = () => { state.view = {x:0, y:0, scale: 0.5}; restartSim(); };
     const btnSim = document.getElementById('btnToggleSim'); if (btnSim) btnSim.style.display = 'none';
@@ -94,7 +126,6 @@ function setupSearch() {
     });
 }
 
-// --- CREATION DE LA BARRE DE FILTRES ---
 function createFilterBar() {
     const bar = document.createElement('div');
     bar.id = 'filter-bar';
@@ -119,8 +150,7 @@ function createFilterBar() {
     document.body.appendChild(bar);
 }
 
-// --- LOGIQUE DE GESTION (NODE/LINK) ---
-
+// --- LOGIQUE ---
 function createNode(type, baseName) {
     let name = baseName, i = 1;
     while(state.nodes.find(n => n.name === name)) { name = `${baseName} ${++i}`; }
@@ -128,13 +158,9 @@ function createNode(type, baseName) {
     zoomToNode(n.id); refreshLists(); restartSim();
 }
 
-// Exporté pour interaction.js
 export function addLink(a, b, kind) {
     const res = logicAddLink(a, b, kind);
-    if(res) {
-        refreshLists(); // Met à jour les listes et légendes
-        renderEditor(); // Met à jour le panneau si ouvert
-    }
+    if(res) { refreshLists(); renderEditor(); }
     return res;
 }
 
@@ -157,17 +183,13 @@ function zoomToNode(id) {
     updatePathfindingPanel();
 }
 
-// --- GESTION DES PANNEAUX (GAUCHE & DROITE) ---
-
-// 1. Panneau Gauche (Pathfinding)
+// --- PANNEAUX ---
 export function updatePathfindingPanel() {
     const el = ui.pathfindingContainer;
     if(!el) return;
-
     const selectedNode = nodeById(state.selection);
     el.innerHTML = renderPathfindingSidebar(state, selectedNode);
 
-    // Listeners dynamiques
     const btnStart = document.getElementById('btnPathStart');
     if(btnStart) btnStart.onclick = () => {
         if(!selectedNode) return;
@@ -176,7 +198,6 @@ export function updatePathfindingPanel() {
         updatePathfindingPanel();
         draw(); 
     };
-
     const btnCancel = document.getElementById('btnPathCancel');
     if(btnCancel) btnCancel.onclick = () => {
         state.pathfinding.startId = null;
@@ -185,7 +206,6 @@ export function updatePathfindingPanel() {
         draw();
         updatePathfindingPanel();
     };
-
     const btnCalc = document.getElementById('btnPathCalc');
     if(btnCalc) btnCalc.onclick = () => {
         if(!selectedNode || !state.pathfinding.startId) return;
@@ -202,7 +222,6 @@ export function updatePathfindingPanel() {
     };
 }
 
-// 2. Panneau Droite (Editeur)
 export function renderEditor() {
     const n = nodeById(state.selection);
     if (!n) {
@@ -211,68 +230,53 @@ export function renderEditor() {
         ui.editorBody.classList.add('muted');
         return;
     }
-
     ui.editorTitle.textContent = n.name;
     ui.editorBody.classList.remove('muted');
     ui.editorBody.innerHTML = renderEditorHTML(n, state);
-
-    // Listeners Editeur
     setupEditorListeners(n);
     renderActiveLinks(n);
 }
 
 function setupEditorListeners(n) {
-    // Création relation
     const handleAdd = (inputId, selectId, targetType) => {
         const nameInput = document.getElementById(inputId);
         const kindSelect = document.getElementById(selectId);
         const name = nameInput.value.trim();
         const kind = kindSelect.value;
         if (!name) return;
-
         let target = state.nodes.find(x => x.name.toLowerCase() === name.toLowerCase());
         if (!target) {
             showCustomConfirm(`"${name}" n'existe pas. Créer nouveau ${targetType} ?`, () => {
                 target = ensureNode(targetType, name);
                 logicAddLink(n, target, kind);
                 nameInput.value = '';
-                renderEditor();
-                updatePathfindingPanel();
-                refreshLists();
+                renderEditor(); updatePathfindingPanel(); refreshLists();
             });
         } else {
             logicAddLink(n, target, kind);
             nameInput.value = '';
-            renderEditor();
-            updatePathfindingPanel();
+            renderEditor(); updatePathfindingPanel();
         }
     };
-
     document.getElementById('btnAddCompany').onclick = () => handleAdd('inpCompany', 'selKindCompany', TYPES.COMPANY);
     document.getElementById('btnAddGroup').onclick = () => handleAdd('inpGroup', 'selKindGroup', TYPES.GROUP);
     document.getElementById('btnAddPerson').onclick = () => handleAdd('inpPerson', 'selKindPerson', TYPES.PERSON);
 
-    // Fusion
     document.getElementById('btnMerge').onclick = () => {
         const targetName = document.getElementById('mergeTarget').value.trim();
         const target = state.nodes.find(x => x.name.toLowerCase() === targetName.toLowerCase());
         if (target) {
             if (target.id === n.id) { showCustomAlert("Impossible de fusionner avec soi-même."); return; }
             showCustomConfirm(`Fusionner "${n.name}" DANS "${target.name}" ?`, () => {
-                mergeNodes(n.id, target.id);
-                selectNode(target.id); 
+                mergeNodes(n.id, target.id); selectNode(target.id); 
             });
-        } else {
-            showCustomAlert("Cible introuvable.");
-        }
+        } else { showCustomAlert("Cible introuvable."); }
     };
 
-    // Actions
     document.getElementById('btnFocusNode').onclick = () => {
         if (state.focusMode) { state.focusMode = false; state.focusSet.clear(); } 
         else {
             state.focusMode = true; state.focusSet.clear(); state.focusSet.add(n.id);
-            // Voisins niveau 1 et 2
             state.links.forEach(l => {
                 const s = (typeof l.source === 'object') ? l.source.id : l.source;
                 const t = (typeof l.target === 'object') ? l.target.id : l.target;
@@ -286,20 +290,15 @@ function setupEditorListeners(n) {
     document.getElementById('btnCenterNode').onclick = () => { state.view.x = -n.x * state.view.scale; state.view.y = -n.y * state.view.scale; restartSim(); };
     document.getElementById('edName').oninput = (e) => { n.name = e.target.value; refreshLists(); draw(); };
     document.getElementById('edType').onchange = (e) => { n.type = e.target.value; updatePersonColors(); restartSim(); draw(); refreshLists(); renderEditor(); };
-    
     const inpColor = document.getElementById('edColor');
     if (inpColor) inpColor.oninput = (e) => { n.color = e.target.value; updatePersonColors(); draw(); };
-
-    document.getElementById('edNum').oninput = (e) => { n.num = e.target.value; if(n.type === TYPES.PERSON) { /* propagate logic inside logic.js call if needed, here mostly auto handled by addLink */ } };
+    document.getElementById('edNum').oninput = (e) => { n.num = e.target.value; };
     document.getElementById('edNotes').oninput = (e) => { n.notes = e.target.value; };
-
     document.getElementById('btnDelete').onclick = () => {
         showCustomConfirm(`Supprimer "${n.name}" ?`, () => {
-            pushHistory(); 
-            state.nodes = state.nodes.filter(x => x.id !== n.id);
+            pushHistory(); state.nodes = state.nodes.filter(x => x.id !== n.id);
             state.links = state.links.filter(l => l.source.id !== n.id && l.target.id !== n.id);
-            state.selection = null;
-            restartSim(); refreshLists(); renderEditor(); updatePathfindingPanel();
+            state.selection = null; restartSim(); refreshLists(); renderEditor(); updatePathfindingPanel();
         });
     };
 }
@@ -333,18 +332,11 @@ function renderActiveLinks(n) {
             const linkColor = computeLinkColor(item.link);
             const typeLabel = kindToLabel(item.link.kind);
             const emoji = linkKindEmoji(item.link.kind);
-            
             html += `
             <div class="chip" style="border-left-color: ${linkColor};">
                 <div class="chip-content">
-                    <span class="chip-name" onclick="window.selectNode(${item.other.id})">
-                        ${escapeHtml(item.other.name)}
-                    </span>
-                    <div class="chip-meta">
-                        <span class="chip-badge" style="color: ${linkColor};">
-                            ${emoji} ${typeLabel}
-                        </span>
-                    </div>
+                    <span class="chip-name" onclick="window.selectNode(${item.other.id})">${escapeHtml(item.other.name)}</span>
+                    <div class="chip-meta"><span class="chip-badge" style="color: ${linkColor};">${emoji} ${typeLabel}</span></div>
                 </div>
                 <div class="x" title="Supprimer le lien" data-s="${item.link.source.id||item.link.source}" data-t="${item.link.target.id||item.link.target}">×</div>
             </div>`;
@@ -352,12 +344,8 @@ function renderActiveLinks(n) {
         return html;
     };
 
-    chipsContainer.innerHTML = 
-        renderGroup('🏢 Entreprises', groups[TYPES.COMPANY]) +
-        renderGroup('👥 Groupuscules', groups[TYPES.GROUP]) +
-        renderGroup('👤 Personnes', groups[TYPES.PERSON]);
+    chipsContainer.innerHTML = renderGroup('🏢 Entreprises', groups[TYPES.COMPANY]) + renderGroup('👥 Groupuscules', groups[TYPES.GROUP]) + renderGroup('👤 Personnes', groups[TYPES.PERSON]);
     
-    // Ajout des listeners suppression lien
     chipsContainer.querySelectorAll('.x').forEach(x => {
         x.onclick = (e) => {
             pushHistory(); 
@@ -368,16 +356,25 @@ function renderActiveLinks(n) {
                 const t = (typeof l.target === 'object') ? l.target.id : l.target;
                 return !((s === sId && t === tId) || (s === tId && t === sId));
             });
-            updatePersonColors();
-            restartSim(); renderEditor(); updatePathfindingPanel();
+            updatePersonColors(); restartSim(); renderEditor(); updatePathfindingPanel();
         };
     });
     
-    // Hack pour rendre selectNode global pour le onclick HTML
     window.selectNode = selectNode;
 }
 
-// --- LISTES & EXPORT ---
+// --- LEGEND & LISTS ---
+export function updateLinkLegend() {
+    const el = ui.linkLegend;
+    if(!state.showLinkTypes) { el.innerHTML = ''; return; }
+    const usedKinds = new Set(state.links.map(l => l.kind));
+    if(usedKinds.size === 0) { el.innerHTML = ''; return; }
+    const html = [];
+    usedKinds.forEach(k => {
+        html.push(`<div class="legend-item"><span class="legend-emoji">${linkKindEmoji(k)}</span><span>${kindToLabel(k)}</span></div>`);
+    });
+    el.innerHTML = html.join('');
+}
 
 export function refreshLists() {
     updateDegreeCache();
@@ -451,17 +448,4 @@ function mergeGraph(e) {
         } catch(err) { console.error(err); showCustomAlert('Erreur fusion.'); }
     };
     r.readAsText(f);
-}
-
-// --- UTILS MODALE ---
-let modalOverlayDiv = null; // Renommé pour éviter conflit
-function getModal() {
-    if(!modalOverlayDiv) {
-        modalOverlayDiv = document.createElement('div');
-        modalOverlayDiv.id = 'custom-modal';
-        modalOverlayDiv.style.cssText = `position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 9999; display: none; align-items: center; justify-content: center;`;
-        modalOverlayDiv.innerHTML = `<div style="background: #1a1a2e; border: 1px solid var(--accent-cyan); padding: 20px; border-radius: 8px; min-width: 300px; text-align: center; box-shadow: 0 0 20px rgba(0,0,0,0.8);"><div id="modal-msg" style="margin-bottom: 20px; color: #fff; font-size: 1rem;"></div><div id="modal-actions" style="display: flex; gap: 10px; justify-content: center;"></div></div>`;
-        document.body.appendChild(modalOverlayDiv);
-    }
-    return modalOverlayDiv;
 }
