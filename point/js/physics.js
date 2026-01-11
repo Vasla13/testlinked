@@ -5,7 +5,6 @@ import { nodeRadius, draw } from './render.js';
 let simulation;
 
 export function initPhysics() {
-    // Utilisation de la friction dynamique
     simulation = d3.forceSimulation()
         .alphaDecay(0.01) 
         .velocityDecay(state.physicsSettings.friction) 
@@ -20,7 +19,7 @@ function ticked() {
 export function restartSim() {
     if (!simulation) initPhysics();
     
-    // Met à jour la friction si elle a changé dans le panneau
+    // MAJ de la friction depuis les réglages
     simulation.velocityDecay(state.physicsSettings.friction);
 
     simulation.nodes(state.nodes);
@@ -38,7 +37,7 @@ export function restartSim() {
         connectedPairs.add(`${t}-${s}`);
     });
 
-    const S = state.physicsSettings; // Raccourci pour les réglages
+    const S = state.physicsSettings; // Raccourci pour accéder aux sliders
 
     // 1. LIENS
     simulation.force("link", d3.forceLink(state.links)
@@ -46,7 +45,7 @@ export function restartSim() {
         .distance(l => {
             if (l.kind === KINDS.ENNEMI) return 0; 
             
-            // Distances relatives basées sur le slider "Link Length"
+            // Slider: Link Length
             const base = S.linkLength;
             if (l.kind === KINDS.AFFILIATION) return base * 2.0; 
             if (l.kind === KINDS.PATRON) return base * 0.3;
@@ -61,11 +60,11 @@ export function restartSim() {
         })
     );
 
-    // 2. GRAVITÉ CENTRALE
+    // 2. GRAVITÉ CENTRALE (Slider: Gravity)
     simulation.force("gravityX", d3.forceX(0).strength(S.gravity));
     simulation.force("gravityY", d3.forceY(0).strength(S.gravity));
 
-    // 3. ENNEMIS (Toujours violent, indépendant des sliders)
+    // 3. ENNEMIS (Utilise le NOUVEAU Slider: enemyForce)
     const enemyRepulsion = (alpha) => {
         state.links.forEach(l => {
             if (l.kind !== KINDS.ENNEMI) return;
@@ -75,13 +74,24 @@ export function restartSim() {
             const isBigS = (s.type === TYPES.COMPANY || s.type === TYPES.GROUP);
             const isBigT = (t.type === TYPES.COMPANY || t.type === TYPES.GROUP);
             
-            let hateRadius = 900; let forceMultiplier = 3.0;
-            if (isBigS && isBigT) { hateRadius = 5000; forceMultiplier = 300.0; } 
-            else if (isBigS || isBigT) { hateRadius = 2500; forceMultiplier = 30.0; }
+            let hateRadius = 900; 
+            
+            // Le slider définit la "Force de base", on l'amplifie selon la taille
+            let forceMultiplier = S.enemyForce / 50; // Normalisation (ex: 300 / 50 = 6)
+
+            if (isBigS && isBigT) { 
+                hateRadius = 5000; // Guerre totale
+                forceMultiplier *= 10; // Très violent
+            } 
+            else if (isBigS || isBigT) { 
+                hateRadius = 2500; 
+                forceMultiplier *= 2;
+            }
 
             let dx = t.x - s.x || (Math.random() - 0.5);
             let dy = t.y - s.y || (Math.random() - 0.5);
-            let distSq = dx*dx + dy*dy; const dist = Math.sqrt(distSq);
+            let distSq = dx*dx + dy*dy; 
+            const dist = Math.sqrt(distSq);
             
             if (dist < hateRadius) {
                 const strength = (hateRadius - dist) / hateRadius; 
@@ -93,10 +103,10 @@ export function restartSim() {
     };
     simulation.force("enemyRepulsion", enemyRepulsion);
 
-    // 4. CHARGE (Utilise S.repulsion)
+    // 4. CHARGE GLOBALE (Slider: Repulsion)
     simulation.force("charge", d3.forceManyBody()
         .strength(n => {
-            let strength = -S.repulsion; // Valeur du slider
+            let strength = -S.repulsion; 
             if (n.type === TYPES.COMPANY) strength *= 5; 
             if (n.type === TYPES.GROUP) strength *= 3;
             const degree = nodeDegree.get(n.id) || 0;
@@ -107,13 +117,13 @@ export function restartSim() {
         .distanceMin(50) 
     );
 
-    // 5. COLLISION (Utilise S.collision)
+    // 5. COLLISION (Slider: Collision)
     simulation.force("collide", d3.forceCollide()
         .radius(n => nodeRadius(n) + S.collision) 
         .iterations(2)
     );
 
-    // 6. BARRIÈRE
+    // 6. BARRIÈRE (Gérée par l'état Globe)
     const worldRadius = 3800; 
     simulation.force("boundary", () => {
         if (!state.globeMode) return; 
@@ -128,7 +138,7 @@ export function restartSim() {
         }
     });
 
-    // 7. TERRITOIRE
+    // 7. TERRITOIRE (Utilise le NOUVEAU Slider: structureRepulsion)
     simulation.force("territory", () => {
         const structures = state.nodes.filter(n => n.type === TYPES.COMPANY || n.type === TYPES.GROUP);
         for (const struct of structures) {
@@ -136,12 +146,17 @@ export function restartSim() {
             for (const n of state.nodes) {
                 if (n.id === struct.id || n.type === TYPES.COMPANY || n.type === TYPES.GROUP) continue;
                 if (n.fx != null) continue;
-                if (connectedPairs.has(`${n.id}-${struct.id}`)) continue;
+                if (connectedPairs.has(`${n.id}-${struct.id}`)) continue; // Si connecté, le lien gère la distance
+
                 const dx = n.x - struct.x; const dy = n.y - struct.y;
-                const distSq = dx*dx + dy*dy; const minDistSq = territoryRadius * territoryRadius;
+                const distSq = dx*dx + dy*dy; 
+                const minDistSq = territoryRadius * territoryRadius;
+
                 if (distSq < minDistSq) {
                     const dist = Math.sqrt(distSq);
-                    const push = (territoryRadius - dist) * 0.08; 
+                    // Ici on utilise le slider "Force Repousse Entreprise"
+                    const push = (territoryRadius - dist) * S.structureRepulsion; 
+                    
                     const angle = Math.atan2(dy, dx);
                     n.vx += Math.cos(angle) * push; n.vy += Math.sin(angle) * push;
                 }

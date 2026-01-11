@@ -1,5 +1,5 @@
 import { state, saveState, nodeById, isPerson, isCompany, isGroup, undo, pushHistory } from './state.js';
-import { ensureNode, addLink as logicAddLink, mergeNodes, updatePersonColors, calculatePath, clearPath } from './logic.js';
+import { ensureNode, addLink as logicAddLink, mergeNodes, updatePersonColors, calculatePath, clearPath, calculateHVT } from './logic.js';
 import { renderEditorHTML, renderPathfindingSidebar } from './templates.js';
 import { restartSim, getSimulation } from './physics.js';
 import { draw, updateDegreeCache, resizeCanvas } from './render.js';
@@ -43,18 +43,46 @@ function createContextMenu() {
     document.body.appendChild(contextMenu);
 }
 
-// --- CREATION DU PANNEAU REGLAGES ---
+// --- PANNEAU DE REGLAGES (AVEC GLOBE & NOUVEAUX SLIDERS) ---
 function createSettingsPanel() {
-    if (document.getElementById('settings-panel')) return;
+    // Suppression préventive pour éviter les doublons buggés
+    const existing = document.getElementById('settings-panel');
+    if (existing) existing.remove();
+
     settingsPanel = document.createElement('div');
     settingsPanel.id = 'settings-panel';
+    settingsPanel.style.display = 'none'; // Caché par défaut
+    
+    // ICONE SVG GLOBE
+    const ICON_GLOBE = `<svg style="width:24px;height:24px;fill:currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>`;
+
     settingsPanel.innerHTML = `
-        <div class="settings-close" onclick="document.getElementById('settings-panel').style.display='none'">✕</div>
-        <h3 style="margin-top:0; color:var(--accent-cyan); text-transform:uppercase; font-size:1rem;">Réglages Physique</h3>
+        <div class="settings-header">
+            <h3>Paramètres Physique</h3>
+            <div class="settings-close" onclick="document.getElementById('settings-panel').style.display='none'">✕</div>
+        </div>
         
+        <div style="background:rgba(255,255,255,0.05); padding:10px; border-radius:6px; margin-bottom:15px; display:flex; align-items:center; justify-content:space-between;">
+            <div style="display:flex; align-items:center; gap:10px; color:#fff; font-weight:bold;">
+                ${ICON_GLOBE} <span>Mode Planète (Globe)</span>
+            </div>
+            <label class="hud-toggle">
+                <input type="checkbox" id="chkGlobeInner" ${state.globeMode ? 'checked' : ''}/>
+                <div class="toggle-track"><div class="toggle-thumb"></div></div>
+            </label>
+        </div>
+
         <div class="setting-row">
-            <label>Répulsion <span id="val-repulsion" class="setting-val"></span></label>
+            <label>Répulsion Globale <span id="val-repulsion" class="setting-val"></span></label>
             <input type="range" id="sl-repulsion" min="100" max="5000" step="50">
+        </div>
+        <div class="setting-row">
+            <label>Force Repousse Ennemis <span id="val-enemyForce" class="setting-val"></span></label>
+            <input type="range" id="sl-enemyForce" min="50" max="1000" step="10" title="Violence de l'éloignement des ennemis">
+        </div>
+        <div class="setting-row">
+            <label>Force Repousse Entreprise <span id="val-structureRepulsion" class="setting-val"></span></label>
+            <input type="range" id="sl-structureRepulsion" min="0.01" max="0.5" step="0.01" title="Force qui éloigne les non-membres des structures">
         </div>
         <div class="setting-row">
             <label>Gravité Centrale <span id="val-gravity" class="setting-val"></span></label>
@@ -72,17 +100,28 @@ function createSettingsPanel() {
             <label>Friction (0=Glace) <span id="val-friction" class="setting-val"></span></label>
             <input type="range" id="sl-friction" min="0.1" max="0.9" step="0.05">
         </div>
-        <button class="primary" style="width:100%; margin-top:10px;" onclick="window.resetPhysicsDefaults()">Rétablir par défaut</button>
+        
+        <div class="settings-actions">
+            <button class="primary" style="width:100%;" onclick="window.resetPhysicsDefaults()">Rétablir défaut</button>
+        </div>
     `;
     document.body.appendChild(settingsPanel);
 
+    // GESTION DU GLOBE
+    document.getElementById('chkGlobeInner').onchange = (e) => {
+        state.globeMode = e.target.checked;
+        restartSim();
+    };
+
+    // GESTION DES SLIDERS
     const bindSlider = (id, key) => {
         const sl = document.getElementById(id);
         const val = document.getElementById(id.replace('sl-', 'val-'));
         
-        // Initialisation si settings pas chargés
-        if(!state.physicsSettings) state.physicsSettings = { repulsion: 1200, gravity: 0.005, linkLength: 220, friction: 0.3, collision: 50 };
-        
+        // Initialisation sécure
+        if(!state.physicsSettings) state.physicsSettings = { repulsion: 1200, gravity: 0.005, linkLength: 220, friction: 0.3, collision: 50, enemyForce: 300, structureRepulsion: 0.1 };
+        if(state.physicsSettings[key] === undefined) state.physicsSettings[key] = (key === 'enemyForce' ? 300 : 0.1);
+
         sl.value = state.physicsSettings[key];
         val.innerText = state.physicsSettings[key];
         
@@ -90,7 +129,7 @@ function createSettingsPanel() {
             const v = parseFloat(e.target.value);
             state.physicsSettings[key] = v;
             val.innerText = v;
-            restartSim(); // Applique immédiatement
+            restartSim(); 
         };
     };
 
@@ -100,13 +139,33 @@ function createSettingsPanel() {
         bindSlider('sl-linkLength', 'linkLength');
         bindSlider('sl-collision', 'collision');
         bindSlider('sl-friction', 'friction');
+        // Nouveaux
+        bindSlider('sl-enemyForce', 'enemyForce');
+        bindSlider('sl-structureRepulsion', 'structureRepulsion');
+        
+        // Sync Globe
+        const chkGlobe = document.getElementById('chkGlobeInner');
+        if(chkGlobe) chkGlobe.checked = state.globeMode;
     };
 
     window.resetPhysicsDefaults = () => {
-        state.physicsSettings = { repulsion: 1200, gravity: 0.005, linkLength: 220, friction: 0.3, collision: 50 };
+        state.physicsSettings = { repulsion: 1200, gravity: 0.005, linkLength: 220, friction: 0.3, collision: 50, enemyForce: 300, structureRepulsion: 0.1 };
+        state.globeMode = true;
         window.updateSettingsUI();
         restartSim();
     };
+}
+
+export function showSettings() {
+    // Si le panneau n'existe pas ou a été supprimé, on le recrée
+    if(!document.getElementById('settings-panel')) createSettingsPanel();
+    
+    // On met à jour les valeurs
+    window.updateSettingsUI();
+    
+    // On l'affiche
+    const panel = document.getElementById('settings-panel');
+    panel.style.display = (panel.style.display === 'none' ? 'block' : 'none');
 }
 
 export function showContextMenu(node, x, y) {
@@ -152,13 +211,6 @@ export function hideContextMenu() {
     if(contextMenu) contextMenu.style.display = 'none';
 }
 
-export function showSettings() {
-    if(!settingsPanel) createSettingsPanel();
-    window.updateSettingsUI();
-    settingsPanel.style.display = 'block';
-}
-
-// --- INIT ---
 export function initUI() {
     createModal();
     createContextMenu();
@@ -178,15 +230,7 @@ export function initUI() {
         } 
     });
 
-    setupCanvasEvents(canvas, {
-        selectNode,
-        renderEditor, 
-        updatePathfindingPanel,
-        addLink,
-        showContextMenu,
-        hideContextMenu
-    });
-
+    setupCanvasEvents(canvas, { selectNode, renderEditor, updatePathfindingPanel, addLink, showContextMenu, hideContextMenu });
     setupHudButtons();
     
     document.getElementById('createPerson').onclick = () => createNode(TYPES.PERSON, 'Nouvelle personne');
@@ -208,41 +252,80 @@ export function initUI() {
     window.zoomToNode = zoomToNode;
 }
 
-// --- HELPERS INIT ---
+// --- HUD ENTIEREMENT REFAIT AVEC SVG & SWITCHES ---
 function setupHudButtons() {
-    document.getElementById('btnRelayout').onclick = () => { state.view = {x:0, y:0, scale: 0.5}; restartSim(); };
-    const btnSim = document.getElementById('btnToggleSim'); if (btnSim) btnSim.style.display = 'none';
-    document.getElementById('chkPerf').onchange = (e) => { state.performance = e.target.checked; draw(); };
-    document.getElementById('chkLinkTypes').onchange = (e) => { state.showLinkTypes = e.target.checked; updateLinkLegend(); draw(); };
-
     const hud = document.getElementById('hud');
-    if (!document.getElementById('chkGlobe')) {
-        const lblGlobe = document.createElement('label');
-        lblGlobe.title = "Restreindre à la planète";
-        lblGlobe.style.cursor = "pointer";
-        lblGlobe.innerHTML = `<input id="chkGlobe" type="checkbox" ${state.globeMode ? 'checked' : ''}/> 🌍 Globe`;
-        lblGlobe.querySelector('input').onchange = (e) => {
-            state.globeMode = e.target.checked;
-            restartSim(); 
-        };
-        hud.insertBefore(lblGlobe, document.getElementById('chkLabels').parentNode);
-    }
-    // BOUTON REGLAGES
-    if (!document.getElementById('btnSettings')) {
-        const btnSettings = document.createElement('button');
-        btnSettings.id = 'btnSettings';
-        btnSettings.innerText = '⚙️';
-        btnSettings.title = "Réglages Physique";
-        btnSettings.onclick = showSettings; 
-        hud.appendChild(btnSettings);
-    }
-    const btnLabel = document.getElementById('chkLabels');
-    if (btnLabel) {
-        btnLabel.type = 'button'; btnLabel.style.width = "100px"; btnLabel.style.textAlign = "center";
-        const updateLabelBtn = () => { const modes = ['❌ Aucun', '✨ Auto', '👁️ Toujours']; btnLabel.value = modes[state.labelMode]; btnLabel.innerText = modes[state.labelMode]; };
-        updateLabelBtn();
-        btnLabel.onclick = (e) => { e.preventDefault(); state.labelMode = (state.labelMode + 1) % 3; updateLabelBtn(); draw(); };
-    }
+    
+    // SVG ICONS DEFINITIONS
+    const ICON_FOCUS = `<svg class="icon-svg" viewBox="0 0 24 24"><path d="M5 5h5v2H5v5H3V5h2zm10 0h5v5h-2V7h-3V5zm5 14h-5v2h5v-5h2v5h-2zm-14 0H3v-5h2v5h3v2z"/></svg>`;
+    const ICON_SETTINGS = `<svg class="icon-svg" viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>`;
+    const ICON_TARGET = `<svg class="icon-svg" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-4-8c0 2.21 1.79 4 4 4s4-1.79 4-4-1.79-4-4-4-4 1.79-4 4z"/></svg>`;
+
+    // On vide le HUD pour le reconstruire proprement
+    hud.innerHTML = '';
+
+    // 1. Bouton Recentre
+    const btnRelayout = document.createElement('button');
+    btnRelayout.className = 'hud-btn';
+    btnRelayout.innerHTML = `${ICON_FOCUS} Recentrer`;
+    btnRelayout.onclick = () => { state.view = {x:0, y:0, scale: 0.5}; restartSim(); };
+    hud.appendChild(btnRelayout);
+
+    // 2. Séparateur
+    hud.insertAdjacentHTML('beforeend', '<div class="hud-sep"></div>');
+
+    // 3. (Globe a été déplacé dans Settings)
+
+    // 4. Labels Mode (Bouton Cycle)
+    const btnLabels = document.createElement('button');
+    btnLabels.className = 'hud-btn';
+    const updateLabelBtn = () => { 
+        const modes = ['Non', 'Auto', 'Oui'];
+        btnLabels.innerHTML = `<span>📝 ${modes[state.labelMode]}</span>`; 
+        btnLabels.classList.toggle('active', state.labelMode > 0);
+    };
+    updateLabelBtn();
+    btnLabels.onclick = () => { state.labelMode = (state.labelMode + 1) % 3; updateLabelBtn(); draw(); };
+    hud.appendChild(btnLabels);
+
+    // 5. Toggles (Eco, Liens)
+    const lblPerf = document.createElement('label');
+    lblPerf.className = 'hud-toggle';
+    lblPerf.innerHTML = `<input type="checkbox" id="chkPerf"/><div class="toggle-track"><div class="toggle-thumb"></div></div> Eco`;
+    lblPerf.querySelector('input').onchange = (e) => { state.performance = e.target.checked; draw(); };
+    hud.appendChild(lblPerf);
+
+    const lblLinks = document.createElement('label');
+    lblLinks.className = 'hud-toggle';
+    lblLinks.innerHTML = `<input type="checkbox" id="chkLinkTypes"/><div class="toggle-track"><div class="toggle-thumb"></div></div> Liens`;
+    lblLinks.querySelector('input').onchange = (e) => { state.showLinkTypes = e.target.checked; updateLinkLegend(); draw(); };
+    hud.appendChild(lblLinks);
+
+    // 6. Settings
+    const btnSettings = document.createElement('button');
+    btnSettings.className = 'hud-btn';
+    btnSettings.innerHTML = ICON_SETTINGS;
+    btnSettings.title = "Paramètres Physique";
+    btnSettings.onclick = showSettings;
+    hud.appendChild(btnSettings);
+
+    // 7. HVT Button
+    const btnHVT = document.createElement('button');
+    btnHVT.id = 'btnHVT';
+    btnHVT.className = 'hud-btn';
+    btnHVT.innerHTML = `${ICON_TARGET} HVT`;
+    btnHVT.title = "Scanner High Value Targets";
+    btnHVT.onclick = () => {
+        state.hvtMode = !state.hvtMode;
+        if(state.hvtMode) {
+            calculateHVT();
+            btnHVT.classList.add('active');
+        } else {
+            btnHVT.classList.remove('active');
+        }
+        draw();
+    };
+    hud.appendChild(btnHVT);
 }
 
 function setupSearch() {
@@ -277,7 +360,6 @@ function createFilterBar() {
     document.body.appendChild(bar);
 }
 
-// --- LOGIQUE ---
 function createNode(type, baseName) {
     let name = baseName, i = 1;
     while(state.nodes.find(n => n.name === name)) { name = `${baseName} ${++i}`; }
@@ -310,7 +392,6 @@ function zoomToNode(id) {
     draw();
 }
 
-// --- COMMONS ---
 export function showCustomAlert(msg) {
     if(!modalOverlay) createModal();
     const msgEl = document.getElementById('modal-msg');
@@ -336,7 +417,6 @@ export function showCustomConfirm(msg, onYes) {
     }
 }
 
-// --- IMPORTS/EXPORTS ---
 export function updateLinkLegend() {
     const el = ui.linkLegend;
     if(!state.showLinkTypes) { el.innerHTML = ''; return; }
@@ -429,11 +509,35 @@ export function updatePathfindingPanel() {
     const selectedNode = nodeById(state.selection);
     el.innerHTML = renderPathfindingSidebar(state, selectedNode);
     const btnStart = document.getElementById('btnPathStart');
-    if(btnStart) btnStart.onclick = () => { if(!selectedNode) return; state.pathfinding.startId = selectedNode.id; state.pathfinding.active = false; updatePathfindingPanel(); draw(); };
+    if(btnStart) btnStart.onclick = () => {
+        if(!selectedNode) return;
+        state.pathfinding.startId = selectedNode.id;
+        state.pathfinding.active = false;
+        updatePathfindingPanel();
+        draw(); 
+    };
     const btnCancel = document.getElementById('btnPathCancel');
-    if(btnCancel) btnCancel.onclick = () => { state.pathfinding.startId = null; state.pathfinding.active = false; clearPath(); draw(); updatePathfindingPanel(); };
+    if(btnCancel) btnCancel.onclick = () => {
+        state.pathfinding.startId = null;
+        state.pathfinding.active = false;
+        clearPath();
+        draw();
+        updatePathfindingPanel();
+    };
     const btnCalc = document.getElementById('btnPathCalc');
-    if(btnCalc) btnCalc.onclick = () => { if(!selectedNode || !state.pathfinding.startId) return; const result = calculatePath(state.pathfinding.startId, selectedNode.id); if (result) { state.pathfinding.pathNodes = result.pathNodes; state.pathfinding.pathLinks = result.pathLinks; state.pathfinding.active = true; draw(); updatePathfindingPanel(); } else { showCustomAlert("Aucune connexion trouvée (hors ennemis)."); } };
+    if(btnCalc) btnCalc.onclick = () => {
+        if(!selectedNode || !state.pathfinding.startId) return;
+        const result = calculatePath(state.pathfinding.startId, selectedNode.id);
+        if (result) {
+            state.pathfinding.pathNodes = result.pathNodes;
+            state.pathfinding.pathLinks = result.pathLinks;
+            state.pathfinding.active = true;
+            draw();
+            updatePathfindingPanel();
+        } else {
+            showCustomAlert("Aucune connexion trouvée (hors ennemis).");
+        }
+    };
 }
 
 export function renderEditor() {

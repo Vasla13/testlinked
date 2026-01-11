@@ -9,7 +9,9 @@ export const state = {
     focusMode: false,
     focusSet: new Set(),
     
-    // Pathfinding
+    // Mode HVT
+    hvtMode: false,
+
     pathfinding: {
         startId: null,      
         active: false,      
@@ -17,19 +19,19 @@ export const state = {
         pathLinks: new Set()  
     },
 
-    // Filtre actif
     activeFilter: 'ALL',
-
-    // Mode Globe
+    // globeMode est maintenant géré via le panneau, mais on garde l'état ici
     globeMode: true, 
 
-    // --- NOUVEAU : PARAMÈTRES PHYSIQUES ---
+    // --- REGLAGES PHYSIQUE COMPLETS ---
     physicsSettings: {
-        repulsion: 1200,    // Force de répulsion globale
-        gravity: 0.005,     // Gravité vers le centre
-        linkLength: 220,    // Longueur des liens
-        friction: 0.3,      // Friction (0 = glace, 1 = mélasse)
-        collision: 50       // Espace entre les points
+        repulsion: 1200,        // Espace global
+        gravity: 0.005,         // Attraction centre
+        linkLength: 220,        // Longueur liens
+        friction: 0.3,          // Stabilité
+        collision: 50,          // Non-superposition
+        enemyForce: 300,        // Violence répulsion ennemis (Nouveau)
+        structureRepulsion: 0.1 // Force territoire des entreprises (Nouveau)
     },
 
     history: [], 
@@ -41,7 +43,7 @@ export const state = {
     forceSimulation: false
 };
 
-const STORAGE_KEY = 'pointPageState_v11'; 
+const STORAGE_KEY = 'pointPageState_v13'; 
 
 export function saveState() {
     try {
@@ -60,7 +62,7 @@ export function saveState() {
             showLinkTypes: state.showLinkTypes,
             activeFilter: state.activeFilter,
             globeMode: state.globeMode,
-            physicsSettings: state.physicsSettings, // Sauvegarde des réglages
+            physicsSettings: state.physicsSettings,
             nextId: state.nextId
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -78,17 +80,15 @@ export function loadState() {
         if (data.nextId) state.nextId = data.nextId;
         
         if (typeof data.labelMode === 'number') state.labelMode = data.labelMode;
-        else if (typeof data.showLabels === 'boolean') state.labelMode = data.showLabels ? 1 : 0;
-        
         if (data.activeFilter) state.activeFilter = data.activeFilter;
         if (typeof data.globeMode === 'boolean') state.globeMode = data.globeMode;
 
-        // Chargement des réglages physiques
         if (data.physicsSettings) {
             state.physicsSettings = { ...state.physicsSettings, ...data.physicsSettings };
         }
 
         state.pathfinding = { startId: null, active: false, pathNodes: new Set(), pathLinks: new Set() };
+        state.hvtMode = false;
 
         return true;
     } catch (e) { return false; }

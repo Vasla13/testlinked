@@ -3,6 +3,34 @@ import { restartSim } from './physics.js';
 import { uid, randomPastel, hexToRgb, rgbToHex } from './utils.js';
 import { TYPES, KINDS } from './constants.js';
 
+// --- NOUVEAU : ALGORITHME HVT ---
+export function calculateHVT() {
+    const degrees = new Map();
+    let maxDegree = 0;
+
+    // 1. Initialisation
+    state.nodes.forEach(n => degrees.set(n.id, 0));
+
+    // 2. Comptage des connexions
+    state.links.forEach(l => {
+        const s = (typeof l.source === 'object') ? l.source.id : l.source;
+        const t = (typeof l.target === 'object') ? l.target.id : l.target;
+        degrees.set(s, (degrees.get(s) || 0) + 1);
+        degrees.set(t, (degrees.get(t) || 0) + 1);
+    });
+
+    // 3. Trouver le max pour normaliser
+    for (let d of degrees.values()) {
+        if (d > maxDegree) maxDegree = d;
+    }
+
+    // 4. Assigner le score HVT (0.0 à 1.0)
+    state.nodes.forEach(n => {
+        const d = degrees.get(n.id) || 0;
+        n.hvtScore = (maxDegree > 0) ? (d / maxDegree) : 0;
+    });
+}
+
 export function updatePersonColors() {
     const nodeWeights = new Map();
     state.links.forEach(l => {
@@ -131,21 +159,16 @@ export function propagateOrgNums() {
     }
 }
 
-// --- ALGORITHME DE CORRÉLATION (PATHFINDING) ---
 export function calculatePath(startId, endId) {
     if (!startId || !endId || startId === endId) return null;
-
     const queue = [[startId]];
     const visited = new Set([startId]);
-
     while (queue.length > 0) {
         const path = queue.shift();
         const node = path[path.length - 1];
-
         if (node === endId) {
             const pathNodes = new Set(path);
             const pathLinks = new Set();
-
             for (let i = 0; i < path.length - 1; i++) {
                 const u = path[i];
                 const v = path[i+1];
@@ -154,7 +177,7 @@ export function calculatePath(startId, endId) {
                     const t = (typeof l.target === 'object') ? l.target.id : l.target;
                     return (s === u && t === v) || (s === v && t === u);
                 });
-                if (link && link.kind !== KINDS.ENNEMI) { // Sécurité double
+                if (link && link.kind !== KINDS.ENNEMI) { 
                     const s = (typeof link.source === 'object') ? link.source.id : link.source;
                     const t = (typeof link.target === 'object') ? link.target.id : link.target;
                     pathLinks.add(`${s}-${t}`);
@@ -163,18 +186,14 @@ export function calculatePath(startId, endId) {
             }
             return { pathNodes, pathLinks };
         }
-
         const neighbors = [];
         state.links.forEach(l => {
-            // --- CORRECTION : ON IGNORE LES ENNEMIS ---
             if (l.kind === KINDS.ENNEMI) return;
-
             const s = (typeof l.source === 'object') ? l.source.id : l.source;
             const t = (typeof l.target === 'object') ? l.target.id : l.target;
             if (s === node && !visited.has(t)) neighbors.push(t);
             else if (t === node && !visited.has(s)) neighbors.push(s);
         });
-
         for (const neighbor of neighbors) {
             visited.add(neighbor);
             queue.push([...path, neighbor]);

@@ -57,15 +57,18 @@ export function draw() {
     
     const isFocus = state.focusMode;
     const isPath = state.pathMode;
+    const isHVT = state.hvtMode; 
     const showTypes = state.showLinkTypes; 
     const labelMode = state.labelMode; 
     const activeFilter = state.activeFilter; 
 
+    // NETTOYAGE
     ctx.save();
     ctx.clearRect(0, 0, w, h);
     
+    // GRILLE (Optimisée : trait fin)
     ctx.save();
-    ctx.strokeStyle = "rgba(115, 251, 247, 0.08)"; 
+    ctx.strokeStyle = "rgba(115, 251, 247, 0.05)"; 
     ctx.lineWidth = 1;
     const gridSize = 100 * p.scale; 
     const offsetX = (w/2 + p.x) % gridSize;
@@ -87,21 +90,18 @@ export function draw() {
     const visibleLinks = new Set();
     const activeNodes = new Set(); 
 
+    // Pré-calcul de visibilité
     for (const l of state.links) {
         if (allowedKinds && !allowedKinds.has(l.kind)) continue;
         visibleLinks.add(l);
-        const sId = l.source.id || l.source;
-        const tId = l.target.id || l.target;
-        activeNodes.add(sId);
-        activeNodes.add(tId);
+        activeNodes.add(l.source.id || l.source);
+        activeNodes.add(l.target.id || l.target);
     }
 
+    // Helper pour griser ce qui n'est pas focus
     function isDimmed(objType, obj) {
-        // --- CORRECTION VISUELLE : Pas de grisement pendant le choix de la cible ---
-        if (state.pathfinding.startId !== null && !state.pathfinding.active) {
-            return false;
-        }
-
+        if (isHVT) return false; // En HVT, on gère la transparence différemment
+        if (state.pathfinding.startId !== null && !state.pathfinding.active) return false;
         if (state.pathfinding.active) {
             if (objType === 'node') return !state.pathfinding.pathNodes.has(obj.id);
             if (objType === 'link') {
@@ -124,27 +124,36 @@ export function draw() {
         return false;
     }
 
-    // 1. LIENS
+    // 1. DESSIN DES LIENS
     for (const l of state.links) {
         if (!visibleLinks.has(l)) continue;
         if (l.kind === KINDS.ENNEMI) continue; 
-
         if (isFocus && (!state.focusSet.has(l.source.id) || !state.focusSet.has(l.target.id))) continue;
         
-        const dimmed = isDimmed('link', l);
-        const isPathLink = state.pathfinding.active && !dimmed;
-        const globalAlpha = dimmed ? 0.2 : 0.8; // Grisé mais visible
+        let dimmed = isDimmed('link', l);
+        let globalAlpha = dimmed ? 0.2 : 0.8;
+
+        // Optimisation HVT : On rend très transparents les liens faibles
+        if (isHVT) {
+            const sScore = l.source.hvtScore || 0;
+            const tScore = l.target.hvtScore || 0;
+            if (sScore < 0.2 && tScore < 0.2) globalAlpha = 0.05; 
+            else globalAlpha = 0.4;
+        }
 
         ctx.beginPath();
         ctx.moveTo(l.source.x, l.source.y);
         ctx.lineTo(l.target.x, l.target.y);
 
+        const isPathLink = state.pathfinding.active && !dimmed;
+
         if (showTypes || isPathLink) {
              const color = isPathLink ? '#00ffff' : computeLinkColor(l);
              ctx.strokeStyle = color;
              ctx.lineWidth = (isPathLink ? 4 : (dimmed ? 1 : 2)) / Math.sqrt(p.scale);
+             // On enlève le shadowBlur en mode HVT pour la perf
              if(isPathLink) { ctx.shadowBlur = 15; ctx.shadowColor = '#00ffff'; }
-             else if(useGlow && !dimmed) { ctx.shadowBlur = 8; ctx.shadowColor = color; }
+             else if(useGlow && !dimmed && !isHVT) { ctx.shadowBlur = 8; ctx.shadowColor = color; }
              else { ctx.shadowBlur = 0; }
         } else {
              if (state.performance) ctx.strokeStyle = "rgba(255,255,255,0.2)";
@@ -162,7 +171,7 @@ export function draw() {
         ctx.globalAlpha = globalAlpha;
         ctx.stroke();
 
-        if (showTypes && p.scale > 0.6 && !dimmed && !isPathLink) {
+        if (showTypes && p.scale > 0.6 && !dimmed && !isPathLink && !isHVT) {
             const mx = (l.source.x + l.target.x) / 2;
             const my = (l.source.y + l.target.y) / 2;
             const color = computeLinkColor(l);
@@ -195,46 +204,72 @@ export function draw() {
         if (activeFilter !== FILTERS.ALL) {
             if (n.type === TYPES.PERSON && !activeNodes.has(n.id)) continue;
         }
-
         if (isFocus && !state.focusSet.has(n.id)) continue;
+        
         const dimmed = isDimmed('node', n);
-        const rad = nodeRadius(n); 
-        ctx.globalAlpha = (isPath && state.pathPath.has(n.id)) ? 1.0 : (dimmed ? 0.4 : 1.0); // Nœuds grisés plus visibles
+        let rad = nodeRadius(n); 
+        let alpha = (isPath && state.pathPath.has(n.id)) ? 1.0 : (dimmed ? 0.4 : 1.0);
+        let nodeColor = safeHex(n.color);
+        
+        // --- LOGIQUE VISUELLE HVT (STATIQUE, SANS ANIMATION) ---
+        let isBoss = false;
+        if (isHVT) {
+            const score = n.hvtScore || 0;
+            if (score > 0.6) { 
+                // LE BOSS : Très gros, Rouge, Visible
+                isBoss = true;
+                rad = rad * (1 + score * 0.8); // Grossissement statique
+                nodeColor = '#ff0000'; 
+                alpha = 1.0;
+            } else if (score < 0.2) { 
+                // LE PETIT : Très transparent
+                alpha = 0.15; 
+                rad *= 0.8;
+            } else { 
+                alpha = 0.6;
+            }
+        }
 
+        ctx.globalAlpha = alpha;
         ctx.beginPath();
         if (isGroup(n)) drawPolygon(ctx, n.x, n.y, rad * 1.2, 4); 
         else if (isCompany(n)) drawPolygon(ctx, n.x, n.y, rad * 1.1, 6, Math.PI/2); 
         else ctx.arc(n.x, n.y, rad, 0, Math.PI * 2);
 
-        ctx.fillStyle = safeHex(n.color);
+        ctx.fillStyle = nodeColor;
+        
         const isPathNode = isPath && state.pathPath.has(n.id);
         const isPathfindingNode = state.pathfinding.active && state.pathfinding.pathNodes.has(n.id);
-        const isPathStart = state.pathfinding.startId === n.id; // Le point de départ
+        const isPathStart = state.pathfinding.startId === n.id;
 
-        // --- CONTOUR DE SELECTION ---
+        // Gestion Contour (Sans animation lourde)
         if (state.selection === n.id || state.hoverId === n.id || isPathNode || isPathfindingNode || isPathStart) {
-            ctx.shadowBlur = (isPathNode || isPathfindingNode || isPathStart) ? 30 : 20; 
-            
-            let strokeColor = '#ffffff'; // Blanc par défaut pour la sélection simple
+            ctx.shadowBlur = 20; 
+            let strokeColor = '#ffffff';
             if (isPathNode || isPathfindingNode) strokeColor = '#00ffff';
-            if (isPathStart) strokeColor = '#ffff00'; // Jaune pour le départ
-
+            if (isPathStart) strokeColor = '#ffff00';
             ctx.shadowColor = strokeColor;
             ctx.strokeStyle = strokeColor;
-            ctx.lineWidth = ((isPathNode || isPathfindingNode || isPathStart) ? 6 : 4) / Math.sqrt(p.scale);
+            ctx.lineWidth = 3 / Math.sqrt(p.scale);
+            ctx.stroke();
+        } else if (isBoss) {
+            // Boss HVT : Contour rouge simple, pas de shadowBlur (trop lourd)
+            ctx.strokeStyle = '#ff0000';
+            ctx.lineWidth = 3 / Math.sqrt(p.scale);
             ctx.stroke();
         } else {
             ctx.shadowBlur = 0;
-            if(!dimmed && p.scale > 0.5) {
-                ctx.strokeStyle = "rgba(255,255,255,0.4)";
-                ctx.lineWidth = 1.5 / Math.sqrt(p.scale);
+            if(!dimmed && p.scale > 0.5 && !isHVT) {
+                ctx.strokeStyle = "rgba(255,255,255,0.3)";
+                ctx.lineWidth = 1 / Math.sqrt(p.scale);
                 ctx.stroke();
             }
         }
         ctx.fill();
-        ctx.shadowBlur = 0;
+        ctx.shadowBlur = 0; // Reset important
 
-        if (!dimmed && (p.scale > 0.4 || rad > 15)) {
+        // Icônes
+        if (!dimmed && (p.scale > 0.4 || rad > 15) && (!isHVT || n.hvtScore > 0.2)) {
             ctx.globalAlpha = 1; 
             ctx.fillStyle = 'rgba(0,0,0,0.5)';
             ctx.font = `${rad}px sans-serif`;
@@ -247,10 +282,12 @@ export function draw() {
     if (labelMode > 0) { 
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         for (const n of sortedNodes) {
-            if (activeFilter !== FILTERS.ALL) {
-                if (n.type === TYPES.PERSON && !activeNodes.has(n.id)) continue;
-            }
+            if (activeFilter !== FILTERS.ALL) { if (n.type === TYPES.PERSON && !activeNodes.has(n.id)) continue; }
             if (isFocus && !state.focusSet.has(n.id)) continue;
+            
+            // Filtre HVT pour labels
+            if (isHVT && n.hvtScore < 0.5) continue;
+
             const rad = nodeRadius(n);
             const dimmed = isDimmed('node', n);
             if (dimmed) continue;
@@ -264,9 +301,11 @@ export function draw() {
             let showName = false;
             if (labelMode === 2) showName = true;
             else if (labelMode === 1) showName = isHover || isPathNode || isPathfindingNode || isPathStart || (p.scale > 0.5 || isImportant);
+            
+            if (isHVT && n.hvtScore > 0.6) showName = true;
 
             if (showName) {
-                const fontSize = (isPathNode || isPathfindingNode || isPathStart ? 16 : 13) / Math.sqrt(p.scale);
+                const fontSize = (isPathNode || isPathfindingNode || isPathStart || (isHVT && n.hvtScore > 0.6) ? 16 : 13) / Math.sqrt(p.scale);
                 ctx.font = `600 ${fontSize}px "Rajdhani", sans-serif`; 
                 const label = n.name;
                 const metrics = ctx.measureText(label);
@@ -285,14 +324,16 @@ export function draw() {
                 let strokeColor = safeHex(n.color);
                 if (isPathNode || isPathfindingNode) strokeColor = '#00ffff';
                 if (isPathStart) strokeColor = '#ffff00';
+                if (isHVT && n.hvtScore > 0.6) strokeColor = '#ff0000'; 
 
                 ctx.strokeStyle = strokeColor;
-                ctx.lineWidth = ((isPathNode || isPathfindingNode || isPathStart) ? 3 : 1) / Math.sqrt(p.scale);
+                ctx.lineWidth = ((isPathNode || isPathfindingNode || isPathStart || (isHVT && n.hvtScore > 0.6)) ? 2 : 1) / Math.sqrt(p.scale);
                 ctx.stroke();
                 ctx.globalAlpha = 1.0; ctx.fillStyle = '#ffffff';
                 ctx.fillText(label, n.x, boxY + textH/2 + padding/2);
             }
         }
     }
+    // Pas de requestAnimationFrame ici -> Performance sauvée
     ctx.restore();
 }
