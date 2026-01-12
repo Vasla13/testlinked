@@ -1,29 +1,28 @@
 import { state } from './state.js';
-import { renderZones, renderAll } from './render.js';
-import { getMapPercentCoords } from './engine.js';
-import { renderGroupsList, deselect } from './ui.js';
+// CORRECTION : On importe getMapPercentCoords depuis render.js
+import { renderAll, getMapPercentCoords } from './render.js';
+import { selectItem } from './ui.js';
 
 export function startDrawingZone(groupIndex) {
     state.drawingMode = true;
     state.drawingGroupIndex = groupIndex;
     state.tempPoints = [];
+    document.body.style.cursor = 'crosshair';
     
-    document.body.classList.add('drawing-mode');
-    document.getElementById('draw-hint').style.display = 'block';
+    // Désélectionner pour éviter la confusion visuelle
+    if(state.selectedPoint || state.selectedZone) selectItem(null); 
     
-    // On désélectionne tout pour éviter les conflits
-    deselect(); 
     renderAll();
 }
 
 export function handleDrawingClick(e) {
-    // Clic Gauche : Ajouter point
+    // Clic Gauche : Ajouter un point
     if (e.button === 0) {
         const coords = getMapPercentCoords(e.clientX, e.clientY);
         state.tempPoints.push(coords);
-        renderZones(); // Update visuel
-    }
-    // Clic Droit : Finir ou Annuler
+        renderAll();
+    } 
+    // Clic Droit : Finir le dessin
     else if (e.button === 2) {
         e.preventDefault();
         finishDrawing();
@@ -31,25 +30,33 @@ export function handleDrawingClick(e) {
 }
 
 function finishDrawing() {
-    if (state.tempPoints.length >= 3) {
-        // Sauvegarder la zone
-        const newZone = {
-            name: "Nouveau Territoire",
-            points: [...state.tempPoints] // Copie
-        };
-        state.groups[state.drawingGroupIndex].zones.push(newZone);
-        alert("Zone créée avec succès !");
-    } else if (state.tempPoints.length > 0) {
-        alert("Annulé : Il faut au moins 3 points pour une zone.");
+    if (state.tempPoints.length < 3) {
+        alert("Une zone tactique doit comporter au moins 3 points.");
+        cancelDrawing();
+        return;
     }
 
-    // Reset
+    const group = state.groups[state.drawingGroupIndex];
+    if (group) {
+        // Initialiser le tableau de zones s'il n'existe pas
+        if(!group.zones) group.zones = [];
+        
+        group.zones.push({
+            name: "Nouvelle Zone",
+            points: [...state.tempPoints]
+        });
+        
+        // Sélectionner automatiquement la nouvelle zone
+        selectItem('zone', state.drawingGroupIndex, group.zones.length - 1);
+    }
+
+    cancelDrawing();
+}
+
+export function cancelDrawing() {
     state.drawingMode = false;
     state.drawingGroupIndex = null;
     state.tempPoints = [];
-    document.body.classList.remove('drawing-mode');
-    document.getElementById('draw-hint').style.display = 'none';
-    
-    renderGroupsList(); // Mettre à jour les compteurs
+    document.body.style.cursor = 'default';
     renderAll();
 }

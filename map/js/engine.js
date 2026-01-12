@@ -1,161 +1,141 @@
 import { state } from './state.js';
-import { renderEditor, closeEditor } from './ui.js';
+// Importe la fonction helper depuis render.js
+import { renderAll, getMapPercentCoords } from './render.js';
+import { handleDrawingClick } from './zone-editor.js';
 
 const viewport = document.getElementById('viewport');
 const mapWorld = document.getElementById('map-world');
 const mapImage = document.getElementById('map-image');
-const markersLayer = document.getElementById('markers-layer');
 const hudCoords = document.getElementById('coords-display');
 
-// Applique le zoom/panoramique CSS
 export function updateTransform() {
     mapWorld.style.transform = `translate(${state.view.x}px, ${state.view.y}px) scale(${state.view.scale})`;
 }
 
-// Génère les points DOM
-export function renderMarkers() {
-    markersLayer.innerHTML = ''; // Nettoyage
-
-    state.groups.forEach((group, gIndex) => {
-        // IMPORTANT : Si le groupe est masqué, on ne dessine pas
-        if (!group.visible) return;
-
-        group.points.forEach((point, pIndex) => {
-            const el = document.createElement('div');
-            el.className = 'marker';
-            
-            // CORRECTION: Utilisation directe des % du JSON
-            el.style.left = `${point.x}%`;
-            el.style.top = `${point.y}%`;
-            
-            // Variable CSS pour la couleur (pour le glow)
-            el.style.setProperty('--marker-color', group.color);
-
-            // Label interne
-            const label = document.createElement('div');
-            label.className = 'marker-label';
-            label.innerText = point.name;
-            el.appendChild(label);
-
-            // État sélectionné
-            if (state.selectedPoint && 
-                state.selectedPoint.groupIndex === gIndex && 
-                state.selectedPoint.pointIndex === pIndex) {
-                el.classList.add('selected');
-            }
-
-            // Clic sur le point
-            el.onmousedown = (e) => {
-                e.stopPropagation(); // Évite de drag la map
-                selectPoint(gIndex, pIndex);
-            };
-
-            markersLayer.appendChild(el);
-        });
-    });
-}
-
-export function selectPoint(gIndex, pIndex) {
-    state.selectedPoint = { groupIndex: gIndex, pointIndex: pIndex };
-    renderMarkers(); // Met à jour la classe .selected
-    renderEditor();  // Ouvre le panneau droite
-}
-
-export function deselect() {
-    state.selectedPoint = null;
-    renderMarkers();
-    closeEditor();
-}
-
-// Initialisation des événements souris (Zoom/Pan)
 export function initEngine() {
-    // Une fois l'image chargée, on initialise le centrage
-    mapImage.onload = () => {
-        state.mapWidth = mapImage.naturalWidth;
-        state.mapHeight = mapImage.naturalHeight;
-        centerMap();
-    };
-    // Si l'image est déjà en cache
     if(mapImage.complete) {
         state.mapWidth = mapImage.naturalWidth;
         state.mapHeight = mapImage.naturalHeight;
         centerMap();
+    } else {
+        mapImage.onload = () => {
+            state.mapWidth = mapImage.naturalWidth;
+            state.mapHeight = mapImage.naturalHeight;
+            centerMap();
+        };
     }
 
-    // ZOOM (Molette)
+    // ZOOM
     viewport.addEventListener('wheel', (e) => {
         e.preventDefault();
-        const zoomSpeed = 0.1;
         const delta = e.deltaY > 0 ? -1 : 1;
-        const newScale = state.view.scale * (1 + delta * zoomSpeed);
+        const newScale = state.view.scale * (1 + delta * 0.1);
+        if (newScale < 0.05 || newScale > 8) return;
 
-        // Limites min/max
-        if (newScale < 0.1 || newScale > 8) return;
-
-        // Zoom vers le curseur
         const rect = viewport.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
 
-        // Calcul mathématique pour que le point sous la souris reste fixe
         state.view.x = mouseX - (mouseX - state.view.x) * (newScale / state.view.scale);
         state.view.y = mouseY - (mouseY - state.view.y) * (newScale / state.view.scale);
         state.view.scale = newScale;
-
+        
+        renderAll(); // Re-calcul clustering
         updateTransform();
     });
 
-    // PAN (Drag)
+    // SOURIS (Draw, Measure, Pan)
     viewport.addEventListener('mousedown', (e) => {
-        if(e.button !== 0) return; // Clic gauche uniquement
-        state.isDragging = true;
-        state.lastMouse = { x: e.clientX, y: e.clientY };
-        viewport.style.cursor = 'grabbing';
+        // Priorité 1: Dessin de zone
+        if (state.drawingMode) { 
+            handleDrawingClick(e); 
+            return; 
+        }
+        
+        // Priorité 2: Outil de Mesure
+        if (state.measuringMode && e.button === 0) {
+            const coords = getMapPercentCoords(e.clientX, e.clientY);
+            if (state.measureStep === 0 || state.measureStep === 2) {
+                state.measurePoints = [coords, coords];
+                state.measureStep = 1;
+            } else if (state.measureStep === 1) {
+                state.measurePoints[1] = coords;
+                state.measureStep = 2;
+            }
+            renderAll();
+            return;
+        }
+
+        // Priorité 3: Pan (Déplacement carte)
+        if(e.button === 0) {
+            state.isDragging = true;
+            state.lastMouse = { x: e.clientX, y: e.clientY };
+            viewport.style.cursor = 'grabbing';
+        }
     });
 
     window.addEventListener('mousemove', (e) => {
-        // Mise à jour coordonnées HUD
         updateHUDCoords(e);
+        
+        // Update visuel ligne de mesure
+        if (state.measuringMode && state.measureStep === 1) {
+            const coords = getMapPercentCoords(e.clientX, e.clientY);
+            state.measurePoints[1] = coords;
+            renderAll(); 
+        }
 
-        if (!state.isDragging) return;
-        const dx = e.clientX - state.lastMouse.x;
-        const dy = e.clientY - state.lastMouse.y;
-        state.view.x += dx;
-        state.view.y += dy;
-        state.lastMouse = { x: e.clientX, y: e.clientY };
-        updateTransform();
+        if (state.drawingMode) return; 
+
+        if (state.isDragging) {
+            const dx = e.clientX - state.lastMouse.x;
+            const dy = e.clientY - state.lastMouse.y;
+            state.view.x += dx;
+            state.view.y += dy;
+            state.lastMouse = { x: e.clientX, y: e.clientY };
+            updateTransform();
+        }
     });
 
     window.addEventListener('mouseup', () => {
         state.isDragging = false;
-        viewport.style.cursor = 'grab';
+        if(!state.drawingMode && !state.measuringMode) viewport.style.cursor = 'grab';
     });
 
-    // CLIC DROIT (Ajout rapide)
+    // CLIC DROIT (Context Menu / Création rapide)
     viewport.addEventListener('contextmenu', (e) => {
         e.preventDefault();
-        const coords = getMapPercentCoords(e.clientX, e.clientY);
+        // Si on dessine ou mesure, le clic droit annule ou finit, géré ailleurs ou ignoré ici
+        if(state.drawingMode) { handleDrawingClick(e); return; }
+        if(state.measuringMode) { 
+            // Annuler la mesure
+            state.measuringMode = false; 
+            state.measurePoints = [];
+            renderAll();
+            document.body.style.cursor = 'default';
+            // Update UI button state via DOM hack ou re-render UI
+            const btn = document.getElementById('btnMeasure');
+            if(btn) btn.classList.remove('active');
+            return;
+        }
         
-        // On ajoute au premier groupe visible par défaut
+        // Création rapide d'un point
+        const coords = getMapPercentCoords(e.clientX, e.clientY);
         if(state.groups.length > 0) {
-            const newPoint = { 
-                name: "Nouvelle Position", 
-                x: coords.x, 
-                y: coords.y, 
-                type: "point" 
-            };
-            state.groups[0].points.push(newPoint);
-            // On sélectionne le nouveau point
-            selectPoint(0, state.groups[0].points.length - 1);
+            // Ajoute au premier groupe visible
+            const targetGroup = state.groups.find(g => g.visible) || state.groups[0];
+            targetGroup.points.push({ name: "Nouv. Point", x: coords.x, y: coords.y, iconType: "DEFAULT" });
+            
+            // Recharger la liste et la carte
+            import('./ui.js').then(ui => ui.renderGroupsList());
+            renderAll();
         }
     });
 }
 
-// Recentre la carte
 export function centerMap() {
     const vw = viewport.clientWidth;
     const vh = viewport.clientHeight;
-    // Fit to screen
+    if(!state.mapWidth) return;
     const scale = Math.min(vw / state.mapWidth, vh / state.mapHeight);
     state.view.scale = scale || 0.5;
     state.view.x = (vw - state.mapWidth * state.view.scale) / 2;
@@ -163,26 +143,8 @@ export function centerMap() {
     updateTransform();
 }
 
-// Convertit la position souris écran en % carte
-function getMapPercentCoords(clientX, clientY) {
-    const rect = mapWorld.getBoundingClientRect(); // Position actuelle de la map transformée
-    // Position relative au coin haut-gauche de la map
-    const relX = (clientX - rect.left);
-    const relY = (clientY - rect.top);
-    
-    // On divise par l'échelle pour avoir la coordonnée "réelle" en px sur l'image originale
-    const originalX = relX / state.view.scale;
-    const originalY = relY / state.view.scale;
-
-    // Conversion en pourcentage
-    return {
-        x: (originalX / state.mapWidth) * 100,
-        y: (originalY / state.mapHeight) * 100
-    };
-}
-
 function updateHUDCoords(e) {
     if(state.mapWidth === 0) return;
     const coords = getMapPercentCoords(e.clientX, e.clientY);
-    hudCoords.innerText = `X: ${coords.x.toFixed(2)} | Y: ${coords.y.toFixed(2)}`;
+    hudCoords.innerText = `COORD: ${coords.x.toFixed(2)} | ${coords.y.toFixed(2)}`;
 }
