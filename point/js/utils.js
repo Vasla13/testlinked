@@ -38,19 +38,31 @@ export function rgbToHex(r, g, b) {
     return "#" + ((1 << 24) + (Math.round(r) << 16) + (Math.round(g) << 8) + Math.round(b)).toString(16).slice(1);
 }
 
+// --- CORRECTION DU BUG DE CLIC ---
 export function screenToWorld(sx, sy, canvas, view) {
     if (!view) return { x: sx, y: sy };
+    
+    // CORRECTION : On utilise clientWidth/clientHeight (taille CSS) 
+    // au lieu de width/height (pixels physiques) pour gérer les écrans Retina/HiDPI.
+    const width = canvas.clientWidth || canvas.width;
+    const height = canvas.clientHeight || canvas.height;
+
     return {
-        x: (sx - canvas.width / 2 - view.x) / view.scale,
-        y: (sy - canvas.height / 2 - view.y) / view.scale
+        x: (sx - width / 2 - view.x) / view.scale,
+        y: (sy - height / 2 - view.y) / view.scale
     };
 }
 
 export function worldToScreen(wx, wy, canvas, view) {
     if (!view) return { x: wx, y: wy };
+    
+    // Même correction pour la conversion inverse (optionnel mais plus propre)
+    const width = canvas.clientWidth || canvas.width;
+    const height = canvas.clientHeight || canvas.height;
+
     return {
-        x: wx * view.scale + view.x + canvas.width / 2,
-        y: wy * view.scale + view.y + canvas.height / 2
+        x: wx * view.scale + view.x + width / 2,
+        y: wy * view.scale + view.y + height / 2
     };
 }
 
