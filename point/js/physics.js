@@ -19,9 +19,7 @@ function ticked() {
 export function restartSim() {
     if (!simulation) initPhysics();
     
-    // MAJ de la friction depuis les réglages
     simulation.velocityDecay(state.physicsSettings.friction);
-
     simulation.nodes(state.nodes);
     
     const nodeDegree = new Map();
@@ -37,34 +35,43 @@ export function restartSim() {
         connectedPairs.add(`${t}-${s}`);
     });
 
-    const S = state.physicsSettings; // Raccourci pour accéder aux sliders
+    const S = state.physicsSettings;
 
-    // 1. LIENS
+    // 1. LIENS (ATTRACTION)
     simulation.force("link", d3.forceLink(state.links)
         .id(d => d.id)
         .distance(l => {
             if (l.kind === KINDS.ENNEMI) return 0; 
-            
-            // Slider: Link Length
             const base = S.linkLength;
+            
+            // Si l'un des deux est influent, on raccourcit le lien pour "tirer" vers lui
+            const sInfo = (typeof l.source === 'object') ? l.source : state.nodes.find(n=>n.id===l.source);
+            const tInfo = (typeof l.target === 'object') ? l.target : state.nodes.find(n=>n.id===l.target);
+            if (sInfo?.influential || tInfo?.influential) return base * 0.7; // Tire plus près
+
             if (l.kind === KINDS.AFFILIATION) return base * 2.0; 
             if (l.kind === KINDS.PATRON) return base * 0.3;
-            if (l.kind === KINDS.HAUT_GRADE) return base * 0.5;
             if (l.kind === KINDS.EMPLOYE) return base * 0.9; 
             return base; 
         })
         .strength(l => {
             if (l.kind === KINDS.ENNEMI) return 0; 
+            
+            // Si influent, attraction beaucoup plus forte (le multiplicateur de force)
+            const sInfo = (typeof l.source === 'object') ? l.source : state.nodes.find(n=>n.id===l.source);
+            const tInfo = (typeof l.target === 'object') ? l.target : state.nodes.find(n=>n.id===l.target);
+            if (sInfo?.influential || tInfo?.influential) return 1.5; // Force extrême
+
             if (l.kind === KINDS.PATRON) return 1.0;
             return 0.25; 
         })
     );
 
-    // 2. GRAVITÉ CENTRALE (Slider: Gravity)
+    // 2. GRAVITÉ
     simulation.force("gravityX", d3.forceX(0).strength(S.gravity));
     simulation.force("gravityY", d3.forceY(0).strength(S.gravity));
 
-    // 3. ENNEMIS (Utilise le NOUVEAU Slider: enemyForce)
+    // 3. ENNEMIS
     const enemyRepulsion = (alpha) => {
         state.links.forEach(l => {
             if (l.kind !== KINDS.ENNEMI) return;
@@ -73,20 +80,11 @@ export function restartSim() {
 
             const isBigS = (s.type === TYPES.COMPANY || s.type === TYPES.GROUP);
             const isBigT = (t.type === TYPES.COMPANY || t.type === TYPES.GROUP);
-            
             let hateRadius = 900; 
-            
-            // Le slider définit la "Force de base", on l'amplifie selon la taille
-            let forceMultiplier = S.enemyForce / 50; // Normalisation (ex: 300 / 50 = 6)
+            let forceMultiplier = S.enemyForce / 50;
 
-            if (isBigS && isBigT) { 
-                hateRadius = 5000; // Guerre totale
-                forceMultiplier *= 10; // Très violent
-            } 
-            else if (isBigS || isBigT) { 
-                hateRadius = 2500; 
-                forceMultiplier *= 2;
-            }
+            if (isBigS && isBigT) { hateRadius = 5000; forceMultiplier *= 10; } 
+            else if (isBigS || isBigT) { hateRadius = 2500; forceMultiplier *= 2; }
 
             let dx = t.x - s.x || (Math.random() - 0.5);
             let dy = t.y - s.y || (Math.random() - 0.5);
@@ -103,12 +101,17 @@ export function restartSim() {
     };
     simulation.force("enemyRepulsion", enemyRepulsion);
 
-    // 4. CHARGE GLOBALE (Slider: Repulsion)
+    // 4. CHARGE GLOBALE
     simulation.force("charge", d3.forceManyBody()
         .strength(n => {
             let strength = -S.repulsion; 
             if (n.type === TYPES.COMPANY) strength *= 5; 
             if (n.type === TYPES.GROUP) strength *= 3;
+            
+            // [NOUVEAU] Les influents repoussent plus fort les gens non connectés
+            // Cela crée un "vide" autour d'eux, sauf pour ceux qu'ils tirent (via force link)
+            if (n.influential) strength *= 4; 
+
             const degree = nodeDegree.get(n.id) || 0;
             strength -= (degree * 150); 
             return strength;
@@ -117,13 +120,13 @@ export function restartSim() {
         .distanceMin(50) 
     );
 
-    // 5. COLLISION (Slider: Collision)
+    // 5. COLLISION
     simulation.force("collide", d3.forceCollide()
         .radius(n => nodeRadius(n) + S.collision) 
         .iterations(2)
     );
 
-    // 6. BARRIÈRE (Gérée par l'état Globe)
+    // 6. BARRIÈRE (Globe)
     const worldRadius = 3800; 
     simulation.force("boundary", () => {
         if (!state.globeMode) return; 
@@ -138,7 +141,7 @@ export function restartSim() {
         }
     });
 
-    // 7. TERRITOIRE (Utilise le NOUVEAU Slider: structureRepulsion)
+    // 7. TERRITOIRE
     simulation.force("territory", () => {
         const structures = state.nodes.filter(n => n.type === TYPES.COMPANY || n.type === TYPES.GROUP);
         for (const struct of structures) {
@@ -146,7 +149,7 @@ export function restartSim() {
             for (const n of state.nodes) {
                 if (n.id === struct.id || n.type === TYPES.COMPANY || n.type === TYPES.GROUP) continue;
                 if (n.fx != null) continue;
-                if (connectedPairs.has(`${n.id}-${struct.id}`)) continue; // Si connecté, le lien gère la distance
+                if (connectedPairs.has(`${n.id}-${struct.id}`)) continue; 
 
                 const dx = n.x - struct.x; const dy = n.y - struct.y;
                 const distSq = dx*dx + dy*dy; 
@@ -154,9 +157,7 @@ export function restartSim() {
 
                 if (distSq < minDistSq) {
                     const dist = Math.sqrt(distSq);
-                    // Ici on utilise le slider "Force Repousse Entreprise"
                     const push = (territoryRadius - dist) * S.structureRepulsion; 
-                    
                     const angle = Math.atan2(dy, dx);
                     n.vx += Math.cos(angle) * push; n.vy += Math.sin(angle) * push;
                 }

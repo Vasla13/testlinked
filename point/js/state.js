@@ -50,6 +50,8 @@ export function saveState() {
         const payload = {
             nodes: state.nodes.map(n => ({
                 id: n.id, name: n.name, type: n.type, color: n.color, num: n.num, notes: n.notes,
+                // [NOUVEAU] Sauvegarde de l'attribut influent
+                influential: n.influential,
                 x: n.x, y: n.y, fixed: n.fixed 
             })),
             links: state.links.map(l => ({

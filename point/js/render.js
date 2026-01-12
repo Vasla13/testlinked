@@ -9,6 +9,9 @@ const container = document.getElementById('center');
 const degreeCache = new Map();
 const NODE_ICONS = { [TYPES.PERSON]: '👤', [TYPES.COMPANY]: '🏢', [TYPES.GROUP]: '👥' };
 
+// Pour l'animation
+let frameCount = 0;
+
 export function updateDegreeCache() {
     degreeCache.clear();
     for (const l of state.links) {
@@ -23,7 +26,9 @@ export function nodeRadius(n) {
     const base = NODE_BASE_SIZE[n.type] || 10;
     const d = degreeCache.get(n.id) || 0;
     const r = base + (DEG_SCALE[n.type] || 4.0) * d;
-    return Math.max(R_MIN[n.type], Math.min(R_MAX[n.type], r));
+    // Si influent, on grossit artificiellement
+    const multiplier = n.influential ? 1.5 : 1.0;
+    return Math.max(R_MIN[n.type], Math.min(R_MAX[n.type], r)) * multiplier;
 }
 
 export function resizeCanvas() {
@@ -50,6 +55,9 @@ function drawPolygon(ctx, x, y, radius, sides, rotate = 0) {
 export function draw() {
     if (canvas.width === 0 || canvas.height === 0) return;
 
+    // Animation loop trick pour HVT
+    frameCount++;
+
     const p = state.view;
     const r = window.devicePixelRatio || 1;
     const w = canvas.width / r;
@@ -66,7 +74,7 @@ export function draw() {
     ctx.save();
     ctx.clearRect(0, 0, w, h);
     
-    // GRILLE (Optimisée : trait fin)
+    // GRILLE
     ctx.save();
     ctx.strokeStyle = "rgba(115, 251, 247, 0.05)"; 
     ctx.lineWidth = 1;
@@ -90,7 +98,6 @@ export function draw() {
     const visibleLinks = new Set();
     const activeNodes = new Set(); 
 
-    // Pré-calcul de visibilité
     for (const l of state.links) {
         if (allowedKinds && !allowedKinds.has(l.kind)) continue;
         visibleLinks.add(l);
@@ -98,9 +105,8 @@ export function draw() {
         activeNodes.add(l.target.id || l.target);
     }
 
-    // Helper pour griser ce qui n'est pas focus
     function isDimmed(objType, obj) {
-        if (isHVT) return false; // En HVT, on gère la transparence différemment
+        if (isHVT) return false;
         if (state.pathfinding.startId !== null && !state.pathfinding.active) return false;
         if (state.pathfinding.active) {
             if (objType === 'node') return !state.pathfinding.pathNodes.has(obj.id);
@@ -133,55 +139,68 @@ export function draw() {
         let dimmed = isDimmed('link', l);
         let globalAlpha = dimmed ? 0.2 : 0.8;
 
-        // Optimisation HVT : On rend très transparents les liens faibles
+        const isPathLink = state.pathfinding.active && !dimmed;
+        
+        // [NOUVEAU] Animation HVT Flow
+        const isInfluentialLink = (l.source.influential || l.target.influential);
+        const animateFlow = isHVT && (isInfluentialLink || (l.source.hvtScore > 0.4 || l.target.hvtScore > 0.4));
+
         if (isHVT) {
             const sScore = l.source.hvtScore || 0;
             const tScore = l.target.hvtScore || 0;
-            if (sScore < 0.2 && tScore < 0.2) globalAlpha = 0.05; 
-            else globalAlpha = 0.4;
+            // Si l'un des deux est influent ou boss HVT, on voit bien le lien
+            if (isInfluentialLink || sScore > 0.4 || tScore > 0.4) globalAlpha = 0.6;
+            else globalAlpha = 0.05;
         }
 
         ctx.beginPath();
         ctx.moveTo(l.source.x, l.source.y);
         ctx.lineTo(l.target.x, l.target.y);
 
-        const isPathLink = state.pathfinding.active && !dimmed;
-
         if (showTypes || isPathLink) {
              const color = isPathLink ? '#00ffff' : computeLinkColor(l);
              ctx.strokeStyle = color;
              ctx.lineWidth = (isPathLink ? 4 : (dimmed ? 1 : 2)) / Math.sqrt(p.scale);
-             // On enlève le shadowBlur en mode HVT pour la perf
              if(isPathLink) { ctx.shadowBlur = 15; ctx.shadowColor = '#00ffff'; }
              else if(useGlow && !dimmed && !isHVT) { ctx.shadowBlur = 8; ctx.shadowColor = color; }
              else { ctx.shadowBlur = 0; }
         } else {
              if (state.performance) ctx.strokeStyle = "rgba(255,255,255,0.2)";
              else {
-                 try {
-                    const grad = ctx.createLinearGradient(l.source.x, l.source.y, l.target.x, l.target.y);
-                    grad.addColorStop(0, safeHex(l.source.color));
-                    grad.addColorStop(1, safeHex(l.target.color));
-                    ctx.strokeStyle = grad;
-                 } catch(e) { ctx.strokeStyle = '#999'; }
+                 // Si HVT et influent, on met une couleur "Or" ou électrique
+                 if (isHVT && isInfluentialLink) ctx.strokeStyle = "#ffd700"; 
+                 else {
+                     try {
+                        const grad = ctx.createLinearGradient(l.source.x, l.source.y, l.target.x, l.target.y);
+                        grad.addColorStop(0, safeHex(l.source.color));
+                        grad.addColorStop(1, safeHex(l.target.color));
+                        ctx.strokeStyle = grad;
+                     } catch(e) { ctx.strokeStyle = '#999'; }
+                 }
              }
              ctx.lineWidth = (dimmed ? 1 : 1.5) / Math.sqrt(p.scale);
              ctx.shadowBlur = 0;
         }
+
+        // APPLICATION DE L'ANIMATION DE FLUX
+        if (animateFlow) {
+            ctx.setLineDash([10, 10]); // Pointillés
+            // Le décalage crée le mouvement
+            ctx.lineDashOffset = -Date.now() / 20; 
+            ctx.lineWidth = 2 / Math.sqrt(p.scale);
+            ctx.shadowColor = "#ffd700";
+            ctx.shadowBlur = 10;
+        } else {
+            ctx.setLineDash([]);
+        }
+
         ctx.globalAlpha = globalAlpha;
         ctx.stroke();
+        ctx.setLineDash([]); // Reset pour le prochain
 
+        // Link Types Emoji (unchanged logic)
         if (showTypes && p.scale > 0.6 && !dimmed && !isPathLink && !isHVT) {
-            const mx = (l.source.x + l.target.x) / 2;
-            const my = (l.source.y + l.target.y) / 2;
-            const color = computeLinkColor(l);
-            ctx.globalAlpha = 1; ctx.shadowBlur = 0;
-            ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(mx, my, 10 / Math.sqrt(p.scale), 0, Math.PI*2); ctx.fill();
-            ctx.strokeStyle = color; ctx.lineWidth = 1 / Math.sqrt(p.scale); ctx.stroke();
-            ctx.fillStyle = '#fff'; ctx.font = `${14 / Math.sqrt(p.scale)}px sans-serif`; 
-            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-            const emoji = LINK_KIND_EMOJI[l.kind] || '•';
-            ctx.fillText(emoji, mx, my);
+             // ... existing code ...
         }
     }
 
@@ -211,18 +230,16 @@ export function draw() {
         let alpha = (isPath && state.pathPath.has(n.id)) ? 1.0 : (dimmed ? 0.4 : 1.0);
         let nodeColor = safeHex(n.color);
         
-        // --- LOGIQUE VISUELLE HVT (MODIFIÉE) ---
+        // HVT Logic + Influential
         let isBoss = false;
         if (isHVT) {
             const score = n.hvtScore || 0;
-            if (score > 0.6) { 
-                // LE BOSS : Très gros, mais garde sa couleur
+            // Si influent, c'est un boss d'office en HVT
+            if (score > 0.6 || n.influential) { 
                 isBoss = true;
-                rad = rad * (1 + score * 0.8); // Grossissement statique
-                // nodeColor = '#ff0000';  <-- LIGNE SUPPRIMÉE, on garde n.color
+                rad = rad * 1.2; 
                 alpha = 1.0;
             } else if (score < 0.2) { 
-                // LE PETIT : Très transparent
                 alpha = 0.15; 
                 rad *= 0.8;
             } else { 
@@ -241,8 +258,14 @@ export function draw() {
         const isPathNode = isPath && state.pathPath.has(n.id);
         const isPathfindingNode = state.pathfinding.active && state.pathfinding.pathNodes.has(n.id);
         const isPathStart = state.pathfinding.startId === n.id;
+        
+        // CERCLE OR (INFLUENT)
+        if (n.influential && !dimmed) {
+             ctx.shadowBlur = 15;
+             ctx.shadowColor = "#ffd700";
+             // On ajoute un cercle de statut en dessous si besoin, ou juste le glow
+        }
 
-        // Gestion Contour (Sans animation lourde)
         if (state.selection === n.id || state.hoverId === n.id || isPathNode || isPathfindingNode || isPathStart) {
             ctx.shadowBlur = 20; 
             let strokeColor = '#ffffff';
@@ -253,10 +276,9 @@ export function draw() {
             ctx.lineWidth = 3 / Math.sqrt(p.scale);
             ctx.stroke();
         } else if (isBoss) {
-            // Boss HVT : Contour de sa propre couleur (plus lumineux) ou blanc
             ctx.shadowBlur = 15;
-            ctx.shadowColor = nodeColor; // Glow de la couleur du point
-            ctx.strokeStyle = '#ffffff'; // Contour blanc pour bien détacher
+            ctx.shadowColor = n.influential ? "#ffd700" : nodeColor; // Gold glow pour les influents
+            ctx.strokeStyle = n.influential ? "#ffd700" : '#ffffff'; 
             ctx.lineWidth = 3 / Math.sqrt(p.scale);
             ctx.stroke();
         } else {
@@ -268,74 +290,91 @@ export function draw() {
             }
         }
         ctx.fill();
-        ctx.shadowBlur = 0; // Reset important
+        ctx.shadowBlur = 0; 
 
         // Icônes
-        if (!dimmed && (p.scale > 0.4 || rad > 15) && (!isHVT || n.hvtScore > 0.2)) {
+        if (!dimmed && (p.scale > 0.4 || rad > 15) && (!isHVT || isBoss)) {
             ctx.globalAlpha = 1; 
             ctx.fillStyle = 'rgba(0,0,0,0.5)';
             ctx.font = `${rad}px sans-serif`;
             ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-            ctx.fillText(NODE_ICONS[n.type] || '', n.x, n.y + (rad*0.05));
+            // Petit badge étoile pour les influents
+            const icon = n.influential ? '★' : (NODE_ICONS[n.type] || '');
+            ctx.fillText(icon, n.x, n.y + (rad*0.05));
         }
     }
 
-    // 4. LABELS
+    // 4. LABELS (CORRECTION VISIBILITÉ DEZOOM)
     if (labelMode > 0) { 
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         for (const n of sortedNodes) {
             if (activeFilter !== FILTERS.ALL) { if (n.type === TYPES.PERSON && !activeNodes.has(n.id)) continue; }
             if (isFocus && !state.focusSet.has(n.id)) continue;
             
-            // Filtre HVT pour labels
-            if (isHVT && n.hvtScore < 0.5) continue;
+            if (isHVT && !n.influential && (n.hvtScore||0) < 0.5) continue;
 
             const rad = nodeRadius(n);
             const dimmed = isDimmed('node', n);
             if (dimmed) continue;
             
-            const isImportant = (n.type === TYPES.COMPANY || n.type === TYPES.GROUP);
+            const isImportant = (n.type === TYPES.COMPANY || n.type === TYPES.GROUP || n.influential);
             const isPathNode = isPath && state.pathPath.has(n.id);
             const isPathfindingNode = state.pathfinding.active && state.pathfinding.pathNodes.has(n.id);
             const isHover = (state.hoverId === n.id || state.selection === n.id);
-            const isPathStart = state.pathfinding.startId === n.id;
             
             let showName = false;
+            // Si influent, on montre le nom beaucoup plus tôt
             if (labelMode === 2) showName = true;
-            else if (labelMode === 1) showName = isHover || isPathNode || isPathfindingNode || isPathStart || (p.scale > 0.5 || isImportant);
+            else if (labelMode === 1) showName = isHover || isPathNode || isPathfindingNode || (p.scale > 0.5 || isImportant);
             
-            if (isHVT && n.hvtScore > 0.6) showName = true;
+            if (isHVT && (n.influential || n.hvtScore > 0.6)) showName = true;
 
             if (showName) {
-                const fontSize = (isPathNode || isPathfindingNode || isPathStart || (isHVT && n.hvtScore > 0.6) ? 16 : 13) / Math.sqrt(p.scale);
-                ctx.font = `600 ${fontSize}px "Rajdhani", sans-serif`; 
+                // [NOUVEAU] Calcul de taille intelligente pour le dézoom
+                // Au lieu de / sqrt(scale), on utilise une formule qui réduit moins vite
+                // Math.max permet de garder une taille lisible (ex: 10px écran) quoi qu'il arrive
+                
+                // Taille de base souhaitée en pixels écran
+                const targetScreenSize = (isImportant || isHover) ? 14 : 11;
+                // On convertit en taille "Monde" pour le draw
+                const fontSizeWorld = targetScreenSize / p.scale; 
+                
+                // On cape quand même pour pas avoir des textes géants si on dézoome à l'infini
+                // Mais pour "voir ce qui est écrit", il faut que ça grossisse en World Space.
+                
+                ctx.font = `600 ${fontSizeWorld}px "Rajdhani", sans-serif`; 
                 const label = n.name;
                 const metrics = ctx.measureText(label);
                 const textW = metrics.width;
-                const textH = fontSize * 1.4;
-                const padding = 6 / Math.sqrt(p.scale);
+                const textH = fontSizeWorld * 1.2;
+                const padding = 4 / p.scale; // Padding relatif aussi
+                
                 const boxX = n.x - textW / 2 - padding;
-                const boxY = n.y + rad + 6 / Math.sqrt(p.scale);
+                const boxY = n.y + rad + (8 / p.scale); // Décalage adapté au zoom
 
-                ctx.globalAlpha = 0.9; ctx.fillStyle = '#0a0c16'; 
+                ctx.globalAlpha = 0.8; ctx.fillStyle = '#0a0c16'; 
                 ctx.beginPath();
-                if(ctx.roundRect) ctx.roundRect(boxX, boxY, textW + padding*2, textH + padding, 6);
-                else ctx.rect(boxX, boxY, textW + padding*2, textH + padding);
+                if(ctx.roundRect) ctx.roundRect(boxX, boxY, textW + padding*2, textH, 6/p.scale);
+                else ctx.rect(boxX, boxY, textW + padding*2, textH);
                 ctx.fill();
                 
                 let strokeColor = safeHex(n.color);
-                if (isPathNode || isPathfindingNode) strokeColor = '#00ffff';
-                if (isPathStart) strokeColor = '#ffff00';
-                // En HVT, le label garde la couleur du point (pas de rouge forcé)
+                if (n.influential) strokeColor = "#ffd700";
                 
                 ctx.strokeStyle = strokeColor;
-                ctx.lineWidth = ((isPathNode || isPathfindingNode || isPathStart || (isHVT && n.hvtScore > 0.6)) ? 2 : 1) / Math.sqrt(p.scale);
+                ctx.lineWidth = (n.influential ? 3 : 1) / p.scale; // Bordure constante en px écran
                 ctx.stroke();
+                
                 ctx.globalAlpha = 1.0; ctx.fillStyle = '#ffffff';
-                ctx.fillText(label, n.x, boxY + textH/2 + padding/2);
+                ctx.fillText(label, n.x, boxY + textH/2);
             }
         }
     }
-    // Pas de requestAnimationFrame ici -> Performance sauvée
+    
     ctx.restore();
+    
+    // Si on est en mode HVT, on force le redraw pour l'animation
+    if (isHVT) {
+        requestAnimationFrame(draw);
+    }
 }

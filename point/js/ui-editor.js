@@ -15,7 +15,6 @@ const ui = {
 export function renderEditor() {
     const n = nodeById(state.selection);
     
-    // Mise à jour du panneau IA (Gauche) à chaque fois qu'on sélectionne un nœud
     updatePathfindingPanel();
 
     if (!n) {
@@ -25,10 +24,43 @@ export function renderEditor() {
         return;
     }
     
-    ui.editorTitle.style.display = 'none'; // On cache le titre par défaut du conteneur car le template a le sien
+    ui.editorTitle.style.display = 'none'; 
     ui.editorBody.innerHTML = renderEditorHTML(n, state);
     
-    // Remplissage de la datalist unifiée pour la fusion
+    // Inject custom checkbox HTML for Influence directly here if not in template, 
+    // or assume it's added in template. Let's add it via JS manipulation to be safe or update template below.
+    // For this file, I will rely on the setupEditorListeners to bind it, 
+    // but I need to inject the HTML into the template first (see renderEditorHTML below or modify templates.js).
+    // Actually, let's modify the HTML string generation in THIS file if renderEditorHTML is imported.
+    // Wait, renderEditorHTML is imported from templates.js. I should modify templates.js ideally, 
+    // but since I can't modify multiple files in one block easily without context, 
+    // I will inject the checkbox manually into the DOM after innerHTML set.
+    
+    // INJECTION DU CHECKBOX INFLUENT (Hack propre)
+    const propsContainer = ui.editorBody.querySelector('#edName').parentElement.parentElement;
+    if(propsContainer) {
+        const div = document.createElement('div');
+        div.style.marginTop = "8px";
+        div.innerHTML = `
+            <label class="hud-toggle" style="justify-content:space-between; background:rgba(255,255,255,0.05); padding:5px 8px; border-radius:4px;">
+                <span style="color:#ffd700; font-weight:bold;">★ INFLUENT (VIP)</span>
+                <div style="display:flex; align-items:center;">
+                    <input type="checkbox" id="chkInfluential" ${n.influential ? 'checked' : ''}>
+                    <div class="toggle-track" style="margin-left:8px;"><div class="toggle-thumb"></div></div>
+                </div>
+            </label>
+        `;
+        propsContainer.appendChild(div);
+        
+        // Listener
+        const chk = div.querySelector('#chkInfluential');
+        chk.onchange = (e) => {
+            n.influential = e.target.checked;
+            restartSim(); // Important pour la physique
+            draw();
+        };
+    }
+
     const dl = document.getElementById('datalist-all');
     if(dl) {
         dl.innerHTML = state.nodes
@@ -42,7 +74,6 @@ export function renderEditor() {
 }
 
 function setupEditorListeners(n) {
-    // Boutons de navigation
     document.getElementById('btnCenterNode').onclick = () => { 
         state.view.x = -n.x * state.view.scale; 
         state.view.y = -n.y * state.view.scale; 
@@ -76,7 +107,6 @@ function setupEditorListeners(n) {
         });
     };
 
-    // Inputs standards
     document.getElementById('edName').oninput = (e) => { n.name = e.target.value; refreshLists(); draw(); };
     document.getElementById('edType').onchange = (e) => { n.type = e.target.value; updatePersonColors(); restartSim(); draw(); refreshLists(); renderEditor(); };
     const inpColor = document.getElementById('edColor');
@@ -86,7 +116,6 @@ function setupEditorListeners(n) {
     if(inpNum) inpNum.oninput = (e) => { n.num = e.target.value; };
     document.getElementById('edNotes').oninput = (e) => { n.notes = e.target.value; };
 
-    // Création de liens
     const bindAdd = (type, btnId, inpId, selId) => {
         document.getElementById(btnId).onclick = () => {
             const nameInput = document.getElementById(inpId);
@@ -114,7 +143,6 @@ function setupEditorListeners(n) {
     bindAdd(TYPES.GROUP, 'btnAddGroup', 'inpGroup', 'selKindGroup');
     bindAdd(TYPES.PERSON, 'btnAddPerson', 'inpPerson', 'selKindPerson');
 
-    // Fusion
     document.getElementById('btnMerge').onclick = () => {
         const targetName = document.getElementById('mergeTarget').value.trim();
         const target = state.nodes.find(x => x.name.toLowerCase() === targetName.toLowerCase());
@@ -125,7 +153,6 @@ function setupEditorListeners(n) {
         } else { showCustomAlert("Cible invalide."); }
     };
 
-    // Export Dossier
     document.getElementById('btnExportRP').onclick = () => {
         const typeLabel = n.type === TYPES.PERSON ? "Individu" : (n.type === TYPES.COMPANY ? "Entreprise" : "Organisation");
         const relations = [];
@@ -145,6 +172,7 @@ function setupEditorListeners(n) {
 📂 DOSSIER : ${n.name.toUpperCase()}
 ================================
 🆔 ${typeLabel} ${n.num ? '| 📞 ' + n.num : ''}
+${n.influential ? '⚠️ CLASSIFICATION : INFLUENT / VIP' : ''}
 📝 NOTES :
 ${n.notes || 'R.A.S'}
 --------------------------------
