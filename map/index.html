@@ -3,56 +3,97 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BNI LINKED // MAP TACTIQUE</title>
-    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+    <title>BNI LINKED // TACTICAL MAP</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-    <div id="top-bar">
-        <div class="logo-area">
-            <span class="app-logo">💠</span>
-            <span class="app-title">LINKED <span style="color:var(--accent-pink)">// MAP</span></span>
-        </div>
-        <div class="toolbar">
-            <input type="file" id="fileImport" accept=".json" style="display:none">
-            <button class="nav-btn" onclick="document.getElementById('fileImport').click()">📂 IMPORTER</button>
-            <button class="nav-btn" id="btnSave">💾 SAUVEGARDER</button>
-            <div class="separator"></div>
-            <a href="../point/index.html" class="nav-link">RÉSEAU NEURAL ➔</a>
-        </div>
-    </div>
+    <div class="scanline"></div>
 
     <div id="app-container">
         
-        <div id="sidebar-left">
-            <div class="panel-header">
-                <span>CALQUES OPÉRATIONNELS</span>
-                <button id="btnAddGroup" class="mini-btn" title="Nouveau Groupe">＋</button>
+        <aside id="sidebar-left">
+            <div class="logo-area">
+                <img src="logo-bni-linked.png" alt="BNI" style="height:40px; filter:drop-shadow(0 0 5px #73fbf7);">
             </div>
-            <div id="groups-list" class="scrollable-content">
-                </div>
-        </div>
 
-        <div id="viewport">
-            <div id="map-world">
-                <img id="map-image" src="carte.jpg" alt="Carte Tactique">
-                <div id="markers-layer">
+            <div class="section">
+                <h2>Navigation</h2>
+                <button class="nav-btn full-width" onclick="window.location.href='../point/index.html'">
+                    ⚡ Basculer vers Neural (Points)
+                </button>
+            </div>
+
+            <div class="section">
+                <h2>Données</h2>
+                <div class="hstack">
+                    <button id="btnSave" class="grow">Sauvegarder</button>
+                    <label class="btn-file grow">
+                        📂 Charger
+                        <input type="file" id="fileImport" accept=".json" style="display:none">
+                    </label>
+                </div>
+            </div>
+
+            <div class="section list-container">
+                <h2>Calques Opérationnels</h2>
+                <div class="header-actions">
+                    <button id="btnAddGroup" class="mini-btn">＋ Nouveau Groupe</button>
+                </div>
+                <div id="groups-list" class="scrollable-content">
                     </div>
             </div>
-            
-            <div id="hud-bottom">
-                <div id="coords-display">COORD: 00.00 | 00.00</div>
-                <button id="btnResetView" class="hud-btn">🎯 RECENTRER</button>
-            </div>
-        </div>
+        </aside>
 
-        <div id="sidebar-right">
-            <div class="panel-header">DONNÉES CIBLE</div>
-            <div id="editor-content">
-                <div class="empty-state">Aucune sélection</div>
+        <main id="viewport">
+            <div id="map-world">
+                <img id="map-image" src="carte.jpg" alt="Carte Tactique">
+                
+                <svg id="zones-layer"></svg>
+                
+                <div id="markers-layer"></div>
+                
+                <div id="circles-layer"></div>
             </div>
-        </div>
+
+            <div id="hud">
+                <div class="hud-group">
+                    <span id="coords-display">--.-- | --.--</span>
+                </div>
+                <div class="hud-sep"></div>
+                <button id="btnResetView" title="Recentrer la vue">⛶ RECENTRER</button>
+                <div class="hud-sep"></div>
+                <label class="hud-toggle">
+                    <input type="checkbox" id="chkLabels" checked>
+                    <span>Noms</span>
+                </label>
+            </div>
+        </main>
+
+        <aside id="sidebar-right">
+            <div class="section">
+                <h2>Données Cible</h2>
+                <div id="editor-content">
+                    <div class="empty-state">
+                        <div style="opacity:0.5; font-size:2rem; margin-bottom:10px;">⌖</div>
+                        Sélectionnez un point ou une zone sur la carte tactique.
+                    </div>
+                </div>
+            </div>
+            
+            <div class="section">
+                 <div class="hint-box">
+                    <strong style="color:var(--accent-cyan)">ASTUCE TACTIQUE</strong><br>
+                    • Clic Droit sur la carte : Créer Point<br>
+                    • Molette : Zoom
+                 </div>
+            </div>
+        </aside>
 
     </div>
 
