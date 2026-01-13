@@ -73,20 +73,19 @@ function setupEditorListeners(n) {
     if(inpNum) inpNum.oninput = (e) => { n.num = e.target.value; };
     document.getElementById('edNotes').oninput = (e) => { n.notes = e.target.value; };
 
-    // --- GESTION LIAISON MAP ---
+    // --- LOGIQUE LIAISON MAP ---
     const inpMapId = document.getElementById('edMapId');
     if(inpMapId) {
         inpMapId.onchange = (e) => { 
             n.linkedMapPointId = e.target.value.trim(); 
-            renderEditor(); // Re-render pour afficher le bouton si ID valide
+            renderEditor(); // Re-render pour faire apparaître le bouton si ID valide
         };
     }
     const btnGoToMap = document.getElementById('btnGoToMap');
     if(btnGoToMap) {
         btnGoToMap.onclick = () => {
             if(n.linkedMapPointId) {
-                // Redirection vers le dossier map avec le paramètre focus
-                // On remonte d'un niveau (../) car on est dans /point/
+                // Redirection vers le dossier parent map avec le paramètre focus
                 window.location.href = `../map/index.html?focus=${n.linkedMapPointId}`;
             }
         };

@@ -1,4 +1,4 @@
-import { state, setGroups, exportToJSON } from './state.js';
+import { state, setGroups, exportToJSON, generateID } from './state.js';
 import { initEngine, centerMap, updateTransform } from './engine.js'; 
 import { renderGroupsList, initUI, selectPoint, customAlert, customConfirm, customPrompt } from './ui.js';
 import { gpsToPercentage } from './utils.js';
@@ -35,14 +35,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderGroupsList();
     renderAll(); 
 
-    // --- PING CROISÉ : AUTO-FOCUS ---
-    // Vérifie si l'URL contient ?focus=ID
+    // --- AUTO-FOCUS VIA URL (PING CROISÉ) ---
     const params = new URLSearchParams(window.location.search);
     const focusId = params.get('focus');
     
     if(focusId) {
         let found = null;
-        // Recherche du point par ID
         state.groups.forEach((g, gIdx) => {
             g.points.forEach((p, pIdx) => {
                 if(p.id === focusId) found = { p, gIdx, pIdx };
@@ -54,10 +52,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Zoom Tactique
             state.view.scale = 3.5;
             
-            // Note: On a besoin de la taille de la map pour centrer.
-            // Si l'image n'est pas chargée, engine.js le fera, mais on force les valeurs si dispos
+            // Calcul du centrage
             const viewport = document.getElementById('viewport');
-            const mapW = state.mapWidth || 2000; // Fallback
+            const mapW = state.mapWidth || 2000; 
             const mapH = state.mapHeight || 2000;
             const vw = viewport ? viewport.clientWidth : window.innerWidth;
             const vh = viewport ? viewport.clientHeight : window.innerHeight;
@@ -159,12 +156,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                 let targetGroup = state.groups.find(g => g.name.includes("intérêt") || g.name.includes("Neutre"));
                 if (!targetGroup) targetGroup = state.groups[0];
                 targetGroup.visible = true;
-                const newPoint = { name: nameVal, x: mapCoords.x, y: mapCoords.y, type: affVal, iconType: iconVal, notes: notesVal };
-                // ID généré automatiquement par state.setGroups, mais ici on l'ajoute manuellement si besoin
-                // Dans state.js setGroups appelle generateID, mais push ne le fait pas.
-                // Importons generateID si besoin, ou laissons le prochain setGroups le faire.
-                // Pour le ping croisé, il vaut mieux en avoir un tout de suite :
-                newPoint.id = 'id_' + Date.now().toString(36);
+                
+                const newPoint = { 
+                    id: generateID(), // ID UNIQUE OBLIGATOIRE
+                    name: nameVal, 
+                    x: mapCoords.x, 
+                    y: mapCoords.y, 
+                    type: affVal, 
+                    iconType: iconVal, 
+                    notes: notesVal 
+                };
                 
                 targetGroup.points.push(newPoint);
                 renderGroupsList(); renderAll();

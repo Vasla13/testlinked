@@ -6,13 +6,15 @@ function getLinkOptions() {
     return Object.entries(KIND_LABELS).map(([k, label]) => `<option value="${k}">${label}</option>`).join('');
 }
 
-// --- 1. BARRE LATÉRALE GAUCHE (LIAISON IA - DESIGN CYBERPUNK) ---
+// =============================================================================
+// --- 1. BARRE LATÉRALE GAUCHE (PATHFINDING / IA) ---
+// C'est cette partie qui manquait (environ 100 lignes)
+// =============================================================================
 export function renderPathfindingSidebar(state, selectedNode) {
     const cyan = 'var(--accent-cyan)';
     const pink = 'var(--accent-pink)';
     const bgPanel = 'rgba(10, 15, 30, 0.6)';
     
-    // Helper pour créer une "boîte" de données
     const renderDataBox = (label, value, color, isActive, icon) => `
         <div style="
             flex: 1;
@@ -33,18 +35,15 @@ export function renderPathfindingSidebar(state, selectedNode) {
         </div>
     `;
 
-    // --- ÉTAT 1 : PAS DE SOURCE ---
+    // CAS 1 : Aucune source définie
     if (!state.pathfinding.startId) {
         if (selectedNode) {
-            // Nœud sélectionné -> Proposition de définir comme source
             return `
                 <div style="display:flex; flex-direction:column; gap:10px; padding:10px; border:1px solid rgba(255,255,255,0.1); border-radius:8px; background:${bgPanel};">
                     <div style="color:${cyan}; font-size:0.8rem; text-transform:uppercase; letter-spacing:2px; border-bottom:1px solid rgba(115,251,247,0.2); padding-bottom:5px; margin-bottom:5px;">
                         /// SYSTÈME DE TRAÇAGE
                     </div>
-                    
                     ${renderDataBox('Candidat Source', escapeHtml(selectedNode.name), cyan, true, '👤')}
-                    
                     <button id="btnPathStart" class="primary" style="
                         width:100%; margin-top:5px; padding:10px;
                         background: linear-gradient(90deg, rgba(115,251,247,0.1), rgba(115,251,247,0.2));
@@ -58,7 +57,6 @@ export function renderPathfindingSidebar(state, selectedNode) {
                 </div>
             `;
         } else {
-            // Rien de sélectionné -> État vide
             return `
                 <div style="
                     padding:25px; text-align:center; border:1px dashed rgba(255,255,255,0.2); 
@@ -72,11 +70,9 @@ export function renderPathfindingSidebar(state, selectedNode) {
         }
     }
 
-    // --- ÉTAT 2 & 3 : SOURCE DÉFINIE (RECHERCHE CIBLE OU CHEMIN ACTIF) ---
+    // CAS 2 : Source définie, en attente de cible ou calcul
     const startNode = state.nodes.find(n => n.id === state.pathfinding.startId);
     const startName = startNode ? escapeHtml(startNode.name) : "ERR_UNKNOWN";
-    
-    // La cible est la sélection actuelle (si différente du départ)
     const targetNode = (selectedNode && selectedNode.id !== state.pathfinding.startId) ? selectedNode : null;
     const hasTarget = !!targetNode;
 
@@ -113,7 +109,6 @@ export function renderPathfindingSidebar(state, selectedNode) {
 
     return `
         <div style="border:1px solid rgba(115, 251, 247, 0.3); border-radius:6px; overflow:hidden; background:rgba(5,7,10,0.4); backdrop-filter:blur(5px);">
-            
             <div style="
                 background: linear-gradient(90deg, rgba(115, 251, 247, 0.1), transparent);
                 padding: 6px 10px; border-bottom:1px solid rgba(115, 251, 247, 0.2);
@@ -124,19 +119,14 @@ export function renderPathfindingSidebar(state, selectedNode) {
             </div>
 
             <div style="padding:12px; display:flex; flex-direction:column; gap:10px;">
-                
                 ${renderDataBox('Source (A)', startName, cyan, true, '🚩')}
-
                 <div style="display:flex; align-items:center; justify-content:center; opacity:0.6;">
                     <div style="height:20px; width:1px; background:linear-gradient(to bottom, ${cyan}, ${pink});"></div>
                     <div style="font-size:0.8rem; color:#fff; margin:0 5px;">▼</div>
                     <div style="height:20px; width:1px; background:linear-gradient(to bottom, ${cyan}, ${pink});"></div>
                 </div>
-
                 ${renderDataBox('Destination (B)', targetNode ? escapeHtml(targetNode.name) : 'Sélectionner...', pink, hasTarget, '🎯')}
-
                 ${statusDisplay}
-
                 <button id="btnPathCancel" style="
                     width:100%; margin-top:5px; padding:6px;
                     background: transparent; border: 1px solid #444; color: #888;
@@ -150,17 +140,23 @@ export function renderPathfindingSidebar(state, selectedNode) {
     `;
 }
 
-// --- 2. BARRE LATÉRALE DROITE (EDITEUR) ---
-// Note: Le code de l'éditeur reste inchangé mais je le remets pour que tu aies le fichier complet
+// =============================================================================
+// --- 2. BARRE LATÉRALE DROITE (ÉDITEUR AVEC LIAISON MAP) ---
+// =============================================================================
 export function renderEditorHTML(n, state) {
     const isP = (n.type === TYPES.PERSON);
     
-    // Dropdown Type
+    // Options Type
     const typeOptions = `
         <option value="${TYPES.PERSON}" ${n.type===TYPES.PERSON?'selected':''}>Personne</option>
         <option value="${TYPES.GROUP}" ${n.type===TYPES.GROUP?'selected':''}>Groupe</option>
         <option value="${TYPES.COMPANY}" ${n.type===TYPES.COMPANY?'selected':''}>Entreprise</option>
     `;
+
+    // BOUTON LIAISON MAP (Ping Croisé)
+    const mapLinkBtn = n.linkedMapPointId 
+        ? `<button id="btnGoToMap" class="mini-btn" style="width:auto; padding:0 8px; border:1px solid var(--accent-cyan); color:var(--accent-cyan); margin-left:5px;" title="Voir sur la Carte Tactique">🗺️</button>` 
+        : '';
 
     return `
     <h3 style="margin:0 0 10px 0; color:var(--accent-cyan); text-transform:uppercase; letter-spacing:1px; border-bottom:1px solid var(--border-color); padding-bottom:5px;">
@@ -199,6 +195,14 @@ export function renderEditorHTML(n, state) {
             <label style="font-size:0.7rem; color:#888;">Téléphone</label>
             <input type="text" id="edNum" value="${escapeHtml(n.num || '')}" placeholder="555-...">
         </div>` : ''}
+
+        <div style="margin-top:8px; padding-top:8px; border-top:1px dashed rgba(255,255,255,0.1);">
+             <label style="font-size:0.7rem; color:#888;">Liaison Carte Tactique</label>
+             <div class="flex-row-force">
+                 <input type="text" id="edMapId" value="${escapeHtml(n.linkedMapPointId || '')}" placeholder="ID Point Map..." class="flex-grow-input" style="font-size:0.8rem; font-family:monospace; color:var(--accent-orange);">
+                 ${mapLinkBtn}
+             </div>
+        </div>
     </div>
 
     <div style="border:1px solid var(--border-color); border-radius:8px; padding:10px; background:rgba(0,0,0,0.2); margin-bottom:10px;">
@@ -263,7 +267,6 @@ export function renderEditorHTML(n, state) {
         </button>
     </div>
 
-    <datalist id="datalist-all">
-        </datalist>
+    <datalist id="datalist-all"></datalist>
     `;
 }

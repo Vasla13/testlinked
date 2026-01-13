@@ -10,7 +10,7 @@ const chkLabels = document.getElementById('chkLabels');
 const btnMeasure = document.getElementById('btnMeasure');
 const searchInput = document.getElementById('searchInput');
 
-// --- MODALES (Inchangé) ---
+// --- 1. MODALES CUSTOM ---
 const modalOverlay = document.getElementById('modal-overlay');
 const modalTitle = document.getElementById('modal-title');
 const modalContent = document.getElementById('modal-content');
@@ -65,7 +65,7 @@ export async function customAlert(title, msg) { return showModal(title, msg, 'al
 export async function customConfirm(title, msg) { return showModal(title, msg, 'confirm'); }
 export async function customPrompt(title, msg) { return showModal(title, msg, 'prompt'); }
 
-// --- MENU CONTEXTUEL (Inchangé) ---
+// --- 2. MENU CONTEXTUEL ---
 export function initContextMenu() {
     const menu = document.getElementById('context-menu');
     const viewport = document.getElementById('viewport'); 
@@ -73,7 +73,9 @@ export function initContextMenu() {
     const btnMeasure = document.getElementById('ctx-measure');
     const btnCancel = document.getElementById('ctx-cancel');
     let lastClickPercent = { x: 0, y: 0 };
+
     if (!viewport || !menu) return;
+
     viewport.addEventListener('contextmenu', (e) => {
         e.preventDefault(); 
         if(state.drawingMode) return; 
@@ -97,14 +99,18 @@ export function initContextMenu() {
     };
     if(btnCancel) btnCancel.onclick = () => { menu.classList.remove('visible'); };
 }
+
 function openGpsPanelWithCoords(xPercent, yPercent) {
     const gpsPanel = document.getElementById('gps-panel');
     const inpX = document.getElementById('gpsInputX');
     const inpY = document.getElementById('gpsInputY');
     const inpName = document.getElementById('gpsName');
-    const sidebarLeft = document.getElementById('sidebar-left'); // Pour mobile
+    // Fermer menu mobile si présent
+    const sidebarLeft = document.getElementById('sidebar-left');
+    const sidebarOverlay = document.getElementById('sidebar-overlay');
     if(sidebarLeft) sidebarLeft.classList.remove('mobile-active');
-    
+    if(sidebarOverlay) sidebarOverlay.classList.remove('active');
+
     if(gpsPanel) {
         gpsPanel.style.display = 'block';
         const gpsCoords = percentageToGps(xPercent, yPercent);
@@ -113,6 +119,7 @@ function openGpsPanelWithCoords(xPercent, yPercent) {
         if(inpName) { inpName.value = ''; setTimeout(() => inpName.focus(), 100); }
     }
 }
+
 function startMeasurementAt(coords) {
     const btnMeasure = document.getElementById('btnMeasure');
     state.measuringMode = true;
@@ -123,10 +130,11 @@ function startMeasurementAt(coords) {
     renderAll();
 }
 
-// --- INITIALISATION UI ---
+// --- 3. INITIALISATION UI ---
 export function initUI() {
     initContextMenu(); 
-    // Mobile Menu
+
+    // Gestion Mobile
     const btnMobileMenu = document.getElementById('btnMobileMenu');
     const sidebarLeft = document.getElementById('sidebar-left');
     const sidebarOverlay = document.getElementById('sidebar-overlay');
@@ -142,6 +150,7 @@ export function initUI() {
             sidebarOverlay.classList.remove('active');
         };
     }
+
     if(searchInput) {
         searchInput.addEventListener('input', (e) => {
             state.searchTerm = e.target.value.toLowerCase();
@@ -167,7 +176,7 @@ export function initUI() {
     }
 }
 
-// --- RENDU LISTE ---
+// --- 4. LISTE DES CALQUES ---
 export function renderGroupsList() {
     groupsList.innerHTML = '';
     const term = state.searchTerm || "";
@@ -203,12 +212,12 @@ export function renderGroupsList() {
                 pRow.onclick = () => {
                     const realIndex = group.points.indexOf(p);
                     selectPoint(gIdx, realIndex);
-                    // Close mobile menu if open
+                    // Mobile close
                     const sidebarLeft = document.getElementById('sidebar-left');
                     const sidebarOverlay = document.getElementById('sidebar-overlay');
                     if(sidebarLeft) sidebarLeft.classList.remove('mobile-active');
                     if(sidebarOverlay) sidebarOverlay.classList.remove('active');
-                    
+
                     import('./engine.js').then(eng => {
                          state.view.scale = 3.0;
                          if(state.mapWidth) {
@@ -226,7 +235,7 @@ export function renderGroupsList() {
     });
 }
 
-// --- SELECTION ---
+// --- 5. SELECTION ---
 export function deselect() { state.selectedPoint = null; state.selectedZone = null; renderAll(); closeEditor(); }
 export function selectItem(type, gIndex, index) { 
     if(state.linkingMode && type === 'point') return;
@@ -237,7 +246,7 @@ export function selectItem(type, gIndex, index) {
 }
 export function selectPoint(groupIndex, pointIndex) { selectItem('point', groupIndex, pointIndex); }
 
-// --- EDITEUR (AVEC COPIE ID UNIQUE) ---
+// --- 6. EDITEUR (AVEC BOUTON COPIER ID) ---
 export function renderEditor() {
     if (!state.selectedPoint) { closeEditor(); return; }
     sidebarRight.classList.add('active');
@@ -256,7 +265,7 @@ export function renderEditor() {
         <div class="editor-section">
             <div class="editor-section-title" style="display:flex; justify-content:space-between; align-items:center;">
                 <span>IDENTIFICATION</span>
-                <button id="btnCopyId" class="mini-btn" style="font-size:0.7rem; border:1px solid var(--accent-cyan); color:var(--accent-cyan);">COPIER ID</button>
+                <button id="btnCopyId" class="mini-btn" style="font-size:0.7rem; border:1px solid var(--accent-cyan); color:var(--accent-cyan); padding: 2px 6px;">COPIER ID</button>
             </div>
             <div style="margin-bottom:10px;"><input type="text" id="edName" value="${point.name}" class="cyber-input" style="font-weight:bold; font-size:1.1rem; color:var(--accent-cyan);"></div>
             <div class="editor-row"><div class="editor-col"><input type="text" id="edType" value="${point.type || ''}" placeholder="Affiliation" class="cyber-input"></div></div>
@@ -284,7 +293,7 @@ export function renderEditor() {
         </div>
     `;
 
-    // Bindings
+    // Listeners
     document.getElementById('edName').oninput = (e) => { point.name = e.target.value; renderAll(); };
     document.getElementById('edIcon').onchange = (e) => { point.iconType = e.target.value; renderAll(); };
     document.getElementById('edType').oninput = (e) => { point.type = e.target.value; };
@@ -301,7 +310,7 @@ export function renderEditor() {
         renderGroupsList(); renderAll(); renderEditor();
     };
     
-    // COPIER ID LOGIC
+    // ACTION COPIER ID
     document.getElementById('btnCopyId').onclick = () => {
         navigator.clipboard.writeText(point.id).then(() => {
             const btn = document.getElementById('btnCopyId');
