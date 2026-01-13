@@ -47,20 +47,18 @@ export function renderZones() {
     }
 }
 
-// --- RENDER MARKERS (FIXED) ---
+// Rendu des marqueurs
 export function renderMarkersAndClusters() {
     markersLayer.innerHTML = '';
     
-    // Calcul de l'échelle inverse pour garder la taille constante
-    // On retire le clamp trop agressif pour que ça ne devienne pas microscopique
-    // state.view.scale = 1 (dézoom) -> counterScale = 1
-    // state.view.scale = 5 (zoom) -> counterScale = 0.2
+    // Contre-échelle pour garder la taille constante lors du zoom
     let counterScale = 1 / Math.max(state.view.scale, 0.2);
 
     state.groups.forEach((group, gIndex) => {
         if (!group.visible) return;
         group.points.forEach((point, pIndex) => {
             if (state.statusFilter !== 'ALL' && (point.status || 'ACTIVE') !== state.statusFilter) return;
+            // Passe la couleur du groupe par défaut si pas de couleur specifique
             renderSingleMarker(point, gIndex, pIndex, group.color, counterScale);
         });
     });
@@ -72,13 +70,14 @@ function renderSingleMarker(point, gIndex, pIndex, color, scaleFactor) {
     el.className = `marker status-${status.toLowerCase()}`;
     el.style.left = `${point.x}%`;
     el.style.top = `${point.y}%`;
-    el.style.setProperty('--marker-color', color);
+    
+    // IMPORTANT: On utilise la couleur du groupe (par exemple le cyan par défaut)
+    el.style.setProperty('--marker-color', color || '#00ffff');
 
+    // LOGIQUE LOGO PAR DÉFAUT
     const iconType = point.iconType || 'DEFAULT';
     const svgContent = ICONS[iconType] || ICONS.DEFAULT;
     
-    // SUPPRESSION DU FACTEUR 0.6 qui rendait tout petit
-    // On utilise scaleFactor directement
     el.innerHTML = `
         <div class="marker-content-wrapper" style="transform: scale(${scaleFactor})">
             <div class="marker-icon-box">

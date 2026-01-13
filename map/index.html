@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>BNI LINKED // MAP TACTIQUE</title>
     <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
@@ -29,19 +29,19 @@
 
     <div id="top-bar">
         <div class="logo-area">
+            <button id="btnMobileMenu" class="mobile-only">☰</button>
+            
             <span class="app-logo">💠</span>
-            <span class="app-title">LINKED <span style="color:var(--accent-pink)">// MAP</span></span>
-            <span id="cloud-status" class="cloud-badge" style="display:none;">☁️ SYNC</span>
+            <span class="app-title desktop-only">LINKED <span style="color:var(--accent-pink)">// MAP</span></span>
+            <span id="cloud-status" class="cloud-badge" style="display:none;">☁️</span>
         </div>
         <div class="toolbar">
             <input type="file" id="fileImport" accept=".json" style="display:none">
-            <button class="nav-btn" id="btnTriggerImport">📂 IMPORTER</button>
-            
-            <button class="nav-btn" id="btnCloudSave">☁️ SAUVEGARDER</button>
-            <button class="nav-btn" id="btnSave">💾 JSON</button>
-            
+            <button class="nav-btn icon-only-mobile" id="btnTriggerImport" title="Importer">📂 <span class="desktop-only">IMPORT</span></button>
+            <button class="nav-btn icon-only-mobile" id="btnCloudSave" title="Sauvegarde Cloud">☁️ <span class="desktop-only">SAVE</span></button>
+            <button class="nav-btn icon-only-mobile" id="btnSave" title="Export JSON">💾 <span class="desktop-only">JSON</span></button>
             <div class="separator"></div>
-            <a href="../point/index.html" class="nav-link">RÉSEAU NEURAL ➔</a>
+            <a href="../point/index.html" class="nav-link icon-only-mobile">RÉSEAU ➔</a>
         </div>
     </div>
 
@@ -51,12 +51,12 @@
             <div class="panel-section" style="padding-bottom: 5px;">
                 <div class="search-container">
                     <span class="search-icon">🔍</span>
-                    <input type="text" id="searchInput" placeholder="Rechercher cible..." autocomplete="off">
+                    <input type="text" id="searchInput" placeholder="Recherche..." autocomplete="off">
                 </div>
             </div>
 
             <div class="panel-section">
-                <button id="btnToggleGpsPanel" class="action-btn full-width">📡 AJOUTER POINT GPS</button>
+                <button id="btnToggleGpsPanel" class="action-btn full-width">📡 AJOUTER GPS</button>
             </div>
 
             <div class="panel-header">
@@ -65,6 +65,8 @@
             </div>
             <div id="groups-list" class="scrollable-content"></div>
         </div>
+
+        <div id="sidebar-overlay"></div>
 
         <div id="viewport">
             <div id="map-world">
@@ -82,42 +84,33 @@
             </div>
             
             <div id="hud-bottom">
-                <div id="coords-display">COORD: 00.00 | 00.00</div>
-                <div class="separator"></div>
-                <button id="btnMeasure" class="hud-btn" title="Mesurer distance">📏 RÈGLE</button>
-                <button id="btnResetView" class="hud-btn">🎯 RECENTRER</button>
-                <label class="hud-toggle" style="margin-left:15px; display:flex; gap:5px; cursor:pointer; color:#888;">
-                    <input type="checkbox" id="chkLabels" checked> NOMS
+                <div id="coords-display" class="desktop-only">00.00 | 00.00</div>
+                <div class="separator desktop-only"></div>
+                <button id="btnMeasure" class="hud-btn" title="Mesurer">📏</button>
+                <button id="btnResetView" class="hud-btn">🎯</button>
+                <label class="hud-toggle" style="margin-left:10px;">
+                    <input type="checkbox" id="chkLabels" checked> <span class="desktop-only">NOMS</span>
                 </label>
             </div>
 
             <div id="gps-panel" class="floating-panel" style="display:none;">
                 <div class="panel-header">
-                    <span>NOUVEAU POINT GPS</span>
+                    <span>POINT GPS</span>
                     <button class="mini-btn close-gps">×</button>
                 </div>
                 <div style="padding:15px;">
-                    <label>Coordonnées (Coller GPS)</label>
                     <div class="gps-row">
                         <input type="text" id="gpsInputX" placeholder="X" class="gps-input">
                         <input type="text" id="gpsInputY" placeholder="Y" class="gps-input">
                     </div>
-                    <label>Nom du point</label>
-                    <input type="text" id="gpsName" placeholder="Ex: Base Militaire">
+                    <input type="text" id="gpsName" placeholder="Nom du point">
                     <div class="gps-row">
-                        <div style="flex:1">
-                            <label>Type</label>
-                            <select id="gpsIconType"></select>
-                        </div>
-                        <div style="flex:1">
-                            <label>Affiliation</label>
-                            <input type="text" id="gpsAffiliation" placeholder="Ex: Hostile">
-                        </div>
+                        <div style="flex:1"><select id="gpsIconType"></select></div>
+                        <div style="flex:1"><input type="text" id="gpsAffiliation" placeholder="Type"></div>
                     </div>
-                    <label>Description / Notes</label>
-                    <textarea id="gpsNotes" placeholder="Infos tactiques..."></textarea>
+                    <textarea id="gpsNotes" placeholder="Notes..."></textarea>
                     <button id="btnAddGpsPoint" class="btn-primary full-width" style="margin-top:10px;">
-                        📍 CRÉER ET PLACER
+                        📍 PLACER
                     </button>
                 </div>
             </div>
@@ -126,7 +119,7 @@
         <div id="sidebar-right">
             <div class="panel-header">DONNÉES CIBLE</div>
             <div id="editor-content">
-                <div class="empty-state">Sélectionnez un point ou une zone</div>
+                <div class="empty-state">Sélectionnez un point</div>
             </div>
         </div>
     </div>
