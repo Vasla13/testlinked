@@ -17,12 +17,26 @@
             <div class="logo-area">
                 <img src="logo-bni-linked.png" alt="BNI" style="height:40px; filter:drop-shadow(0 0 5px #73fbf7);">
             </div>
+            
             <div class="section">
                 <h2>Navigation</h2>
                 <button class="nav-btn full-width" onclick="window.location.href='../point/index.html'">
                     ⚡ Basculer vers Neural
                 </button>
             </div>
+
+            <div class="section block">
+                <h2>🛰️ Outils GPS</h2>
+                <div style="font-size:0.75rem; color:#888; margin-bottom:5px;">Collez "GPS: X, Y" ou saisissez :</div>
+                <div class="hstack">
+                    <input type="text" id="gpsInputX" placeholder="X (ex: 861.2)" style="font-family:monospace;">
+                    <input type="text" id="gpsInputY" placeholder="Y (ex: -2308)" style="font-family:monospace;">
+                </div>
+                <button id="btnAddGpsPoint" class="full-width" style="margin-top:5px; border-color:var(--accent-orange); color:var(--accent-orange);">
+                    📍 CRÉER POINT GPS
+                </button>
+            </div>
+
             <div class="section">
                 <h2>Données</h2>
                 <div class="hstack">
@@ -33,6 +47,7 @@
                     </label>
                 </div>
             </div>
+
             <div class="section list-container">
                 <h2>Calques Opérationnels</h2>
                 <div class="header-actions">
@@ -64,20 +79,16 @@
                     <span id="coords-display">--.-- | --.--</span>
                 </div>
                 <div class="hud-sep"></div>
-                
                 <div class="hud-group">
-                    <button id="btnMeasure" title="Outil de Mesure (Télémètre)">📏 Règle</button>
+                    <button id="btnMeasure" title="Outil de Mesure">📏 Règle</button>
                 </div>
                 <div class="hud-sep"></div>
-
                 <div class="hud-group">
                     <button class="filter-btn" title="Tout voir" onclick="state.statusFilter='ALL'; import('./js/render.js').then(m=>m.renderAll())">TOUS</button>
                     <button class="filter-btn danger" title="Menaces uniquement" onclick="state.statusFilter='DANGER'; import('./js/render.js').then(m=>m.renderAll())">⚠️</button>
                 </div>
-                
                 <div class="hud-sep"></div>
                 <button id="btnResetView" title="Recentrer">⛶</button>
-                
                 <label class="hud-toggle">
                     <input type="checkbox" id="chkLabels" checked> <span>Noms</span>
                 </label>
@@ -95,15 +106,17 @@
                  <div class="hint-box">
                     <strong>ASTUCE TACTIQUE</strong><br>
                     • Clic Droit : Créer Point<br>
-                    • Molette : Zoom / Cluster
+                    • Molette : Zoom / Cluster<br>
+                    • Copier/Coller GPS possible
                  </div>
             </div>
         </aside>
     </div>
+    
     <script type="module" src="./js/main.js"></script>
     <script type="module">
         import { state } from './js/state.js';
-        window.state = state; // Hack pour les onclick dans le HUD
+        window.state = state; 
     </script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-import { state } from './state.js';
+import { state, findPointById } from './state.js';
 import { selectItem } from './ui.js';
 import { ICONS, MAP_SCALE_UNIT } from './constants.js';
 
@@ -13,12 +13,13 @@ export function renderAll() {
     renderMeasureTool(); 
 }
 
-// --- 1. ZONES ---
+// --- ZONES ---
 export function renderZones() {
     zonesLayer.innerHTML = '';
     state.groups.forEach((group, gIndex) => {
         if (!group.visible) return;
         if (!group.zones) return;
+        
         group.zones.forEach((zone, zIndex) => {
             const poly = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
             const pointsStr = zone.points.map(p => `${p.x},${p.y}`).join(" ");
@@ -29,6 +30,7 @@ export function renderZones() {
             if (state.selectedZone && state.selectedZone.groupIndex === gIndex && state.selectedZone.zoneIndex === zIndex) {
                 poly.classList.add("selected");
             }
+            
             poly.onmousedown = (e) => {
                 if (state.drawingMode || state.measuringMode || state.linkingMode) return;
                 e.stopPropagation();
@@ -37,7 +39,7 @@ export function renderZones() {
             zonesLayer.appendChild(poly);
         });
     });
-    // Dessin en cours
+
     if (state.drawingMode && state.tempPoints.length > 0) {
         const poly = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
         const pointsStr = state.tempPoints.map(p => `${p.x},${p.y}`).join(" ");
@@ -50,13 +52,13 @@ export function renderZones() {
     }
 }
 
-// --- 2. MARKERS & CLUSTERING ---
+// --- MARKERS (Avec correction de taille de texte) ---
 export function renderMarkersAndClusters() {
     markersLayer.innerHTML = '';
     
-    const isZoomedOut = state.view.scale < 0.6; 
+    // Seuil de clustering très bas pour voir les points individuels de loin
+    const isZoomedOut = state.view.scale < 0.15; 
     const CLUSTER_THRESHOLD = 5; 
-    
     const visiblePoints = [];
 
     state.groups.forEach((group, gIndex) => {
@@ -69,6 +71,7 @@ export function renderMarkersAndClusters() {
     });
 
     if (isZoomedOut) {
+        // Logique Clustering
         const processed = new Set();
         const clusters = [];
         visiblePoints.forEach((p, i) => {
@@ -104,20 +107,26 @@ function renderSingleMarker(point) {
 
     const iconType = point.iconType || 'DEFAULT';
     const svgContent = ICONS[iconType] || ICONS.DEFAULT;
-    
-    // CORRECTION : Encapsulation dans <svg> pour un centrage parfait
+
+    // === CORRECTION MAJEURE ICI ===
+    // On calcule l'inverse du zoom. Si le zoom est petit (ex: 0.5), l'échelle du texte double (2.0)
+    // On limite à 0.2 pour éviter des textes gigantesques si on dézoome à l'infini.
+    const labelScale = 1 / Math.max(state.view.scale, 0.2); 
+
     el.innerHTML = `
         <div class="marker-icon-wrapper">
             <svg viewBox="0 0 24 24" width="100%" height="100%">${svgContent}</svg>
         </div>
-        <div class="marker-label">${point.name}</div>
+        <div class="marker-label" style="transform: translateX(-50%) scale(${labelScale}); transform-origin: bottom center; bottom: 26px;">
+            ${point.name}
+        </div>
     `;
 
-    const isSelected = (state.selectedPoint && 
+    if (state.selectedPoint && 
         state.selectedPoint.groupIndex === point.gIndex && 
-        state.selectedPoint.pointIndex === point.pIndex);
-
-    if (isSelected) el.classList.add('selected');
+        state.selectedPoint.pointIndex === point.pIndex) {
+        el.classList.add('selected');
+    }
 
     el.onmousedown = (e) => {
         if(state.drawingMode || state.measuringMode) return;
@@ -134,49 +143,51 @@ function renderClusterMarker(cluster) {
     el.style.left = `${cluster.x}%`;
     el.style.top = `${cluster.y}%`;
     el.style.setProperty('--marker-color', cluster.color);
+    
+    // On garde aussi les clusters visibles de loin
+    const clusterScale = 1 / Math.max(state.view.scale, 0.3);
+    el.style.transform = `translate(-50%, -50%) scale(${clusterScale})`;
 
     el.innerHTML = `<div class="cluster-count">${cluster.points.length}</div>`;
-
+    
     el.onmousedown = (e) => {
         e.stopPropagation();
+        // Zoom sur le cluster
         state.view.x = -cluster.x * (state.view.scale * 2.5) + (window.innerWidth/2);
         state.view.y = -cluster.y * (state.view.scale * 2.5) + (window.innerHeight/2);
         state.view.scale *= 2.5;
         import('./engine.js').then(mod => mod.updateTransform());
         renderAll();
     };
-
     markersLayer.appendChild(el);
 }
 
-// --- 3. LIENS TACTIQUES ---
+// --- LIENS & OUTILS ---
 export function renderTacticalLinks() {
     linksLayer.innerHTML = ''; 
+    if(!state.tacticalLinks) return;
 
-    if(state.tacticalLinks) {
-        state.tacticalLinks.forEach(link => {
-            const gFrom = state.groups[link.from.g];
-            const gTo = state.groups[link.to.g];
-            if(!gFrom || !gTo || !gFrom.visible || !gTo.visible) return;
+    state.tacticalLinks.forEach(link => {
+        const pFrom = findPointById(link.from);
+        const pTo = findPointById(link.to);
 
-            const pFrom = gFrom.points[link.from.p];
-            const pTo = gTo.points[link.to.p];
-
-            if(pFrom && pTo) {
-                const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-                line.setAttribute("x1", pFrom.x);
-                line.setAttribute("y1", pFrom.y);
-                line.setAttribute("x2", pTo.x);
-                line.setAttribute("y2", pTo.y);
-                line.setAttribute("stroke", link.color || "#ffffff");
-                line.setAttribute("stroke-width", "0.3");
-                line.setAttribute("stroke-dasharray", "1, 1");
-                line.setAttribute("class", "tactical-link");
-                line.setAttribute("marker-end", "url(#arrowhead)");
-                linksLayer.appendChild(line);
-            }
-        });
-    }
+        if(pFrom && pTo) {
+            const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+            line.setAttribute("x1", pFrom.x);
+            line.setAttribute("y1", pFrom.y);
+            line.setAttribute("x2", pTo.x);
+            line.setAttribute("y2", pTo.y);
+            line.setAttribute("stroke", link.color || "#ffffff");
+            
+            // On garde les lignes fines mais visibles
+            const strokeWidth = 0.3 / Math.max(state.view.scale, 0.1);
+            line.setAttribute("stroke-width", strokeWidth);
+            line.setAttribute("stroke-dasharray", `${1/state.view.scale}, ${1/state.view.scale}`);
+            
+            line.setAttribute("class", "tactical-link");
+            linksLayer.appendChild(line);
+        }
+    });
 
     if (state.measurePoints.length === 2) {
         const p1 = state.measurePoints[0];
@@ -185,12 +196,11 @@ export function renderTacticalLinks() {
         line.setAttribute("x1", p1.x); line.setAttribute("y1", p1.y);
         line.setAttribute("x2", p2.x); line.setAttribute("y2", p2.y);
         line.setAttribute("stroke", "#ff00ff");
-        line.setAttribute("stroke-width", "0.5");
+        line.setAttribute("stroke-width", 0.5 / state.view.scale); // Scale fix
         linksLayer.appendChild(line);
     }
 }
 
-// --- 4. OUTIL RÈGLE ---
 export function renderMeasureTool() {
     const existingLabel = document.getElementById('measure-label');
     if(existingLabel) existingLabel.remove();
@@ -207,22 +217,20 @@ export function renderMeasureTool() {
         label.innerText = `${distKm} km`;
         label.style.left = `${(p1.x + p2.x)/2}%`;
         label.style.top = `${(p1.y + p2.y)/2}%`;
+        
+        // Le label de mesure reste aussi lisible
+        const labelScale = 1 / Math.max(state.view.scale, 0.2);
+        label.style.transform = `translate(-50%, -50%) scale(${labelScale})`;
+        
         markersLayer.appendChild(label);
     }
 }
 
-// --- CORRECTION MAJEURE : CALCUL PRÉCIS DES COORDONNÉES ---
 export function getMapPercentCoords(clientX, clientY) {
     const mapWorld = document.getElementById('map-world');
-    // On utilise la taille VISIBLE actuelle (incluant le zoom CSS)
     const rect = mapWorld.getBoundingClientRect(); 
-    
-    // Position du clic relative au coin haut-gauche de l'image
     const xPixel = clientX - rect.left;
     const yPixel = clientY - rect.top;
-
-    // Conversion simple : (Position / Taille Totale) * 100
-    // Cette méthode marche quel que soit le zoom ou la translation
     return {
         x: (xPixel / rect.width) * 100,
         y: (yPixel / rect.height) * 100

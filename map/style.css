@@ -31,7 +31,6 @@ body {
 /* --- VIEWPORT & MAP --- */
 #viewport {
     background-color: #05060a;
-    /* Effet Grille Tactique */
     background-image: 
         linear-gradient(rgba(115, 251, 247, 0.03) 1px, transparent 1px),
         linear-gradient(90deg, rgba(115, 251, 247, 0.03) 1px, transparent 1px);
@@ -49,18 +48,20 @@ body {
     position: absolute;
     top: 0; left: 0;
     transform-origin: 0 0;
-    /* Optimisation rendu */
-    will-change: transform;
+    
+    /* Optimisation netteté */
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+    backface-visibility: hidden;
 }
 
 #map-image {
     display: block;
     pointer-events: none;
-    /* Optionnel: assombrir un peu la carte pour faire ressortir les néons */
     filter: brightness(0.8) contrast(1.1);
 }
 
-/* Calques SVG (Zones, Liens) */
+/* Calques SVG */
 #zones-layer, #links-layer, #markers-layer {
     position: absolute;
     top: 0; left: 0;
@@ -68,7 +69,7 @@ body {
     pointer-events: none;
 }
 
-/* Zones Tactiques (Polygones) */
+/* Zones Tactiques */
 polygon, polyline {
     vector-effect: non-scaling-stroke;
     pointer-events: auto;
@@ -85,7 +86,7 @@ polygon.selected {
     animation: dash 30s linear infinite;
 }
 
-/* --- SIDEBARS (Panneaux) --- */
+/* --- SIDEBARS --- */
 aside {
     width: 320px;
     background: var(--bg-panel);
@@ -105,11 +106,10 @@ aside {
     border-left: 1px solid var(--border-color);
     position: absolute;
     right: 0; top: 0; bottom: 0;
-    transform: translateX(100%); /* Caché par défaut */
+    transform: translateX(100%);
 }
 #sidebar-right.active { transform: translateX(0); }
 
-/* Headers de section */
 h2 {
     font-size: 0.85rem;
     text-transform: uppercase;
@@ -120,7 +120,7 @@ h2 {
     margin: 0 0 10px 0;
 }
 
-/* --- HUD FLOTTANT (Barre du bas) --- */
+/* --- HUD --- */
 #hud {
     position: absolute;
     bottom: 30px; 
@@ -134,7 +134,7 @@ h2 {
     display: flex; 
     align-items: center; 
     gap: 15px;
-    z-index: 100;
+    z-index: 500;
     box-shadow: 0 10px 40px rgba(0,0,0,0.6);
 }
 
@@ -169,9 +169,7 @@ h2 {
     position: absolute;
     width: 28px; 
     height: 28px;
-    /* CENTRAGE CRUCIAL : Place le centre de l'icône sur la coordonnée exacte */
     transform: translate(-50%, -50%);
-    
     display: flex; 
     justify-content: center; 
     align-items: center;
@@ -188,7 +186,6 @@ h2 {
     transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-/* Interaction Marqueur */
 .marker:hover .marker-icon-wrapper { 
     transform: scale(1.4); 
     color: #fff; 
@@ -200,42 +197,41 @@ h2 {
     filter: drop-shadow(0 0 15px var(--accent-cyan));
 }
 
-/* Statuts Spéciaux */
-.marker.status-danger .marker-icon-wrapper {
-    animation: pulse-danger 0.8s infinite alternate;
-}
-.marker.status-inactive {
-    opacity: 0.4;
-    filter: grayscale(1);
-}
+.marker.status-danger .marker-icon-wrapper { animation: pulse-danger 0.8s infinite alternate; }
+.marker.status-inactive { opacity: 0.4; filter: grayscale(1); }
 
-/* Labels des marqueurs */
+/* LABELS (TEXTE) */
 .marker-label {
     position: absolute;
-    top: -22px; 
+    /* La position verticale est gérée par le JS pour s'adapter au zoom */
     left: 50%; 
-    transform: translateX(-50%);
     background: rgba(0,0,0,0.85);
     border: 1px solid var(--border-color);
     color: #fff; 
-    padding: 3px 8px; 
+    padding: 4px 10px; /* Un peu plus d'espace */
     border-radius: 4px;
-    font-size: 11px; 
+    
+    /* AUGMENTATION DE LA TAILLE DE POLICE (+25%) */
+    font-size: 14px; 
+    font-weight: 500;
+    
     white-space: nowrap;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    backface-visibility: hidden;
+    
+    transition: opacity 0.2s;
     opacity: 0; 
     pointer-events: none; 
-    transition: opacity 0.2s;
     z-index: 200;
     box-shadow: 0 4px 10px rgba(0,0,0,0.5);
 }
 
 .marker:hover .marker-label, 
 .marker.selected .marker-label { opacity: 1; }
+body.show-labels .marker-label { opacity: 0.9; }
 
-/* Si checkbox "Noms" active */
-body.show-labels .marker-label { opacity: 0.8; }
-
-/* --- CLUSTERS (Regroupement) --- */
+/* CLUSTERS */
 .marker.cluster {
     background: rgba(10, 20, 35, 0.95);
     border: 2px solid var(--marker-color);
@@ -243,28 +239,28 @@ body.show-labels .marker-label { opacity: 0.8; }
     width: 36px; height: 36px;
     box-shadow: 0 0 15px var(--marker-color);
     z-index: 150;
+    display: flex; justify-content: center; align-items: center;
 }
 .cluster-count {
     font-weight: bold;
-    font-size: 14px;
+    /* AUGMENTATION CLUSTER AUSSI */
+    font-size: 18px; 
     color: #fff;
 }
 
-/* --- OUTILS TACTIQUES --- */
-/* Liens (Lignes) */
-.tactical-link {
-    opacity: 0.8;
-    vector-effect: non-scaling-stroke;
-}
+/* OUTILS */
+.tactical-link { opacity: 0.8; vector-effect: non-scaling-stroke; }
 
-/* Tag de mesure (Règle) */
 .measure-tag {
     position: absolute;
     background: #000;
     border: 1px solid #ff00ff;
     color: #ff00ff;
-    padding: 2px 6px;
-    font-size: 11px;
+    padding: 3px 8px;
+    
+    /* AUGMENTATION MESURE */
+    font-size: 14px;
+    
     font-weight: bold;
     border-radius: 4px;
     transform: translate(-50%, -50%);
@@ -272,11 +268,11 @@ body.show-labels .marker-label { opacity: 0.8; }
     white-space: nowrap;
     z-index: 200;
     box-shadow: 0 0 10px #ff00ff;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
 }
 
-/* --- ÉLÉMENTS UI GÉNÉRIQUES --- */
-
-/* Boutons Futuristes */
+/* UI GÉNÉRIQUE */
 button, .btn-file {
     background: rgba(115, 251, 247, 0.1);
     border: 1px solid var(--accent-cyan);
@@ -290,7 +286,6 @@ button, .btn-file {
     transition: all 0.2s;
     text-align: center;
     display: inline-flex; justify-content: center; align-items: center;
-    /* Coins coupés */
     clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
 }
 button:hover, .btn-file:hover {
@@ -298,18 +293,15 @@ button:hover, .btn-file:hover {
     color: #000;
     box-shadow: 0 0 15px rgba(115, 251, 247, 0.4);
 }
-
 .btn-danger {
     border-color: var(--accent-pink); color: var(--accent-pink);
     background: rgba(255, 107, 129, 0.1);
 }
 .btn-danger:hover { background: var(--accent-pink); color: #fff; }
-
 .mini-btn { font-size: 0.75rem; padding: 4px 8px; width: auto; margin-bottom: 0; }
 .full-width { width: 100%; }
 
-/* Inputs & Selects */
-input[type="text"], input[type="number"], select {
+input[type="text"], input[type="number"], textarea, select {
     background: rgba(0, 0, 0, 0.4);
     border: 1px solid var(--border-color);
     color: var(--text-main);
@@ -320,62 +312,42 @@ input[type="text"], input[type="number"], select {
     outline: none;
     margin-bottom: 10px;
 }
-input:focus, select:focus { 
+input:focus, textarea:focus, select:focus { 
     border-color: var(--accent-cyan); 
     box-shadow: 0 0 8px rgba(115, 251, 247, 0.2); 
 }
+textarea { resize: vertical; min-height: 60px; }
 label { 
-    display: block; 
-    color: var(--text-muted); 
-    font-size: 0.8rem; 
-    margin-bottom: 4px; 
-    text-transform: uppercase;
-    letter-spacing: 1px;
+    display: block; color: var(--text-muted); font-size: 0.8rem; 
+    margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px;
 }
 
-/* Listes (Calques) */
 .list-container { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 .scrollable-content { flex: 1; overflow-y: auto; padding-right: 5px; }
-
 .group-item {
-    padding: 8px;
-    margin-bottom: 6px;
+    padding: 8px; margin-bottom: 6px;
     background: rgba(255,255,255,0.02);
-    border: 1px solid transparent;
-    border-radius: 4px;
-    transition: all 0.2s;
+    border: 1px solid transparent; border-radius: 4px; transition: all 0.2s;
 }
 .group-item:hover { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); }
-
 .group-header { display: flex; align-items: center; gap: 10px; cursor: pointer; }
 .color-dot { width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 6px currentColor; }
 
-/* Scrollbars custom */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: rgba(0,0,0,0.3); }
 ::-webkit-scrollbar-thumb { background: rgba(115, 251, 247, 0.2); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(115, 251, 247, 0.5); }
 
-/* --- HELPERS & ANIMATIONS --- */
 .hstack { display: flex; gap: 10px; align-items: center; }
 .grow { flex: 1; }
-
 .empty-state { text-align: center; padding: 40px 20px; color: var(--text-muted); border: 1px dashed var(--border-color); border-radius: 8px; font-size: 0.9rem;}
 .hint-box { margin-top:auto; font-size:0.8rem; background:rgba(255,255,255,0.03); padding:10px; border-radius:4px; color:#888; border-left: 2px solid var(--accent-cyan); line-height: 1.5; }
 .logo-area { text-align: center; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid var(--border-color); }
-
-/* Overlay Scanline (Effet écran) */
 .scanline {
-    position: fixed;
-    top: 0; left: 0;
-    width: 100%; height: 5px;
-    background: rgba(115, 251, 247, 0.1);
-    opacity: 0.3;
-    animation: scan 6s linear infinite;
-    pointer-events: none;
-    z-index: 999;
+    position: fixed; top: 0; left: 0; width: 100%; height: 5px;
+    background: rgba(115, 251, 247, 0.1); opacity: 0.3;
+    animation: scan 6s linear infinite; pointer-events: none; z-index: 999;
 }
-
 @keyframes scan { 0% { top: -10%; } 100% { top: 110%; } }
 @keyframes pulse-danger { from { opacity: 1; transform: translate(-50%, -50%) scale(1); } to { opacity: 0.5; transform: translate(-50%, -50%) scale(1.1); } }
 @keyframes dash { to { stroke-dashoffset: 1000; } }

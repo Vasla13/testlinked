@@ -8,7 +8,6 @@ const editorContent = document.getElementById('editor-content');
 const chkLabels = document.getElementById('chkLabels');
 
 export function initUI() {
-    // Labels Toggle
     if(chkLabels) {
         chkLabels.addEventListener('change', (e) => {
             if(e.target.checked) document.body.classList.add('show-labels');
@@ -17,7 +16,6 @@ export function initUI() {
         if(chkLabels.checked) document.body.classList.add('show-labels');
     }
 
-    // Bouton Mesure
     const btnMeasure = document.getElementById('btnMeasure');
     if(btnMeasure) {
         btnMeasure.onclick = () => {
@@ -30,8 +28,6 @@ export function initUI() {
         };
     }
 }
-
-// --- ÉDITEUR CONTEXTUEL ---
 
 export function renderEditor() {
     if (state.selectedPoint) {
@@ -53,12 +49,18 @@ function renderPointEditor() {
     const point = group.points[pointIndex];
     const status = point.status || 'ACTIVE';
 
+    // Ajout du champ NOTES et affichage de l'ID (lecture seule)
     editorContent.innerHTML = `
         <h3 style="color:${group.color}; border-bottom:1px solid ${group.color}">TACTICAL DATA</h3>
         
+        <div style="font-size:0.7rem; color:#555; margin-bottom:5px;">ID: ${point.id}</div>
+
         <label>IDENTITY</label>
         <input type="text" id="edName" value="${point.name}">
         
+        <label>NOTES</label>
+        <textarea id="edNotes" class="notes-textarea" placeholder="R.A.S.">${point.notes || ''}</textarea>
+
         <label>COORDINATES</label>
         <div class="hstack">
             <input type="number" id="edX" value="${point.x.toFixed(2)}" step="0.1">
@@ -98,18 +100,18 @@ function renderPointEditor() {
     bindPointEvents(point, groupIndex, pointIndex);
 }
 
-// Fonction globale pour les onclick inline du HTML généré
 window.updateStatus = (newStatus) => {
     if(state.selectedPoint) {
         const { groupIndex, pointIndex } = state.selectedPoint;
         state.groups[groupIndex].points[pointIndex].status = newStatus;
         renderAll();
-        renderPointEditor(); // Rafraichir les boutons
+        renderPointEditor();
     }
 };
 
 function bindPointEvents(point, groupIndex, pointIndex) {
     document.getElementById('edName').oninput = (e) => { point.name = e.target.value; renderAll(); };
+    document.getElementById('edNotes').oninput = (e) => { point.notes = e.target.value; }; // Pas besoin de re-render
     document.getElementById('edIcon').onchange = (e) => { point.iconType = e.target.value; renderAll(); };
 
     const inpX = document.getElementById('edX');
@@ -130,17 +132,20 @@ function bindPointEvents(point, groupIndex, pointIndex) {
         renderGroupsList(); renderAll(); renderEditor();
     };
     
-    // Créer un lien
+    // Création de lien : On stocke l'ID
     document.getElementById('btnLink').onclick = () => {
         state.linkingMode = true; 
-        state.linkStart = { g: groupIndex, p: pointIndex };
+        state.linkStartId = point.id; // STOCKE ID
         document.body.style.cursor = 'cell';
-        // Petit feedback visuel
-        document.getElementById('btnLink').innerText = "SELECTIONNER CIBLE...";
+        document.getElementById('btnLink').innerText = "CIBLE ?";
     };
 
     document.getElementById('btnDelete').onclick = () => {
         if(confirm("Supprimer ce point ?")) {
+            // Nettoyage des liens associés à ce point
+            const pid = point.id;
+            state.tacticalLinks = state.tacticalLinks.filter(l => l.from !== pid && l.to !== pid);
+            
             state.groups[groupIndex].points.splice(pointIndex, 1);
             deselect();
             renderGroupsList(); renderAll();
@@ -158,6 +163,7 @@ function renderZoneEditor() {
 
     editorContent.innerHTML = `
         <h3 style="color:${group.color}; border-bottom:1px solid ${group.color}">ÉDITION ZONE</h3>
+        <div style="font-size:0.7rem; color:#555; margin-bottom:5px;">ID: ${zone.id}</div>
         <label>NOM DE LA ZONE</label>
         <input type="text" id="edName" value="${zone.name || 'Zone sans nom'}">
         <div style="margin-top:20px;">
@@ -177,19 +183,25 @@ function renderZoneEditor() {
 }
 
 export function selectItem(type, gIndex, index) {
-    // Si on est en train de créer un lien
+    // LOGIQUE DE LIAISON
     if(state.linkingMode && type === 'point') {
-        if(!state.tacticalLinks) state.tacticalLinks = [];
-        state.tacticalLinks.push({
-            from: state.linkStart,
-            to: { g: gIndex, p: index },
-            color: '#73fbf7'
-        });
+        const targetGroup = state.groups[gIndex];
+        const targetPoint = targetGroup.points[index];
+        
+        if(state.linkStartId && targetPoint && targetPoint.id !== state.linkStartId) {
+            if(!state.tacticalLinks) state.tacticalLinks = [];
+            state.tacticalLinks.push({
+                from: state.linkStartId,
+                to: targetPoint.id,
+                color: '#73fbf7'
+            });
+        }
+        
         state.linkingMode = false;
-        state.linkStart = null;
+        state.linkStartId = null;
         document.body.style.cursor = 'default';
         renderAll();
-        renderEditor(); // Refresh pour réinitialiser le bouton
+        renderEditor();
         return;
     }
 
@@ -238,7 +250,7 @@ export function renderGroupsList() {
 
         const btnAdd = document.createElement('button');
         btnAdd.innerText = '+'; btnAdd.className = 'mini-btn'; btnAdd.style.width = '24px'; btnAdd.style.padding = '0';
-        btnAdd.onclick = (e) => { e.stopPropagation(); if(confirm(`Zone pour "${group.name}" ?`)) startDrawingZone(idx); };
+        btnAdd.onclick = (e) => { e.stopPropagation(); if(confirm(`Créer zone pour "${group.name}" ?`)) startDrawingZone(idx); };
 
         header.append(checkbox, dot, nameSpan, btnAdd);
         item.appendChild(header);
