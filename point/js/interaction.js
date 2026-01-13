@@ -6,39 +6,33 @@ import { selectNode, renderEditor, updatePathfindingPanel, addLink } from './ui.
 
 export function setupCanvasEvents(canvas) {
     
-    // 1. ZOOM (CORRIGÉ : Coordonnées Logiques)
+    // 1. ZOOM (CORRIGÉ ET SYNCHRONISÉ)
     canvas.addEventListener('wheel', (e) => {
         e.preventDefault();
 
-        // Position de la souris (Repère Canvas)
-        const mouseX = e.offsetX;
-        const mouseY = e.offsetY;
+        // 1. Où est la souris dans le monde AVANT le zoom ?
+        // On utilise la fonction centralisée screenToWorld pour être cohérent avec le clic
+        const mouseBefore = screenToWorld(e.offsetX, e.offsetY, canvas, state.view);
 
-        // Facteur de zoom
+        // 2. Calcul du nouveau zoom
         const delta = (e.deltaY < 0) ? 1.1 : 0.9;
-        const oldScale = state.view.scale;
-        const newScale = clamp(oldScale * delta, 0.1, 5.0);
+        const newScale = clamp(state.view.scale * delta, 0.1, 5.0);
 
-        // CORRECTION MAJEURE ICI : Utilisation de clientWidth/Height (taille d'affichage)
-        // au lieu de width/height (taille pixels physiques) pour éviter le décalage Retina/HD.
-        const width = canvas.clientWidth;
-        const height = canvas.clientHeight;
-
-        // 1. Calcul du point monde sous la souris avant zoom
-        const worldX = (mouseX - width/2 - state.view.x) / oldScale;
-        const worldY = (mouseY - height/2 - state.view.y) / oldScale;
-
-        // 2. Application du nouveau scale
+        // 3. Application du zoom
         state.view.scale = newScale;
 
-        // 3. Recalcul de la translation pour garder le point sous la souris
-        state.view.x = mouseX - width/2 - (worldX * newScale);
-        state.view.y = mouseY - height/2 - (worldY * newScale);
+        // 4. Recalcul de la position (Pan) pour que la souris reste au même endroit du monde
+        // Formule inverse de screenToWorld :
+        // screenX = worldX * scale + viewX + width/2
+        // => viewX = screenX - width/2 - worldX * scale
+        state.view.x = e.offsetX - canvas.clientWidth / 2 - (mouseBefore.x * newScale);
+        state.view.y = e.offsetY - canvas.clientHeight / 2 - (mouseBefore.y * newScale);
 
         draw();
     }, { passive: false });
 
-    // 2. SOURIS (Drag & Click)
+
+    // 2. SOURIS (CLIC & DRAG MANUEL)
     let isPanning = false;
     let lastPan = { x: 0, y: 0 };
     let dragLinkSource = null;
@@ -47,9 +41,10 @@ export function setupCanvasEvents(canvas) {
         const sim = getSimulation();
         if (!sim) return; 
 
+        // Calcul précis de la position monde
         const p = screenToWorld(e.offsetX, e.offsetY, canvas, state.view);
         
-        // Rayon de détection légèrement augmenté pour faciliter le clic (30 -> 40)
+        // On cherche un nœud sous la souris (Rayon 40px)
         const hit = sim.find(p.x, p.y, 40); 
         
         // Cas 1 : Création de lien (Shift + Clic)
@@ -57,19 +52,20 @@ export function setupCanvasEvents(canvas) {
             dragLinkSource = hit;
             state.tempLink = { x1: hit.x, y1: hit.y, x2: hit.x, y2: hit.y };
             draw(); 
-            e.stopImmediatePropagation(); 
+            e.stopImmediatePropagation(); // Empêche D3 d'interférer
             return;
         }
         
         // Cas 2 : Sélection simple (Clic Gauche sur un point)
         if (hit && e.button === 0) {
-            // On force la sélection ici pour être sûr (même si D3 drag ne se lance pas)
+            // C'est ici que ça bloquait : on force la sélection maintenant
             selectNode(hit.id);
             draw();
+            // On laisse l'événement se propager pour que D3 puisse lancer le drag si on bouge
         }
         
-        // Cas 3 : Panoramique (Clic Gauche dans le vide)
-        // On vérifie e.button === 0 pour ne pas bouger avec le clic droit
+        // Cas 3 : Panoramique (Clic Gauche DANS LE VIDE)
+        // On vérifie bien !hit pour ne pas bouger si on est sur un noeud
         if (!hit && e.button === 0) {
             isPanning = true; 
             lastPan = { x: e.clientX, y: e.clientY };
@@ -86,15 +82,14 @@ export function setupCanvasEvents(canvas) {
     });
 
     canvas.addEventListener('mousemove', (e) => {
-        const p = screenToWorld(e.offsetX, e.offsetY, canvas, state.view);
-        
-        // Mode création de lien
+        // Mode création de lien (visuel)
         if (dragLinkSource) { 
+            const p = screenToWorld(e.offsetX, e.offsetY, canvas, state.view);
             state.tempLink.x2 = p.x; state.tempLink.y2 = p.y; 
             draw(); return; 
         }
         
-        // Mode Panoramique
+        // Mode Panoramique (Déplacement carte)
         if (isPanning) {
             const dx = e.clientX - lastPan.x; 
             const dy = e.clientY - lastPan.y;
@@ -103,10 +98,11 @@ export function setupCanvasEvents(canvas) {
             draw(); return; 
         }
         
-        // Curseur Pointer au survol
+        // Changement curseur au survol
         const sim = getSimulation();
-        if (sim) {
-            const hit = sim.find(p.x, p.y, 30);
+        if (sim && !isPanning && !dragLinkSource) {
+            const p = screenToWorld(e.offsetX, e.offsetY, canvas, state.view);
+            const hit = sim.find(p.x, p.y, 40);
             if (hit) { 
                 if (state.hoverId !== hit.id) { state.hoverId = hit.id; canvas.style.cursor = 'pointer'; draw(); } 
             } else { 
@@ -116,12 +112,12 @@ export function setupCanvasEvents(canvas) {
     });
 
     canvas.addEventListener('mouseup', (e) => {
-        const p = screenToWorld(e.offsetX, e.offsetY, canvas, state.view);
-        const sim = getSimulation();
-
         // Fin création lien
-        if (dragLinkSource && sim) {
-            const hit = sim.find(p.x, p.y, 40); 
+        if (dragLinkSource) {
+            const sim = getSimulation();
+            const p = screenToWorld(e.offsetX, e.offsetY, canvas, state.view);
+            const hit = sim ? sim.find(p.x, p.y, 40) : null; 
+            
             if (hit && hit.id !== dragLinkSource.id) {
                 const success = addLink(dragLinkSource, hit, null); 
                 if (success) selectNode(dragLinkSource.id);
@@ -138,30 +134,33 @@ export function setupCanvasEvents(canvas) {
         isPanning = false; state.hoverId = null; dragLinkSource = null; state.tempLink = null; draw(); 
     });
 
-    // Gestion Drag & Drop des nœuds avec D3
+    // 3. CONFIGURATION D3 DRAG (Pour bouger les nœuds)
     d3.select(canvas).call(d3.drag()
         .container(canvas)
-        .filter(event => !event.shiftKey && event.button === 0) // Uniquement Clic Gauche
+        .filter(event => !event.shiftKey && event.button === 0) // Uniquement Clic Gauche sans Shift
         .subject(e => {
             const sim = getSimulation();
             if (!sim) return null;
+            // On utilise screenToWorld ici aussi pour être cohérent !
             const p = screenToWorld(e.sourceEvent.offsetX, e.sourceEvent.offsetY, canvas, state.view);
-            return sim.find(p.x, p.y, 40); // Rayon cohérent avec mousedown
+            return sim.find(p.x, p.y, 40);
         })
         .on("start", e => {
             const sim = getSimulation();
             if (!sim) return;
             if (!e.active) sim.alphaTarget(0.3).restart();
             if (e.subject) {
-                e.subject.fx = e.subject.x; e.subject.fy = e.subject.y; 
-                selectNode(e.subject.id); // Sélection au début du drag
+                e.subject.fx = e.subject.x; 
+                e.subject.fy = e.subject.y; 
+                selectNode(e.subject.id); // Sélectionne aussi quand on commence à drag
             }
         })
         .on("drag", e => {
             if (e.subject) {
-                // Conversion écran -> monde continue pendant le drag
+                // Conversion continue pendant le mouvement
                 const p = screenToWorld(e.sourceEvent.offsetX, e.sourceEvent.offsetY, canvas, state.view);
-                e.subject.fx = p.x; e.subject.fy = p.y;
+                e.subject.fx = p.x; 
+                e.subject.fy = p.y;
             }
         })
         .on("end", e => {
@@ -169,7 +168,8 @@ export function setupCanvasEvents(canvas) {
             if (!sim) return;
             if (!e.active) sim.alphaTarget(0);
             if (e.subject) {
-                e.subject.fx = null; e.subject.fy = null; // Relâche la physique
+                e.subject.fx = null; 
+                e.subject.fy = null; 
                 saveState(); 
             }
         })
