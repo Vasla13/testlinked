@@ -1,8 +1,9 @@
 import { state, setGroups, exportToJSON } from './state.js';
 import { initEngine, centerMap } from './engine.js'; 
-import { renderGroupsList, initUI, selectItem } from './ui.js';
+import { renderGroupsList, initUI, selectPoint, customAlert, customPrompt } from './ui.js';
+import { gpsToPercentage } from './utils.js';
 import { renderAll } from './render.js';
-import { gpsToPercentage } from './utils.js'; // Import de la fonction de conversion
+import { ICONS } from './constants.js';
 
 const DEFAULT_DATA = [
     { name: "Alliés", color: "#73fbf7", visible: true, points: [], zones: [] },
@@ -17,121 +18,138 @@ document.addEventListener('DOMContentLoaded', () => {
     renderGroupsList();
     renderAll(); 
 
-    // --- LOGIQUE GPS ---
-    const inpX = document.getElementById('gpsInputX');
-    const inpY = document.getElementById('gpsInputY');
-    const btnGps = document.getElementById('btnAddGpsPoint');
-
-    // Détection collage intelligent (si on colle "GPS: X, Y" dans la case X)
-    inpX.addEventListener('paste', (e) => {
-        e.preventDefault();
-        const text = (e.clipboardData || window.clipboardData).getData('text');
-        
-        // Regex pour trouver deux nombres (positifs ou négatifs) séparés par virgule ou espace
-        // Ex: "GPS: 861.2, -2308.94" ou "861.2 -2308.94"
-        const matches = text.match(/([-\d.]+)[,\s]+([-\d.]+)/);
-        
-        if (matches && matches.length >= 3) {
-            inpX.value = matches[1];
-            inpY.value = matches[2];
-        } else {
-            inpX.value = text; // Collage normal si pas de format détecté
-        }
-    });
-
-    btnGps.onclick = () => {
-        const xVal = parseFloat(inpX.value);
-        const yVal = parseFloat(inpY.value);
-
-        if (isNaN(xVal) || isNaN(yVal)) {
-            alert("Coordonnées invalides.");
-            return;
-        }
-
-        // 1. Conversion
-        const mapCoords = gpsToPercentage(xVal, yVal);
-
-        // 2. Création du point
-        if (state.groups.length > 0) {
-            // On cherche le groupe "Points d'intérêt" ou on prend le premier visible
-            let targetGroup = state.groups.find(g => g.name.includes("intérêt") || g.name.includes("Neutre"));
-            if (!targetGroup) targetGroup = state.groups[0];
-
-            // Rendre le groupe visible pour voir le point
-            targetGroup.visible = true;
-
-            // Ajout du point
-            const newPoint = { 
-                name: `GPS: ${xVal.toFixed(0)}, ${yVal.toFixed(0)}`, 
-                x: mapCoords.x, 
-                y: mapCoords.y, 
-                type: "point",
-                iconType: "INFO"
-            };
-            targetGroup.points.push(newPoint);
-
-            // 3. Mise à jour UI
-            renderGroupsList();
-            renderAll();
-
-            // 4. Zoom sur le point
-            // On calcule le zoom pour centrer (formule inverse de engine.js)
-            const vw = window.innerWidth;
-            const vh = window.innerHeight;
-            state.view.scale = 3; // Zoom fort
-            state.view.x = (vw / 2) - (newPoint.x * state.mapWidth / 100) * state.view.scale;
-            state.view.y = (vh / 2) - (newPoint.y * state.mapHeight / 100) * state.view.scale;
-            
-            // Mise à jour visuelle du moteur
-            import('./engine.js').then(eng => eng.updateTransform());
-            
-            // Sélectionner le point pour l'éditer direct
-            selectItem('point', state.groups.indexOf(targetGroup), targetGroup.points.length - 1);
-            
-            // Nettoyer les inputs
-            inpX.value = "";
-            inpY.value = "";
-        } else {
-            alert("Créez d'abord un groupe !");
-        }
-    };
-
-    // --- LE RESTE DU CODE EXISTANT ---
-    const fileInput = document.getElementById('fileImport');
-    if (fileInput) {
-        fileInput.onchange = (e) => {
-            const file = e.target.files[0];
-            if(!file) return;
-            const reader = new FileReader();
-            reader.onload = (evt) => {
-                try {
-                    const json = JSON.parse(evt.target.result);
-                    if(json.groups) {
-                        setGroups(json.groups);
-                        if(json.tacticalLinks) state.tacticalLinks = json.tacticalLinks;
-                        renderGroupsList();
-                        renderAll();
-                    } else { alert("Format JSON invalide."); }
-                } catch(err) { console.error(err); alert("Erreur fichier."); }
-            };
-            reader.readAsText(file);
-        };
+    // Remplissage Select Icônes
+    const gpsIconSelect = document.getElementById('gpsIconType');
+    if(gpsIconSelect) {
+        let opts = '';
+        for(const k in ICONS) opts += `<option value="${k}">${k}</option>`;
+        gpsIconSelect.innerHTML = opts;
     }
 
-    const btnSave = document.getElementById('btnSave');
-    if (btnSave) btnSave.onclick = exportToJSON;
+    // Gestion Panneau GPS
+    const gpsPanel = document.getElementById('gps-panel');
+    const btnToggleGps = document.getElementById('btnToggleGpsPanel');
+    const btnCloseGps = document.querySelector('.close-gps');
+    if(gpsPanel && btnToggleGps) {
+        btnToggleGps.onclick = () => { gpsPanel.style.display = (gpsPanel.style.display === 'none') ? 'block' : 'none'; };
+        if(btnCloseGps) btnCloseGps.onclick = () => { gpsPanel.style.display = 'none'; };
+    }
 
-    const btnReset = document.getElementById('btnResetView');
-    if (btnReset) btnReset.onclick = centerMap;
+    // Gestion Import (CORRIGÉE & AVEC MODALES)
+    const fileInput = document.getElementById('fileImport');
+    const btnTriggerImport = document.getElementById('btnTriggerImport');
 
-    const btnAddGroup = document.getElementById('btnAddGroup');
-    if (btnAddGroup) {
-        btnAddGroup.onclick = () => {
-            const name = prompt("Nom du groupe ?");
-            if(name) {
-                state.groups.push({ name, color: '#ffffff', visible: true, points: [], zones: [] });
+    if (btnTriggerImport && fileInput) {
+        btnTriggerImport.onclick = () => { fileInput.click(); };
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async (evt) => {
+                try {
+                    const json = JSON.parse(evt.target.result);
+                    if (json.groups && Array.isArray(json.groups)) {
+                        setGroups(json.groups);
+                        if (json.tacticalLinks) state.tacticalLinks = json.tacticalLinks;
+                        else state.tacticalLinks = [];
+
+                        renderGroupsList();
+                        renderAll();
+                        
+                        await customAlert("IMPORTATION RÉUSSIE", `Les données tactiques ont été chargées.<br>Calques : ${json.groups.length}`);
+                    } else {
+                        await customAlert("ERREUR IMPORT", "Le fichier ne contient pas de structure 'groups' valide.");
+                    }
+                } catch (err) {
+                    console.error(err);
+                    await customAlert("ERREUR CRITIQUE", "Fichier corrompu ou format JSON invalide.");
+                }
+                fileInput.value = ''; // Reset obligatoire
+            };
+            reader.readAsText(file);
+        });
+    }
+
+    // Ajout GPS
+    const inpX = document.getElementById('gpsInputX');
+    const inpY = document.getElementById('gpsInputY');
+    const btnAddGps = document.getElementById('btnAddGpsPoint');
+
+    if(inpX) {
+        inpX.addEventListener('paste', (e) => {
+            e.preventDefault();
+            const text = (e.clipboardData || window.clipboardData).getData('text');
+            const matches = text.match(/([-\d.]+)[,\s]+([-\d.]+)/);
+            if (matches && matches.length >= 3) { inpX.value = matches[1]; inpY.value = matches[2]; } 
+            else { inpX.value = text; }
+        });
+    }
+
+    if(btnAddGps) {
+        btnAddGps.onclick = async () => {
+            const xVal = parseFloat(inpX.value);
+            const yVal = parseFloat(inpY.value);
+            const nameVal = document.getElementById('gpsName').value || `GPS: ${xVal.toFixed(0)},${yVal.toFixed(0)}`;
+            const iconVal = document.getElementById('gpsIconType').value || 'DEFAULT';
+            const affVal = document.getElementById('gpsAffiliation').value || '';
+            const notesVal = document.getElementById('gpsNotes').value || '';
+
+            if (isNaN(xVal) || isNaN(yVal)) {
+                await customAlert("COORDONNÉES INVALIDES", "Veuillez entrer des valeurs numériques pour X et Y.");
+                return;
+            }
+
+            const mapCoords = gpsToPercentage(xVal, yVal);
+
+            if (state.groups.length > 0) {
+                let targetGroup = state.groups.find(g => g.name.includes("intérêt") || g.name.includes("Neutre"));
+                if (!targetGroup) targetGroup = state.groups[0];
+                targetGroup.visible = true;
+
+                const newPoint = { 
+                    name: nameVal, x: mapCoords.x, y: mapCoords.y, 
+                    type: affVal, iconType: iconVal, notes: notesVal
+                };
+                targetGroup.points.push(newPoint);
+
                 renderGroupsList();
+                renderAll();
+
+                const vw = window.innerWidth;
+                const vh = window.innerHeight;
+                state.view.scale = 2.0; 
+                state.view.x = (vw / 2) - (newPoint.x * state.mapWidth / 100) * state.view.scale;
+                state.view.y = (vh / 2) - (newPoint.y * state.mapHeight / 100) * state.view.scale;
+                
+                import('./engine.js').then(eng => eng.updateTransform());
+                selectPoint(state.groups.indexOf(targetGroup), targetGroup.points.length - 1);
+
+                // Reset champs
+                inpX.value = ""; inpY.value = "";
+                document.getElementById('gpsName').value = "";
+                document.getElementById('gpsAffiliation').value = "";
+                document.getElementById('gpsNotes').value = "";
+            } else {
+                await customAlert("ATTENTION", "Aucun groupe de calques n'est disponible.");
             }
         };
     }
+    
+    // Boutons divers
+    const btnSave = document.getElementById('btnSave');
+    if(btnSave) btnSave.onclick = exportToJSON;
+    const btnReset = document.getElementById('btnResetView');
+    if(btnReset) btnReset.onclick = centerMap;
+    
+    // NOUVEAU GROUPE AVEC MODALE
+    const btnAddGroup = document.getElementById('btnAddGroup');
+    if(btnAddGroup) btnAddGroup.onclick = async () => {
+        const name = await customPrompt("NOUVEAU CALQUE", "Entrez le nom du nouveau groupe :");
+        if(name) {
+            state.groups.push({ name, color: '#ffffff', visible: true, points: [], zones: [] });
+            renderGroupsList();
+        }
+    };
 });

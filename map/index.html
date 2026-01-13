@@ -3,61 +3,54 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BNI LINKED // TACTICAL MAP</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <title>BNI LINKED // MAP TACTIQUE</title>
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="scanline"></div>
+
+    <div id="modal-overlay" class="hidden">
+        <div id="modal-box">
+            <div id="modal-title">TITRE</div>
+            <div id="modal-content">Message...</div>
+            <div id="modal-input-container" style="display:none;">
+                <input type="text" id="modal-input" class="gps-input full-width">
+            </div>
+            <div id="modal-actions">
+                </div>
+        </div>
+    </div>
+
+    <div id="top-bar">
+        <div class="logo-area">
+            <span class="app-logo">💠</span>
+            <span class="app-title">LINKED <span style="color:var(--accent-pink)">// MAP</span></span>
+        </div>
+        <div class="toolbar">
+            <input type="file" id="fileImport" accept=".json" style="display:none">
+            
+            <button class="nav-btn" id="btnTriggerImport">📂 IMPORTER</button>
+            <button class="nav-btn" id="btnSave">💾 SAUVEGARDER</button>
+            <div class="separator"></div>
+            <a href="../point/index.html" class="nav-link">RÉSEAU NEURAL ➔</a>
+        </div>
+    </div>
 
     <div id="app-container">
-        <aside id="sidebar-left">
-            <div class="logo-area">
-                <img src="logo-bni-linked.png" alt="BNI" style="height:40px; filter:drop-shadow(0 0 5px #73fbf7);">
-            </div>
-            
-            <div class="section">
-                <h2>Navigation</h2>
-                <button class="nav-btn full-width" onclick="window.location.href='../point/index.html'">
-                    ⚡ Basculer vers Neural
-                </button>
+        
+        <div id="sidebar-left">
+            <div class="panel-section">
+                <button id="btnToggleGpsPanel" class="action-btn full-width">📡 AJOUTER POINT GPS</button>
             </div>
 
-            <div class="section block">
-                <h2>🛰️ Outils GPS</h2>
-                <div style="font-size:0.75rem; color:#888; margin-bottom:5px;">Collez "GPS: X, Y" ou saisissez :</div>
-                <div class="hstack">
-                    <input type="text" id="gpsInputX" placeholder="X (ex: 861.2)" style="font-family:monospace;">
-                    <input type="text" id="gpsInputY" placeholder="Y (ex: -2308)" style="font-family:monospace;">
-                </div>
-                <button id="btnAddGpsPoint" class="full-width" style="margin-top:5px; border-color:var(--accent-orange); color:var(--accent-orange);">
-                    📍 CRÉER POINT GPS
-                </button>
+            <div class="panel-header">
+                <span>CALQUES OPÉRATIONNELS</span>
+                <button id="btnAddGroup" class="mini-btn" title="Nouveau Groupe">＋</button>
             </div>
+            <div id="groups-list" class="scrollable-content"></div>
+        </div>
 
-            <div class="section">
-                <h2>Données</h2>
-                <div class="hstack">
-                    <button id="btnSave" class="grow">Sauvegarder</button>
-                    <label class="btn-file grow">
-                        📂 Charger
-                        <input type="file" id="fileImport" accept=".json" style="display:none">
-                    </label>
-                </div>
-            </div>
-
-            <div class="section list-container">
-                <h2>Calques Opérationnels</h2>
-                <div class="header-actions">
-                    <button id="btnAddGroup" class="mini-btn">＋ Nouveau Groupe</button>
-                </div>
-                <div id="groups-list" class="scrollable-content"></div>
-            </div>
-        </aside>
-
-        <main id="viewport">
+        <div id="viewport">
             <div id="map-world">
                 <img id="map-image" src="carte.jpg" alt="Carte Tactique">
                 
@@ -73,46 +66,57 @@
                 <svg id="links-layer" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none;"></svg>
                 <div id="markers-layer"></div>
             </div>
-
-            <div id="hud">
-                <div class="hud-group">
-                    <span id="coords-display">--.-- | --.--</span>
-                </div>
-                <div class="hud-sep"></div>
-                <div class="hud-group">
-                    <button id="btnMeasure" title="Outil de Mesure">📏 Règle</button>
-                </div>
-                <div class="hud-sep"></div>
-                <div class="hud-group">
-                    <button class="filter-btn" title="Tout voir" onclick="state.statusFilter='ALL'; import('./js/render.js').then(m=>m.renderAll())">TOUS</button>
-                    <button class="filter-btn danger" title="Menaces uniquement" onclick="state.statusFilter='DANGER'; import('./js/render.js').then(m=>m.renderAll())">⚠️</button>
-                </div>
-                <div class="hud-sep"></div>
-                <button id="btnResetView" title="Recentrer">⛶</button>
-                <label class="hud-toggle">
-                    <input type="checkbox" id="chkLabels" checked> <span>Noms</span>
+            
+            <div id="hud-bottom">
+                <div id="coords-display">COORD: 00.00 | 00.00</div>
+                <div class="separator"></div>
+                <button id="btnMeasure" class="hud-btn" title="Mesurer distance">📏 RÈGLE</button>
+                <button id="btnResetView" class="hud-btn">🎯 RECENTRER</button>
+                <label class="hud-toggle" style="margin-left:15px; display:flex; gap:5px; cursor:pointer; color:#888;">
+                    <input type="checkbox" id="chkLabels" checked> NOMS
                 </label>
             </div>
-        </main>
 
-        <aside id="sidebar-right">
-            <div class="section">
-                <h2>Données Cible</h2>
-                <div id="editor-content">
-                    <div class="empty-state">⌖ Sélectionnez un point</div>
+            <div id="gps-panel" class="floating-panel" style="display:none;">
+                <div class="panel-header">
+                    <span>NOUVEAU POINT GPS</span>
+                    <button class="mini-btn close-gps">×</button>
+                </div>
+                <div style="padding:15px;">
+                    <label>Coordonnées (Coller GPS)</label>
+                    <div class="gps-row">
+                        <input type="text" id="gpsInputX" placeholder="X" class="gps-input">
+                        <input type="text" id="gpsInputY" placeholder="Y" class="gps-input">
+                    </div>
+                    <label>Nom du point</label>
+                    <input type="text" id="gpsName" placeholder="Ex: Base Militaire">
+                    <div class="gps-row">
+                        <div style="flex:1">
+                            <label>Type</label>
+                            <select id="gpsIconType"></select>
+                        </div>
+                        <div style="flex:1">
+                            <label>Affiliation</label>
+                            <input type="text" id="gpsAffiliation" placeholder="Ex: Hostile">
+                        </div>
+                    </div>
+                    <label>Description / Notes</label>
+                    <textarea id="gpsNotes" placeholder="Infos tactiques..."></textarea>
+                    <button id="btnAddGpsPoint" class="btn-primary full-width" style="margin-top:10px;">
+                        📍 CRÉER ET PLACER
+                    </button>
                 </div>
             </div>
-            <div class="section">
-                 <div class="hint-box">
-                    <strong>ASTUCE TACTIQUE</strong><br>
-                    • Clic Droit : Créer Point<br>
-                    • Molette : Zoom / Cluster<br>
-                    • Copier/Coller GPS possible
-                 </div>
+        </div>
+
+        <div id="sidebar-right">
+            <div class="panel-header">DONNÉES CIBLE</div>
+            <div id="editor-content">
+                <div class="empty-state">Sélectionnez un point ou une zone</div>
             </div>
-        </aside>
+        </div>
     </div>
-    
+
     <script type="module" src="./js/main.js"></script>
     <script type="module">
         import { state } from './js/state.js';
