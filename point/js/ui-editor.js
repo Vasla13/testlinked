@@ -15,20 +15,18 @@ const ui = {
 export function renderEditor() {
     const n = nodeById(state.selection);
     
-    // Mise à jour du panneau IA (Gauche) à chaque fois qu'on sélectionne un nœud
     updatePathfindingPanel();
 
     if (!n) {
         ui.editorTitle.style.display = 'block';
         ui.editorTitle.textContent = 'SÉLECTIONNEZ UN NŒUD';
-        ui.editorBody.innerHTML = '<div style="padding:20px; text-align:center; opacity:0.5; font-style:italic;">Cliquez sur un élément du graphe pour voir ses détails et modifier ses connexions.</div>';
+        ui.editorBody.innerHTML = '<div style="padding:20px; text-align:center; opacity:0.5; font-style:italic;">Cliquez sur un élément du graphe pour voir ses détails.</div>';
         return;
     }
     
-    ui.editorTitle.style.display = 'none'; // On cache le titre par défaut du conteneur car le template a le sien
+    ui.editorTitle.style.display = 'none';
     ui.editorBody.innerHTML = renderEditorHTML(n, state);
     
-    // Remplissage de la datalist unifiée pour la fusion
     const dl = document.getElementById('datalist-all');
     if(dl) {
         dl.innerHTML = state.nodes
@@ -42,21 +40,12 @@ export function renderEditor() {
 }
 
 function setupEditorListeners(n) {
-    // Boutons de navigation
-    document.getElementById('btnCenterNode').onclick = () => { 
-        state.view.x = -n.x * state.view.scale; 
-        state.view.y = -n.y * state.view.scale; 
-        restartSim(); 
-    };
-
+    document.getElementById('btnCenterNode').onclick = () => { state.view.x = -n.x * state.view.scale; state.view.y = -n.y * state.view.scale; restartSim(); };
+    
     document.getElementById('btnFocusNode').onclick = () => {
-        if (state.focusMode) { 
-            state.focusMode = false; 
-            state.focusSet.clear(); 
-        } else {
-            state.focusMode = true; 
-            state.focusSet.clear(); 
-            state.focusSet.add(n.id);
+        if (state.focusMode) { state.focusMode = false; state.focusSet.clear(); } 
+        else {
+            state.focusMode = true; state.focusSet.clear(); state.focusSet.add(n.id);
             state.links.forEach(l => {
                 const s = (typeof l.source === 'object') ? l.source.id : l.source;
                 const t = (typeof l.target === 'object') ? l.target.id : l.target;
@@ -76,17 +65,34 @@ function setupEditorListeners(n) {
         });
     };
 
-    // Inputs standards
     document.getElementById('edName').oninput = (e) => { n.name = e.target.value; refreshLists(); draw(); };
     document.getElementById('edType').onchange = (e) => { n.type = e.target.value; updatePersonColors(); restartSim(); draw(); refreshLists(); renderEditor(); };
     const inpColor = document.getElementById('edColor');
     if(inpColor) inpColor.oninput = (e) => { n.color = e.target.value; updatePersonColors(); draw(); };
-    
     const inpNum = document.getElementById('edNum');
     if(inpNum) inpNum.oninput = (e) => { n.num = e.target.value; };
     document.getElementById('edNotes').oninput = (e) => { n.notes = e.target.value; };
 
-    // Création de liens
+    // --- GESTION LIAISON MAP ---
+    const inpMapId = document.getElementById('edMapId');
+    if(inpMapId) {
+        inpMapId.onchange = (e) => { 
+            n.linkedMapPointId = e.target.value.trim(); 
+            renderEditor(); // Re-render pour afficher le bouton si ID valide
+        };
+    }
+    const btnGoToMap = document.getElementById('btnGoToMap');
+    if(btnGoToMap) {
+        btnGoToMap.onclick = () => {
+            if(n.linkedMapPointId) {
+                // Redirection vers le dossier map avec le paramètre focus
+                // On remonte d'un niveau (../) car on est dans /point/
+                window.location.href = `../map/index.html?focus=${n.linkedMapPointId}`;
+            }
+        };
+    }
+
+    // Création Liens
     const bindAdd = (type, btnId, inpId, selId) => {
         document.getElementById(btnId).onclick = () => {
             const nameInput = document.getElementById(inpId);
@@ -94,19 +100,14 @@ function setupEditorListeners(n) {
             const name = nameInput.value.trim();
             const kind = kindSelect.value;
             if (!name) return;
-            
             let target = state.nodes.find(x => x.name.toLowerCase() === name.toLowerCase());
             if (!target) {
                 showCustomConfirm(`"${name}" n'existe pas. Créer ?`, () => {
-                    target = ensureNode(type, name);
-                    addLink(n, target, kind);
-                    nameInput.value = '';
-                    renderEditor(); updatePathfindingPanel(); refreshLists();
+                    target = ensureNode(type, name); addLink(n, target, kind);
+                    nameInput.value = ''; renderEditor(); updatePathfindingPanel(); refreshLists();
                 });
             } else {
-                addLink(n, target, kind);
-                nameInput.value = '';
-                renderEditor(); updatePathfindingPanel();
+                addLink(n, target, kind); nameInput.value = ''; renderEditor(); updatePathfindingPanel();
             }
         };
     };
@@ -114,18 +115,14 @@ function setupEditorListeners(n) {
     bindAdd(TYPES.GROUP, 'btnAddGroup', 'inpGroup', 'selKindGroup');
     bindAdd(TYPES.PERSON, 'btnAddPerson', 'inpPerson', 'selKindPerson');
 
-    // Fusion
     document.getElementById('btnMerge').onclick = () => {
         const targetName = document.getElementById('mergeTarget').value.trim();
         const target = state.nodes.find(x => x.name.toLowerCase() === targetName.toLowerCase());
         if (target && target.id !== n.id) {
-            showCustomConfirm(`Fusionner "${n.name}" DANS "${target.name}" ?`, () => {
-                mergeNodes(n.id, target.id); selectNode(target.id);
-            });
+            showCustomConfirm(`Fusionner "${n.name}" DANS "${target.name}" ?`, () => { mergeNodes(n.id, target.id); selectNode(target.id); });
         } else { showCustomAlert("Cible invalide."); }
     };
 
-    // Export Dossier
     document.getElementById('btnExportRP').onclick = () => {
         const typeLabel = n.type === TYPES.PERSON ? "Individu" : (n.type === TYPES.COMPANY ? "Entreprise" : "Organisation");
         const relations = [];
@@ -140,21 +137,8 @@ function setupEditorListeners(n) {
                 relations.push(`- ${emoji} [${kind}] ${other.name}`);
             }
         });
-
-        const report = `
-📂 DOSSIER : ${n.name.toUpperCase()}
-================================
-🆔 ${typeLabel} ${n.num ? '| 📞 ' + n.num : ''}
-📝 NOTES :
-${n.notes || 'R.A.S'}
---------------------------------
-🔗 RÉSEAU (${relations.length}) :
-${relations.length > 0 ? relations.join('\n') : "Aucun lien connu."}
-================================`.trim();
-
-        navigator.clipboard.writeText(report).then(() => {
-            showCustomAlert("✅ Dossier copié !");
-        });
+        const report = `📂 DOSSIER : ${n.name.toUpperCase()}\n================================\n🆔 ${typeLabel} ${n.num ? '| 📞 ' + n.num : ''}\n📝 NOTES :\n${n.notes || 'R.A.S'}\n--------------------------------\n🔗 RÉSEAU (${relations.length}) :\n${relations.length > 0 ? relations.join('\n') : "Aucun lien connu."}\n================================`.trim();
+        navigator.clipboard.writeText(report).then(() => { showCustomAlert("✅ Dossier copié !"); });
     };
 }
 

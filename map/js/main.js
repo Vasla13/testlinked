@@ -4,7 +4,7 @@ import { renderGroupsList, initUI, selectPoint, customAlert, customConfirm, cust
 import { gpsToPercentage } from './utils.js';
 import { renderAll } from './render.js';
 import { ICONS } from './constants.js';
-import { api } from './api.js'; // Assurez-vous d'avoir créé api.js
+import { api } from './api.js';
 
 const DEFAULT_DATA = [
     { name: "Alliés", color: "#73fbf7", visible: true, points: [], zones: [] },
@@ -13,133 +13,128 @@ const DEFAULT_DATA = [
 ];
 
 document.addEventListener('DOMContentLoaded', async () => {
-    // 1. Init UI & Engine
     initUI();
     initEngine();
     
-    // 2. Gestion Chargement Données (Cloud vs Local vs Default)
     const cloudStatus = document.getElementById('cloud-status');
-    if(cloudStatus) cloudStatus.style.display = 'inline-block'; // Afficher 'SYNC' pendant chargement
+    if(cloudStatus) cloudStatus.style.display = 'inline-block';
     
-    // Essai chargement Cloud
     console.log("☁️ Chargement Cloud...");
     const cloudData = await api.loadLatestMap();
     
     if (cloudData && cloudData.groups) {
-        console.log("✅ Données Cloud reçues");
+        console.log("✅ Données reçues");
         setGroups(cloudData.groups);
         if(cloudData.tacticalLinks) state.tacticalLinks = cloudData.tacticalLinks;
     } else {
-        console.log("⚠️ Pas de données Cloud ou erreur, utilisation défaut.");
+        console.log("⚠️ Utilisation défaut.");
         setGroups(DEFAULT_DATA);
     }
-    
     if(cloudStatus) cloudStatus.style.display = 'none';
 
-    // 3. Rendu initial
     renderGroupsList();
     renderAll(); 
 
+    // --- PING CROISÉ : AUTO-FOCUS ---
+    // Vérifie si l'URL contient ?focus=ID
+    const params = new URLSearchParams(window.location.search);
+    const focusId = params.get('focus');
+    
+    if(focusId) {
+        let found = null;
+        // Recherche du point par ID
+        state.groups.forEach((g, gIdx) => {
+            g.points.forEach((p, pIdx) => {
+                if(p.id === focusId) found = { p, gIdx, pIdx };
+            });
+        });
 
-    // --- GESTION BOUTONS & EVENTS ---
+        if(found) {
+            console.log("📍 Focus sur point :", found.p.name);
+            // Zoom Tactique
+            state.view.scale = 3.5;
+            
+            // Note: On a besoin de la taille de la map pour centrer.
+            // Si l'image n'est pas chargée, engine.js le fera, mais on force les valeurs si dispos
+            const viewport = document.getElementById('viewport');
+            const mapW = state.mapWidth || 2000; // Fallback
+            const mapH = state.mapHeight || 2000;
+            const vw = viewport ? viewport.clientWidth : window.innerWidth;
+            const vh = viewport ? viewport.clientHeight : window.innerHeight;
 
-    // Sauvegarde CLOUD
+            state.view.x = (vw / 2) - (found.p.x * mapW / 100) * state.view.scale;
+            state.view.y = (vh / 2) - (found.p.y * mapH / 100) * state.view.scale;
+            
+            updateTransform();
+            selectPoint(found.gIdx, found.pIdx);
+        }
+    }
+
+    // --- BOUTONS ---
     const btnCloudSave = document.getElementById('btnCloudSave');
     if(btnCloudSave) {
         btnCloudSave.onclick = async () => {
-            const confirmSave = await customConfirm("SAUVEGARDE CLOUD", "Écraser la version en ligne actuelle ?");
-            if(confirmSave) {
+            if(await customConfirm("SAUVEGARDE CLOUD", "Écraser la version en ligne ?")) {
                 if(cloudStatus) cloudStatus.style.display = 'inline-block';
-                
-                const success = await api.saveMap({
-                    groups: state.groups,
-                    tacticalLinks: state.tacticalLinks
-                });
-                
+                const success = await api.saveMap({ groups: state.groups, tacticalLinks: state.tacticalLinks });
                 if(cloudStatus) cloudStatus.style.display = 'none';
-                
-                if(success) await customAlert("SUCCÈS", "Données synchronisées dans le Cloud.");
-                else await customAlert("ERREUR", "Échec de la connexion au serveur.");
+                if(success) await customAlert("SUCCÈS", "Synchronisé.");
+                else await customAlert("ERREUR", "Échec connexion.");
             }
         };
     }
-
-    // Sauvegarde JSON Local
     const btnSave = document.getElementById('btnSave');
     if(btnSave) btnSave.onclick = exportToJSON;
-
-    // Reset Vue
     const btnReset = document.getElementById('btnResetView');
     if(btnReset) btnReset.onclick = centerMap;
-
-    // Ajouter Groupe
     const btnAddGroup = document.getElementById('btnAddGroup');
     if(btnAddGroup) btnAddGroup.onclick = async () => {
-        const name = await customPrompt("NOUVEAU CALQUE", "Nom du groupe :");
+        const name = await customPrompt("NOUVEAU CALQUE", "Nom :");
         if(name) {
             state.groups.push({ name, color: '#ffffff', visible: true, points: [], zones: [] });
             renderGroupsList();
         }
     };
-
-    // --- GESTION IMPORT JSON LOCAL ---
     const fileInput = document.getElementById('fileImport');
     const btnTriggerImport = document.getElementById('btnTriggerImport');
-
     if (btnTriggerImport && fileInput) {
         btnTriggerImport.onclick = () => { fileInput.click(); };
-
         fileInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
-
             const reader = new FileReader();
             reader.onload = async (evt) => {
                 try {
                     const json = JSON.parse(evt.target.result);
-                    if (json.groups && Array.isArray(json.groups)) {
+                    if (json.groups) {
                         setGroups(json.groups);
-                        if (json.tacticalLinks) state.tacticalLinks = json.tacticalLinks;
-                        else state.tacticalLinks = [];
-
-                        renderGroupsList();
-                        renderAll();
-                        await customAlert("IMPORT RÉUSSI", `${json.groups.length} calques chargés.`);
-                    } else {
-                        await customAlert("ERREUR", "Format JSON invalide.");
+                        if(json.tacticalLinks) state.tacticalLinks = json.tacticalLinks;
+                        renderGroupsList(); renderAll();
+                        await customAlert("IMPORT", "Chargé.");
                     }
-                } catch (err) {
-                    await customAlert("ERREUR", "Fichier corrompu.");
-                }
+                } catch (err) {}
                 fileInput.value = ''; 
             };
             reader.readAsText(file);
         });
     }
 
-    // --- Remplissage Select Icônes (GPS Panel) ---
+    // --- GPS PANEL ---
     const gpsIconSelect = document.getElementById('gpsIconType');
     if(gpsIconSelect) {
-        let opts = '';
-        for(const k in ICONS) opts += `<option value="${k}">${k}</option>`;
+        let opts = ''; for(const k in ICONS) opts += `<option value="${k}">${k}</option>`;
         gpsIconSelect.innerHTML = opts;
     }
-
-    // --- GESTION PANNEAU GPS & CRÉATION ---
     const gpsPanel = document.getElementById('gps-panel');
     const btnToggleGps = document.getElementById('btnToggleGpsPanel');
     const btnCloseGps = document.querySelector('.close-gps');
-    
     if(gpsPanel && btnToggleGps) {
         btnToggleGps.onclick = () => { gpsPanel.style.display = (gpsPanel.style.display === 'none') ? 'block' : 'none'; };
         if(btnCloseGps) btnCloseGps.onclick = () => { gpsPanel.style.display = 'none'; };
     }
-
     const inpX = document.getElementById('gpsInputX');
     const inpY = document.getElementById('gpsInputY');
     const btnAddGps = document.getElementById('btnAddGpsPoint');
-
-    // Paste automatique intelligent
     if(inpX) {
         inpX.addEventListener('paste', (e) => {
             e.preventDefault();
@@ -149,7 +144,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             else { inpX.value = text; }
         });
     }
-
     if(btnAddGps) {
         btnAddGps.onclick = async () => {
             const xVal = parseFloat(inpX.value);
@@ -159,47 +153,34 @@ document.addEventListener('DOMContentLoaded', async () => {
             const affVal = document.getElementById('gpsAffiliation').value || '';
             const notesVal = document.getElementById('gpsNotes').value || '';
 
-            if (isNaN(xVal) || isNaN(yVal)) {
-                await customAlert("ERREUR", "Coordonnées invalides.");
-                return;
-            }
-
+            if (isNaN(xVal) || isNaN(yVal)) { await customAlert("ERREUR", "Coordonnées invalides."); return; }
             const mapCoords = gpsToPercentage(xVal, yVal);
-
             if (state.groups.length > 0) {
                 let targetGroup = state.groups.find(g => g.name.includes("intérêt") || g.name.includes("Neutre"));
                 if (!targetGroup) targetGroup = state.groups[0];
                 targetGroup.visible = true;
-
-                const newPoint = { 
-                    name: nameVal, x: mapCoords.x, y: mapCoords.y, 
-                    type: affVal, iconType: iconVal, notes: notesVal
-                };
+                const newPoint = { name: nameVal, x: mapCoords.x, y: mapCoords.y, type: affVal, iconType: iconVal, notes: notesVal };
+                // ID généré automatiquement par state.setGroups, mais ici on l'ajoute manuellement si besoin
+                // Dans state.js setGroups appelle generateID, mais push ne le fait pas.
+                // Importons generateID si besoin, ou laissons le prochain setGroups le faire.
+                // Pour le ping croisé, il vaut mieux en avoir un tout de suite :
+                newPoint.id = 'id_' + Date.now().toString(36);
+                
                 targetGroup.points.push(newPoint);
+                renderGroupsList(); renderAll();
 
-                renderGroupsList();
-                renderAll();
-
-                // Centrage et Zoom sur le nouveau point
                 const viewport = document.getElementById('viewport');
                 const vw = viewport ? viewport.clientWidth : window.innerWidth;
                 const vh = viewport ? viewport.clientHeight : window.innerHeight;
-                
                 state.view.scale = 2.5; 
                 state.view.x = (vw / 2) - (newPoint.x * state.mapWidth / 100) * state.view.scale;
                 state.view.y = (vh / 2) - (newPoint.y * state.mapHeight / 100) * state.view.scale;
-                
                 updateTransform();
                 selectPoint(state.groups.indexOf(targetGroup), targetGroup.points.length - 1);
 
-                // Reset
-                inpX.value = ""; inpY.value = "";
-                document.getElementById('gpsName').value = "";
-                document.getElementById('gpsAffiliation').value = "";
-                document.getElementById('gpsNotes').value = "";
-                
+                inpX.value = ""; inpY.value = ""; document.getElementById('gpsName').value = ""; document.getElementById('gpsAffiliation').value = ""; document.getElementById('gpsNotes').value = "";
             } else {
-                await customAlert("ERREUR", "Aucun groupe disponible.");
+                await customAlert("ERREUR", "Aucun groupe.");
             }
         };
     }
