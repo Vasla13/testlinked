@@ -1,5 +1,5 @@
 import { state, setGroups, exportToJSON } from './state.js';
-import { initEngine, centerMap } from './engine.js'; 
+import { initEngine, centerMap, updateTransform } from './engine.js'; 
 import { renderGroupsList, initUI, selectPoint, customAlert, customPrompt } from './ui.js';
 import { gpsToPercentage } from './utils.js';
 import { renderAll } from './render.js';
@@ -35,7 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if(btnCloseGps) btnCloseGps.onclick = () => { gpsPanel.style.display = 'none'; };
     }
 
-    // Gestion Import (CORRIGÉE & AVEC MODALES)
+    // Gestion Import
     const fileInput = document.getElementById('fileImport');
     const btnTriggerImport = document.getElementById('btnTriggerImport');
 
@@ -66,7 +66,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     console.error(err);
                     await customAlert("ERREUR CRITIQUE", "Fichier corrompu ou format JSON invalide.");
                 }
-                fileInput.value = ''; // Reset obligatoire
+                fileInput.value = ''; 
             };
             reader.readAsText(file);
         });
@@ -117,20 +117,32 @@ document.addEventListener('DOMContentLoaded', () => {
                 renderGroupsList();
                 renderAll();
 
-                const vw = window.innerWidth;
-                const vh = window.innerHeight;
-                state.view.scale = 2.0; 
+                // --- CENTRAGE CORRECT SUR LE POINT ---
+                const viewport = document.getElementById('viewport');
+                const vw = viewport ? viewport.clientWidth : window.innerWidth;
+                const vh = viewport ? viewport.clientHeight : window.innerHeight;
+                
+                // On applique un zoom tactique (x2.5)
+                state.view.scale = 2.5; 
+                
+                // Formule : Centre Écran - (Position Point * Zoom)
                 state.view.x = (vw / 2) - (newPoint.x * state.mapWidth / 100) * state.view.scale;
                 state.view.y = (vh / 2) - (newPoint.y * state.mapHeight / 100) * state.view.scale;
                 
-                import('./engine.js').then(eng => eng.updateTransform());
+                // Application immédiate
+                updateTransform();
+
+                // Sélection automatique
                 selectPoint(state.groups.indexOf(targetGroup), targetGroup.points.length - 1);
 
-                // Reset champs
+                // Reset des champs
                 inpX.value = ""; inpY.value = "";
                 document.getElementById('gpsName').value = "";
                 document.getElementById('gpsAffiliation').value = "";
                 document.getElementById('gpsNotes').value = "";
+                
+                // Optionnel : fermer le panneau après création
+                // gpsPanel.style.display = 'none'; 
             } else {
                 await customAlert("ATTENTION", "Aucun groupe de calques n'est disponible.");
             }
@@ -143,7 +155,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnReset = document.getElementById('btnResetView');
     if(btnReset) btnReset.onclick = centerMap;
     
-    // NOUVEAU GROUPE AVEC MODALE
     const btnAddGroup = document.getElementById('btnAddGroup');
     if(btnAddGroup) btnAddGroup.onclick = async () => {
         const name = await customPrompt("NOUVEAU CALQUE", "Entrez le nom du nouveau groupe :");

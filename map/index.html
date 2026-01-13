@@ -16,21 +16,30 @@
             <div id="modal-input-container" style="display:none;">
                 <input type="text" id="modal-input" class="gps-input full-width">
             </div>
-            <div id="modal-actions">
-                </div>
+            <div id="modal-actions"></div>
         </div>
+    </div>
+
+    <div id="context-menu" class="context-menu">
+        <button id="ctx-new-point">📍 NOUVEAU POINT ICI</button>
+        <button id="ctx-measure">📏 MESURER DEPUIS ICI</button>
+        <div class="separator-h"></div>
+        <button id="ctx-cancel" style="color:var(--text-dim)">❌ ANNULER</button>
     </div>
 
     <div id="top-bar">
         <div class="logo-area">
             <span class="app-logo">💠</span>
             <span class="app-title">LINKED <span style="color:var(--accent-pink)">// MAP</span></span>
+            <span id="cloud-status" class="cloud-badge" style="display:none;">☁️ SYNC</span>
         </div>
         <div class="toolbar">
             <input type="file" id="fileImport" accept=".json" style="display:none">
-            
             <button class="nav-btn" id="btnTriggerImport">📂 IMPORTER</button>
-            <button class="nav-btn" id="btnSave">💾 SAUVEGARDER</button>
+            
+            <button class="nav-btn" id="btnCloudSave">☁️ SAUVEGARDER</button>
+            <button class="nav-btn" id="btnSave">💾 JSON</button>
+            
             <div class="separator"></div>
             <a href="../point/index.html" class="nav-link">RÉSEAU NEURAL ➔</a>
         </div>
@@ -39,6 +48,13 @@
     <div id="app-container">
         
         <div id="sidebar-left">
+            <div class="panel-section" style="padding-bottom: 5px;">
+                <div class="search-container">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" id="searchInput" placeholder="Rechercher cible..." autocomplete="off">
+                </div>
+            </div>
+
             <div class="panel-section">
                 <button id="btnToggleGpsPanel" class="action-btn full-width">📡 AJOUTER POINT GPS</button>
             </div>
@@ -53,7 +69,6 @@
         <div id="viewport">
             <div id="map-world">
                 <img id="map-image" src="carte.jpg" alt="Carte Tactique">
-                
                 <svg style="position:absolute; width:0; height:0; overflow:hidden;">
                     <defs>
                         <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
@@ -61,7 +76,6 @@
                         </marker>
                     </defs>
                 </svg>
-
                 <svg id="zones-layer"></svg>
                 <svg id="links-layer" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none;"></svg>
                 <div id="markers-layer"></div>

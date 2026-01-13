@@ -1,4 +1,4 @@
-import { state, generateID } from './state.js'; // Import generateID
+import { state, generateID } from './state.js';
 import { renderAll, getMapPercentCoords } from './render.js';
 import { handleDrawingClick } from './zone-editor.js';
 
@@ -45,6 +45,7 @@ export function initEngine() {
     viewport.addEventListener('mousedown', (e) => {
         if (state.drawingMode) { handleDrawingClick(e); return; }
         
+        // Mode mesure : clic gauche pose un point
         if (state.measuringMode && e.button === 0) {
             const coords = getMapPercentCoords(e.clientX, e.clientY);
             if (state.measureStep === 0 || state.measureStep === 2) {
@@ -52,7 +53,7 @@ export function initEngine() {
                 state.measureStep = 1;
             } else if (state.measureStep === 1) {
                 state.measurePoints[1] = coords;
-                state.measureStep = 2;
+                state.measureStep = 2; // Fini
             }
             renderAll();
             return;
@@ -91,39 +92,7 @@ export function initEngine() {
         if(!state.drawingMode && !state.measuringMode) viewport.style.cursor = 'grab';
     });
 
-    // CLIC DROIT : Création de point avec ID
-    viewport.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        if(state.drawingMode) { handleDrawingClick(e); return; }
-        if(state.measuringMode) { 
-            state.measuringMode = false; 
-            state.measurePoints = [];
-            renderAll();
-            document.body.style.cursor = 'default';
-            const btn = document.getElementById('btnMeasure');
-            if(btn) btn.classList.remove('active');
-            return;
-        }
-        
-        const coords = getMapPercentCoords(e.clientX, e.clientY);
-        if(state.groups.length > 0) {
-            const targetGroup = state.groups.find(g => g.visible) || state.groups[0];
-            
-            // AJOUT DE L'ID ET PROPRIETES PAR DEFAUT
-            targetGroup.points.push({ 
-                id: generateID(),
-                name: "Nouv. Point", 
-                x: coords.x, 
-                y: coords.y, 
-                iconType: "DEFAULT",
-                status: "ACTIVE",
-                notes: ""
-            });
-            
-            import('./ui.js').then(ui => ui.renderGroupsList());
-            renderAll();
-        }
-    });
+    // NOTE : L'ancien 'contextmenu' a été retiré d'ici pour être géré par ui.js (Menu Contextuel)
 }
 
 export function centerMap() {
