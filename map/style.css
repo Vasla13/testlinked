@@ -400,3 +400,59 @@ textarea.cyber-input {
     cursor: pointer; text-transform: uppercase;
 }
 .btn-close-editor:hover { color: #fff; border-color: #fff; }
+
+/* AJOUTS POUR LA RECHERCHE ET LE CLOUD */
+
+/* Barre de recherche style Cyberpunk */
+.search-container {
+    position: relative;
+    width: 100%;
+}
+.search-icon {
+    position: absolute;
+    left: 10px; top: 50%; transform: translateY(-50%);
+    color: var(--accent-cyan);
+    font-size: 0.9rem;
+    pointer-events: none;
+}
+#searchInput {
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid var(--border-color);
+    color: #fff;
+    padding: 10px 10px 10px 35px; /* Place pour l'icone */
+    width: 100%;
+    border-radius: 4px;
+    font-family: var(--font-main);
+    font-size: 0.9rem;
+    outline: none;
+    transition: all 0.2s;
+    margin-bottom: 0; /* Override */
+}
+#searchInput:focus {
+    border-color: var(--accent-cyan);
+    background: rgba(10, 15, 25, 0.8);
+    box-shadow: 0 0 10px rgba(115, 251, 247, 0.15);
+}
+
+/* Badge Cloud */
+.cloud-badge {
+    background: rgba(115, 251, 247, 0.1);
+    border: 1px solid var(--accent-cyan);
+    color: var(--accent-cyan);
+    font-size: 0.7rem;
+    padding: 2px 6px;
+    border-radius: 3px;
+    margin-left: 10px;
+    animation: pulse-cloud 2s infinite;
+}
+@keyframes pulse-cloud {
+    0% { opacity: 0.7; }
+    50% { opacity: 1; text-shadow: 0 0 5px var(--accent-cyan); }
+    100% { opacity: 0.7; }
+}
+
+/* Modification pour la liste filtrée */
+.group-item.hidden {
+    display: none;
+}
+.point-item { /* Si on voulait lister les points dans la sidebar, mais ici on filtre les marqueurs */ }

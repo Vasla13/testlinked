@@ -1,13 +1,14 @@
 import { state } from './state.js';
 import { renderAll, getMapPercentCoords } from './render.js'; 
 import { ICONS } from './constants.js';
-import { percentageToGps } from './utils.js'; // Import crucial pour la conversion
+import { percentageToGps } from './utils.js';
 
 const groupsList = document.getElementById('groups-list');
 const sidebarRight = document.getElementById('sidebar-right');
 const editorContent = document.getElementById('editor-content');
 const chkLabels = document.getElementById('chkLabels');
 const btnMeasure = document.getElementById('btnMeasure');
+const searchInput = document.getElementById('searchInput');
 
 // --- 1. SYSTÈME DE MODALES CUSTOM ---
 const modalOverlay = document.getElementById('modal-overlay');
@@ -19,6 +20,12 @@ const modalActions = document.getElementById('modal-actions');
 
 function showModal(title, text, type = 'alert') {
     return new Promise((resolve) => {
+        if(!modalOverlay) {
+            if(type === 'confirm') return resolve(confirm(text));
+            if(type === 'prompt') return resolve(prompt(text));
+            return resolve(alert(text));
+        }
+
         modalTitle.innerText = title;
         modalContent.innerHTML = text;
         modalInputContainer.style.display = 'none';
@@ -92,6 +99,7 @@ export function initContextMenu() {
         let x = e.clientX;
         let y = e.clientY;
         
+        // Garde-fou écran
         if (x + 230 > window.innerWidth) x -= 230;
         if (y + 150 > window.innerHeight) y -= 150;
 
@@ -128,6 +136,7 @@ function openGpsPanelWithCoords(xPercent, yPercent) {
     if(gpsPanel) {
         gpsPanel.style.display = 'block';
         
+        // Conversion % vers GPS
         const gpsCoords = percentageToGps(xPercent, yPercent);
         
         if(inpX) inpX.value = gpsCoords.x.toFixed(2);
@@ -156,6 +165,16 @@ function startMeasurementAt(coords) {
 export function initUI() {
     initContextMenu(); 
 
+    // Recherche
+    if(searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            state.searchTerm = e.target.value.toLowerCase();
+            renderGroupsList();
+            // Optionnel : filtrer aussi sur la map si désiré
+            // renderAll(); 
+        });
+    }
+
     if(chkLabels) {
         chkLabels.addEventListener('change', (e) => {
             if(e.target.checked) document.body.classList.add('show-labels');
@@ -179,10 +198,21 @@ export function initUI() {
     }
 }
 
-// --- 4. GESTION LISTE GROUPES ---
+// --- 4. GESTION LISTE GROUPES (AVEC FILTRE RECHERCHE) ---
 export function renderGroupsList() {
     groupsList.innerHTML = '';
-    state.groups.forEach((group, idx) => {
+    const term = state.searchTerm || "";
+
+    state.groups.forEach((group, gIdx) => {
+        // Logique de filtrage
+        const matchingPoints = group.points.filter(p => 
+            p.name.toLowerCase().includes(term) || 
+            (p.type && p.type.toLowerCase().includes(term))
+        );
+
+        // Si recherche active et aucun match, on masque le groupe
+        if (term !== "" && matchingPoints.length === 0) return;
+
         const item = document.createElement('div');
         item.className = 'group-item';
         
@@ -205,16 +235,55 @@ export function renderGroupsList() {
         dot.style.backgroundColor = group.color;
 
         const nameSpan = document.createElement('span');
-        nameSpan.innerText = `${group.name} (${group.points.length})`;
+        const count = term !== "" ? matchingPoints.length : group.points.length;
+        nameSpan.innerText = `${group.name} (${count})`;
         nameSpan.style.flex = '1';
 
         header.append(checkbox, dot, nameSpan);
         item.appendChild(header);
+
+        // Affichage des résultats de recherche
+        if (term !== "") {
+            const subList = document.createElement('div');
+            subList.style.paddingLeft = '30px';
+            subList.style.fontSize = '0.85rem';
+            subList.style.paddingBottom = '5px';
+            
+            matchingPoints.forEach(p => {
+                const pRow = document.createElement('div');
+                pRow.innerText = `• ${p.name}`;
+                pRow.style.cursor = 'pointer';
+                pRow.style.color = '#8892b0';
+                pRow.style.padding = '2px 0';
+                pRow.onmouseover = () => pRow.style.color = '#fff';
+                pRow.onmouseout = () => pRow.style.color = '#8892b0';
+                
+                // Clic sur résultat = Zoom
+                pRow.onclick = () => {
+                    const realIndex = group.points.indexOf(p);
+                    selectPoint(gIdx, realIndex);
+                    
+                    // Zoom Auto (via import dynamique pour éviter cycle)
+                    import('./engine.js').then(eng => {
+                         state.view.scale = 3.0;
+                         // Centrage simplifié (nécessite width/height map chargés)
+                         if(state.mapWidth) {
+                             state.view.x = (window.innerWidth/2) - (p.x * state.mapWidth/100)*3.0;
+                             state.view.y = (window.innerHeight/2) - (p.y * state.mapHeight/100)*3.0;
+                             eng.updateTransform();
+                         }
+                    });
+                };
+                subList.appendChild(pRow);
+            });
+            item.appendChild(subList);
+        }
+
         groupsList.appendChild(item);
     });
 }
 
-// --- 5. SÉLECTION & ÉDITEUR ---
+// --- 5. SÉLECTION ---
 export function deselect() {
     state.selectedPoint = null;
     state.selectedZone = null;
@@ -244,7 +313,7 @@ export function selectPoint(groupIndex, pointIndex) {
     selectItem('point', groupIndex, pointIndex);
 }
 
-// --- 6. RENDU ÉDITEUR (DESIGN PRO + BOUTON COPIER) ---
+// --- 6. ÉDITEUR (DESIGN + COPIE CORDS) ---
 export function renderEditor() {
     if (!state.selectedPoint) { closeEditor(); return; }
     
@@ -287,14 +356,12 @@ export function renderEditor() {
 
         <div class="editor-section" style="border-left-color: var(--accent-orange);">
             <div class="editor-section-title" style="color:var(--accent-orange);">CLASSIFICATION</div>
-            
             <div class="editor-row">
                 <div class="editor-col" style="flex:2;">
                     <label class="cyber-label">Type d'icône</label>
                     <select id="edIcon" class="cyber-input">${iconOptions}</select>
                 </div>
             </div>
-
             <div style="margin-top:10px;">
                 <label class="cyber-label">Calque Opérationnel</label>
                 <select id="edGroup" class="cyber-input">
@@ -316,7 +383,7 @@ export function renderEditor() {
                 </div>
             </div>
             <button id="btnCopyCoords" class="btn-close-editor" style="margin-top:5px; border-color:rgba(255,255,255,0.3); color:#eee;">
-                COPIER CORDS
+                📋 COPIER CORDS (GTA)
             </button>
         </div>
 
@@ -326,16 +393,12 @@ export function renderEditor() {
         </div>
 
         <div style="margin-top:10px;">
-            <button id="btnDelete" class="btn-delete-zone">
-                ⚠️ SUPPRIMER POSITION
-            </button>
-            <button id="btnClose" class="btn-close-editor">
-                Fermer Panneau
-            </button>
+            <button id="btnDelete" class="btn-delete-zone">⚠️ SUPPRIMER POSITION</button>
+            <button id="btnClose" class="btn-close-editor">Fermer Panneau</button>
         </div>
     `;
 
-    // Events Listeners
+    // Events
     document.getElementById('edName').oninput = (e) => { point.name = e.target.value; renderAll(); };
     document.getElementById('edIcon').onchange = (e) => { point.iconType = e.target.value; renderAll(); };
     document.getElementById('edType').oninput = (e) => { point.type = e.target.value; };
@@ -360,7 +423,7 @@ export function renderEditor() {
         renderGroupsList(); renderAll(); renderEditor();
     };
 
-    // LOGIQUE DU BOUTON "COPIER CORDS"
+    // BOUTON COPIER
     document.getElementById('btnCopyCoords').onclick = () => {
         const gps = percentageToGps(point.x, point.y);
         const text = `${gps.x.toFixed(2)}, ${gps.y.toFixed(2)}`;
@@ -368,15 +431,14 @@ export function renderEditor() {
         navigator.clipboard.writeText(text).then(() => {
             const btn = document.getElementById('btnCopyCoords');
             const originalText = btn.innerText;
-            btn.innerText = "COPIÉ !";
-            btn.style.color = "var(--accent-cyan)";
+            btn.innerText = "✅ COPIÉ !";
             btn.style.borderColor = "var(--accent-cyan)";
-            
+            btn.style.color = "var(--accent-cyan)";
             setTimeout(() => {
                 btn.innerText = originalText;
-                btn.style.color = "";
-                btn.style.borderColor = "";
-            }, 1000);
+                btn.style.borderColor = "rgba(255,255,255,0.3)";
+                btn.style.color = "#eee";
+            }, 1500);
         });
     };
 
