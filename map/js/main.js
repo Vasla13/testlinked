@@ -1,6 +1,10 @@
+// map/js/main.js
 import { state, setGroups, exportToJSON, generateID } from './state.js';
 import { initEngine, centerMap, updateTransform } from './engine.js'; 
-import { renderGroupsList, initUI, selectPoint, customAlert, customConfirm, customPrompt } from './ui.js';
+// CORRECTION 1 : On importe selectItem au lieu de selectPoint
+import { renderGroupsList, initUI, selectItem } from './ui.js';
+// CORRECTION 2 : On importe les alertes depuis le nouveau fichier ui-modals
+import { customAlert, customConfirm, customPrompt } from './ui-modals.js';
 import { gpsToPercentage } from './utils.js';
 import { renderAll } from './render.js';
 import { ICONS } from './constants.js';
@@ -35,7 +39,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderGroupsList();
     renderAll(); 
 
-    // --- AUTO-FOCUS VIA URL (PING CROISÉ) ---
+    // --- AUTO-FOCUS VIA URL ---
     const params = new URLSearchParams(window.location.search);
     const focusId = params.get('focus');
     
@@ -49,10 +53,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         if(found) {
             console.log("📍 Focus sur point :", found.p.name);
-            // Zoom Tactique
             state.view.scale = 3.5;
             
-            // Calcul du centrage
             const viewport = document.getElementById('viewport');
             const mapW = state.mapWidth || 2000; 
             const mapH = state.mapHeight || 2000;
@@ -63,7 +65,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             state.view.y = (vh / 2) - (found.p.y * mapH / 100) * state.view.scale;
             
             updateTransform();
-            selectPoint(found.gIdx, found.pIdx);
+            // CORRECTION 3 : Utilisation de selectItem
+            selectItem('point', found.gIdx, found.pIdx);
         }
     }
 
@@ -158,7 +161,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 targetGroup.visible = true;
                 
                 const newPoint = { 
-                    id: generateID(), // ID UNIQUE OBLIGATOIRE
+                    id: generateID(),
                     name: nameVal, 
                     x: mapCoords.x, 
                     y: mapCoords.y, 
@@ -177,7 +180,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 state.view.x = (vw / 2) - (newPoint.x * state.mapWidth / 100) * state.view.scale;
                 state.view.y = (vh / 2) - (newPoint.y * state.mapHeight / 100) * state.view.scale;
                 updateTransform();
-                selectPoint(state.groups.indexOf(targetGroup), targetGroup.points.length - 1);
+                
+                // CORRECTION 4 : selectItem
+                selectItem('point', state.groups.indexOf(targetGroup), targetGroup.points.length - 1);
 
                 inpX.value = ""; inpY.value = ""; document.getElementById('gpsName').value = ""; document.getElementById('gpsAffiliation').value = ""; document.getElementById('gpsNotes').value = "";
             } else {

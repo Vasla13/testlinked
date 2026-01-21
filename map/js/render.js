@@ -1,10 +1,14 @@
+// map/js/render.js
 import { state } from './state.js';
-import { selectItem } from './ui.js';
 import { ICONS, MAP_SCALE_UNIT } from './constants.js';
+import { handlePointClick, handleLinkClick, handleLinkHover, handleLinkOut, moveTooltip, selectItem } from './ui.js';
 
 const markersLayer = document.getElementById('markers-layer');
 const zonesLayer = document.getElementById('zones-layer');
 const linksLayer = document.getElementById('links-layer'); 
+
+// Listener global pour le suivi de souris (tooltip)
+document.addEventListener('mousemove', moveTooltip);
 
 export function renderAll() {
     renderZones();
@@ -13,20 +17,22 @@ export function renderAll() {
     renderMeasureTool(); 
 }
 
-export function renderZones() {
+// --- RENDU ZONES ---
+function renderZones() {
     zonesLayer.innerHTML = '';
     state.groups.forEach((group, gIndex) => {
         if (!group.visible || !group.zones) return;
         group.zones.forEach((zone, zIndex) => {
             const poly = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
-            const pointsStr = zone.points.map(p => `${p.x},${p.y}`).join(" ");
-            poly.setAttribute("points", pointsStr);
+            poly.setAttribute("points", zone.points.map(p => `${p.x},${p.y}`).join(" "));
             poly.setAttribute("fill", group.color);
             poly.setAttribute("stroke", group.color);
             poly.setAttribute("class", "tactical-zone");
+            
             if (state.selectedZone && state.selectedZone.groupIndex === gIndex && state.selectedZone.zoneIndex === zIndex) {
                 poly.classList.add("selected");
             }
+            
             poly.onmousedown = (e) => {
                 if (state.drawingMode || state.measuringMode) return;
                 e.stopPropagation();
@@ -35,10 +41,11 @@ export function renderZones() {
             zonesLayer.appendChild(poly);
         });
     });
+
+    // Tracé temporaire pendant dessin
     if (state.drawingMode && state.tempPoints.length > 0) {
         const poly = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
-        const pointsStr = state.tempPoints.map(p => `${p.x},${p.y}`).join(" ");
-        poly.setAttribute("points", pointsStr);
+        poly.setAttribute("points", state.tempPoints.map(p => `${p.x},${p.y}`).join(" "));
         poly.setAttribute("fill", "none");
         poly.setAttribute("stroke", "#ff00ff");
         poly.setAttribute("stroke-width", "0.5");
@@ -47,95 +54,100 @@ export function renderZones() {
     }
 }
 
-// Rendu des marqueurs
-export function renderMarkersAndClusters() {
+// --- RENDU MARKERS ---
+function renderMarkersAndClusters() {
     markersLayer.innerHTML = '';
-    
-    // Contre-échelle pour garder la taille constante lors du zoom
-    let counterScale = 1 / Math.max(state.view.scale, 0.2);
+    let counterScale = 1 / Math.max(state.view.scale, 0.2); // Taille constante
 
     state.groups.forEach((group, gIndex) => {
         if (!group.visible) return;
         group.points.forEach((point, pIndex) => {
             if (state.statusFilter !== 'ALL' && (point.status || 'ACTIVE') !== state.statusFilter) return;
-            // Passe la couleur du groupe par défaut si pas de couleur specifique
-            renderSingleMarker(point, gIndex, pIndex, group.color, counterScale);
+            
+            const el = document.createElement('div');
+            el.className = `marker status-${(point.status || 'ACTIVE').toLowerCase()}`;
+            el.style.left = `${point.x}%`;
+            el.style.top = `${point.y}%`;
+            el.style.setProperty('--marker-color', group.color || '#00ffff');
+
+            const svgContent = ICONS[point.iconType] || ICONS.DEFAULT;
+            el.innerHTML = `
+                <div class="marker-content-wrapper" style="transform: scale(${counterScale})">
+                    <div class="marker-icon-box"><svg viewBox="0 0 24 24">${svgContent}</svg></div>
+                    <div class="marker-label">${point.name}</div>
+                </div>
+            `;
+
+            if (state.selectedPoint && state.selectedPoint.groupIndex === gIndex && state.selectedPoint.pointIndex === pIndex) {
+                el.classList.add('selected');
+            }
+
+            el.onmousedown = (e) => {
+                if(state.drawingMode || state.measuringMode) return;
+                e.stopPropagation();
+                handlePointClick(gIndex, pIndex);
+            };
+            markersLayer.appendChild(el);
         });
     });
 }
 
-function renderSingleMarker(point, gIndex, pIndex, color, scaleFactor) {
-    const el = document.createElement('div');
-    const status = point.status || 'ACTIVE';
-    el.className = `marker status-${status.toLowerCase()}`;
-    el.style.left = `${point.x}%`;
-    el.style.top = `${point.y}%`;
-    
-    // IMPORTANT: On utilise la couleur du groupe (par exemple le cyan par défaut)
-    el.style.setProperty('--marker-color', color || '#00ffff');
-
-    // LOGIQUE LOGO PAR DÉFAUT
-    const iconType = point.iconType || 'DEFAULT';
-    const svgContent = ICONS[iconType] || ICONS.DEFAULT;
-    
-    el.innerHTML = `
-        <div class="marker-content-wrapper" style="transform: scale(${scaleFactor})">
-            <div class="marker-icon-box">
-                <svg viewBox="0 0 24 24">${svgContent}</svg>
-            </div>
-            <div class="marker-label">${point.name}</div>
-        </div>
-    `;
-
-    const isSelected = (state.selectedPoint && state.selectedPoint.groupIndex === gIndex && state.selectedPoint.pointIndex === pIndex);
-    if (isSelected) el.classList.add('selected');
-
-    el.onmousedown = (e) => {
-        if(state.drawingMode || state.measuringMode) return;
-        e.stopPropagation();
-        selectItem('point', gIndex, pIndex);
-    };
-
-    markersLayer.appendChild(el);
-}
-
-export function renderTacticalLinks() {
+// --- RENDU LIENS TACTIQUES ---
+function renderTacticalLinks() {
     if(!linksLayer) return;
     linksLayer.innerHTML = ''; 
-    if(state.tacticalLinks) {
-        state.tacticalLinks.forEach(link => {
-            const gFrom = state.groups[link.from.g];
-            const gTo = state.groups[link.to.g];
-            if(gFrom && gTo && gFrom.visible && gTo.visible) {
-                const pFrom = gFrom.points[link.from.p];
-                const pTo = gTo.points[link.to.p];
-                if(pFrom && pTo) {
-                    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-                    line.setAttribute("x1", pFrom.x); line.setAttribute("y1", pFrom.y);
-                    line.setAttribute("x2", pTo.x); line.setAttribute("y2", pTo.y);
-                    line.setAttribute("stroke", link.color || "#ffffff");
-                    line.setAttribute("stroke-width", "0.4");
-                    line.setAttribute("class", "tactical-link-line");
-                    linksLayer.appendChild(line);
-                }
-            }
-        });
-    }
-    renderMeasureTool();
+    linksLayer.style.pointerEvents = 'auto'; 
+
+    if(!state.tacticalLinks) return;
+
+    // Helper rapide pour trouver un point
+    const findP = (id) => {
+        for (const g of state.groups) {
+            const p = g.points.find(x => x.id === id);
+            if (p) return p;
+        }
+        return null;
+    };
+
+    state.tacticalLinks.forEach(link => {
+        const pFrom = findP(link.from);
+        const pTo = findP(link.to);
+
+        if(pFrom && pTo) {
+            const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+            line.setAttribute("x1", pFrom.x); line.setAttribute("y1", pFrom.y);
+            line.setAttribute("x2", pTo.x); line.setAttribute("y2", pTo.y);
+            line.setAttribute("stroke", link.color || "#ffffff");
+            line.setAttribute("stroke-width", "0.5");
+            line.setAttribute("class", "tactical-link-line");
+            line.style.cursor = "pointer";
+            
+            // Events
+            line.onclick = (e) => { e.stopPropagation(); handleLinkClick(e, link); };
+            line.onmouseover = (e) => { line.setAttribute("stroke-width", "1.5"); handleLinkHover(e, link); };
+            line.onmouseout = (e) => { line.setAttribute("stroke-width", "0.5"); handleLinkOut(); };
+
+            linksLayer.appendChild(line);
+        }
+    });
 }
 
-export function renderMeasureTool() {
+// --- RENDU OUTIL MESURE ---
+function renderMeasureTool() {
     if (state.measurePoints.length === 2) {
-        const p1 = state.measurePoints[0];
-        const p2 = state.measurePoints[1];
+        const [p1, p2] = state.measurePoints;
+        
+        // Ligne
         const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
         line.setAttribute("x1", p1.x); line.setAttribute("y1", p1.y);
         line.setAttribute("x2", p2.x); line.setAttribute("y2", p2.y);
         line.setAttribute("stroke", "#ff00ff");
         line.setAttribute("stroke-width", "0.6");
         line.setAttribute("stroke-dasharray", "4");
+        line.style.pointerEvents = "none";
         linksLayer.appendChild(line);
 
+        // Label Distance
         const existingLabel = document.getElementById('measure-label');
         if(existingLabel) existingLabel.remove();
 

@@ -1,7 +1,9 @@
+// map/js/zone-editor.js
 import { state } from './state.js';
-// CORRECTION : On importe getMapPercentCoords depuis render.js
 import { renderAll, getMapPercentCoords } from './render.js';
 import { selectItem } from './ui.js';
+// AJOUT : Import de l'alerte custom
+import { customAlert } from './ui-modals.js';
 
 export function startDrawingZone(groupIndex) {
     state.drawingMode = true;
@@ -29,9 +31,10 @@ export function handleDrawingClick(e) {
     }
 }
 
-function finishDrawing() {
+async function finishDrawing() {
     if (state.tempPoints.length < 3) {
-        alert("Une zone tactique doit comporter au moins 3 points.");
+        // CORRECTION : Utilisation de customAlert au lieu de alert()
+        await customAlert("ATTENTION", "Une zone tactique doit comporter au moins 3 points.");
         cancelDrawing();
         return;
     }

@@ -1,4 +1,6 @@
-import { customAlert } from './ui.js';
+// map/js/api.js
+// CORRECTION : Import depuis ui-modals.js
+import { customAlert } from './ui-modals.js';
 
 const API_BASE = '/.netlify/functions';
 const LOCAL_STORAGE_KEY = 'bni_linked_local_map';

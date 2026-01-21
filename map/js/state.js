@@ -1,6 +1,6 @@
 export const state = {
     groups: [],
-    tacticalLinks: [], // Format: { from: "id_point_A", to: "id_point_B", color: "..." }
+    tacticalLinks: [], // Format: { id: "uid", from: "id_A", to: "id_B", color: "#fff", type: "standard" }
     view: { x: 0, y: 0, scale: 0.5 },
     
     // Interaction
@@ -8,19 +8,21 @@ export const state = {
     lastMouse: { x: 0, y: 0 },
     
     // Sélection
-    selectedPoint: null, // { groupIndex, pointIndex } (pour l'édition rapide)
+    selectedPoint: null, // { groupIndex, pointIndex }
     selectedZone: null,
 
     // Outils
     drawingMode: false,
     drawingGroupIndex: null,
     tempPoints: [],
+    
     measuringMode: false,
     measureStep: 0,
     measurePoints: [],
     
+    // --- NOUVEAU : MODE LIAISON ---
     linkingMode: false,
-    linkStartId: null, // On stocke l'ID maintenant, plus l'index
+    linkStartId: null, 
 
     statusFilter: 'ALL',
     mapWidth: 0,
@@ -41,6 +43,38 @@ export function findPointById(id) {
     return null;
 }
 
+// --- GESTION DES LIENS TACTIQUES ---
+
+export function addTacticalLink(idA, idB) {
+    if (!idA || !idB || idA === idB) return false;
+
+    // Vérifier si le lien existe déjà (dans un sens ou l'autre)
+    const exists = state.tacticalLinks.find(l => 
+        (l.from === idA && l.to === idB) || (l.from === idB && l.to === idA)
+    );
+    if (exists) return false;
+
+    state.tacticalLinks.push({
+        id: generateID(),
+        from: idA,
+        to: idB,
+        color: '#ffffff',
+        type: 'Standard'
+    });
+    return true;
+}
+
+export function removeTacticalLink(linkId) {
+    state.tacticalLinks = state.tacticalLinks.filter(l => l.id !== linkId);
+}
+
+export function updateTacticalLink(linkId, newData) {
+    const link = state.tacticalLinks.find(l => l.id === linkId);
+    if (link) {
+        Object.assign(link, newData);
+    }
+}
+
 export function setGroups(newGroups) { 
     // MIGRATION AUTOMATIQUE : On s'assure que tout le monde a un ID
     newGroups.forEach(g => {
@@ -55,11 +89,19 @@ export function setGroups(newGroups) {
         });
     });
     state.groups = newGroups; 
+    
+    // Migration liens (ajout ID si manquant)
+    if(state.tacticalLinks) {
+        state.tacticalLinks.forEach(l => {
+            if(!l.id) l.id = generateID();
+            if(!l.type) l.type = 'Standard';
+        });
+    }
 }
 
 export function exportToJSON() {
     const data = { 
-        meta: { date: new Date().toISOString(), version: "2.0" },
+        meta: { date: new Date().toISOString(), version: "2.1" },
         groups: state.groups,
         tacticalLinks: state.tacticalLinks
     };
