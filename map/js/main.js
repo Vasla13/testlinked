@@ -1,7 +1,8 @@
 import { state, setGroups, exportToJSON, generateID } from './state.js';
 import { initEngine, centerMap, updateTransform } from './engine.js'; 
 import { renderGroupsList, initUI, selectItem } from './ui.js';
-import { customAlert, customConfirm, customPrompt } from './ui-modals.js';
+// AJOUT : Import de customColorPicker
+import { customAlert, customConfirm, customPrompt, customColorPicker } from './ui-modals.js';
 import { gpsToPercentage } from './utils.js';
 import { renderAll } from './render.js';
 import { ICONS } from './constants.js';
@@ -14,7 +15,6 @@ const DEFAULT_DATA = [
 ];
 
 document.addEventListener('DOMContentLoaded', async () => {
-    // NETTOYAGE PRÉVENTIF : Si un ancien calque markers-layer traîne dans map-world (suite au fix zoom), on le supprime.
     const oldLayer = document.querySelector('#map-world #markers-layer');
     if(oldLayer) oldLayer.remove();
 
@@ -41,6 +41,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // --- AUTO-FOCUS VIA URL ---
     const params = new URLSearchParams(window.location.search);
     const focusId = params.get('focus');
+    
     if(focusId) {
         let found = null;
         state.groups.forEach((g, gIdx) => {
@@ -81,22 +82,27 @@ document.addEventListener('DOMContentLoaded', async () => {
     const btnReset = document.getElementById('btnResetView');
     if(btnReset) btnReset.onclick = centerMap;
     
+    // CORRECTION ICI : Création de calque avec choix de couleur
     const btnAddGroup = document.getElementById('btnAddGroup');
     if(btnAddGroup) btnAddGroup.onclick = async () => {
+        // 1. Demander le Nom
         const name = await customPrompt("NOUVEAU CALQUE", "Nom :");
-        if(name) {
-            state.groups.push({ name, color: '#ffffff', visible: true, points: [], zones: [] });
-            renderGroupsList();
-        }
-    };
+        if(!name) return; // Annulation si vide ou annulé
 
-    // --- CORRECTION IMPORT (Utilisation de .onchange pour éviter doublons d'écouteurs) ---
+        // 2. Demander la Couleur
+        const color = await customColorPicker("COULEUR DU CALQUE", "#ffffff");
+        if(!color) return; // Annulation
+
+        // 3. Création
+        state.groups.push({ name, color, visible: true, points: [], zones: [] });
+        renderGroupsList();
+    };
+    
     const fileInput = document.getElementById('fileImport');
     const btnTriggerImport = document.getElementById('btnTriggerImport');
     if (btnTriggerImport && fileInput) {
         btnTriggerImport.onclick = () => { fileInput.click(); };
-        
-        fileInput.onchange = (e) => { // .onchange remplace tout écouteur précédent
+        fileInput.onchange = (e) => {
             const file = e.target.files[0];
             if (!file) return;
             const reader = new FileReader();
@@ -106,15 +112,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (json.groups) {
                         setGroups(json.groups);
                         if(json.tacticalLinks) state.tacticalLinks = json.tacticalLinks;
-                        
-                        renderGroupsList(); 
-                        renderAll();
-                        
+                        renderGroupsList(); renderAll();
                         await customAlert("IMPORT", "Chargé avec succès.");
                     }
-                } catch (err) {
-                    await customAlert("ERREUR", "Fichier invalide.");
-                }
+                } catch (err) {}
                 fileInput.value = ''; 
             };
             reader.readAsText(file);
@@ -127,16 +128,39 @@ document.addEventListener('DOMContentLoaded', async () => {
         let opts = ''; for(const k in ICONS) opts += `<option value="${k}">${k}</option>`;
         gpsIconSelect.innerHTML = opts;
     }
+    
     const gpsPanel = document.getElementById('gps-panel');
     const btnToggleGps = document.getElementById('btnToggleGpsPanel');
     const btnCloseGps = document.querySelector('.close-gps');
+
     if(gpsPanel && btnToggleGps) {
-        btnToggleGps.onclick = () => { gpsPanel.style.display = (gpsPanel.style.display === 'none') ? 'block' : 'none'; };
+        btnToggleGps.onclick = () => { 
+            const isHidden = (gpsPanel.style.display === 'none');
+            
+            if(isHidden) {
+                const selectEl = document.getElementById('gpsGroupSelect');
+                if(selectEl) {
+                    selectEl.innerHTML = '';
+                    state.groups.forEach((g, idx) => {
+                        const opt = document.createElement('option');
+                        opt.value = idx;
+                        opt.text = g.name;
+                        opt.style.color = 'black'; 
+                        selectEl.appendChild(opt);
+                    });
+                }
+                gpsPanel.style.display = 'block';
+            } else {
+                gpsPanel.style.display = 'none';
+            }
+        };
         if(btnCloseGps) btnCloseGps.onclick = () => { gpsPanel.style.display = 'none'; };
     }
+
     const inpX = document.getElementById('gpsInputX');
     const inpY = document.getElementById('gpsInputY');
     const btnAddGps = document.getElementById('btnAddGpsPoint');
+    
     if(inpX) {
         inpX.addEventListener('paste', (e) => {
             e.preventDefault();
@@ -146,6 +170,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             else { inpX.value = text; }
         });
     }
+
     if(btnAddGps) {
         btnAddGps.onclick = async () => {
             const xVal = parseFloat(inpX.value);
@@ -154,11 +179,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             const iconVal = document.getElementById('gpsIconType').value || 'DEFAULT';
             const affVal = document.getElementById('gpsAffiliation').value || '';
             const notesVal = document.getElementById('gpsNotes').value || '';
+            
+            const selectEl = document.getElementById('gpsGroupSelect');
+            const groupIdx = selectEl ? parseInt(selectEl.value) : 0;
 
             if (isNaN(xVal) || isNaN(yVal)) { await customAlert("ERREUR", "Coordonnées invalides."); return; }
             const mapCoords = gpsToPercentage(xVal, yVal);
+            
             if (state.groups.length > 0) {
-                let targetGroup = state.groups.find(g => g.name.includes("intérêt") || g.name.includes("Neutre"));
+                let targetGroup = state.groups[groupIdx];
                 if (!targetGroup) targetGroup = state.groups[0];
                 targetGroup.visible = true;
                 
@@ -176,13 +205,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                 renderGroupsList(); renderAll();
 
                 const viewport = document.getElementById('viewport');
+                const vw = viewport ? viewport.clientWidth : window.innerWidth;
+                const vh = viewport ? viewport.clientHeight : window.innerHeight;
                 state.view.scale = 2.5; 
-                state.view.x = (viewport.clientWidth / 2) - (newPoint.x * state.mapWidth / 100) * state.view.scale;
-                state.view.y = (viewport.clientHeight / 2) - (newPoint.y * state.mapHeight / 100) * state.view.scale;
+                state.view.x = (vw / 2) - (newPoint.x * state.mapWidth / 100) * state.view.scale;
+                state.view.y = (vh / 2) - (newPoint.y * state.mapHeight / 100) * state.view.scale;
                 updateTransform();
                 
                 selectItem('point', state.groups.indexOf(targetGroup), targetGroup.points.length - 1);
-                
+
                 inpX.value = ""; inpY.value = ""; document.getElementById('gpsName').value = ""; document.getElementById('gpsAffiliation').value = ""; document.getElementById('gpsNotes').value = "";
             } else {
                 await customAlert("ERREUR", "Aucun groupe.");

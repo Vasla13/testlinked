@@ -8,13 +8,12 @@
     <link rel="stylesheet" href="style.css">
 
     <style>
-        /* --- LOADER STYLE (Identique au dossier Point) --- */
         #app-loader {
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            background: #05070a; /* Couleur de fond de la map */
+            background: #05070a;
             z-index: 9999;
             display: flex; flex-direction: column; justify-content: center; align-items: center;
-            color: #73fbf7; /* var(--accent-cyan) */
+            color: #73fbf7;
             transition: opacity 0.5s ease;
         }
         .loader-text { 
@@ -39,15 +38,28 @@
         <div id="modal-box">
             <div id="modal-title">TITRE</div>
             <div id="modal-content">Message...</div>
+            
             <div id="modal-input-container" style="display:none;">
-                <input type="text" id="modal-input" class="gps-input full-width">
+                <input type="text" id="modal-input" class="gps-input full-width" autocomplete="off">
             </div>
+
+            <div id="modal-color-picker" style="display:none;">
+                <div id="color-swatches" class="color-grid"></div>
+                <div class="separator-h" style="margin: 10px 0;"></div>
+                <label style="font-size:0.8rem; color:#8892b0;">Ou personnalisé :</label>
+                <div style="display:flex; align-items:center; gap:10px; margin-top:5px;">
+                    <input type="color" id="modal-color-input" value="#ffffff" style="width:50px; height:40px; border:none; background:none;">
+                    <span id="modal-color-hex" style="font-family:monospace; color:var(--text-main);">#FFFFFF</span>
+                </div>
+            </div>
+
             <div id="modal-actions"></div>
         </div>
     </div>
 
     <div id="context-menu" class="context-menu">
         <button id="ctx-new-point">📍 NOUVEAU POINT ICI</button>
+        <button id="ctx-new-zone">⭕ NOUVELLE ZONE</button>
         <button id="ctx-measure">📏 MESURER DEPUIS ICI</button>
         <div class="separator-h"></div>
         <button id="ctx-cancel" style="color:var(--text-dim)">❌ ANNULER</button>
@@ -56,7 +68,6 @@
     <div id="top-bar">
         <div class="logo-area">
             <button id="btnMobileMenu" class="mobile-only">☰</button>
-            
             <span class="app-logo">💠</span>
             <span class="app-title desktop-only">LINKED <span style="color:var(--accent-pink)">// MAP</span></span>
             <span id="cloud-status" class="cloud-badge" style="display:none;">☁️</span>
@@ -72,7 +83,6 @@
     </div>
 
     <div id="app-container">
-        
         <div id="sidebar-left">
             <div class="panel-section" style="padding-bottom: 5px;">
                 <div class="search-container">
@@ -129,6 +139,12 @@
                         <input type="text" id="gpsInputX" placeholder="X" class="gps-input">
                         <input type="text" id="gpsInputY" placeholder="Y" class="gps-input">
                     </div>
+                    
+                    <div style="margin-bottom:10px;">
+                        <label style="font-size:0.7rem; color:var(--text-dim);">CALQUE CIBLE</label>
+                        <select id="gpsGroupSelect" style="width:100%; background:rgba(0,0,0,0.3); color:white; border:1px solid #333; padding:5px;"></select>
+                    </div>
+
                     <input type="text" id="gpsName" placeholder="Nom du point">
                     <div class="gps-row">
                         <div style="flex:1"><select id="gpsIconType"></select></div>
@@ -155,13 +171,12 @@
         import { state } from './js/state.js';
         window.state = state; 
     </script>
-
     <script>
         window.addEventListener('load', () => {
           setTimeout(() => {
             const l = document.getElementById('app-loader');
             if(l) { l.style.opacity = '0'; setTimeout(() => l.remove(), 500); }
-          }, 600); // Délai minimal pour voir l'effet
+          }, 600);
         });
     </script>
 </body>

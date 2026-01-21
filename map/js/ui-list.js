@@ -1,7 +1,7 @@
-// map/js/ui-list.js
 import { state } from './state.js';
-import { handlePointClick } from './ui.js'; // On importe l'action de clic
+import { handlePointClick } from './ui.js';
 import { renderAll } from './render.js';
+import { customPrompt, customColorPicker, customConfirm } from './ui-modals.js'; // AJOUT : customConfirm
 
 export function renderGroupsList() {
     const groupsList = document.getElementById('groups-list');
@@ -11,14 +11,12 @@ export function renderGroupsList() {
     const term = state.searchTerm || "";
 
     state.groups.forEach((group, gIdx) => {
-        // Filtrage
         const matchingPoints = group.points.filter(p => 
             p.name.toLowerCase().includes(term) || (p.type && p.type.toLowerCase().includes(term))
         );
         
         if (term !== "" && matchingPoints.length === 0) return;
 
-        // Création de l'élément Groupe
         const item = document.createElement('div');
         item.className = 'group-item';
         
@@ -46,10 +44,66 @@ export function renderGroupsList() {
         nameSpan.innerText = `${group.name} (${count})`;
         nameSpan.style.flex = '1';
         
-        header.append(checkbox, dot, nameSpan);
+        // 1. Bouton Modification (Engrenage)
+        const btnEdit = document.createElement('button');
+        btnEdit.className = 'mini-btn'; 
+        btnEdit.innerHTML = '⚙️';
+        btnEdit.title = "Modifier le calque";
+        btnEdit.style.marginLeft = '5px';
+        btnEdit.style.padding = '0 5px';
+        
+        btnEdit.onclick = async (e) => {
+            e.stopPropagation();
+            
+            // Nom
+            const newName = await customPrompt("MODIFIER CALQUE", "Nom du calque :", group.name);
+            if(newName === null) return;
+
+            // Couleur
+            const newColor = await customColorPicker("COULEUR DU CALQUE", group.color);
+            if(newColor === null) return;
+
+            if(newName.trim() !== "") group.name = newName.trim();
+            group.color = newColor;
+
+            renderGroupsList();
+            renderAll();
+        };
+
+        // 2. AJOUT : Bouton Suppression (Poubelle)
+        const btnDelete = document.createElement('button');
+        btnDelete.className = 'mini-btn';
+        btnDelete.innerHTML = '🗑️';
+        btnDelete.title = "Supprimer le calque";
+        btnDelete.style.marginLeft = '5px';
+        btnDelete.style.padding = '0 5px';
+        btnDelete.style.color = '#ff6b81'; // Rouge clair pour l'alerte visuelle
+
+        btnDelete.onclick = async (e) => {
+            e.stopPropagation();
+            
+            const pointCount = group.points.length;
+            const msg = pointCount > 0 
+                ? `Attention, ce calque contient ${pointCount} points.\nTout sera supprimé définitivement.`
+                : `Supprimer le calque "${group.name}" ?`;
+
+            if(await customConfirm("SUPPRESSION", msg)) {
+                // Suppression du groupe
+                state.groups.splice(gIdx, 1);
+                
+                // Si plus aucun groupe, on en recrée un par défaut pour éviter les bugs
+                if (state.groups.length === 0) {
+                    state.groups.push({ name: "Défaut", color: "#ffffff", visible: true, points: [], zones: [] });
+                }
+
+                renderGroupsList();
+                renderAll();
+            }
+        };
+
+        header.append(checkbox, dot, nameSpan, btnEdit, btnDelete);
         item.appendChild(header);
 
-        // Sous-liste des points (affichée si recherche active)
         if (term !== "") {
             const subList = document.createElement('div');
             subList.style.paddingLeft = '30px'; 
@@ -60,9 +114,8 @@ export function renderGroupsList() {
                 
                 pRow.onclick = () => {
                     const realIndex = group.points.indexOf(p);
-                    handlePointClick(gIdx, realIndex); // Appel au gestionnaire central
+                    handlePointClick(gIdx, realIndex);
                     
-                    // Zoom automatique (Lazy load engine)
                     import('./engine.js').then(eng => {
                          state.view.scale = 3.0;
                          if(state.mapWidth) {
