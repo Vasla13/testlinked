@@ -1,16 +1,27 @@
-// map/js/ui.js
 import { state, addTacticalLink } from './state.js';
 import { renderAll } from './render.js'; 
 import { renderEditor, closeEditor } from './ui-editor.js';
 import { customAlert } from './ui-modals.js';
 import { renderGroupsList } from './ui-list.js'; 
 import { initContextMenu, handleLinkClick, handleLinkHover, handleLinkOut, moveTooltip } from './ui-menus.js';
+// IMPORT : Handlers de zone
+import { handleMapMouseDown, handleMapMouseMove, handleMapMouseUp } from './zone-editor.js';
 
 export { handleLinkClick, handleLinkHover, handleLinkOut, moveTooltip };
 
 export function initUI() {
     initContextMenu(); 
     
+    // --- GESTION ÉVÉNEMENTS MAP (DESSIN & DRAG) ---
+    const viewport = document.getElementById('viewport');
+    if (viewport) {
+        // On attache ces events au viewport ou window pour être fluide
+        viewport.addEventListener('mousedown', (e) => handleMapMouseDown(e));
+        window.addEventListener('mousemove', (e) => handleMapMouseMove(e));
+        window.addEventListener('mouseup', (e) => handleMapMouseUp(e));
+    }
+    // -----------------------------------------------
+
     const btnMobileMenu = document.getElementById('btnMobileMenu');
     const sidebarLeft = document.getElementById('sidebar-left');
     const sidebarOverlay = document.getElementById('sidebar-overlay');
@@ -41,10 +52,7 @@ export function initUI() {
             state.measuringMode = !state.measuringMode;
             state.measureStep = 0;
             state.measurePoints = [];
-            
-            if(state.measuringMode) btnMeasure.classList.add('active');
-            else btnMeasure.classList.remove('active');
-            
+            btnMeasure.classList.toggle('active', state.measuringMode);
             renderAll();
         };
     }
@@ -52,8 +60,7 @@ export function initUI() {
     const chkLabels = document.getElementById('chkLabels');
     if(chkLabels) {
         chkLabels.addEventListener('change', (e) => {
-            if(e.target.checked) document.body.classList.add('show-labels');
-            else document.body.classList.remove('show-labels');
+            document.body.classList.toggle('show-labels', e.target.checked);
         });
         if(chkLabels.checked) document.body.classList.add('show-labels');
     }
@@ -95,11 +102,8 @@ export function selectItem(type, gIndex, index) {
     renderAll(); 
     renderEditor(); 
 }
-
-// AJOUT : Rétro-compatibilité pour éviter de casser d'autres scripts
-export function selectPoint(gIndex, pIndex) {
-    selectItem('point', gIndex, pIndex);
-}
+// Alias legacy
+export function selectPoint(gIndex, pIndex) { selectItem('point', gIndex, pIndex); }
 
 export function deselect() { 
     state.selectedPoint = null; 

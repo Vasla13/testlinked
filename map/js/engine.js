@@ -1,6 +1,6 @@
-import { state, generateID } from './state.js';
+import { state } from './state.js';
 import { renderAll, getMapPercentCoords } from './render.js';
-import { handleDrawingClick } from './zone-editor.js';
+// CORRECTION : On retire l'import de handleDrawingClick qui n'existe plus
 
 const viewport = document.getElementById('viewport');
 const mapWorld = document.getElementById('map-world');
@@ -43,7 +43,8 @@ export function initEngine() {
     });
 
     viewport.addEventListener('mousedown', (e) => {
-        if (state.drawingMode) { handleDrawingClick(e); return; }
+        // CORRECTION : Si on dessine, on laisse ui.js/zone-editor.js gérer. On ne fait rien ici.
+        if (state.drawingMode) return; 
         
         // Mode mesure : clic gauche pose un point
         if (state.measuringMode && e.button === 0) {
@@ -59,7 +60,8 @@ export function initEngine() {
             return;
         }
 
-        if(e.button === 0) {
+        // Navigation (Pan) seulement si clic gauche et pas de drag d'item
+        if(e.button === 0 && !state.draggingItem) {
             state.isDragging = true;
             state.lastMouse = { x: e.clientX, y: e.clientY };
             viewport.style.cursor = 'grabbing';
@@ -91,8 +93,6 @@ export function initEngine() {
         state.isDragging = false;
         if(!state.drawingMode && !state.measuringMode) viewport.style.cursor = 'grab';
     });
-
-    // NOTE : L'ancien 'contextmenu' a été retiré d'ici pour être géré par ui.js (Menu Contextuel)
 }
 
 export function centerMap() {
@@ -109,5 +109,5 @@ export function centerMap() {
 function updateHUDCoords(e) {
     if(state.mapWidth === 0) return;
     const coords = getMapPercentCoords(e.clientX, e.clientY);
-    hudCoords.innerText = `COORD: ${coords.x.toFixed(2)} | ${coords.y.toFixed(2)}`;
+    if(hudCoords) hudCoords.innerText = `COORD: ${coords.x.toFixed(2)} | ${coords.y.toFixed(2)}`;
 }

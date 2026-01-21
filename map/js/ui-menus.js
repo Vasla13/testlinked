@@ -1,8 +1,9 @@
-// map/js/ui-menus.js
 import { state, updateTacticalLink, removeTacticalLink, findPointById } from './state.js';
 import { renderAll, getMapPercentCoords } from './render.js';
-import { customConfirm, customPrompt } from './ui-modals.js';
+import { customConfirm, customPrompt, customAlert } from './ui-modals.js';
 import { percentageToGps } from './utils.js';
+// IMPORT : Fonction de création de cercle
+import { startDrawingCircle } from './zone-editor.js';
 
 // --- MENU CONTEXTUEL (Clic Droit Map) ---
 export function initContextMenu() {
@@ -12,42 +13,65 @@ export function initContextMenu() {
 
     if (!viewport || !menu) return;
 
+    // Ajouter le bouton Zone s'il n'existe pas dans le HTML
+    // (Ou assurez-vous de l'ajouter manuellement dans index.html)
+    // Ici, on va l'injecter dynamiquement si besoin ou utiliser un bouton existant
+    if (!document.getElementById('ctx-new-zone')) {
+        const btn = document.createElement('li');
+        btn.id = 'ctx-new-zone';
+        btn.innerHTML = '⭕ Nouvelle Zone';
+        // Insérer après "Nouveau Point"
+        const ref = document.getElementById('ctx-new-point');
+        if(ref && ref.parentNode) ref.parentNode.insertBefore(btn, ref.nextSibling);
+    }
+
     viewport.addEventListener('contextmenu', (e) => {
         e.preventDefault(); 
         if(state.drawingMode) return; 
         
         lastClickPercent = getMapPercentCoords(e.clientX, e.clientY);
         
-        // Positionnement intelligent (évite de sortir de l'écran)
         let x = e.clientX, y = e.clientY;
         if (x + 230 > window.innerWidth) x -= 230;
         if (y + 150 > window.innerHeight) y -= 150;
         
-        menu.style.left = `${x}px`; 
-        menu.style.top = `${y}px`;
+        menu.style.left = `${x}px`; menu.style.top = `${y}px`;
         menu.classList.add('visible');
     });
 
-    // Fermeture au clic ailleurs
     document.addEventListener('click', (e) => {
         if (!menu.contains(e.target)) menu.classList.remove('visible');
     });
 
-    // Actions du menu
+    // Actions
     document.getElementById('ctx-new-point').onclick = () => {
         menu.classList.remove('visible');
         openGpsPanelWithCoords(lastClickPercent);
     };
+
+    // --- NOUVEAU : CRÉATION ZONE ---
+    const btnZone = document.getElementById('ctx-new-zone');
+    if(btnZone) {
+        btnZone.onclick = () => {
+            menu.classList.remove('visible');
+            // On choisit le groupe 0 par défaut ou le premier visible
+            if (state.groups.length === 0) {
+                customAlert("ERREUR", "Créez d'abord un calque/groupe.");
+                return;
+            }
+            // On lance le mode dessin sur le groupe 0 (l'utilisateur pourra changer après)
+            startDrawingCircle(0);
+        };
+    }
     
     document.getElementById('ctx-measure').onclick = () => {
         menu.classList.remove('visible');
         startMeasurementAt(lastClickPercent);
     };
-    
     document.getElementById('ctx-cancel').onclick = () => menu.classList.remove('visible');
 }
 
-// Helpers internes au menu
+// Helpers
 function openGpsPanelWithCoords(coords) {
     const gpsPanel = document.getElementById('gps-panel');
     const gpsCoords = percentageToGps(coords.x, coords.y);
@@ -67,14 +91,11 @@ function startMeasurementAt(coords) {
 }
 
 
-// --- MENU LIENS (Clic Gauche Lien) ---
+// --- MENU LIENS & TOOLTIPS (Inchangé) ---
 export function handleLinkClick(e, link) {
-    // Création DOM du menu
     const menu = document.createElement('div');
     menu.className = 'link-menu';
-    menu.style.left = `${e.clientX}px`;
-    menu.style.top = `${e.clientY}px`;
-    
+    menu.style.left = `${e.clientX}px`; menu.style.top = `${e.clientY}px`;
     menu.innerHTML = `
         <div class="link-menu-title">Lien Tactique</div>
         <button id="btnLinkColor">🎨 Changer Couleur</button>
@@ -85,66 +106,19 @@ export function handleLinkClick(e, link) {
     `;
     document.body.appendChild(menu);
 
-    // Handlers
-    document.getElementById('btnLinkColor').onclick = async () => {
-        menu.remove();
-        const color = await customPrompt("COULEUR", "Code Hex (ex: #ff0000) ou Nom :");
-        if (color) { updateTacticalLink(link.id, { color }); renderAll(); }
-    };
-
-    document.getElementById('btnLinkType').onclick = async () => {
-        menu.remove();
-        const type = await customPrompt("TYPE", "Label du lien (ex: Patrouille, Vue...) :");
-        if (type) { updateTacticalLink(link.id, { type }); renderAll(); }
-    };
-
-    document.getElementById('btnLinkDelete').onclick = async () => {
-        menu.remove();
-        if (await customConfirm("SUPPRESSION", "Supprimer ce lien ?")) {
-            removeTacticalLink(link.id);
-            renderAll();
-        }
-    };
-
+    document.getElementById('btnLinkColor').onclick = async () => { menu.remove(); const c = await customPrompt("COULEUR", "Hex ou Nom :"); if (c) { updateTacticalLink(link.id, { color: c }); renderAll(); } };
+    document.getElementById('btnLinkType').onclick = async () => { menu.remove(); const t = await customPrompt("TYPE", "Label :"); if (t) { updateTacticalLink(link.id, { type: t }); renderAll(); } };
+    document.getElementById('btnLinkDelete').onclick = async () => { menu.remove(); if (await customConfirm("SUPPRESSION", "Supprimer ?")) { removeTacticalLink(link.id); renderAll(); } };
     document.getElementById('btnLinkClose').onclick = () => menu.remove();
-    
-    // Auto-close
-    setTimeout(() => {
-        const closeFn = (ev) => {
-            if (!menu.contains(ev.target)) {
-                menu.remove();
-                document.removeEventListener('click', closeFn);
-            }
-        };
-        document.addEventListener('click', closeFn);
-    }, 100);
+    setTimeout(() => { const c = (ev) => { if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', c); } }; document.addEventListener('click', c); }, 100);
 }
 
-
-// --- TOOLTIPS (Survol Lien) ---
 let tooltipEl = null;
-
 export function handleLinkHover(e, link) {
-    if (!tooltipEl) {
-        tooltipEl = document.createElement('div');
-        tooltipEl.className = 'link-tooltip';
-        document.body.appendChild(tooltipEl);
-    }
-    const p1 = findPointById(link.from);
-    const p2 = findPointById(link.to);
-    
+    if (!tooltipEl) { tooltipEl = document.createElement('div'); tooltipEl.className = 'link-tooltip'; document.body.appendChild(tooltipEl); }
+    const p1 = findPointById(link.from); const p2 = findPointById(link.to);
     tooltipEl.innerHTML = `<strong>${link.type || 'Lien'}</strong><br>${p1?.name || '?'} ↔ ${p2?.name || '?'}`;
-    tooltipEl.style.display = 'block';
-    moveTooltip(e);
+    tooltipEl.style.display = 'block'; moveTooltip(e);
 }
-
-export function handleLinkOut() {
-    if (tooltipEl) tooltipEl.style.display = 'none';
-}
-
-export function moveTooltip(e) {
-    if (tooltipEl && tooltipEl.style.display === 'block') {
-        tooltipEl.style.left = (e.clientX + 15) + 'px';
-        tooltipEl.style.top = (e.clientY + 15) + 'px';
-    }
-}
+export function handleLinkOut() { if (tooltipEl) tooltipEl.style.display = 'none'; }
+export function moveTooltip(e) { if (tooltipEl && tooltipEl.style.display === 'block') { tooltipEl.style.left = (e.clientX + 15) + 'px'; tooltipEl.style.top = (e.clientY + 15) + 'px'; } }

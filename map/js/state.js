@@ -1,40 +1,42 @@
 export const state = {
     groups: [],
-    tacticalLinks: [], // Format: { id: "uid", from: "id_A", to: "id_B", color: "#fff", type: "standard" }
+    tacticalLinks: [],
     view: { x: 0, y: 0, scale: 0.5 },
     
-    // Interaction
+    // Interaction Map
     isDragging: false,
     lastMouse: { x: 0, y: 0 },
     
     // Sélection
     selectedPoint: null, // { groupIndex, pointIndex }
-    selectedZone: null,
+    selectedZone: null,  // { groupIndex, zoneIndex }
 
-    // Outils
-    drawingMode: false,
+    // Outils & Modes
+    drawingMode: false,      // Mode création
+    drawingType: null,       // 'CIRCLE' ou 'POLYGON'
     drawingGroupIndex: null,
-    tempPoints: [],
+    tempZone: null,          // Données temporaires pendant la création
+    tempPoints: [],          // Legacy (Polygone)
     
+    draggingItem: null,      // { type: 'zone'|'point', groupIndex, index, startX, startY }
+
     measuringMode: false,
     measureStep: 0,
     measurePoints: [],
     
-    // --- NOUVEAU : MODE LIAISON ---
     linkingMode: false,
     linkStartId: null, 
 
     statusFilter: 'ALL',
+    searchTerm: '',
     mapWidth: 0,
     mapHeight: 0
 };
 
-// Générateur d'ID unique simple
 export function generateID() {
     return 'id_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
 }
 
-// Recherche un point par son ID unique
 export function findPointById(id) {
     for (const group of state.groups) {
         const p = group.points.find(pt => pt.id === id);
@@ -43,12 +45,9 @@ export function findPointById(id) {
     return null;
 }
 
-// --- GESTION DES LIENS TACTIQUES ---
-
+// --- LIENS TACTIQUES ---
 export function addTacticalLink(idA, idB) {
     if (!idA || !idB || idA === idB) return false;
-
-    // Vérifier si le lien existe déjà (dans un sens ou l'autre)
     const exists = state.tacticalLinks.find(l => 
         (l.from === idA && l.to === idB) || (l.from === idB && l.to === idA)
     );
@@ -56,10 +55,8 @@ export function addTacticalLink(idA, idB) {
 
     state.tacticalLinks.push({
         id: generateID(),
-        from: idA,
-        to: idB,
-        color: '#ffffff',
-        type: 'Standard'
+        from: idA, to: idB,
+        color: '#ffffff', type: 'Standard'
     });
     return true;
 }
@@ -70,13 +67,11 @@ export function removeTacticalLink(linkId) {
 
 export function updateTacticalLink(linkId, newData) {
     const link = state.tacticalLinks.find(l => l.id === linkId);
-    if (link) {
-        Object.assign(link, newData);
-    }
+    if (link) Object.assign(link, newData);
 }
 
+// --- INITIALISATION DONNÉES ---
 export function setGroups(newGroups) { 
-    // MIGRATION AUTOMATIQUE : On s'assure que tout le monde a un ID
     newGroups.forEach(g => {
         if(!g.zones) g.zones = [];
         g.points.forEach(p => {
@@ -86,11 +81,11 @@ export function setGroups(newGroups) {
         });
         g.zones.forEach(z => {
             if(!z.id) z.id = generateID();
+            if(!z.type) z.type = 'POLYGON'; // Compatibilité ancienne version
         });
     });
     state.groups = newGroups; 
     
-    // Migration liens (ajout ID si manquant)
     if(state.tacticalLinks) {
         state.tacticalLinks.forEach(l => {
             if(!l.id) l.id = generateID();
@@ -101,13 +96,13 @@ export function setGroups(newGroups) {
 
 export function exportToJSON() {
     const data = { 
-        meta: { date: new Date().toISOString(), version: "2.1" },
+        meta: { date: new Date().toISOString(), version: "2.2" },
         groups: state.groups,
         tacticalLinks: state.tacticalLinks
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'tactical_map_data_v2.json';
+    a.download = 'tactical_map_data_v2.2.json';
     a.click();
 }
