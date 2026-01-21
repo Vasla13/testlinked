@@ -417,3 +417,17 @@ label { display: block; color: var(--text-dim); font-size: 0.8rem; margin-bottom
     font-size: 0.8rem; box-shadow: 0 0 10px rgba(0,0,0,0.5);
     display: none;
 }
+
+/* Ajouter à la fin du fichier */
+.marker.is-dragging {
+    z-index: 1000 !important;
+    cursor: grabbing !important;
+    transform: scale(1.2); /* Grossit légèrement */
+    filter: drop-shadow(0 0 10px var(--marker-color)); /* Lueur intense */
+    opacity: 1 !important;
+}
+
+.marker.is-dragging .marker-label {
+    display: block !important; /* Force l'affichage du nom pendant le drag */
+    background: rgba(0,0,0,0.9);
+}

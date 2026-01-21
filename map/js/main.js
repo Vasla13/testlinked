@@ -1,9 +1,6 @@
-// map/js/main.js
 import { state, setGroups, exportToJSON, generateID } from './state.js';
 import { initEngine, centerMap, updateTransform } from './engine.js'; 
-// CORRECTION 1 : On importe selectItem au lieu de selectPoint
 import { renderGroupsList, initUI, selectItem } from './ui.js';
-// CORRECTION 2 : On importe les alertes depuis le nouveau fichier ui-modals
 import { customAlert, customConfirm, customPrompt } from './ui-modals.js';
 import { gpsToPercentage } from './utils.js';
 import { renderAll } from './render.js';
@@ -17,6 +14,10 @@ const DEFAULT_DATA = [
 ];
 
 document.addEventListener('DOMContentLoaded', async () => {
+    // NETTOYAGE PRÉVENTIF : Si un ancien calque markers-layer traîne dans map-world (suite au fix zoom), on le supprime.
+    const oldLayer = document.querySelector('#map-world #markers-layer');
+    if(oldLayer) oldLayer.remove();
+
     initUI();
     initEngine();
     
@@ -27,11 +28,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     const cloudData = await api.loadLatestMap();
     
     if (cloudData && cloudData.groups) {
-        console.log("✅ Données reçues");
         setGroups(cloudData.groups);
         if(cloudData.tacticalLinks) state.tacticalLinks = cloudData.tacticalLinks;
     } else {
-        console.log("⚠️ Utilisation défaut.");
         setGroups(DEFAULT_DATA);
     }
     if(cloudStatus) cloudStatus.style.display = 'none';
@@ -42,7 +41,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     // --- AUTO-FOCUS VIA URL ---
     const params = new URLSearchParams(window.location.search);
     const focusId = params.get('focus');
-    
     if(focusId) {
         let found = null;
         state.groups.forEach((g, gIdx) => {
@@ -52,20 +50,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
 
         if(found) {
-            console.log("📍 Focus sur point :", found.p.name);
             state.view.scale = 3.5;
-            
             const viewport = document.getElementById('viewport');
             const mapW = state.mapWidth || 2000; 
-            const mapH = state.mapHeight || 2000;
             const vw = viewport ? viewport.clientWidth : window.innerWidth;
             const vh = viewport ? viewport.clientHeight : window.innerHeight;
 
             state.view.x = (vw / 2) - (found.p.x * mapW / 100) * state.view.scale;
             state.view.y = (vh / 2) - (found.p.y * mapH / 100) * state.view.scale;
-            
             updateTransform();
-            // CORRECTION 3 : Utilisation de selectItem
             selectItem('point', found.gIdx, found.pIdx);
         }
     }
@@ -87,6 +80,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if(btnSave) btnSave.onclick = exportToJSON;
     const btnReset = document.getElementById('btnResetView');
     if(btnReset) btnReset.onclick = centerMap;
+    
     const btnAddGroup = document.getElementById('btnAddGroup');
     if(btnAddGroup) btnAddGroup.onclick = async () => {
         const name = await customPrompt("NOUVEAU CALQUE", "Nom :");
@@ -95,11 +89,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             renderGroupsList();
         }
     };
+
+    // --- CORRECTION IMPORT (Utilisation de .onchange pour éviter doublons d'écouteurs) ---
     const fileInput = document.getElementById('fileImport');
     const btnTriggerImport = document.getElementById('btnTriggerImport');
     if (btnTriggerImport && fileInput) {
         btnTriggerImport.onclick = () => { fileInput.click(); };
-        fileInput.addEventListener('change', (e) => {
+        
+        fileInput.onchange = (e) => { // .onchange remplace tout écouteur précédent
             const file = e.target.files[0];
             if (!file) return;
             const reader = new FileReader();
@@ -109,14 +106,19 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (json.groups) {
                         setGroups(json.groups);
                         if(json.tacticalLinks) state.tacticalLinks = json.tacticalLinks;
-                        renderGroupsList(); renderAll();
-                        await customAlert("IMPORT", "Chargé.");
+                        
+                        renderGroupsList(); 
+                        renderAll();
+                        
+                        await customAlert("IMPORT", "Chargé avec succès.");
                     }
-                } catch (err) {}
+                } catch (err) {
+                    await customAlert("ERREUR", "Fichier invalide.");
+                }
                 fileInput.value = ''; 
             };
             reader.readAsText(file);
-        });
+        };
     }
 
     // --- GPS PANEL ---
@@ -174,16 +176,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 renderGroupsList(); renderAll();
 
                 const viewport = document.getElementById('viewport');
-                const vw = viewport ? viewport.clientWidth : window.innerWidth;
-                const vh = viewport ? viewport.clientHeight : window.innerHeight;
                 state.view.scale = 2.5; 
-                state.view.x = (vw / 2) - (newPoint.x * state.mapWidth / 100) * state.view.scale;
-                state.view.y = (vh / 2) - (newPoint.y * state.mapHeight / 100) * state.view.scale;
+                state.view.x = (viewport.clientWidth / 2) - (newPoint.x * state.mapWidth / 100) * state.view.scale;
+                state.view.y = (viewport.clientHeight / 2) - (newPoint.y * state.mapHeight / 100) * state.view.scale;
                 updateTransform();
                 
-                // CORRECTION 4 : selectItem
                 selectItem('point', state.groups.indexOf(targetGroup), targetGroup.points.length - 1);
-
+                
                 inpX.value = ""; inpY.value = ""; document.getElementById('gpsName').value = ""; document.getElementById('gpsAffiliation').value = ""; document.getElementById('gpsNotes').value = "";
             } else {
                 await customAlert("ERREUR", "Aucun groupe.");

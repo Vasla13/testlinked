@@ -1,36 +1,35 @@
 export const state = {
-    groups: [],
-    tacticalLinks: [],
-    view: { x: 0, y: 0, scale: 0.5 },
+    // Données principales
+    groups: [], // Liste des groupes (avec leurs points et zones)
+    tacticalLinks: [], // Liens tactiques
     
-    // Interaction Map
-    isDragging: false,
-    lastMouse: { x: 0, y: 0 },
-    
-    // Sélection
-    selectedPoint: null, // { groupIndex, pointIndex }
-    selectedZone: null,  // { groupIndex, zoneIndex }
+    // Vue et Map
+    view: { x: 0, y: 0, scale: 1 },
+    mapWidth: 0,
+    mapHeight: 0,
 
-    // Outils & Modes
-    drawingMode: false,      // Mode création
-    drawingType: null,       // 'CIRCLE' ou 'POLYGON'
-    drawingGroupIndex: null,
-    tempZone: null,          // Données temporaires pendant la création
-    tempPoints: [],          // Legacy (Polygone)
+    // États d'interaction
+    selectedPoint: null, // { groupIndex, pointIndex }
+    selectedZone: null, // { groupIndex, zoneIndex }
     
-    draggingItem: null,      // { type: 'zone'|'point', groupIndex, index, startX, startY }
+    // NOUVEAU : Gestion du Drag & Drop des points
+    draggingMarker: null, // { groupIndex, pointIndex, startX, startY, hasMoved }
+
+    isDragging: false, // Pan de la map
+    lastMouse: { x: 0, y: 0 },
+
+    // Outils
+    drawingMode: false,
+    drawingType: null, // 'POLYGON', 'CIRCLE'
+    tempPoints: [],
+    tempZone: null,
 
     measuringMode: false,
-    measureStep: 0,
+    measureStep: 0, // 0=inactif, 1=premier point posé, 2=fini
     measurePoints: [],
-    
-    linkingMode: false,
-    linkStartId: null, 
 
-    statusFilter: 'ALL',
-    searchTerm: '',
-    mapWidth: 0,
-    mapHeight: 0
+    // Filtres
+    statusFilter: 'ALL', // 'ALL', 'ACTIVE', 'NEUTRAL', 'DOWN'
 };
 
 export function generateID() {
@@ -106,3 +105,4 @@ export function exportToJSON() {
     a.download = 'tactical_map_data_v2.2.json';
     a.click();
 }
+

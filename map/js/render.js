@@ -1,6 +1,7 @@
 import { state } from './state.js';
 import { ICONS, MAP_SCALE_UNIT } from './constants.js';
-import { handlePointClick, handleLinkClick, handleLinkHover, handleLinkOut, moveTooltip, selectItem } from './ui.js';
+import { handleLinkClick, handleLinkHover, handleLinkOut, moveTooltip, selectItem } from './ui.js';
+import { startMarkerDrag } from './engine.js'; // Import de la fonction de drag
 import { handleZoneMouseDown } from './zone-editor.js';
 
 const markersLayer = document.getElementById('markers-layer');
@@ -141,7 +142,6 @@ function renderTacticalLinks() {
 
 function renderMarkersAndClusters() {
     markersLayer.innerHTML = '';
-    // CORRECTION : Plus de counterScale ! Les points sont en taille réelle.
 
     state.groups.forEach((group, gIndex) => {
         if (!group.visible) return;
@@ -150,29 +150,39 @@ function renderMarkersAndClusters() {
             
             const el = document.createElement('div');
             el.className = `marker status-${(point.status || 'ACTIVE').toLowerCase()}`;
-            // Positionnement en % fonctionne toujours car markersLayer a width/height ajustés en JS
             el.style.left = `${point.x}%`;
             el.style.top = `${point.y}%`;
             el.style.setProperty('--marker-color', group.color || '#00ffff');
             el.style.pointerEvents = 'auto'; 
 
-            const svgContent = ICONS[point.iconType] || ICONS.DEFAULT;
+            // Classe active si sélectionné
+            if (state.selectedPoint && state.selectedPoint.groupIndex === gIndex && state.selectedPoint.pointIndex === pIndex) {
+                el.classList.add('selected');
+            }
             
-            // On retire le scale() qui causait le flou
+            // Classe active si en cours de drag
+            if (state.draggingMarker && state.draggingMarker.groupIndex === gIndex && state.draggingMarker.pointIndex === pIndex) {
+                el.classList.add('is-dragging');
+            }
+
+            const svgContent = ICONS[point.iconType] || ICONS.DEFAULT;
             el.innerHTML = `
                 <div class="marker-content-wrapper">
                     <div class="marker-icon-box"><svg viewBox="0 0 24 24">${svgContent}</svg></div>
                     <div class="marker-label">${point.name}</div>
                 </div>
             `;
-            if (state.selectedPoint && state.selectedPoint.groupIndex === gIndex && state.selectedPoint.pointIndex === pIndex) {
-                el.classList.add('selected');
-            }
+
+            // MODIFICATION : Au lieu de onclick, on utilise mousedown pour gérer Drag vs Click
             el.onmousedown = (e) => {
                 if(state.drawingMode || state.measuringMode) return;
-                e.stopPropagation();
-                handlePointClick(gIndex, pIndex);
+                // Clic droit
+                if(e.button === 2) return; 
+
+                e.stopPropagation(); // Empêche le pan de la map
+                startMarkerDrag(e, gIndex, pIndex);
             };
+
             markersLayer.appendChild(el);
         });
     });
@@ -202,8 +212,6 @@ function renderMeasureTool() {
         label.innerText = `${distKm} km`;
         label.style.left = `${(p1.x + p2.x)/2}%`;
         label.style.top = `${(p1.y + p2.y)/2}%`;
-        
-        // CORRECTION : Pas de scale ici non plus, juste le centrage
         label.style.transform = `translate(-50%, -50%)`;
         
         markersLayer.appendChild(label);
@@ -214,8 +222,6 @@ function renderMeasureTool() {
 }
 
 export function getMapPercentCoords(clientX, clientY) {
-    // On utilise map-world ou viewport pour le calcul de base, mais map-world a le scale
-    // Pour être précis, on prend le rect de l'image (map-world) qui est scalé.
     const mapWorld = document.getElementById('map-world');
     const rect = mapWorld.getBoundingClientRect(); 
     return {
