@@ -34,12 +34,15 @@ export const ICONS = {
 // --- ECHELLE RÉELLE (Inchangé) ---
 export const MAP_SCALE_UNIT = 82.5; 
 
-// --- CALIBRATION GPS GTA V (Inchangé) ---
+// Bornes calculées par calibration le 21/01/2026
 export const GTA_BOUNDS = {
-    MIN_X: -3750, MAX_X: 4500, MIN_Y: -4250, MAX_Y: 8250   
+    MIN_X: -5647, MAX_X: 6672,
+    MIN_Y: -4060, MAX_Y: 8426
 };
 
-// --- CORRECTION MANUELLE (Inchangé) ---
+// Remis à zéro car la calibration est désormais exacte
 export const GPS_CORRECTION = {
-    x: -3.1, y: 1.5
+    x: 0,
+    y: 0
 };
+
