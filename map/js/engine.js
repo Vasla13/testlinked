@@ -1,14 +1,24 @@
 import { state } from './state.js';
 import { renderAll, getMapPercentCoords } from './render.js';
-// CORRECTION : On retire l'import de handleDrawingClick qui n'existe plus
 
 const viewport = document.getElementById('viewport');
 const mapWorld = document.getElementById('map-world');
 const mapImage = document.getElementById('map-image');
 const hudCoords = document.getElementById('coords-display');
+const markersLayer = document.getElementById('markers-layer'); // Référence au layer sorti
 
 export function updateTransform() {
+    // 1. La carte et les vecteurs subissent le zoom (scale)
     mapWorld.style.transform = `translate(${state.view.x}px, ${state.view.y}px) scale(${state.view.scale})`;
+
+    // 2. Les marqueurs NE subissent PAS le scale pour rester nets et fixes.
+    // On bouge le calque (translate) et on adapte sa taille (width/height)
+    // pour que les positions en pourcentage (%) tombent au bon endroit.
+    if (markersLayer && state.mapWidth && state.mapHeight) {
+        markersLayer.style.transform = `translate(${state.view.x}px, ${state.view.y}px)`;
+        markersLayer.style.width = `${state.mapWidth * state.view.scale}px`;
+        markersLayer.style.height = `${state.mapHeight * state.view.scale}px`;
+    }
 }
 
 export function initEngine() {
@@ -43,7 +53,6 @@ export function initEngine() {
     });
 
     viewport.addEventListener('mousedown', (e) => {
-        // CORRECTION : Si on dessine, on laisse ui.js/zone-editor.js gérer. On ne fait rien ici.
         if (state.drawingMode) return; 
         
         // Mode mesure : clic gauche pose un point

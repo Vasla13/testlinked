@@ -9,14 +9,11 @@ const linksLayer = document.getElementById('links-layer');
 
 document.addEventListener('mousemove', moveTooltip);
 
-// Configuration du SVG pour utiliser les coordonnées 0-100%
 function configureSVG(layer) {
     if (layer) {
         layer.setAttribute("viewBox", "0 0 100 100");
         layer.setAttribute("preserveAspectRatio", "none");
-        // IMPORTANT : Le conteneur doit laisser passer les clics (pour le drag map)
         layer.style.pointerEvents = 'none'; 
-        // Par sécurité, on s'assure qu'il est bien dimensionné
         layer.style.width = '100%';
         layer.style.height = '100%';
     }
@@ -32,7 +29,6 @@ export function renderAll() {
     renderMeasureTool(); 
 }
 
-// --- RENDU ZONES ---
 function renderZones() {
     zonesLayer.innerHTML = '';
     
@@ -59,19 +55,14 @@ function renderZones() {
             el.setAttribute("stroke-width", isSelected ? "0.2" : "0.08"); 
             el.setAttribute("fill-opacity", isSelected ? "0.3" : "0.15");
             el.setAttribute("class", "tactical-zone");
-            
-            // --- CORRECTION CLIC ---
-            // On force l'élément à capturer les clics, même si le parent est en "none"
             el.style.pointerEvents = 'auto'; 
             el.style.cursor = 'pointer';
 
             if (isSelected) el.classList.add("selected");
 
             el.onmousedown = (e) => {
-                // Bloquer la propagation pour ne pas draguer la map
                 if (state.drawingMode || state.measuringMode) return;
-                if (e.button === 2) return; // Clic droit géré ailleurs
-                
+                if (e.button === 2) return; 
                 e.stopPropagation(); 
                 selectItem('zone', gIndex, zIndex);
                 handleZoneMouseDown(e, gIndex, zIndex);
@@ -81,7 +72,6 @@ function renderZones() {
         });
     });
 
-    // Rendu TEMPORAIRE (Création)
     if (state.drawingMode) {
         if (state.tempZone && state.drawingType === 'CIRCLE') {
             const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
@@ -104,11 +94,9 @@ function renderZones() {
     }
 }
 
-// --- RENDU LIENS ---
 function renderTacticalLinks() {
     if(!linksLayer) return;
     linksLayer.innerHTML = ''; 
-    // IMPORTANT : Le conteneur ne doit pas bloquer
     linksLayer.style.pointerEvents = 'none'; 
 
     if(!state.tacticalLinks) return;
@@ -131,9 +119,7 @@ function renderTacticalLinks() {
             line.setAttribute("stroke", link.color || "#ffffff");
             line.setAttribute("stroke-width", "0.15");
             line.setAttribute("class", "tactical-link-line");
-            
-            // --- CORRECTION CLIC LIEN ---
-            line.style.pointerEvents = 'visibleStroke'; // Capture le clic sur le trait
+            line.style.pointerEvents = 'visibleStroke'; 
             line.style.cursor = 'pointer';
             
             line.onclick = (e) => { 
@@ -153,10 +139,9 @@ function renderTacticalLinks() {
     });
 }
 
-// --- RENDU MARKERS (Inchangé) ---
 function renderMarkersAndClusters() {
     markersLayer.innerHTML = '';
-    let counterScale = 1 / Math.max(state.view.scale, 0.2);
+    // CORRECTION : Plus de counterScale ! Les points sont en taille réelle.
 
     state.groups.forEach((group, gIndex) => {
         if (!group.visible) return;
@@ -165,15 +150,17 @@ function renderMarkersAndClusters() {
             
             const el = document.createElement('div');
             el.className = `marker status-${(point.status || 'ACTIVE').toLowerCase()}`;
+            // Positionnement en % fonctionne toujours car markersLayer a width/height ajustés en JS
             el.style.left = `${point.x}%`;
             el.style.top = `${point.y}%`;
             el.style.setProperty('--marker-color', group.color || '#00ffff');
-            // Marker clickable
             el.style.pointerEvents = 'auto'; 
 
             const svgContent = ICONS[point.iconType] || ICONS.DEFAULT;
+            
+            // On retire le scale() qui causait le flou
             el.innerHTML = `
-                <div class="marker-content-wrapper" style="transform: scale(${counterScale})">
+                <div class="marker-content-wrapper">
                     <div class="marker-icon-box"><svg viewBox="0 0 24 24">${svgContent}</svg></div>
                     <div class="marker-label">${point.name}</div>
                 </div>
@@ -215,8 +202,10 @@ function renderMeasureTool() {
         label.innerText = `${distKm} km`;
         label.style.left = `${(p1.x + p2.x)/2}%`;
         label.style.top = `${(p1.y + p2.y)/2}%`;
-        let counterScale = 1 / Math.max(state.view.scale, 0.2);
-        label.style.transform = `translate(-50%, -50%) scale(${counterScale})`;
+        
+        // CORRECTION : Pas de scale ici non plus, juste le centrage
+        label.style.transform = `translate(-50%, -50%)`;
+        
         markersLayer.appendChild(label);
     } else {
         const existingLabel = document.getElementById('measure-label');
@@ -225,6 +214,8 @@ function renderMeasureTool() {
 }
 
 export function getMapPercentCoords(clientX, clientY) {
+    // On utilise map-world ou viewport pour le calcul de base, mais map-world a le scale
+    // Pour être précis, on prend le rect de l'image (map-world) qui est scalé.
     const mapWorld = document.getElementById('map-world');
     const rect = mapWorld.getBoundingClientRect(); 
     return {
