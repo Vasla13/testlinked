@@ -120,127 +120,145 @@ body {
 #zones-layer, #links-layer, #markers-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
 
 
-/* --- 4. MARQUEURS TACTIQUES (FIXES) --- */
+/* --- 4. MARQUEURS TACTIQUES (PROPRE & COULEURS) --- */
+
+/* Animation Pulse pour le statut DANGER uniquement */
+.marker.status-danger {
+    animation: pulse-danger 2s infinite;
+    --marker-color: #ff4444 !important; /* Force le rouge uniquement si Danger */
+}
+@keyframes pulse-danger {
+    0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; }
+}
 
 .marker {
     position: absolute;
-    /* On centre le point pile sur sa coordonnée GPS */
-    transform: translate(-50%, -50%);
+    transform: translate(-50%, -50%); /* Centrage parfait */
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     cursor: pointer; z-index: 100; pointer-events: auto;
-    
-    --marker-color: #00ffff;
     will-change: left, top;
 }
 
-/* Le conteneur visuel : c'est lui qui va changer de forme/taille lors des transitions */
+/* CONTENEUR GLOBAL */
 .marker-content-wrapper {
     position: relative;
     display: flex; flex-direction: column; align-items: center;
-    transition: transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    transition: transform 0.2s ease-out;
 }
 
-/* BOITE DE L'ICÔNE : TAILLE FIXE */
-/* Contrairement à avant, on fixe la taille en pixels. Elle restera de 32px que la carte soit zoomée ou non */
+/* BOITE DE L'ICÔNE (Style "Bracket" Fixe) */
 .marker-icon-box {
-    width: 32px; height: 32px;
-    background: rgba(0, 0, 0, 0.85);
-    border: 2px solid var(--marker-color);
-    border-radius: 6px; 
-    padding: 5px;
-    box-shadow: 0 0 10px var(--marker-color);
+    position: relative;
+    width: 34px; height: 34px; 
+    background: rgba(5, 7, 10, 0.9); /* Fond sombre opaque */
     
     display: flex; justify-content: center; align-items: center;
     color: var(--marker-color);
-    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.6);
+    transition: all 0.2s;
 }
 
+/* LES CROCHETS [ ] (Fixes) */
+.marker-icon-box::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: 2px solid var(--marker-color);
+    clip-path: polygon(
+        0 0, 30% 0, 30% 100%, 0 100%,    /* Gauche */
+        0 100%, 100% 100%, 100% 0, 0 0,  /* Cadre complet */
+        100% 0, 70% 0, 70% 100%, 100% 100% /* Droite */
+    );
+}
+
+/* L'ICÔNE SVG */
 .marker svg { 
-    width: 100%; height: 100%; 
+    width: 20px; height: 20px;
     fill: currentColor; 
-    filter: drop-shadow(0 0 2px rgba(0,0,0,0.5));
-    transition: opacity 0.2s;
+    filter: drop-shadow(0 0 5px var(--marker-color));
 }
 
-/* LE NOM (TEXTE) */
+/* LE NOM (Label déporté sur le coté) */
 .marker-label {
     position: absolute;
-    bottom: 115%; /* Juste au-dessus de la boîte */
-    left: 50%; transform: translateX(-50%);
+    left: 40px; /* À droite du point */
+    top: 50%; transform: translateY(-50%);
     
     background: rgba(0, 0, 0, 0.8);
-    border: 1px solid var(--marker-color);
-    color: #fff; padding: 2px 6px; border-radius: 4px;
+    border-left: 3px solid var(--marker-color); /* Barre de couleur */
     
-    font-size: 11px; font-weight: 700; white-space: nowrap;
-    text-shadow: 0 1px 2px #000;
+    color: #fff;
+    padding: 4px 8px;
+    border-radius: 0 4px 4px 0;
+    
+    font-size: 11px; font-weight: 600; 
+    letter-spacing: 0.5px; text-transform: uppercase;
+    white-space: nowrap;
     pointer-events: none;
     
-    transition: opacity 0.2s, transform 0.2s;
+    opacity: 0.8;
+    transition: all 0.2s;
+}
+
+/* LIGNE DE LIAISON */
+.marker-label::before {
+    content: '';
+    position: absolute;
+    left: -18px; top: 50%;
+    width: 15px; height: 1px;
+    background: var(--marker-color);
+    opacity: 0.5;
+}
+
+/* --- INTERACTIONS STANDARD --- */
+.marker:hover { z-index: 1000; }
+
+.marker:hover .marker-content-wrapper { transform: scale(1.1); }
+
+.marker:hover .marker-icon-box {
+    background: var(--marker-color); 
+    color: #000; 
+    box-shadow: 0 0 20px var(--marker-color);
+}
+.marker:hover .marker-icon-box::after { border-color: #000; }
+
+.marker:hover .marker-label {
     opacity: 1;
+    background: #000;
+    padding-left: 10px;
 }
 
 /* --- MODE DÉZOOMÉ (PETITS POINTS) --- */
-/* Cette classe est ajoutée au body par engine.js quand on dézoome beaucoup */
+/* Simple point rond sans texte quand on est loin */
 
-/* 1. L'icône devient un petit point rond */
 body.view-zoomed-out .marker-icon-box {
-    width: 12px; height: 12px;
+    width: 10px; height: 10px;
+    background: var(--marker-color);
     border-radius: 50%;
-    padding: 0;
-    background: var(--marker-color); /* Point plein */
     box-shadow: 0 0 5px var(--marker-color);
-    border-width: 1px;
+    padding: 0;
+}
+/* Par défaut, on cache tout pour garder la carte propre */
+body.view-zoomed-out .marker-icon-box::after { display: none; }
+body.view-zoomed-out .marker svg { display: none; }
+body.view-zoomed-out .marker-label { display: none; }
+body.view-zoomed-out .marker-label::before { display: none; }
+
+
+/* === NOUVEAU : EXCEPTION SURVOL EN MODE DÉZOOMÉ === */
+/* Quand on passe la souris dessus, on force l'affichage du texte ! */
+
+body.view-zoomed-out .marker:hover .marker-label {
+    display: block !important; /* Force l'apparition */
+    left: 20px; /* Un peu plus près car le point est petit */
+    opacity: 1;
+    z-index: 2000;
 }
 
-/* 2. On cache le dessin SVG à l'intérieur */
-body.view-zoomed-out .marker-icon-box svg {
-    opacity: 0;
-    display: none;
-}
-
-/* 3. On cache le texte */
-body.view-zoomed-out .marker-label {
-    opacity: 0;
-    transform: translateX(-50%) translateY(5px);
-}
-
-
-/* --- INTERACTIONS (HOVER) --- */
-/* Même si on est dézoomé, passer la souris dessus réaffiche tout en grand */
-
-.marker:hover { z-index: 1000; }
-
-.marker:hover .marker-content-wrapper {
-    transform: scale(1.15); /* Petit effet de pop */
-}
-
-/* On force le retour à l'apparence complète au survol */
-.marker:hover .marker-icon-box {
-    width: 36px !important; height: 36px !important;
-    border-radius: 6px !important;
-    background: rgba(0,0,0,0.9) !important;
-    border-width: 2px !important;
-}
-
-.marker:hover .marker-icon-box svg {
-    opacity: 1 !important;
+body.view-zoomed-out .marker:hover .marker-label::before {
     display: block !important;
-}
-
-.marker:hover .marker-label {
-    opacity: 1 !important;
-    transform: translateX(-50%) translateY(0) !important;
-    display: block !important;
-}
-
-/* Sélection */
-.marker.selected .marker-icon-box { 
-    background: #fff; border-color: #fff; color: #000; 
-    box-shadow: 0 0 40px #fff; 
-}
-.marker.is-dragging {
-    z-index: 1000 !important; cursor: grabbing !important;
+    width: 10px; /* Ligne plus courte pour s'adapter */
+    left: -10px;
 }
 
 
@@ -330,7 +348,6 @@ label { display: block; color: var(--text-dim); font-size: 0.8rem; margin-bottom
 .measure-tag { position: absolute; transform: translate(-50%, -50%); background: #000; border: 1px solid #ff00ff; color: #ff00ff; padding: 4px 8px; font-size: 13px; font-weight: bold; border-radius: 4px; pointer-events: none; white-space: nowrap; z-index: 200; box-shadow: 0 0 10px rgba(255,0,255,0.3); }
 
 /* Animations */
-@keyframes pulse-danger { from { opacity: 1; transform: scale(1); } to { opacity: 0.5; transform: scale(1.1); } }
 @keyframes pulse-cloud { 0% { opacity: 0.7; } 50% { opacity: 1; text-shadow: 0 0 5px var(--accent-cyan); } 100% { opacity: 0.7; } }
 @keyframes slideIn { from { opacity: 0; transform: translateY(-15px); } to { opacity: 1; transform: translateY(0); } }
 
