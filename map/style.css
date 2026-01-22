@@ -115,17 +115,35 @@ body {
     position: absolute; top: 0; left: 0; 
     transform-origin: 0 0; will-change: transform; transform-style: preserve-3d;
 }
-#map-image { display: block; pointer-events: none; filter: brightness(0.6) contrast(1.2) grayscale(0.2); }
+
+/* --- LE RENDU DE LA CARTE (Gestion Lumière) --- */
+#map-image { 
+    display: block; 
+    pointer-events: none; 
+    
+    /* État par défaut : Sombre et contrasté */
+    filter: brightness(0.6) contrast(1.2) grayscale(0.2);
+    
+    /* Transition fluide pour l'allumage */
+    transition: filter 0.5s ease, mix-blend-mode 0.5s ease, opacity 0.5s ease;
+}
+
+/* Mode Haute Lumière (Activé via bouton) */
+body.high-light-mode #map-image {
+    filter: brightness(1.4) contrast(1.1) saturate(1.2) grayscale(0);
+    mix-blend-mode: screen; /* Effet projection */
+    opacity: 0.9;
+}
 
 #zones-layer, #links-layer, #markers-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
 
 
-/* --- 4. MARQUEURS TACTIQUES (PROPRE & COULEURS) --- */
+/* --- 4. MARQUEURS TACTIQUES (HUD & FIXES) --- */
 
-/* Animation Pulse pour le statut DANGER uniquement */
+/* Animation pour le statut DANGER uniquement */
 .marker.status-danger {
     animation: pulse-danger 2s infinite;
-    --marker-color: #ff4444 !important; /* Force le rouge uniquement si Danger */
+    --marker-color: #ff4444 !important;
 }
 @keyframes pulse-danger {
     0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; }
@@ -136,6 +154,8 @@ body {
     transform: translate(-50%, -50%); /* Centrage parfait */
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     cursor: pointer; z-index: 100; pointer-events: auto;
+    
+    /* La couleur vient du JS (Groupe) */
     will-change: left, top;
 }
 
@@ -146,7 +166,7 @@ body {
     transition: transform 0.2s ease-out;
 }
 
-/* BOITE DE L'ICÔNE (Style "Bracket" Fixe) */
+/* BOITE DE L'ICÔNE (Style "Bracket" Fixe - Taille Fixe) */
 .marker-icon-box {
     position: relative;
     width: 34px; height: 34px; 
@@ -166,7 +186,7 @@ body {
     border: 2px solid var(--marker-color);
     clip-path: polygon(
         0 0, 30% 0, 30% 100%, 0 100%,    /* Gauche */
-        0 100%, 100% 100%, 100% 0, 0 0,  /* Cadre complet */
+        0 100%, 100% 100%, 100% 0, 0 0,  /* Cadre */
         100% 0, 70% 0, 70% 100%, 100% 100% /* Droite */
     );
 }
@@ -181,11 +201,11 @@ body {
 /* LE NOM (Label déporté sur le coté) */
 .marker-label {
     position: absolute;
-    left: 40px; /* À droite du point */
+    left: 40px; /* À droite */
     top: 50%; transform: translateY(-50%);
     
     background: rgba(0, 0, 0, 0.8);
-    border-left: 3px solid var(--marker-color); /* Barre de couleur */
+    border-left: 3px solid var(--marker-color);
     
     color: #fff;
     padding: 4px 8px;
@@ -229,7 +249,7 @@ body {
 }
 
 /* --- MODE DÉZOOMÉ (PETITS POINTS) --- */
-/* Simple point rond sans texte quand on est loin */
+/* Activé par le JS quand on dézoome */
 
 body.view-zoomed-out .marker-icon-box {
     width: 10px; height: 10px;
@@ -238,26 +258,23 @@ body.view-zoomed-out .marker-icon-box {
     box-shadow: 0 0 5px var(--marker-color);
     padding: 0;
 }
-/* Par défaut, on cache tout pour garder la carte propre */
+/* On cache les détails */
 body.view-zoomed-out .marker-icon-box::after { display: none; }
 body.view-zoomed-out .marker svg { display: none; }
 body.view-zoomed-out .marker-label { display: none; }
 body.view-zoomed-out .marker-label::before { display: none; }
 
-
-/* === NOUVEAU : EXCEPTION SURVOL EN MODE DÉZOOMÉ === */
-/* Quand on passe la souris dessus, on force l'affichage du texte ! */
-
+/* === EXCEPTION SURVOL EN MODE DÉZOOMÉ === */
+/* Force l'affichage du nom au survol */
 body.view-zoomed-out .marker:hover .marker-label {
-    display: block !important; /* Force l'apparition */
-    left: 20px; /* Un peu plus près car le point est petit */
+    display: block !important;
+    left: 20px; /* Ajusté */
     opacity: 1;
     z-index: 2000;
 }
-
 body.view-zoomed-out .marker:hover .marker-label::before {
     display: block !important;
-    width: 10px; /* Ligne plus courte pour s'adapter */
+    width: 10px;
     left: -10px;
 }
 
