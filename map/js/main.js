@@ -23,26 +23,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     const cloudStatus = document.getElementById('cloud-status');
     if(cloudStatus) cloudStatus.style.display = 'inline-block';
     
-    // --- NOUVEAU : CHARGEMENT PRIORITAIRE LOCAL ---
+    // --- CHARGEMENT DONNÉES ---
     const localData = loadLocalState();
     
     if (localData && localData.groups && localData.groups.length > 0) {
         console.log("💾 Restauration sauvegarde locale...");
         setGroups(localData.groups);
         if(localData.tacticalLinks) state.tacticalLinks = localData.tacticalLinks;
-        
-        // Optionnel : On peut quand même charger le cloud en background ou laisser tel quel
         if(cloudStatus) cloudStatus.style.display = 'none';
     } 
     else {
-        // Fallback : Cloud ou Défaut
         console.log("☁️ Pas de local, chargement Cloud...");
         const cloudData = await api.loadLatestMap();
         
         if (cloudData && cloudData.groups) {
             setGroups(cloudData.groups);
             if(cloudData.tacticalLinks) state.tacticalLinks = cloudData.tacticalLinks;
-            // On sauvegarde tout de suite en local pour synchroniser
             saveLocalState();
         } else {
             setGroups(DEFAULT_DATA);
@@ -57,7 +53,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     // --- AUTO-FOCUS VIA URL ---
     const params = new URLSearchParams(window.location.search);
     const focusId = params.get('focus');
-    
     if(focusId) {
         let found = null;
         state.groups.forEach((g, gIdx) => {
@@ -80,7 +75,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // --- BOUTONS ---
+    // --- BOUTONS BARRE D'OUTILS ---
+    
+    // 1. Sauvegarde Cloud
     const btnCloudSave = document.getElementById('btnCloudSave');
     if(btnCloudSave) {
         btnCloudSave.onclick = async () => {
@@ -93,24 +90,29 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         };
     }
+    
+    // 2. Export JSON
     const btnSave = document.getElementById('btnSave');
     if(btnSave) btnSave.onclick = exportToJSON;
+    
+    // 3. Reset Vue
     const btnReset = document.getElementById('btnResetView');
     if(btnReset) btnReset.onclick = centerMap;
     
+    // 4. Ajouter Groupe
     const btnAddGroup = document.getElementById('btnAddGroup');
     if(btnAddGroup) btnAddGroup.onclick = async () => {
         const name = await customPrompt("NOUVEAU CALQUE", "Nom :");
         if(!name) return; 
-
         const color = await customColorPicker("COULEUR DU CALQUE", "#ffffff");
         if(!color) return; 
 
         state.groups.push({ name, color, visible: true, points: [], zones: [] });
-        saveLocalState(); // <--- SAVE
+        saveLocalState();
         renderGroupsList();
     };
     
+    // 5. IMPORT (OUVRIR / REMPLACER)
     const fileInput = document.getElementById('fileImport');
     const btnTriggerImport = document.getElementById('btnTriggerImport');
     if (btnTriggerImport && fileInput) {
@@ -126,16 +128,78 @@ document.addEventListener('DOMContentLoaded', async () => {
                         setGroups(json.groups);
                         if(json.tacticalLinks) state.tacticalLinks = json.tacticalLinks;
                         
-                        saveLocalState(); // <--- SAVE IMPORT
-                        
+                        saveLocalState();
                         renderGroupsList(); renderAll();
-                        await customAlert("IMPORT", "Chargé avec succès.");
+                        await customAlert("OUVERTURE", "Carte chargée (Remplacement total).");
                     }
-                } catch (err) {}
+                } catch (err) { await customAlert("ERREUR", "Fichier invalide."); }
                 fileInput.value = ''; 
             };
             reader.readAsText(file);
         };
+    }
+
+    // 6. FUSION (MERGE)
+    const fileMerge = document.getElementById('fileMerge');
+    const btnTriggerMerge = document.getElementById('btnTriggerMerge');
+    if(btnTriggerMerge && fileMerge) {
+        btnTriggerMerge.onclick = () => { fileMerge.click(); };
+        fileMerge.onchange = (e) => {
+            const file = e.target.files[0];
+            if(!file) return;
+            const reader = new FileReader();
+            reader.onload = async (evt) => {
+                try {
+                    const json = JSON.parse(evt.target.result);
+                    let importedCount = 0;
+                    
+                    if(json.groups) {
+                        json.groups.forEach(newGroup => {
+                            // Chercher si le groupe existe déjà
+                            const existingGroup = state.groups.find(g => g.name === newGroup.name);
+                            if(existingGroup) {
+                                // Fusionner les points dans le groupe existant
+                                if(newGroup.points) {
+                                    newGroup.points.forEach(p => {
+                                        // On évite les doublons d'ID exacts, sinon on ajoute
+                                        if(!existingGroup.points.some(ep => ep.id === p.id)) {
+                                            existingGroup.points.push(p);
+                                            importedCount++;
+                                        }
+                                    });
+                                }
+                                // Fusionner les zones
+                                if(newGroup.zones) {
+                                    newGroup.zones.forEach(z => {
+                                        existingGroup.zones.push(z);
+                                    });
+                                }
+                            } else {
+                                // Nouveau groupe complet
+                                state.groups.push(newGroup);
+                                importedCount += (newGroup.points ? newGroup.points.length : 0);
+                            }
+                        });
+                        
+                        // Fusionner les liens tactiques
+                        if(json.tacticalLinks) {
+                            if(!state.tacticalLinks) state.tacticalLinks = [];
+                            json.tacticalLinks.forEach(l => {
+                                if(!state.tacticalLinks.some(el => el.id === l.id)) {
+                                    state.tacticalLinks.push(l);
+                                }
+                            });
+                        }
+
+                        saveLocalState();
+                        renderGroupsList(); renderAll();
+                        await customAlert("FUSION", `${importedCount} points importés.`);
+                    }
+                } catch (err) { await customAlert("ERREUR", "Fichier invalide."); }
+                fileMerge.value = '';
+            };
+            reader.readAsText(file);
+        }
     }
 
     // --- GPS PANEL ---
@@ -218,7 +282,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 };
                 
                 targetGroup.points.push(newPoint);
-                saveLocalState(); // <--- SAVE POINT
+                saveLocalState();
                 
                 renderGroupsList(); renderAll();
 

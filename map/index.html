@@ -8,24 +8,67 @@
     <link rel="stylesheet" href="style.css">
 
     <style>
+        /* --- STYLES HARMONISÉS AVEC LE RÉSEAU (POINT) --- */
+        
+        /* Layout Principal */
+        body { overflow: hidden; background: #05070a; }
+        
+        /* Sur Desktop : On cache la top-bar et on étend le container */
+        @media (min-width: 769px) {
+            #top-bar { display: none !important; }
+            #app-container { top: 0 !important; height: 100vh !important; }
+            #sidebar-left { padding-top: 10px; }
+        }
+
+        /* Sections du Sidebar (Style "Point") */
+        .panel-section {
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 15px;
+            margin-bottom: 15px;
+            display: flex; flex-direction: column; gap: 10px;
+        }
+        
+        /* Titres de section */
+        .section-title {
+            font-size: 0.9rem; text-transform: uppercase; letter-spacing: 2px;
+            color: var(--text-muted); margin-bottom: 5px; display: block;
+        }
+
+        /* Boutons fichiers (Style "Point") */
+        .file-btn { 
+            font-size: 0.85rem; color: var(--text-muted); cursor: pointer; 
+            border: 1px dashed var(--border-color); padding: 8px; 
+            text-align: center; border-radius: 4px; transition: 0.2s;
+            background: rgba(0,0,0,0.2); display: block; width: 100%;
+        }
+        .file-btn:hover { border-color: var(--accent-cyan); color: var(--accent-cyan); background: rgba(115, 251, 247, 0.05); }
+
+        /* Grille de boutons */
+        .btn-row { display: flex; gap: 5px; }
+        .btn-row > * { flex: 1; }
+
+        /* Bouton Switch Mode */
+        .btn-switch {
+            width: 100%; font-size: 0.8rem; padding: 8px;
+            background: rgba(115, 251, 247, 0.1); border: 1px solid var(--accent-cyan);
+            color: var(--accent-cyan); text-transform: uppercase; letter-spacing: 1px;
+            cursor: pointer; margin-top: 10px;
+            clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+        }
+        .btn-switch:hover { background: var(--accent-cyan); color: #000; }
+
+        /* Loader */
         #app-loader {
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            background: #05070a;
-            z-index: 9999;
+            background: #05070a; z-index: 9999;
             display: flex; flex-direction: column; justify-content: center; align-items: center;
-            color: #73fbf7;
-            transition: opacity 0.5s ease;
+            color: #73fbf7; transition: opacity 0.5s ease;
         }
         .loader-text { 
-            font-family: 'Rajdhani', sans-serif;
-            font-size: 1.5rem; letter-spacing: 4px; 
+            font-family: 'Rajdhani', sans-serif; font-size: 1.5rem; letter-spacing: 4px; 
             animation: pulse 1.5s infinite; text-transform: uppercase; 
         }
-        @keyframes pulse { 
-            0% { opacity: 0.5; } 
-            50% { opacity: 1; text-shadow: 0 0 15px #73fbf7; } 
-            100% { opacity: 0.5; } 
-        }
+        @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; text-shadow: 0 0 15px #73fbf7; } 100% { opacity: 0.5; } }
     </style>
 </head>
 <body>
@@ -38,11 +81,9 @@
         <div id="modal-box">
             <div id="modal-title">TITRE</div>
             <div id="modal-content">Message...</div>
-            
             <div id="modal-input-container" style="display:none;">
                 <input type="text" id="modal-input" class="gps-input full-width" autocomplete="off">
             </div>
-
             <div id="modal-color-picker" style="display:none;">
                 <div id="color-swatches" class="color-grid"></div>
                 <div class="separator-h" style="margin: 10px 0;"></div>
@@ -52,7 +93,6 @@
                     <span id="modal-color-hex" style="font-family:monospace; color:var(--text-main);">#FFFFFF</span>
                 </div>
             </div>
-
             <div id="modal-actions"></div>
         </div>
     </div>
@@ -69,30 +109,47 @@
         <div class="logo-area">
             <button id="btnMobileMenu" class="mobile-only">☰</button>
             <span class="app-logo">💠</span>
-            <span class="app-title desktop-only">LINKED <span style="color:var(--accent-pink)">// MAP</span></span>
-            <span id="cloud-status" class="cloud-badge" style="display:none;">☁️</span>
+            <span class="app-title">LINKED <span style="color:var(--accent-pink)">// MAP</span></span>
         </div>
-        <div class="toolbar">
-            <input type="file" id="fileImport" accept=".json" style="display:none">
-            <button class="nav-btn icon-only-mobile" id="btnTriggerImport" title="Importer">📂 <span class="desktop-only">IMPORT</span></button>
-            <button class="nav-btn icon-only-mobile" id="btnCloudSave" title="Sauvegarde Cloud">☁️ <span class="desktop-only">SAVE</span></button>
-            <button class="nav-btn icon-only-mobile" id="btnSave" title="Export JSON">💾 <span class="desktop-only">JSON</span></button>
-            <div class="separator"></div>
-            <a href="../point/index.html" class="nav-link icon-only-mobile">RÉSEAU ➔</a>
         </div>
-    </div>
 
     <div id="app-container">
+        
         <div id="sidebar-left">
+            <div class="panel-section" style="text-align:center;">
+                <img src="logo-bni-linked.png" alt="BNI LINKED" style="width:80%; max-height:80px; object-fit:contain; filter: drop-shadow(0 0 5px rgba(115,251,247,0.3));">
+                <button class="btn-switch" onclick="window.location.href='../point/index.html';">
+                    🕸️ Mode Réseau
+                </button>
+                <div id="cloud-status" style="font-size:0.8rem; color:var(--text-dim); margin-top:5px; display:none;">☁️ Synchronisé</div>
+            </div>
+
+            <div class="panel-section">
+                <span class="section-title">DONNÉES</span>
+                
+                <input type="file" id="fileImport" accept=".json" style="display:none">
+                <input type="file" id="fileMerge" accept=".json" style="display:none">
+
+                <div class="btn-row">
+                    <button id="btnCloudSave" class="mini-btn grow" style="justify-content:center;">☁️ SAVE</button>
+                    <button id="btnSave" class="mini-btn grow" style="justify-content:center;">💾 JSON</button>
+                </div>
+                <div class="btn-row">
+                    <button id="btnTriggerImport" class="file-btn">📂 Ouvrir</button>
+                    <button id="btnTriggerMerge" class="file-btn">🧩 Fusionner</button>
+                </div>
+            </div>
+
             <div class="panel-section" style="padding-bottom: 5px;">
+                <span class="section-title">RECHERCHE</span>
                 <div class="search-container">
                     <span class="search-icon">🔍</span>
-                    <input type="text" id="searchInput" placeholder="Recherche..." autocomplete="off">
+                    <input type="text" id="searchInput" placeholder="Nom, matricule..." autocomplete="off">
                 </div>
             </div>
 
             <div class="panel-section">
-                <button id="btnToggleGpsPanel" class="action-btn full-width">📡 AJOUTER GPS</button>
+                <button id="btnToggleGpsPanel" class="action-btn full-width">📡 SAISIE COORDONNÉES</button>
             </div>
 
             <div class="panel-header">
