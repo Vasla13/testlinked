@@ -1,0 +1,24 @@
+# Dépendances Node.js (TRES IMPORTANT : Ne jamais commit ce dossier)
+node_modules/
+npm-debug.log
+
+# Fichiers générés par Netlify (Local dev)
+.netlify/
+
+# Fichiers d'environnement (Clés API secrètes)
+.env
+.env.local
+.env.*
+
+# Fichiers Système
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE / Editeurs
+.vscode/
+.idea/
+
+# Fichiers temporaires ou de build (si vous en avez plus tard)
+dist/
+build/
