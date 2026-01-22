@@ -57,14 +57,16 @@ export function renderPathfindingSidebar(state, selectedNode) {
                 </div>
             `;
         } else {
+            // MODIFICATION ICI : Version compacte
             return `
                 <div style="
-                    padding:25px; text-align:center; border:1px dashed rgba(255,255,255,0.2); 
-                    border-radius:8px; color:#666; font-style:italic; background:rgba(0,0,0,0.2);
+                    padding:12px; text-align:center; border:1px dashed rgba(255,255,255,0.15); 
+                    border-radius:6px; color:#666; font-style:italic; background:rgba(0,0,0,0.15);
                 ">
-                    <div style="font-size:1.5rem; margin-bottom:10px; opacity:0.5;">📡</div>
-                    <div>En attente de signal...</div>
-                    <div style="font-size:0.75rem; margin-top:5px;">Sélectionnez une entité sur la carte.</div>
+                    <div style="font-size:0.8rem; display:flex; align-items:center; justify-content:center; gap:6px;">
+                        <span style="font-size:1rem; opacity:0.7;">📡</span> 
+                        <span>En attente de signal...</span>
+                    </div>
                 </div>
             `;
         }
