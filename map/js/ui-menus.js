@@ -2,7 +2,6 @@ import { state, updateTacticalLink, removeTacticalLink, findPointById, saveLocal
 import { renderAll, getMapPercentCoords } from './render.js';
 import { customConfirm, customPrompt, customAlert } from './ui-modals.js';
 import { percentageToGps } from './utils.js';
-// AJOUT : Import de startDrawingFree
 import { startDrawingCircle, startDrawingFree } from './zone-editor.js';
 
 export function initContextMenu() {
@@ -51,12 +50,11 @@ export function initContextMenu() {
                 customAlert("ERREUR", "Créez d'abord un calque/groupe.");
                 return;
             }
-            // Lance le mode Cercle sur le premier groupe (ou modifier pour choisir)
             startDrawingCircle(0);
         };
     }
 
-    // --- BOUTON 3 : DESSIN LIBRE (NOUVEAU) ---
+    // --- BOUTON 3 : DESSIN LIBRE ---
     const btnFree = document.getElementById('ctx-new-free-zone');
     if(btnFree) {
         btnFree.onclick = () => {
@@ -65,7 +63,6 @@ export function initContextMenu() {
                 customAlert("ERREUR", "Créez d'abord un calque/groupe.");
                 return;
             }
-            // Lance le mode Dessin Libre sur le premier groupe
             startDrawingFree(0);
         };
     }
@@ -87,11 +84,30 @@ function openGpsPanelWithCoords(coords) {
     if(inputX) inputX.value = gpsCoords.x.toFixed(2);
     if(inputY) inputY.value = gpsCoords.y.toFixed(2);
     
+    // --- CORRECTION ICI : ON REMPLIT LA LISTE DES CALQUES ---
+    const selectEl = document.getElementById('gpsGroupSelect');
+    if(selectEl) {
+        selectEl.innerHTML = '';
+        if (state.groups.length === 0) {
+            const opt = document.createElement('option');
+            opt.text = "Aucun calque disponible";
+            selectEl.appendChild(opt);
+        } else {
+            state.groups.forEach((g, idx) => {
+                const opt = document.createElement('option');
+                opt.value = idx;
+                opt.text = g.name;
+                opt.style.color = '#000'; // Texte noir pour lisibilité dans le menu
+                selectEl.appendChild(opt);
+            });
+        }
+    }
+    // --------------------------------------------------------
+    
     if(gpsPanel) gpsPanel.style.display = 'block';
 }
 
 export function handleLinkClick(e, link) {
-    // Création dynamique du menu pour le lien
     const menu = document.createElement('div');
     menu.className = 'link-menu';
     menu.style.left = `${e.clientX}px`; menu.style.top = `${e.clientY}px`;
@@ -105,7 +121,6 @@ export function handleLinkClick(e, link) {
     `;
     document.body.appendChild(menu);
 
-    // Actions du menu lien
     document.getElementById('btnLinkColor').onclick = async () => { 
         menu.remove(); 
         const c = await customPrompt("COULEUR", "Hex ou Nom :"); 
@@ -127,7 +142,6 @@ export function handleLinkClick(e, link) {
     
     document.getElementById('btnLinkClose').onclick = () => menu.remove();
     
-    // Fermeture automatique si on clique ailleurs
     setTimeout(() => { 
         const c = (ev) => { 
             if (!menu.contains(ev.target)) { 
@@ -139,7 +153,7 @@ export function handleLinkClick(e, link) {
     }, 100);
 }
 
-// --- TOOLTIPS DES LIENS ---
+// --- TOOLTIPS ---
 let tooltipEl = null;
 
 export function handleLinkHover(e, link) {
