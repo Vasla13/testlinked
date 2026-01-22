@@ -121,14 +121,12 @@ function renderTacticalLinks() {
 
     if(!state.tacticalLinks) return;
 
-    // Définition des dégradés (Defs container)
     let defs = linksLayer.querySelector('defs');
     if (!defs) {
         defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
         linksLayer.appendChild(defs);
     } else {
-        defs.innerHTML = ''; // Reset des anciens dégradés
-        // Rajouter le marqueur flèche si besoin (souvent dans index.html mais on sait jamais)
+        defs.innerHTML = ''; 
         const marker = document.createElementNS("http://www.w3.org/2000/svg", "marker");
         marker.setAttribute("id", "arrowhead");
         marker.setAttribute("markerWidth", "10"); marker.setAttribute("markerHeight", "7");
@@ -141,7 +139,6 @@ function renderTacticalLinks() {
         defs.appendChild(marker);
     }
 
-    // Helper pour trouver Point + Couleur du groupe
     const findPointInfo = (id) => {
         for (const g of state.groups) {
             const p = g.points.find(x => x.id === id);
@@ -164,15 +161,11 @@ function renderTacticalLinks() {
             line.setAttribute("x1", pFrom.x); line.setAttribute("y1", pFrom.y);
             line.setAttribute("x2", pTo.x); line.setAttribute("y2", pTo.y);
             
-            // GESTION COULEUR : Dégradé ou Solide
-            // Si l'utilisateur a défini une couleur manuelle (différente de blanc), on l'utilise.
-            // Sinon, on utilise la couleur des points.
             let finalColor = link.color;
             if (!finalColor || finalColor === '#ffffff') {
                 if (cFrom === cTo) {
-                    finalColor = cFrom; // Même groupe = couleur unie
+                    finalColor = cFrom;
                 } else {
-                    // Groupes différents = Dégradé
                     const gradId = `grad_${link.id}`;
                     const grad = document.createElementNS("http://www.w3.org/2000/svg", "linearGradient");
                     grad.setAttribute("id", gradId);
@@ -200,23 +193,15 @@ function renderTacticalLinks() {
             line.style.pointerEvents = 'visibleStroke'; 
             line.style.cursor = 'pointer';
             
-            line.onclick = (e) => { 
-                e.stopPropagation(); 
-                handleLinkClick(e, link); 
-            };
-            line.onmouseover = (e) => { 
-                line.setAttribute("stroke-width", "0.4"); 
-                handleLinkHover(e, link); 
-            };
-            line.onmouseout = (e) => { 
-                line.setAttribute("stroke-width", "0.15"); 
-                handleLinkOut(); 
-            };
+            line.onclick = (e) => { e.stopPropagation(); handleLinkClick(e, link); };
+            line.onmouseover = (e) => { line.setAttribute("stroke-width", "0.4"); handleLinkHover(e, link); };
+            line.onmouseout = (e) => { line.setAttribute("stroke-width", "0.15"); handleLinkOut(); };
             linksLayer.appendChild(line);
         }
     });
 }
 
+// --- RENDU DES MARQUEURS (MODIFIÉ POUR IMAGES) ---
 function renderMarkersAndClusters() {
     markersLayer.innerHTML = '';
 
@@ -235,15 +220,33 @@ function renderMarkersAndClusters() {
             if (state.selectedPoint && state.selectedPoint.groupIndex === gIndex && state.selectedPoint.pointIndex === pIndex) {
                 el.classList.add('selected');
             }
-            
             if (state.draggingMarker && state.draggingMarker.groupIndex === gIndex && state.draggingMarker.pointIndex === pIndex) {
                 el.classList.add('is-dragging');
             }
 
-            const svgContent = ICONS[point.iconType] || ICONS.DEFAULT;
+            const iconData = ICONS[point.iconType] || ICONS.DEFAULT;
+            
+            // --- DETECTION : URL ou SVG ? ---
+            let innerContent = '';
+            
+            // Si ça commence par http (lien) ou data: (image encodée) ou ./ (local)
+            if (iconData.startsWith('http') || iconData.startsWith('data:') || iconData.startsWith('./') || iconData.startsWith('/')) {
+                // C'est une IMAGE
+                innerContent = `
+                    <div class="marker-icon-box">
+                        <img src="${iconData}" alt="icon" style="width:20px; height:20px; object-fit:contain; filter: drop-shadow(0 0 2px var(--marker-color));">
+                    </div>`;
+            } else {
+                // C'est du SVG (Code HTML)
+                innerContent = `
+                    <div class="marker-icon-box">
+                        <svg viewBox="0 0 24 24">${iconData}</svg>
+                    </div>`;
+            }
+
             el.innerHTML = `
                 <div class="marker-content-wrapper">
-                    <div class="marker-icon-box"><svg viewBox="0 0 24 24">${svgContent}</svg></div>
+                    ${innerContent}
                     <div class="marker-label">${point.name}</div>
                 </div>
             `;
