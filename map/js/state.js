@@ -1,35 +1,36 @@
 export const state = {
-    // Données principales
-    groups: [], // Liste des groupes (avec leurs points et zones)
-    tacticalLinks: [], // Liens tactiques
+    groups: [],
+    tacticalLinks: [],
+    view: { x: 0, y: 0, scale: 0.5 },
     
-    // Vue et Map
-    view: { x: 0, y: 0, scale: 1 },
-    mapWidth: 0,
-    mapHeight: 0,
-
-    // États d'interaction
-    selectedPoint: null, // { groupIndex, pointIndex }
-    selectedZone: null, // { groupIndex, zoneIndex }
-    
-    // NOUVEAU : Gestion du Drag & Drop des points
-    draggingMarker: null, // { groupIndex, pointIndex, startX, startY, hasMoved }
-
-    isDragging: false, // Pan de la map
+    // Interaction Map
+    isDragging: false,
     lastMouse: { x: 0, y: 0 },
+    
+    // Sélection
+    selectedPoint: null, 
+    selectedZone: null,
 
-    // Outils
+    // Outils & Modes
     drawingMode: false,
-    drawingType: null, // 'POLYGON', 'CIRCLE'
-    tempPoints: [],
+    drawingType: null,
+    drawingGroupIndex: null,
     tempZone: null,
+    tempPoints: [],
+    
+    draggingMarker: null, // { groupIndex, pointIndex, startX, startY, hasMoved, offsetX, offsetY }
 
     measuringMode: false,
-    measureStep: 0, // 0=inactif, 1=premier point posé, 2=fini
+    measureStep: 0,
     measurePoints: [],
+    
+    linkingMode: false,
+    linkStartId: null, 
 
-    // Filtres
-    statusFilter: 'ALL', // 'ALL', 'ACTIVE', 'NEUTRAL', 'DOWN'
+    statusFilter: 'ALL',
+    searchTerm: '',
+    mapWidth: 0,
+    mapHeight: 0
 };
 
 export function generateID() {
@@ -80,7 +81,7 @@ export function setGroups(newGroups) {
         });
         g.zones.forEach(z => {
             if(!z.id) z.id = generateID();
-            if(!z.type) z.type = 'POLYGON'; // Compatibilité ancienne version
+            if(!z.type) z.type = 'POLYGON'; 
         });
     });
     state.groups = newGroups; 
@@ -95,14 +96,39 @@ export function setGroups(newGroups) {
 
 export function exportToJSON() {
     const data = { 
-        meta: { date: new Date().toISOString(), version: "2.2" },
+        meta: { date: new Date().toISOString(), version: "2.3" },
         groups: state.groups,
         tacticalLinks: state.tacticalLinks
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'tactical_map_data_v2.2.json';
+    a.download = 'tactical_map_data_v2.3.json';
     a.click();
 }
 
+// --- NOUVEAU : LOCAL STORAGE (AUTO-SAVE) ---
+export function saveLocalState() {
+    const data = {
+        groups: state.groups,
+        tacticalLinks: state.tacticalLinks,
+        meta: { date: new Date().toISOString(), savedBy: "AutoSave" }
+    };
+    try {
+        localStorage.setItem('tacticalMapData', JSON.stringify(data));
+        // console.log("💾 Auto-saved locally");
+    } catch (e) {
+        console.error("Local Save Error (Quota?):", e);
+    }
+}
+
+export function loadLocalState() {
+    try {
+        const json = localStorage.getItem('tacticalMapData');
+        if (!json) return null;
+        return JSON.parse(json);
+    } catch (e) {
+        console.error("Local Load Error:", e);
+        return null;
+    }
+}

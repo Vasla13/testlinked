@@ -1,7 +1,6 @@
-import { state, setGroups, exportToJSON, generateID } from './state.js';
+import { state, setGroups, exportToJSON, generateID, loadLocalState, saveLocalState } from './state.js';
 import { initEngine, centerMap, updateTransform } from './engine.js'; 
 import { renderGroupsList, initUI, selectItem } from './ui.js';
-// AJOUT : Import de customColorPicker
 import { customAlert, customConfirm, customPrompt, customColorPicker } from './ui-modals.js';
 import { gpsToPercentage } from './utils.js';
 import { renderAll } from './render.js';
@@ -24,16 +23,33 @@ document.addEventListener('DOMContentLoaded', async () => {
     const cloudStatus = document.getElementById('cloud-status');
     if(cloudStatus) cloudStatus.style.display = 'inline-block';
     
-    console.log("☁️ Chargement Cloud...");
-    const cloudData = await api.loadLatestMap();
+    // --- NOUVEAU : CHARGEMENT PRIORITAIRE LOCAL ---
+    const localData = loadLocalState();
     
-    if (cloudData && cloudData.groups) {
-        setGroups(cloudData.groups);
-        if(cloudData.tacticalLinks) state.tacticalLinks = cloudData.tacticalLinks;
-    } else {
-        setGroups(DEFAULT_DATA);
+    if (localData && localData.groups && localData.groups.length > 0) {
+        console.log("💾 Restauration sauvegarde locale...");
+        setGroups(localData.groups);
+        if(localData.tacticalLinks) state.tacticalLinks = localData.tacticalLinks;
+        
+        // Optionnel : On peut quand même charger le cloud en background ou laisser tel quel
+        if(cloudStatus) cloudStatus.style.display = 'none';
+    } 
+    else {
+        // Fallback : Cloud ou Défaut
+        console.log("☁️ Pas de local, chargement Cloud...");
+        const cloudData = await api.loadLatestMap();
+        
+        if (cloudData && cloudData.groups) {
+            setGroups(cloudData.groups);
+            if(cloudData.tacticalLinks) state.tacticalLinks = cloudData.tacticalLinks;
+            // On sauvegarde tout de suite en local pour synchroniser
+            saveLocalState();
+        } else {
+            setGroups(DEFAULT_DATA);
+            saveLocalState();
+        }
+        if(cloudStatus) cloudStatus.style.display = 'none';
     }
-    if(cloudStatus) cloudStatus.style.display = 'none';
 
     renderGroupsList();
     renderAll(); 
@@ -82,19 +98,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     const btnReset = document.getElementById('btnResetView');
     if(btnReset) btnReset.onclick = centerMap;
     
-    // CORRECTION ICI : Création de calque avec choix de couleur
     const btnAddGroup = document.getElementById('btnAddGroup');
     if(btnAddGroup) btnAddGroup.onclick = async () => {
-        // 1. Demander le Nom
         const name = await customPrompt("NOUVEAU CALQUE", "Nom :");
-        if(!name) return; // Annulation si vide ou annulé
+        if(!name) return; 
 
-        // 2. Demander la Couleur
         const color = await customColorPicker("COULEUR DU CALQUE", "#ffffff");
-        if(!color) return; // Annulation
+        if(!color) return; 
 
-        // 3. Création
         state.groups.push({ name, color, visible: true, points: [], zones: [] });
+        saveLocalState(); // <--- SAVE
         renderGroupsList();
     };
     
@@ -112,6 +125,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (json.groups) {
                         setGroups(json.groups);
                         if(json.tacticalLinks) state.tacticalLinks = json.tacticalLinks;
+                        
+                        saveLocalState(); // <--- SAVE IMPORT
+                        
                         renderGroupsList(); renderAll();
                         await customAlert("IMPORT", "Chargé avec succès.");
                     }
@@ -202,6 +218,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 };
                 
                 targetGroup.points.push(newPoint);
+                saveLocalState(); // <--- SAVE POINT
+                
                 renderGroupsList(); renderAll();
 
                 const viewport = document.getElementById('viewport');

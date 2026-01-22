@@ -1,7 +1,7 @@
-import { state } from './state.js';
+import { state, saveLocalState } from './state.js'; // AJOUT saveLocalState
 import { handlePointClick } from './ui.js';
 import { renderAll } from './render.js';
-import { customPrompt, customColorPicker, customConfirm } from './ui-modals.js'; // AJOUT : customConfirm
+import { customPrompt, customColorPicker, customConfirm } from './ui-modals.js'; 
 
 export function renderGroupsList() {
     const groupsList = document.getElementById('groups-list');
@@ -23,28 +23,26 @@ export function renderGroupsList() {
         const header = document.createElement('div');
         header.className = 'group-header';
         
-        // Checkbox visibilité
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.checked = group.visible;
         checkbox.onclick = (e) => { 
             e.stopPropagation(); 
             group.visible = e.target.checked; 
+            saveLocalState(); // <-- Save visibilité
             renderAll(); 
         };
         
-        // Point de couleur
         const dot = document.createElement('div');
         dot.className = 'color-dot';
         dot.style.cssText = `color:${group.color}; background-color:${group.color};`;
         
-        // Nom du groupe
         const nameSpan = document.createElement('span');
         const count = term !== "" ? matchingPoints.length : group.points.length;
         nameSpan.innerText = `${group.name} (${count})`;
         nameSpan.style.flex = '1';
         
-        // 1. Bouton Modification (Engrenage)
+        // Bouton Modification
         const btnEdit = document.createElement('button');
         btnEdit.className = 'mini-btn'; 
         btnEdit.innerHTML = '⚙️';
@@ -55,29 +53,28 @@ export function renderGroupsList() {
         btnEdit.onclick = async (e) => {
             e.stopPropagation();
             
-            // Nom
             const newName = await customPrompt("MODIFIER CALQUE", "Nom du calque :", group.name);
             if(newName === null) return;
 
-            // Couleur
             const newColor = await customColorPicker("COULEUR DU CALQUE", group.color);
             if(newColor === null) return;
 
             if(newName.trim() !== "") group.name = newName.trim();
             group.color = newColor;
 
+            saveLocalState(); // <-- Save modif
             renderGroupsList();
             renderAll();
         };
 
-        // 2. AJOUT : Bouton Suppression (Poubelle)
+        // Bouton Suppression
         const btnDelete = document.createElement('button');
         btnDelete.className = 'mini-btn';
         btnDelete.innerHTML = '🗑️';
         btnDelete.title = "Supprimer le calque";
         btnDelete.style.marginLeft = '5px';
         btnDelete.style.padding = '0 5px';
-        btnDelete.style.color = '#ff6b81'; // Rouge clair pour l'alerte visuelle
+        btnDelete.style.color = '#ff6b81'; 
 
         btnDelete.onclick = async (e) => {
             e.stopPropagation();
@@ -88,14 +85,13 @@ export function renderGroupsList() {
                 : `Supprimer le calque "${group.name}" ?`;
 
             if(await customConfirm("SUPPRESSION", msg)) {
-                // Suppression du groupe
                 state.groups.splice(gIdx, 1);
                 
-                // Si plus aucun groupe, on en recrée un par défaut pour éviter les bugs
                 if (state.groups.length === 0) {
                     state.groups.push({ name: "Défaut", color: "#ffffff", visible: true, points: [], zones: [] });
                 }
 
+                saveLocalState(); // <-- Save suppression
                 renderGroupsList();
                 renderAll();
             }

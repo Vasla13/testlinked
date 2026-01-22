@@ -1,4 +1,4 @@
-import { state } from './state.js';
+import { state, saveLocalState } from './state.js'; // AJOUT import
 import { renderAll, getMapPercentCoords } from './render.js';
 import { handlePointClick } from './ui.js';
 
@@ -18,7 +18,6 @@ export function updateTransform() {
     }
 }
 
-// CORRECTION : On calcule l'écart (offset) au clic
 export function startMarkerDrag(e, gIndex, pIndex) {
     const mouseStart = getMapPercentCoords(e.clientX, e.clientY);
     const point = state.groups[gIndex].points[pIndex];
@@ -29,7 +28,6 @@ export function startMarkerDrag(e, gIndex, pIndex) {
         startX: e.clientX,
         startY: e.clientY,
         hasMoved: false,
-        // On mémorise la différence de position entre la souris et le point
         offsetX: point.x - mouseStart.x,
         offsetY: point.y - mouseStart.y
     };
@@ -94,7 +92,6 @@ export function initEngine() {
     window.addEventListener('mousemove', (e) => {
         updateHUDCoords(e);
         
-        // --- LOGIQUE DEPLACEMENT POINT ---
         if (state.draggingMarker) {
             const dx = Math.abs(e.clientX - state.draggingMarker.startX);
             const dy = Math.abs(e.clientY - state.draggingMarker.startY);
@@ -106,7 +103,6 @@ export function initEngine() {
                 const gIdx = state.draggingMarker.groupIndex;
                 const pIdx = state.draggingMarker.pointIndex;
                 
-                // CORRECTION : On applique l'offset pour garder le point sous la souris
                 state.groups[gIdx].points[pIdx].x = coords.x + state.draggingMarker.offsetX;
                 state.groups[gIdx].points[pIdx].y = coords.y + state.draggingMarker.offsetY;
                 
@@ -137,6 +133,9 @@ export function initEngine() {
         if (state.draggingMarker) {
             if (!state.draggingMarker.hasMoved) {
                 handlePointClick(state.draggingMarker.groupIndex, state.draggingMarker.pointIndex);
+            } else {
+                // DRAG TERMINÉ AVEC SUCCÈS -> SAUVEGARDE
+                saveLocalState();
             }
             state.draggingMarker = null;
             renderAll(); 

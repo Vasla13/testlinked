@@ -1,10 +1,9 @@
-import { state, addTacticalLink } from './state.js';
+import { state, addTacticalLink, saveLocalState } from './state.js'; // AJOUT saveLocalState
 import { renderAll } from './render.js'; 
 import { renderEditor, closeEditor } from './ui-editor.js';
 import { customAlert } from './ui-modals.js';
 import { renderGroupsList } from './ui-list.js'; 
 import { initContextMenu, handleLinkClick, handleLinkHover, handleLinkOut, moveTooltip } from './ui-menus.js';
-// IMPORT : Handlers de zone
 import { handleMapMouseDown, handleMapMouseMove, handleMapMouseUp } from './zone-editor.js';
 
 export { handleLinkClick, handleLinkHover, handleLinkOut, moveTooltip };
@@ -12,15 +11,12 @@ export { handleLinkClick, handleLinkHover, handleLinkOut, moveTooltip };
 export function initUI() {
     initContextMenu(); 
     
-    // --- GESTION ÉVÉNEMENTS MAP (DESSIN & DRAG) ---
     const viewport = document.getElementById('viewport');
     if (viewport) {
-        // On attache ces events au viewport ou window pour être fluide
         viewport.addEventListener('mousedown', (e) => handleMapMouseDown(e));
         window.addEventListener('mousemove', (e) => handleMapMouseMove(e));
         window.addEventListener('mouseup', (e) => handleMapMouseUp(e));
     }
-    // -----------------------------------------------
 
     const btnMobileMenu = document.getElementById('btnMobileMenu');
     const sidebarLeft = document.getElementById('sidebar-left');
@@ -75,6 +71,7 @@ export function handlePointClick(gIndex, pIndex) {
             const success = addTacticalLink(state.linkStartId, point.id);
             if (success) {
                 customAlert("SUCCÈS", "Lien tactique créé.");
+                saveLocalState(); // <-- SAVE LIEN
             } else {
                 customAlert("INFO", "Ce lien existe déjà ou est invalide.");
             }
@@ -102,7 +99,7 @@ export function selectItem(type, gIndex, index) {
     renderAll(); 
     renderEditor(); 
 }
-// Alias legacy
+
 export function selectPoint(gIndex, pIndex) { selectItem('point', gIndex, pIndex); }
 
 export function deselect() { 
