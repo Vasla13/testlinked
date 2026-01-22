@@ -170,11 +170,8 @@
             <div id="hud-bottom">
                 <div id="coords-display" class="desktop-only">00.00 | 00.00</div>
                 <div class="separator desktop-only"></div>
-                
                 <button id="btnToggleLight" class="hud-btn" title="Mode Lumière / Hologramme">💡</button>
-                
                 <button id="btnResetView" class="hud-btn" title="Recentrer">🎯</button>
-                
                 <label class="hud-toggle" style="margin-left:10px;">
                     <input type="checkbox" id="chkLabels" checked> <span class="desktop-only">NOMS</span>
                 </label>
@@ -205,6 +202,35 @@
                     </button>
                 </div>
             </div>
+
+            <div id="drawing-toolbar" class="floating-panel compact" style="display:none;">
+                <div class="toolbar-header">
+                    <span>ÉDITION ZONE</span>
+                </div>
+                <div class="toolbar-content">
+                    <div class="tool-row">
+                        <label>ÉPAISSEUR</label>
+                        <input type="range" id="drawWidth" min="1" max="10" value="2" step="1">
+                        <span id="drawWidthVal" style="width:30px; text-align:right;">2px</span>
+                    </div>
+                    <div class="tool-row">
+                        <label>STYLE</label>
+                        <select id="drawStyle" class="mini-select">
+                            <option value="solid">Trait Plein</option>
+                            <option value="dashed">Tirets</option>
+                            <option value="dotted">Pointillés</option>
+                        </select>
+                    </div>
+                    
+                    <div class="tool-actions">
+                        <button id="btnDrawSmooth" class="action-btn" title="Lisser la forme" style="flex:1;">〰️ LISSER</button>
+                        <div class="separator"></div>
+                        <button id="btnDrawCancel" class="action-btn btn-red" title="Annuler">❌</button>
+                        <button id="btnDrawConfirm" class="action-btn btn-green" title="Valider">✅</button>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
         <div id="sidebar-right">
@@ -220,7 +246,6 @@
         import { state } from './js/state.js';
         window.state = state;
     </script>
-    
     <script>
         window.addEventListener('load', () => {
           setTimeout(() => {
@@ -228,15 +253,12 @@
             if(l) { l.style.opacity = '0'; setTimeout(() => l.remove(), 500); }
           }, 600);
         });
-
-        // GESTION DU MODE LUMIÈRE
         const btnLight = document.getElementById('btnToggleLight');
         if(btnLight) {
             btnLight.addEventListener('click', () => {
                 document.body.classList.toggle('high-light-mode');
-                
                 if(document.body.classList.contains('high-light-mode')) {
-                    btnLight.classList.add('active'); // Allume le bouton
+                    btnLight.classList.add('active');
                 } else {
                     btnLight.classList.remove('active');
                 }

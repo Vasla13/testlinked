@@ -404,3 +404,89 @@ label { display: block; color: var(--text-dim); font-size: 0.8rem; margin-bottom
 .link-menu button:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
 .separator-h { height: 1px; background: rgba(255,255,255,0.1); margin: 2px 0; }
 .link-tooltip { position: fixed; z-index: 20001; pointer-events: none; background: rgba(0,0,0,0.85); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); padding: 5px 10px; border-radius: 4px; font-size: 0.8rem; box-shadow: 0 0 10px rgba(0,0,0,0.5); display: none; }
+
+/* ... tout le CSS précédent (marquers HUD, layout, etc.) ... */
+/* COPIEZ TOUT CE QUI ÉTAIT DANS LA RÉPONSE PRÉCÉDENTE POUR LE FICHIER STYLE.CSS */
+/* AJOUTEZ CECI À LA FIN DU FICHIER : */
+
+/* --- BARRE D'OUTILS DESSIN --- */
+.floating-panel.compact {
+    width: 280px;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 5000;
+    border: 1px solid var(--accent-cyan);
+    box-shadow: 0 0 30px rgba(0,0,0,0.8);
+}
+
+.toolbar-header {
+    background: rgba(115, 251, 247, 0.1);
+    padding: 8px 15px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--accent-cyan);
+    border-bottom: 1px solid rgba(115, 251, 247, 0.2);
+    text-align: center;
+    letter-spacing: 2px;
+}
+
+.toolbar-content {
+    padding: 10px;
+    background: rgba(10, 15, 25, 0.95);
+    backdrop-filter: blur(10px);
+}
+
+.tool-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    color: #fff;
+}
+
+.tool-row label {
+    margin: 0;
+    width: 70px;
+    font-size: 0.7rem;
+    color: var(--text-dim);
+}
+
+.mini-select {
+    padding: 4px;
+    font-size: 0.8rem;
+    background: rgba(0,0,0,0.5);
+    border: 1px solid var(--border-color);
+    color: #fff;
+    flex: 1;
+}
+
+.tool-actions {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 15px;
+    gap: 5px;
+}
+
+.action-btn.btn-green { border-color: #0f0; color: #0f0; background: rgba(0, 255, 0, 0.1); }
+.action-btn.btn-green:hover { background: #0f0; color: #000; }
+
+.action-btn.btn-red { border-color: #f00; color: #f00; background: rgba(255, 0, 0, 0.1); }
+.action-btn.btn-red:hover { background: #f00; color: #000; }
+
+input[type="range"] {
+    flex: 1;
+    height: 4px;
+    background: var(--border-color);
+    appearance: none;
+    border-radius: 2px;
+    outline: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+    appearance: none;
+    width: 14px; height: 14px;
+    background: var(--accent-cyan);
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 0 5px var(--accent-cyan);
+}

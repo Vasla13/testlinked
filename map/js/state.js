@@ -18,9 +18,16 @@ export const state = {
     tempZone: null,
     tempPoints: [],
     
-    // NOUVEAU : Drapeaux pour le dessin libre
-    isFreeMode: false,
-    isFreeDrawing: false,
+    // NOUVEAU : Dessin Libre Avancé
+    isFreeMode: false,      // Mode activé via le menu
+    isFreeDrawing: false,   // En train de tracer (souris enfoncée)
+    drawingPending: false,  // Tracé fini, en attente de validation
+    
+    // Options de style par défaut
+    drawOptions: {
+        width: 2,       // Épaisseur (1-10)
+        style: 'solid'  // solid, dashed, dotted
+    },
     
     draggingMarker: null, 
 
@@ -100,14 +107,14 @@ export function setGroups(newGroups) {
 
 export function exportToJSON() {
     const data = { 
-        meta: { date: new Date().toISOString(), version: "2.3" },
+        meta: { date: new Date().toISOString(), version: "2.4" },
         groups: state.groups,
         tacticalLinks: state.tacticalLinks
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'tactical_map_data_v2.3.json';
+    a.download = 'tactical_map_data_v2.4.json';
     a.click();
 }
 
@@ -120,7 +127,7 @@ export function saveLocalState() {
     try {
         localStorage.setItem('tacticalMapData', JSON.stringify(data));
     } catch (e) {
-        console.error("Local Save Error (Quota?):", e);
+        console.error("Local Save Error:", e);
     }
 }
 

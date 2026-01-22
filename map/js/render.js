@@ -1,7 +1,7 @@
 import { state } from './state.js';
 import { ICONS, MAP_SCALE_UNIT } from './constants.js';
 import { handleLinkClick, handleLinkHover, handleLinkOut, moveTooltip, selectItem } from './ui.js';
-import { startMarkerDrag } from './engine.js'; // Import de la fonction de drag
+import { startMarkerDrag } from './engine.js'; 
 import { handleZoneMouseDown } from './zone-editor.js';
 
 const markersLayer = document.getElementById('markers-layer');
@@ -51,9 +51,24 @@ function renderZones() {
                 el.setAttribute("points", pointsStr);
             }
 
+            // GESTION DU STYLE (Épaisseur et traits)
+            // On calcule une épaisseur relative (ex: 2px -> 0.1 unité map)
+            let strokeWidth = "0.08"; // Défaut
+            if (zone.style && zone.style.width) {
+                strokeWidth = (zone.style.width * 0.05).toString();
+            }
+            if (isSelected) strokeWidth = (parseFloat(strokeWidth) * 1.5).toString(); // Plus gros si sélectionné
+
             el.setAttribute("fill", group.color);
             el.setAttribute("stroke", isSelected ? "#fff" : group.color);
-            el.setAttribute("stroke-width", isSelected ? "0.2" : "0.08"); 
+            el.setAttribute("stroke-width", strokeWidth);
+            
+            // GESTION DES TIRETS
+            if (zone.style) {
+                if (zone.style.style === 'dashed') el.setAttribute("stroke-dasharray", "0.5, 0.5");
+                if (zone.style.style === 'dotted') el.setAttribute("stroke-dasharray", "0.1, 0.3");
+            }
+
             el.setAttribute("fill-opacity", isSelected ? "0.3" : "0.15");
             el.setAttribute("class", "tactical-zone");
             el.style.pointerEvents = 'auto'; 
@@ -73,7 +88,14 @@ function renderZones() {
         });
     });
 
+    // Rendu du tracé en cours (Brouillon)
     if (state.drawingMode) {
+        // Style du brouillon basé sur les options actuelles
+        let draftWidth = (state.drawOptions.width * 0.05).toString();
+        let draftDash = "";
+        if (state.drawOptions.style === 'dashed') draftDash = "0.5, 0.5";
+        if (state.drawOptions.style === 'dotted') draftDash = "0.1, 0.3";
+
         if (state.tempZone && state.drawingType === 'CIRCLE') {
             const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
             circle.setAttribute("cx", state.tempZone.cx);
@@ -81,15 +103,17 @@ function renderZones() {
             circle.setAttribute("r", state.tempZone.r);
             circle.setAttribute("fill", "none");
             circle.setAttribute("stroke", "#00ff00");
-            circle.setAttribute("stroke-width", "0.15");
-            circle.setAttribute("stroke-dasharray", "1");
+            circle.setAttribute("stroke-width", draftWidth);
+            circle.setAttribute("stroke-dasharray", draftDash);
             zonesLayer.appendChild(circle);
         } else if (state.tempPoints.length > 0) {
+            // On utilise polyline pour que ça ne se ferme pas tout seul visuellement pendant le tracé
             const poly = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
             poly.setAttribute("points", state.tempPoints.map(p => `${p.x},${p.y}`).join(" "));
             poly.setAttribute("fill", "none");
-            poly.setAttribute("stroke", "#ff00ff");
-            poly.setAttribute("stroke-width", "0.15");
+            poly.setAttribute("stroke", state.drawingPending ? "#00ff00" : "#ff00ff"); // Vert si en attente, Rose si en cours
+            poly.setAttribute("stroke-width", draftWidth);
+            if(draftDash) poly.setAttribute("stroke-dasharray", draftDash);
             zonesLayer.appendChild(poly);
         }
     }
@@ -155,12 +179,10 @@ function renderMarkersAndClusters() {
             el.style.setProperty('--marker-color', group.color || '#00ffff');
             el.style.pointerEvents = 'auto'; 
 
-            // Classe active si sélectionné
             if (state.selectedPoint && state.selectedPoint.groupIndex === gIndex && state.selectedPoint.pointIndex === pIndex) {
                 el.classList.add('selected');
             }
             
-            // Classe active si en cours de drag
             if (state.draggingMarker && state.draggingMarker.groupIndex === gIndex && state.draggingMarker.pointIndex === pIndex) {
                 el.classList.add('is-dragging');
             }
@@ -173,13 +195,10 @@ function renderMarkersAndClusters() {
                 </div>
             `;
 
-            // MODIFICATION : Au lieu de onclick, on utilise mousedown pour gérer Drag vs Click
             el.onmousedown = (e) => {
                 if(state.drawingMode || state.measuringMode) return;
-                // Clic droit
                 if(e.button === 2) return; 
-
-                e.stopPropagation(); // Empêche le pan de la map
+                e.stopPropagation(); 
                 startMarkerDrag(e, gIndex, pIndex);
             };
 
