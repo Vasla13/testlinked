@@ -1,7 +1,7 @@
 import { state, saveLocalState } from './state.js';
 import { renderAll, getMapPercentCoords } from './render.js';
 import { handlePointClick } from './ui.js';
-import { percentageToGps } from './utils.js'; // AJOUT : Import de la conversion
+import { percentageToGps } from './utils.js';
 
 const viewport = document.getElementById('viewport');
 const mapWorld = document.getElementById('map-world');
@@ -10,14 +10,23 @@ const hudCoords = document.getElementById('coords-display');
 const markersLayer = document.getElementById('markers-layer');
 
 export function updateTransform() {
+    // 1. On applique le zoom UNIQUEMENT sur la carte (l'image de fond)
     mapWorld.style.transform = `translate(${state.view.x}px, ${state.view.y}px) scale(${state.view.scale})`;
 
     if (markersLayer && state.mapWidth && state.mapHeight) {
+        // 2. Pour les marqueurs, on change juste la taille du conteneur (width/height)
+        // On ne met PAS de scale() ici, donc les points garderont leur taille CSS fixe (ex: 32px)
         markersLayer.style.transform = `translate(${state.view.x}px, ${state.view.y}px)`;
         markersLayer.style.width = `${state.mapWidth * state.view.scale}px`;
         markersLayer.style.height = `${state.mapHeight * state.view.scale}px`;
         
-        markersLayer.style.setProperty('--map-scale', state.view.scale);
+        // 3. Gestion du Level of Detail (LOD)
+        // Si on est très dézoomé (scale < 0.5), on active le mode "petits points" via une classe CSS
+        if (state.view.scale < 0.5) {
+            document.body.classList.add('view-zoomed-out');
+        } else {
+            document.body.classList.remove('view-zoomed-out');
+        }
     }
 }
 
@@ -54,6 +63,8 @@ export function initEngine() {
         e.preventDefault();
         const delta = e.deltaY > 0 ? -1 : 1;
         const newScale = state.view.scale * (1 + delta * 0.1);
+        
+        // Limites de zoom
         if (newScale < 0.05 || newScale > 8) return;
 
         const rect = viewport.getBoundingClientRect();
@@ -72,8 +83,6 @@ export function initEngine() {
         if (state.draggingMarker) return; 
         if (state.drawingMode) return; 
         
-        // Note: La logique de mesure peut rester ici sans effet si le bouton est supprimé, 
-        // ou on peut la laisser pour un usage futur.
         if (state.measuringMode && e.button === 0) {
             const coords = getMapPercentCoords(e.clientX, e.clientY);
             if (state.measureStep === 0 || state.measureStep === 2) {
@@ -164,10 +173,6 @@ export function centerMap() {
 function updateHUDCoords(e) {
     if(state.mapWidth === 0) return;
     const coords = getMapPercentCoords(e.clientX, e.clientY);
-    
-    // CORRECTION : Conversion en coordonnées GPS réelles
     const gps = percentageToGps(coords.x, coords.y);
-    
-    // Affichage formaté (X | Y) avec 2 décimales pour la précision
     if(hudCoords) hudCoords.innerText = `GPS: ${gps.x.toFixed(2)} | ${gps.y.toFixed(2)}`;
 }

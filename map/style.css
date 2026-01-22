@@ -107,7 +107,7 @@ body {
         linear-gradient(90deg, rgba(115, 251, 247, 0.03) 1px, transparent 1px);
     background-size: 50px 50px; overflow: hidden; cursor: grab;
     box-shadow: inset 0 0 100px rgba(0,0,0,0.8);
-    perspective: 1000px; /* Important pour la netteté lors du zoom */
+    perspective: 1000px;
 }
 #viewport:active { cursor: grabbing; }
 
@@ -115,99 +115,132 @@ body {
     position: absolute; top: 0; left: 0; 
     transform-origin: 0 0; will-change: transform; transform-style: preserve-3d;
 }
-/* Carte assombrie pour faire ressortir les néons */
 #map-image { display: block; pointer-events: none; filter: brightness(0.6) contrast(1.2) grayscale(0.2); }
 
 #zones-layer, #links-layer, #markers-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
 
 
-/* --- 4. MARQUEURS "HIGH VISIBILITY" (NEON & GLOW) --- */
+/* --- 4. MARQUEURS TACTIQUES (FIXES) --- */
+
 .marker {
     position: absolute;
-    transform: translate(-50%, -50%); /* Centrage parfait */
+    /* On centre le point pile sur sa coordonnée GPS */
+    transform: translate(-50%, -50%);
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     cursor: pointer; z-index: 100; pointer-events: auto;
     
-    /* Variable par défaut si aucune couleur n'est fournie (Cyan) */
-    --marker-color: #00ffff; 
-    
-    -webkit-font-smoothing: antialiased;
-    backface-visibility: hidden;
-    transform-style: preserve-3d;
+    --marker-color: #00ffff;
+    will-change: left, top;
 }
 
-/* Conteneur pour le zoom inversé (Counter-Scale) */
+/* Le conteneur visuel : c'est lui qui va changer de forme/taille lors des transitions */
 .marker-content-wrapper {
+    position: relative;
     display: flex; flex-direction: column; align-items: center;
-    will-change: transform;
+    transition: transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
-/* BOITE DE L'ICÔNE */
+/* BOITE DE L'ICÔNE : TAILLE FIXE */
+/* Contrairement à avant, on fixe la taille en pixels. Elle restera de 32px que la carte soit zoomée ou non */
 .marker-icon-box {
-    width: 36px; height: 36px; /* Taille augmentée pour visibilité */
-    
-    /* Fond sombre semi-transparent */
+    width: 32px; height: 32px;
     background: rgba(0, 0, 0, 0.85);
-    
-    /* Bordure lumineuse */
     border: 2px solid var(--marker-color);
     border-radius: 6px; 
-    padding: 6px;
-    
-    /* EFFET GLOW : Ombre portée lumineuse */
-    box-shadow: 0 0 15px var(--marker-color), inset 0 0 5px var(--marker-color);
+    padding: 5px;
+    box-shadow: 0 0 10px var(--marker-color);
     
     display: flex; justify-content: center; align-items: center;
-    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    color: var(--marker-color); /* Couleur du SVG */
+    color: var(--marker-color);
+    transition: all 0.3s ease;
 }
 
-/* SVG Plein */
 .marker svg { 
     width: 100%; height: 100%; 
     fill: currentColor; 
-    filter: drop-shadow(0 0 2px rgba(0,0,0,0.5)); 
+    filter: drop-shadow(0 0 2px rgba(0,0,0,0.5));
+    transition: opacity 0.2s;
 }
 
-/* Interactions */
-.marker:hover .marker-icon-box { 
-    transform: scale(1.2); 
-    background: var(--marker-color); 
-    color: #000; /* Icône noire sur fond couleur */
-    box-shadow: 0 0 30px var(--marker-color); /* Glow intense */
-    z-index: 200;
+/* LE NOM (TEXTE) */
+.marker-label {
+    position: absolute;
+    bottom: 115%; /* Juste au-dessus de la boîte */
+    left: 50%; transform: translateX(-50%);
+    
+    background: rgba(0, 0, 0, 0.8);
+    border: 1px solid var(--marker-color);
+    color: #fff; padding: 2px 6px; border-radius: 4px;
+    
+    font-size: 11px; font-weight: 700; white-space: nowrap;
+    text-shadow: 0 1px 2px #000;
+    pointer-events: none;
+    
+    transition: opacity 0.2s, transform 0.2s;
+    opacity: 1;
 }
 
+/* --- MODE DÉZOOMÉ (PETITS POINTS) --- */
+/* Cette classe est ajoutée au body par engine.js quand on dézoome beaucoup */
+
+/* 1. L'icône devient un petit point rond */
+body.view-zoomed-out .marker-icon-box {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    padding: 0;
+    background: var(--marker-color); /* Point plein */
+    box-shadow: 0 0 5px var(--marker-color);
+    border-width: 1px;
+}
+
+/* 2. On cache le dessin SVG à l'intérieur */
+body.view-zoomed-out .marker-icon-box svg {
+    opacity: 0;
+    display: none;
+}
+
+/* 3. On cache le texte */
+body.view-zoomed-out .marker-label {
+    opacity: 0;
+    transform: translateX(-50%) translateY(5px);
+}
+
+
+/* --- INTERACTIONS (HOVER) --- */
+/* Même si on est dézoomé, passer la souris dessus réaffiche tout en grand */
+
+.marker:hover { z-index: 1000; }
+
+.marker:hover .marker-content-wrapper {
+    transform: scale(1.15); /* Petit effet de pop */
+}
+
+/* On force le retour à l'apparence complète au survol */
+.marker:hover .marker-icon-box {
+    width: 36px !important; height: 36px !important;
+    border-radius: 6px !important;
+    background: rgba(0,0,0,0.9) !important;
+    border-width: 2px !important;
+}
+
+.marker:hover .marker-icon-box svg {
+    opacity: 1 !important;
+    display: block !important;
+}
+
+.marker:hover .marker-label {
+    opacity: 1 !important;
+    transform: translateX(-50%) translateY(0) !important;
+    display: block !important;
+}
+
+/* Sélection */
 .marker.selected .marker-icon-box { 
     background: #fff; border-color: #fff; color: #000; 
-    box-shadow: 0 0 40px #fff; transform: scale(1.3); 
+    box-shadow: 0 0 40px #fff; 
 }
-
-/* LABEL DU MARQUEUR */
-.marker-label {
-    margin-top: 8px;
-    background: rgba(0, 0, 0, 0.9);
-    border: 1px solid var(--marker-color);
-    color: #fff;
-    padding: 4px 10px;
-    border-radius: 4px;
-    font-size: 14px; 
-    font-weight: 800;
-    text-transform: uppercase;
-    white-space: nowrap;
-    text-shadow: 0 2px 4px #000;
-    pointer-events: none;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.8);
-    transform: translateZ(0); 
-}
-.marker:hover .marker-label { background: var(--marker-color); color: #000; border-color: #000; }
-
-/* Status Danger */
-.marker.status-danger .marker-icon-box { 
-    animation: pulse-danger 1s infinite alternate; 
-    border-color: var(--danger); 
-    color: var(--danger); 
-    --marker-color: var(--danger);
+.marker.is-dragging {
+    z-index: 1000 !important; cursor: grabbing !important;
 }
 
 
@@ -254,7 +287,7 @@ label { display: block; color: var(--text-dim); font-size: 0.8rem; margin-bottom
 .hud-toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.85rem; color: var(--text-dim); text-transform: uppercase; font-weight: 600; margin-left: 10px; padding-left: 10px; border-left: 1px solid rgba(255,255,255,0.2); }
 .hud-toggle:hover { color: #fff; }
 
-/* STYLE ÉDITEUR "DATA CIBLE" */
+/* STYLE ÉDITEUR */
 .editor-section { background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(115, 251, 247, 0.1); border-left: 2px solid var(--accent-cyan); padding: 12px; position: relative; clip-path: polygon(0 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%); margin-bottom: 15px; }
 .editor-section-title { font-size: 0.7rem; color: var(--accent-cyan); text-transform: uppercase; letter-spacing: 2px; font-weight: 700; margin-bottom: 8px; border-bottom: 1px solid rgba(115, 251, 247, 0.1); padding-bottom: 4px; display: flex; justify-content: space-between; }
 .cyber-input { background: rgba(10, 15, 25, 0.8); border: 1px solid rgba(115, 251, 247, 0.3); color: #fff; font-family: 'Rajdhani', monospace; font-size: 0.95rem; padding: 8px 10px; width: 100%; transition: all 0.2s; border-radius: 2px; }
@@ -268,13 +301,12 @@ label { display: block; color: var(--text-dim); font-size: 0.8rem; margin-bottom
 .btn-close-editor { width: 100%; background: transparent; border: 1px solid var(--border-color); color: var(--text-dim); padding: 8px; font-size: 0.8rem; margin-top: 5px; cursor: pointer; text-transform: uppercase; }
 .btn-close-editor:hover { color: #fff; border-color: #fff; }
 
-/* MENU CONTEXTUEL */
+/* MENU CONTEXTUEL & MODALES */
 .context-menu { position: fixed; z-index: 2000; width: 220px; background: rgba(10, 15, 25, 0.98); border: 1px solid var(--accent-cyan); box-shadow: 0 0 30px rgba(115, 251, 247, 0.2); border-radius: 6px; padding: 6px; display: flex; flex-direction: column; gap: 4px; backdrop-filter: blur(12px); opacity: 0; pointer-events: none; transform: scale(0.95); transition: opacity 0.1s, transform 0.1s; }
 .context-menu.visible { opacity: 1; pointer-events: auto; transform: scale(1); }
 .context-menu button { background: transparent; border: none; color: var(--text-main); text-align: left; padding: 10px 12px; font-size: 0.85rem; cursor: pointer; border-radius: 4px; text-transform: uppercase; font-weight: 700; transition: all 0.1s; display: block; width: 100%; }
 .context-menu button:hover { background: rgba(115, 251, 247, 0.15); color: #fff; }
 
-/* MODALES CUSTOM */
 #modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(8px); z-index: 2000; display: flex; justify-content: center; align-items: center; opacity: 1; transition: opacity 0.2s; }
 #modal-overlay.hidden { opacity: 0; pointer-events: none; display: none; }
 #modal-box { width: 400px; background: rgba(10, 15, 25, 0.95); border: 1px solid var(--accent-cyan); box-shadow: 0 0 50px rgba(115, 251, 247, 0.2); border-radius: 8px; padding: 0; transform: scale(1); transition: transform 0.2s; }
@@ -302,279 +334,39 @@ label { display: block; color: var(--text-dim); font-size: 0.8rem; margin-bottom
 @keyframes pulse-cloud { 0% { opacity: 0.7; } 50% { opacity: 1; text-shadow: 0 0 5px var(--accent-cyan); } 100% { opacity: 0.7; } }
 @keyframes slideIn { from { opacity: 0; transform: translateY(-15px); } to { opacity: 1; transform: translateY(0); } }
 
-/* --- GARDER LE CSS EXISTANT ET AJOUTER / REMPLACER CECI --- */
 
-/* 1. MEDIA QUERIES (RESPONSIVE) */
+/* MEDIA QUERIES */
 @media (max-width: 768px) {
-    
-    /* Layout */
-    #sidebar-left {
-        position: absolute;
-        left: -100%; top: 0; bottom: 0;
-        width: 280px;
-        z-index: 1000;
-        transition: left 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
-        box-shadow: 10px 0 30px rgba(0,0,0,0.8);
-    }
+    #sidebar-left { position: absolute; left: -100%; top: 0; bottom: 0; width: 280px; z-index: 1000; transition: left 0.3s cubic-bezier(0.4, 0.0, 0.2, 1); box-shadow: 10px 0 30px rgba(0,0,0,0.8); }
     #sidebar-left.mobile-active { left: 0; }
-
-    #sidebar-right {
-        width: 100%; /* Plein écran sur mobile */
-        z-index: 1100;
-    }
-
-    /* Top Bar Compacte */
+    #sidebar-right { width: 100%; z-index: 1100; }
     #top-bar { padding: 0 10px; }
     .logo-area { font-size: 1rem; }
-    .nav-btn { padding: 8px; } /* Boutons carrés */
-    
-    /* Classes utilitaires */
+    .nav-btn { padding: 8px; }
     .desktop-only { display: none !important; }
     .mobile-only { display: block !important; }
-    .icon-only-mobile span { display: none; } /* Cache le texte des boutons */
-
-    /* Bouton Burger */
-    #btnMobileMenu {
-        background: transparent; border: 1px solid var(--accent-cyan);
-        color: var(--accent-cyan); font-size: 1.2rem; padding: 4px 10px;
-        margin-right: 10px; cursor: pointer; border-radius: 4px;
-    }
-
-    /* Overlay sombre quand le menu est ouvert */
-    #sidebar-overlay {
-        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-        background: rgba(0,0,0,0.7); z-index: 900;
-        opacity: 0; pointer-events: none; transition: opacity 0.3s;
-        backdrop-filter: blur(2px);
-    }
+    .icon-only-mobile span { display: none; }
+    #btnMobileMenu { background: transparent; border: 1px solid var(--accent-cyan); color: var(--accent-cyan); font-size: 1.2rem; padding: 4px 10px; margin-right: 10px; cursor: pointer; border-radius: 4px; }
+    #sidebar-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 900; opacity: 0; pointer-events: none; transition: opacity 0.3s; backdrop-filter: blur(2px); }
     #sidebar-overlay.active { opacity: 1; pointer-events: auto; }
-
-    /* Floating Panel (GPS) Centré */
-    .floating-panel {
-        left: 50% !important; top: 60px !important;
-        transform: translateX(-50%) !important;
-        width: 90% !important;
-    }
-
-    /* HUD Bottom Compact */
-    #hud-bottom {
-        bottom: 15px; padding: 5px 15px; width: 90%;
-        justify-content: space-between;
-    }
+    .floating-panel { left: 50% !important; top: 60px !important; transform: translateX(-50%) !important; width: 90% !important; }
+    #hud-bottom { bottom: 15px; padding: 5px 15px; width: 90%; justify-content: space-between; }
 }
 
-/* Classes desktop par défaut */
 .mobile-only { display: none; }
-#sidebar-overlay { display: none; } /* Pas d'overlay sur PC */
+#sidebar-overlay { display: none; }
+@media (min-width: 769px) { #sidebar-overlay { display: none !important; } }
 
-@media (min-width: 769px) {
-    #sidebar-overlay { display: none !important; }
-}
+/* COLOR PICKER */
+.color-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 10px; }
+.color-swatch-btn { width: 35px; height: 35px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.2); cursor: pointer; transition: transform 0.2s, border-color 0.2s; }
+.color-swatch-btn:hover { transform: scale(1.1); border-color: #fff; }
+.color-swatch-btn.active { border-color: #fff; box-shadow: 0 0 10px var(--color); }
 
-/* --- AMÉLIORATIONS GÉNÉRALES --- */
-
-/* Bouton Burger Style */
-#btnMobileMenu:active { background: var(--accent-cyan); color: #000; }
-
-/* Ajustement Scrollbar mobile */
-::-webkit-scrollbar { width: 3px; }
-
-/* Modal Responsive */
-#modal-box {
-    width: 90%; max-width: 400px;
-}
-
-/* --- UI LIENS TACTIQUES --- */
-.link-menu {
-    position: fixed; z-index: 20000;
-    background: rgba(10, 15, 25, 0.98);
-    border: 1px solid var(--accent-cyan);
-    box-shadow: 0 0 20px rgba(115, 251, 247, 0.2);
-    border-radius: 6px; padding: 10px;
-    display: flex; flex-direction: column; gap: 5px;
-    backdrop-filter: blur(12px);
-    width: 160px;
-}
-.link-menu-title {
-    font-size: 0.7rem; color: #888; text-transform: uppercase;
-    text-align: center; margin-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,0.1);
-    padding-bottom: 4px;
-}
-.link-menu button {
-    background: transparent; border: 1px solid transparent; color: #fff;
-    text-align: left; padding: 6px 10px; font-size: 0.8rem; cursor: pointer;
-    border-radius: 4px;
-}
-.link-menu button:hover {
-    background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2);
-}
+/* UI LIENS TACTIQUES */
+.link-menu { position: fixed; z-index: 20000; background: rgba(10, 15, 25, 0.98); border: 1px solid var(--accent-cyan); box-shadow: 0 0 20px rgba(115, 251, 247, 0.2); border-radius: 6px; padding: 10px; display: flex; flex-direction: column; gap: 5px; backdrop-filter: blur(12px); width: 160px; }
+.link-menu-title { font-size: 0.7rem; color: #888; text-transform: uppercase; text-align: center; margin-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 4px; }
+.link-menu button { background: transparent; border: 1px solid transparent; color: #fff; text-align: left; padding: 6px 10px; font-size: 0.8rem; cursor: pointer; border-radius: 4px; }
+.link-menu button:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
 .separator-h { height: 1px; background: rgba(255,255,255,0.1); margin: 2px 0; }
-
-.link-tooltip {
-    position: fixed; z-index: 20001; pointer-events: none;
-    background: rgba(0,0,0,0.85); border: 1px solid var(--accent-cyan);
-    color: var(--accent-cyan); padding: 5px 10px; border-radius: 4px;
-    font-size: 0.8rem; box-shadow: 0 0 10px rgba(0,0,0,0.5);
-    display: none;
-}
-
-/* Ajouter à la fin du fichier */
-.marker.is-dragging {
-    z-index: 1000 !important;
-    cursor: grabbing !important;
-    transform: scale(1.2); /* Grossit légèrement */
-    filter: drop-shadow(0 0 10px var(--marker-color)); /* Lueur intense */
-    opacity: 1 !important;
-}
-
-.marker.is-dragging .marker-label {
-    display: block !important; /* Force l'affichage du nom pendant le drag */
-    background: rgba(0,0,0,0.9);
-}
-
-/* Ajouter à la fin du fichier */
-
-/* --- COLOR PICKER MODAL --- */
-.color-grid {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 10px;
-    margin-top: 10px;
-}
-
-.color-swatch-btn {
-    width: 35px;
-    height: 35px;
-    border-radius: 50%;
-    border: 2px solid rgba(255,255,255,0.2);
-    cursor: pointer;
-    transition: transform 0.2s, border-color 0.2s;
-}
-
-.color-swatch-btn:hover {
-    transform: scale(1.1);
-    border-color: #fff;
-}
-
-.color-swatch-btn.active {
-    border-color: #fff;
-    box-shadow: 0 0 10px var(--color);
-}
-
-/* --- GESTION DYNAMIQUE DU ZOOM (ICONES vs TEXTE) --- */
-
-/* Conteneur principal du marqueur */
-.marker {
-    position: absolute;
-    /* On centre le point exactement sur ses coordonnées */
-    transform: translate(-50%, -50%);
-    cursor: pointer;
-    z-index: 100;
-    
-    /* Variable de sécurité pour éviter division par zéro */
-    --safe-scale: max(var(--map-scale, 1), 0.1); 
-}
-
-/* 1. L'ICONE : Ne grossit pas, voire rétrécit un peu au dézoom pour la propreté */
-.marker-icon-box {
-    width: 32px; 
-    height: 32px;
-    display: flex; justify-content: center; align-items: center;
-    border-radius: 50%;
-    background: rgba(5, 7, 10, 0.6);
-    border: 1px solid var(--marker-color);
-    box-shadow: 0 0 5px var(--marker-color);
-    transition: transform 0.1s ease-out;
-
-    /* LOGIQUE : 
-       Si zoom normal (1) -> echelle 1. 
-       Si dézoom (0.1) -> echelle 0.6 (plus petit pour pas encombrer). 
-    */
-    transform: scale(clamp(0.6, 0.5 + 0.5 * var(--safe-scale), 1));
-}
-
-.marker-icon-box svg {
-    width: 20px; height: 20px;
-    fill: var(--marker-color);
-    filter: drop-shadow(0 0 2px var(--marker-color));
-}
-
-/* 2. LE NOM : Grossit inversement au zoom pour rester lisible */
-.marker-label {
-    position: absolute;
-    top: -12px; left: 50%;
-    transform: translateX(-50%);
-    color: #fff;
-    text-shadow: 0 0 2px #000, 0 0 4px #000;
-    white-space: nowrap;
-    pointer-events: none;
-    font-family: 'Rajdhani', sans-serif;
-    font-weight: 600;
-    
-    /* Fond semi-transparent pour lisibilité */
-    background: rgba(0, 0, 0, 0.4);
-    padding: 0 4px;
-    border-radius: 3px;
-
-    /* LOGIQUE :
-       Base 10px.
-       Plus le scale est petit (dézoom), plus on ajoute de pixels.
-       Clamp borne entre 11px (min) et 24px (max).
-    */
-    font-size: clamp(11px, 9px + (3px / var(--safe-scale)), 24px);
-    
-    /* Transition douce */
-    transition: font-size 0.1s ease-out;
-}
-
-/* État sélectionné ou survolé */
-.marker:hover .marker-icon-box, 
-.marker.selected .marker-icon-box {
-    background: var(--marker-color);
-    box-shadow: 0 0 15px var(--marker-color);
-    z-index: 200;
-    transform: scale(1.2); /* Grossit au survol indépendamment du zoom */
-}
-.marker:hover .marker-icon-box svg, 
-.marker.selected .marker-icon-box svg {
-    fill: #000; /* Contraste noir sur couleur vive */
-}
-
-/* Dragging (Feedback visuel) */
-.marker.is-dragging {
-    z-index: 1000 !important;
-    cursor: grabbing !important;
-}
-.marker.is-dragging .marker-icon-box {
-    transform: scale(1.3);
-    box-shadow: 0 0 20px var(--marker-color);
-}
-
-/* Ajouter à la fin de map/style.css */
-
-/* --- COLOR PICKER MODAL --- */
-.color-grid {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 10px;
-    margin-top: 10px;
-}
-
-.color-swatch-btn {
-    width: 35px;
-    height: 35px;
-    border-radius: 50%;
-    border: 2px solid rgba(255,255,255,0.2);
-    cursor: pointer;
-    transition: transform 0.2s, border-color 0.2s;
-}
-
-.color-swatch-btn:hover {
-    transform: scale(1.1);
-    border-color: #fff;
-}
-
-.color-swatch-btn.active {
-    border-color: #fff;
-    box-shadow: 0 0 10px var(--color);
-}
+.link-tooltip { position: fixed; z-index: 20001; pointer-events: none; background: rgba(0,0,0,0.85); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); padding: 5px 10px; border-radius: 4px; font-size: 0.8rem; box-shadow: 0 0 10px rgba(0,0,0,0.5); display: none; }
