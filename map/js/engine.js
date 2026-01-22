@@ -1,4 +1,4 @@
-import { state, saveLocalState } from './state.js'; // AJOUT import
+import { state, saveLocalState } from './state.js';
 import { renderAll, getMapPercentCoords } from './render.js';
 import { handlePointClick } from './ui.js';
 
@@ -15,6 +15,9 @@ export function updateTransform() {
         markersLayer.style.transform = `translate(${state.view.x}px, ${state.view.y}px)`;
         markersLayer.style.width = `${state.mapWidth * state.view.scale}px`;
         markersLayer.style.height = `${state.mapHeight * state.view.scale}px`;
+        
+        // AJOUT : On passe l'échelle au CSS pour gérer la taille dynamique (Textes vs Icônes)
+        markersLayer.style.setProperty('--map-scale', state.view.scale);
     }
 }
 
@@ -134,7 +137,6 @@ export function initEngine() {
             if (!state.draggingMarker.hasMoved) {
                 handlePointClick(state.draggingMarker.groupIndex, state.draggingMarker.pointIndex);
             } else {
-                // DRAG TERMINÉ AVEC SUCCÈS -> SAUVEGARDE
                 saveLocalState();
             }
             state.draggingMarker = null;

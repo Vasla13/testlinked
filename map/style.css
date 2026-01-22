@@ -460,3 +460,92 @@ label { display: block; color: var(--text-dim); font-size: 0.8rem; margin-bottom
     border-color: #fff;
     box-shadow: 0 0 10px var(--color);
 }
+
+/* --- GESTION DYNAMIQUE DU ZOOM (ICONES vs TEXTE) --- */
+
+/* Conteneur principal du marqueur */
+.marker {
+    position: absolute;
+    /* On centre le point exactement sur ses coordonnées */
+    transform: translate(-50%, -50%);
+    cursor: pointer;
+    z-index: 100;
+    
+    /* Variable de sécurité pour éviter division par zéro */
+    --safe-scale: max(var(--map-scale, 1), 0.1); 
+}
+
+/* 1. L'ICONE : Ne grossit pas, voire rétrécit un peu au dézoom pour la propreté */
+.marker-icon-box {
+    width: 32px; 
+    height: 32px;
+    display: flex; justify-content: center; align-items: center;
+    border-radius: 50%;
+    background: rgba(5, 7, 10, 0.6);
+    border: 1px solid var(--marker-color);
+    box-shadow: 0 0 5px var(--marker-color);
+    transition: transform 0.1s ease-out;
+
+    /* LOGIQUE : 
+       Si zoom normal (1) -> echelle 1. 
+       Si dézoom (0.1) -> echelle 0.6 (plus petit pour pas encombrer). 
+    */
+    transform: scale(clamp(0.6, 0.5 + 0.5 * var(--safe-scale), 1));
+}
+
+.marker-icon-box svg {
+    width: 20px; height: 20px;
+    fill: var(--marker-color);
+    filter: drop-shadow(0 0 2px var(--marker-color));
+}
+
+/* 2. LE NOM : Grossit inversement au zoom pour rester lisible */
+.marker-label {
+    position: absolute;
+    top: -12px; left: 50%;
+    transform: translateX(-50%);
+    color: #fff;
+    text-shadow: 0 0 2px #000, 0 0 4px #000;
+    white-space: nowrap;
+    pointer-events: none;
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 600;
+    
+    /* Fond semi-transparent pour lisibilité */
+    background: rgba(0, 0, 0, 0.4);
+    padding: 0 4px;
+    border-radius: 3px;
+
+    /* LOGIQUE :
+       Base 10px.
+       Plus le scale est petit (dézoom), plus on ajoute de pixels.
+       Clamp borne entre 11px (min) et 24px (max).
+    */
+    font-size: clamp(11px, 9px + (3px / var(--safe-scale)), 24px);
+    
+    /* Transition douce */
+    transition: font-size 0.1s ease-out;
+}
+
+/* État sélectionné ou survolé */
+.marker:hover .marker-icon-box, 
+.marker.selected .marker-icon-box {
+    background: var(--marker-color);
+    box-shadow: 0 0 15px var(--marker-color);
+    z-index: 200;
+    transform: scale(1.2); /* Grossit au survol indépendamment du zoom */
+}
+.marker:hover .marker-icon-box svg, 
+.marker.selected .marker-icon-box svg {
+    fill: #000; /* Contraste noir sur couleur vive */
+}
+
+/* Dragging (Feedback visuel) */
+.marker.is-dragging {
+    z-index: 1000 !important;
+    cursor: grabbing !important;
+}
+.marker.is-dragging .marker-icon-box {
+    transform: scale(1.3);
+    box-shadow: 0 0 20px var(--marker-color);
+}
