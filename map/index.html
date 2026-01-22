@@ -8,7 +8,6 @@
     <link rel="stylesheet" href="style.css">
 
     <style>
-        /* Styles critiques inline */
         body { overflow: hidden; background: #05070a; }
         
         @media (min-width: 769px) {
@@ -49,7 +48,6 @@
         }
         .btn-switch:hover { background: var(--accent-cyan); color: #000; }
 
-        /* Loader */
         #app-loader {
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
             background: #05070a; z-index: 9999;
@@ -92,6 +90,7 @@
     <div id="context-menu" class="context-menu">
         <button id="ctx-new-point">📍 NOUVEAU POINT ICI</button>
         <button id="ctx-new-zone">⭕ NOUVELLE ZONE</button>
+        <button id="ctx-new-free-zone" style="color:#73fbf7">✏️ DESSIN LIBRE</button>
         <div class="separator-h"></div>
         <button id="ctx-cancel" style="color:var(--text-dim)">❌ ANNULER</button>
     </div>
@@ -172,7 +171,7 @@
                 <div id="coords-display" class="desktop-only">00.00 | 00.00</div>
                 <div class="separator desktop-only"></div>
                 
-                <button id="btnToggleLight" class="hud-btn" title="Mode Lumière">💡</button>
+                <button id="btnToggleLight" class="hud-btn" title="Mode Lumière / Hologramme">💡</button>
                 
                 <button id="btnResetView" class="hud-btn" title="Recentrer">🎯</button>
                 
@@ -230,15 +229,14 @@
           }, 600);
         });
 
-        // Script de gestion du bouton Lumière dans le HUD
+        // GESTION DU MODE LUMIÈRE
         const btnLight = document.getElementById('btnToggleLight');
         if(btnLight) {
             btnLight.addEventListener('click', () => {
                 document.body.classList.toggle('high-light-mode');
                 
-                // On ajoute/retire la classe "active" pour l'effet visuel du bouton (défini dans style.css)
                 if(document.body.classList.contains('high-light-mode')) {
-                    btnLight.classList.add('active');
+                    btnLight.classList.add('active'); // Allume le bouton
                 } else {
                     btnLight.classList.remove('active');
                 }

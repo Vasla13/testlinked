@@ -18,7 +18,11 @@ export const state = {
     tempZone: null,
     tempPoints: [],
     
-    draggingMarker: null, // { groupIndex, pointIndex, startX, startY, hasMoved, offsetX, offsetY }
+    // NOUVEAU : Drapeaux pour le dessin libre
+    isFreeMode: false,
+    isFreeDrawing: false,
+    
+    draggingMarker: null, 
 
     measuringMode: false,
     measureStep: 0,
@@ -107,7 +111,6 @@ export function exportToJSON() {
     a.click();
 }
 
-// --- NOUVEAU : LOCAL STORAGE (AUTO-SAVE) ---
 export function saveLocalState() {
     const data = {
         groups: state.groups,
@@ -116,7 +119,6 @@ export function saveLocalState() {
     };
     try {
         localStorage.setItem('tacticalMapData', JSON.stringify(data));
-        // console.log("💾 Auto-saved locally");
     } catch (e) {
         console.error("Local Save Error (Quota?):", e);
     }
