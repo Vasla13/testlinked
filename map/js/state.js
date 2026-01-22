@@ -18,15 +18,15 @@ export const state = {
     tempZone: null,
     tempPoints: [],
     
-    // NOUVEAU : Dessin Libre Avancé
-    isFreeMode: false,      // Mode activé via le menu
-    isFreeDrawing: false,   // En train de tracer (souris enfoncée)
-    drawingPending: false,  // Tracé fini, en attente de validation
+    // Dessin Libre Avancé
+    isFreeMode: false,
+    isFreeDrawing: false,
+    drawingPending: false,
     
     // Options de style par défaut
     drawOptions: {
-        width: 2,       // Épaisseur (1-10)
-        style: 'solid'  // solid, dashed, dotted
+        width: 2,
+        style: 'solid'
     },
     
     draggingMarker: null, 
@@ -67,7 +67,9 @@ export function addTacticalLink(idA, idB) {
     state.tacticalLinks.push({
         id: generateID(),
         from: idA, to: idB,
-        color: '#ffffff', type: 'Standard'
+        // CORRECTION : null par défaut pour hériter de la couleur des points
+        color: null, 
+        type: 'Standard'
     });
     return true;
 }
@@ -107,14 +109,14 @@ export function setGroups(newGroups) {
 
 export function exportToJSON() {
     const data = { 
-        meta: { date: new Date().toISOString(), version: "2.4" },
+        meta: { date: new Date().toISOString(), version: "2.5" },
         groups: state.groups,
         tacticalLinks: state.tacticalLinks
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'tactical_map_data_v2.4.json';
+    a.download = 'tactical_map_data_v2.5.json';
     a.click();
 }
 

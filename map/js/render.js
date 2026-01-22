@@ -51,19 +51,16 @@ function renderZones() {
                 el.setAttribute("points", pointsStr);
             }
 
-            // GESTION DU STYLE (Épaisseur et traits)
-            // On calcule une épaisseur relative (ex: 2px -> 0.1 unité map)
-            let strokeWidth = "0.08"; // Défaut
+            let strokeWidth = "0.08"; 
             if (zone.style && zone.style.width) {
                 strokeWidth = (zone.style.width * 0.05).toString();
             }
-            if (isSelected) strokeWidth = (parseFloat(strokeWidth) * 1.5).toString(); // Plus gros si sélectionné
+            if (isSelected) strokeWidth = (parseFloat(strokeWidth) * 1.5).toString();
 
             el.setAttribute("fill", group.color);
             el.setAttribute("stroke", isSelected ? "#fff" : group.color);
             el.setAttribute("stroke-width", strokeWidth);
             
-            // GESTION DES TIRETS
             if (zone.style) {
                 if (zone.style.style === 'dashed') el.setAttribute("stroke-dasharray", "0.5, 0.5");
                 if (zone.style.style === 'dotted') el.setAttribute("stroke-dasharray", "0.1, 0.3");
@@ -88,9 +85,8 @@ function renderZones() {
         });
     });
 
-    // Rendu du tracé en cours (Brouillon)
+    // Dessin en cours
     if (state.drawingMode) {
-        // Style du brouillon basé sur les options actuelles
         let draftWidth = (state.drawOptions.width * 0.05).toString();
         let draftDash = "";
         if (state.drawOptions.style === 'dashed') draftDash = "0.5, 0.5";
@@ -107,11 +103,10 @@ function renderZones() {
             circle.setAttribute("stroke-dasharray", draftDash);
             zonesLayer.appendChild(circle);
         } else if (state.tempPoints.length > 0) {
-            // On utilise polyline pour que ça ne se ferme pas tout seul visuellement pendant le tracé
             const poly = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
             poly.setAttribute("points", state.tempPoints.map(p => `${p.x},${p.y}`).join(" "));
             poly.setAttribute("fill", "none");
-            poly.setAttribute("stroke", state.drawingPending ? "#00ff00" : "#ff00ff"); // Vert si en attente, Rose si en cours
+            poly.setAttribute("stroke", state.drawingPending ? "#00ff00" : "#ff00ff");
             poly.setAttribute("stroke-width", draftWidth);
             if(draftDash) poly.setAttribute("stroke-dasharray", draftDash);
             zonesLayer.appendChild(poly);
@@ -126,22 +121,80 @@ function renderTacticalLinks() {
 
     if(!state.tacticalLinks) return;
 
-    const findP = (id) => {
+    // Définition des dégradés (Defs container)
+    let defs = linksLayer.querySelector('defs');
+    if (!defs) {
+        defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+        linksLayer.appendChild(defs);
+    } else {
+        defs.innerHTML = ''; // Reset des anciens dégradés
+        // Rajouter le marqueur flèche si besoin (souvent dans index.html mais on sait jamais)
+        const marker = document.createElementNS("http://www.w3.org/2000/svg", "marker");
+        marker.setAttribute("id", "arrowhead");
+        marker.setAttribute("markerWidth", "10"); marker.setAttribute("markerHeight", "7");
+        marker.setAttribute("refX", "9"); marker.setAttribute("refY", "3.5");
+        marker.setAttribute("orient", "auto");
+        const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+        polygon.setAttribute("points", "0 0, 10 3.5, 0 7");
+        polygon.setAttribute("fill", "#ffffff");
+        marker.appendChild(polygon);
+        defs.appendChild(marker);
+    }
+
+    // Helper pour trouver Point + Couleur du groupe
+    const findPointInfo = (id) => {
         for (const g of state.groups) {
             const p = g.points.find(x => x.id === id);
-            if (p) return p;
+            if (p) return { point: p, color: g.color || '#ffffff' };
         }
         return null;
     };
 
     state.tacticalLinks.forEach(link => {
-        const pFrom = findP(link.from);
-        const pTo = findP(link.to);
-        if(pFrom && pTo) {
+        const fromInfo = findPointInfo(link.from);
+        const toInfo = findPointInfo(link.to);
+        
+        if(fromInfo && toInfo) {
+            const pFrom = fromInfo.point;
+            const pTo = toInfo.point;
+            const cFrom = fromInfo.color;
+            const cTo = toInfo.color;
+
             const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
             line.setAttribute("x1", pFrom.x); line.setAttribute("y1", pFrom.y);
             line.setAttribute("x2", pTo.x); line.setAttribute("y2", pTo.y);
-            line.setAttribute("stroke", link.color || "#ffffff");
+            
+            // GESTION COULEUR : Dégradé ou Solide
+            // Si l'utilisateur a défini une couleur manuelle (différente de blanc), on l'utilise.
+            // Sinon, on utilise la couleur des points.
+            let finalColor = link.color;
+            if (!finalColor || finalColor === '#ffffff') {
+                if (cFrom === cTo) {
+                    finalColor = cFrom; // Même groupe = couleur unie
+                } else {
+                    // Groupes différents = Dégradé
+                    const gradId = `grad_${link.id}`;
+                    const grad = document.createElementNS("http://www.w3.org/2000/svg", "linearGradient");
+                    grad.setAttribute("id", gradId);
+                    grad.setAttribute("gradientUnits", "userSpaceOnUse");
+                    grad.setAttribute("x1", pFrom.x); grad.setAttribute("y1", pFrom.y);
+                    grad.setAttribute("x2", pTo.x); grad.setAttribute("y2", pTo.y);
+                    
+                    const stop1 = document.createElementNS("http://www.w3.org/2000/svg", "stop");
+                    stop1.setAttribute("offset", "0%"); stop1.setAttribute("stop-color", cFrom);
+                    
+                    const stop2 = document.createElementNS("http://www.w3.org/2000/svg", "stop");
+                    stop2.setAttribute("offset", "100%"); stop2.setAttribute("stop-color", cTo);
+                    
+                    grad.appendChild(stop1);
+                    grad.appendChild(stop2);
+                    defs.appendChild(grad);
+                    
+                    finalColor = `url(#${gradId})`;
+                }
+            }
+
+            line.setAttribute("stroke", finalColor);
             line.setAttribute("stroke-width", "0.15");
             line.setAttribute("class", "tactical-link-line");
             line.style.pointerEvents = 'visibleStroke'; 
