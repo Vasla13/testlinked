@@ -164,7 +164,6 @@
     #center {
       position: relative;
       overflow: hidden;
-      /* Le dégradé subtil s'ajoute au background du body */
       background: transparent; 
     }
     #graph { width: 100%; height: 100%; cursor: default; }
@@ -290,6 +289,9 @@
         <h2>Données</h2>
         <div style="display:flex; gap:5px;">
           <button id="btnExport" type="button" class="grow">Sauvegarder</button>
+          <button id="btnCloudSave" type="button" class="grow" style="border-color:var(--accent-cyan); color:var(--accent-cyan);">☁️ Cloud</button>
+        </div>
+        <div style="display:flex; gap:5px;">
           <button id="btnClearAll" type="button" class="danger grow">Reset</button>
         </div>
         <div style="display:flex; gap:5px;">

@@ -103,6 +103,11 @@ function setupTopButtons() {
     document.getElementById('createCompany').onclick = () => createNode(TYPES.COMPANY, 'Nouvelle entreprise');
     
     document.getElementById('btnExport').onclick = exportGraph;
+    
+    // NOUVEAU : Sauvegarde Cloud
+    const btnCloud = document.getElementById('btnCloudSave');
+    if(btnCloud) btnCloud.onclick = saveToCloud;
+    
     document.getElementById('fileImport').onchange = importGraph;
     document.getElementById('fileMerge').onchange = mergeGraph;
     document.getElementById('btnClearAll').onclick = () => { 
@@ -127,16 +132,6 @@ function setupHudButtons() {
 
     // Séparateur
     hud.insertAdjacentHTML('beforeend', '<div style="width:1px;height:24px;background:rgba(255,255,255,0.2);margin:0 10px;"></div>');
-
-    // 2. Checkbox Globe (Maintenant dans Settings, on peut le retirer d'ici ou le laisser en raccourci)
-    // Pour rester cohérent avec le panel settings, on peut laisser un raccourci ici
-    /*
-    const lblGlobe = document.createElement('label');
-    lblGlobe.className = 'hud-toggle';
-    lblGlobe.innerHTML = `<input type="checkbox" id="chkGlobe" ${state.globeMode ? 'checked' : ''}/><div class="toggle-track"><div class="toggle-thumb"></div></div> Globe`;
-    lblGlobe.querySelector('input').onchange = (e) => { state.globeMode = e.target.checked; restartSim(); };
-    hud.appendChild(lblGlobe);
-    */
 
     // 3. Bouton Mode Labels (Cycle)
     const btnLabels = document.createElement('button');
@@ -383,4 +378,60 @@ export function updatePathfindingPanel() {
             showCustomAlert("Aucune connexion trouvée (hors ennemis).");
         }
     };
+}
+
+// --- FONCTION CLOUD SAVE AJOUTÉE ---
+async function saveToCloud() {
+    const btn = document.getElementById('btnCloudSave');
+    const originalText = btn.textContent;
+
+    const data = {
+        nodes: state.nodes.map(n => ({
+            id: n.id, name: n.name, type: n.type, color: n.color, num: n.num, notes: n.notes,
+            x: n.x, y: n.y, fixed: n.fixed 
+        })),
+        links: state.links.map(l => ({
+            source: (typeof l.source === 'object') ? l.source.id : l.source,
+            target: (typeof l.target === 'object') ? l.target.id : l.target,
+            kind: l.kind
+        })),
+        physicsSettings: state.physicsSettings,
+        meta: { date: new Date().toISOString(), version: "1.0" }
+    };
+
+    try {
+        btn.textContent = "⏳...";
+        btn.disabled = true;
+
+        const response = await fetch('/.netlify/functions/db-add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                page: 'point',    
+                action: 'export', 
+                data: data     
+            })
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.ok) {
+            btn.textContent = "✅";
+            setTimeout(() => { 
+                btn.textContent = originalText; 
+                btn.disabled = false; 
+            }, 2000);
+        } else {
+            throw new Error(result.error || "Erreur inconnue");
+        }
+
+    } catch (error) {
+        console.error("Erreur Cloud Save:", error);
+        btn.textContent = "❌";
+        showCustomAlert("Erreur Cloud: " + error.message);
+        setTimeout(() => { 
+            btn.textContent = originalText; 
+            btn.disabled = false; 
+        }, 3000);
+    }
 }

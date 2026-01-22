@@ -3,31 +3,64 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Database — JSON</title>
-  <link rel="stylesheet" href="../point/cyberpunk-theme.css"/>
+  <title>BNI LINKED // DATABASE</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
   <link rel="stylesheet" href="style.css"/>
 </head>
 <body>
-  <div class="container">
-    <header>
-      <h1>Database (privé)</h1>
-      <small>Historique des imports/exports JSON (Netlify Blobs)</small>
+
+  <div class="bg-grid"></div>
+
+  <div class="app-container">
+    
+    <header class="top-bar">
+      <div class="logo-area">
+        <img src="../point/logo-bni-linked.png" alt="BNI Linked" class="app-logo">
+        <div class="titles">
+          <h1 class="main-title">SYSTEM DATABASE</h1>
+          <span class="sub-title">MANAGEMENT DES ARCHIVES JSON (NETLIFY BLOBS)</span>
+        </div>
+      </div>
+      
+      <nav class="main-nav">
+        <a href="../point/" class="nav-btn">🕸️ RÉTICULE</a>
+        <a href="../map/" class="nav-btn">🗺️ CARTE TACTIQUE</a>
+      </nav>
     </header>
 
-    <div class="tabs">
-      <button class="tab-btn active" data-tab="point">Point</button>
-      <button class="tab-btn" data-tab="map">Map</button>
-    </div>
+    <main class="content-panel">
+      
+      <div class="tabs-container">
+        <button class="tab-btn active" data-tab="point">📂 BACKUPS RÉSEAU (POINT)</button>
+        <button class="tab-btn" data-tab="map">📂 BACKUPS TACTIQUES (MAP)</button>
+      </div>
 
-    <div id="panel-point" class="panel active">
-      <div class="status" id="status-point">Chargement…</div>
-      <div class="cards" id="cards-point"></div>
-    </div>
+      <div class="status-bar">
+        <span class="status-indicator"></span>
+        <span id="global-status">Système prêt. En attente de sélection...</span>
+      </div>
 
-    <div id="panel-map" class="panel">
-      <div class="status" id="status-map">Chargement…</div>
-      <div class="cards" id="cards-map"></div>
-    </div>
+      <div id="panel-point" class="panel active">
+        <div class="panel-header-row">
+          <h3>ARCHIVES RÉSEAU</h3>
+          <div class="status-text" id="status-point">Chargement...</div>
+        </div>
+        <div class="cards-grid" id="cards-point"></div>
+      </div>
+
+      <div id="panel-map" class="panel">
+        <div class="panel-header-row">
+          <h3>ARCHIVES TACTIQUES</h3>
+          <div class="status-text" id="status-map">Chargement...</div>
+        </div>
+        <div class="cards-grid" id="cards-map"></div>
+      </div>
+
+    </main>
   </div>
 
 <script>
@@ -36,6 +69,7 @@
     point: document.getElementById('panel-point'),
     map: document.getElementById('panel-map')
   };
+  const globalStatus = document.getElementById('global-status');
 
   tabs.forEach(btn => {
     btn.addEventListener('click', () => {
@@ -44,6 +78,7 @@
       const tab = btn.dataset.tab;
       Object.values(panels).forEach(p => p.classList.remove('active'));
       panels[tab].classList.add('active');
+      globalStatus.textContent = `Affichage des archives : ${tab.toUpperCase()}`;
     });
   });
 
@@ -59,15 +94,15 @@
 
   async function apiList(page) {
     const res = await fetch(`/.netlify/functions/db-list?page=${encodeURIComponent(page)}`);
-    if (!res.ok) throw new Error('List failed');
+    if (!res.ok) throw new Error('Erreur réseau');
     const out = await res.json();
-    if (!out.ok) throw new Error(out.error || 'List failed');
+    if (!out.ok) throw new Error(out.error || 'Erreur API');
     return out.entries || [];
   }
 
   async function apiGet(key) {
     const res = await fetch(`/.netlify/functions/db-get?key=${encodeURIComponent(key)}`);
-    if (!res.ok) throw new Error('Get failed');
+    if (!res.ok) throw new Error('Erreur récupération');
     return await res.json();
   }
 
@@ -78,7 +113,7 @@
       body: JSON.stringify({ key })
     });
     const out = await res.json().catch(()=>({ok:false}));
-    if (!res.ok || !out.ok) throw new Error(out.error || 'Delete failed');
+    if (!res.ok || !out.ok) throw new Error(out.error || 'Erreur suppression');
   }
 
   function render(page, entries) {
@@ -87,49 +122,39 @@
     cardsEl.innerHTML = '';
 
     if (!entries.length) {
-      statusEl.textContent = 'Aucune entrée pour le moment.';
-      const empty = document.createElement('div');
-      empty.className = 'empty';
-      empty.textContent = 'Rien à afficher.';
-      cardsEl.appendChild(empty);
+      statusEl.textContent = 'Aucune donnée.';
+      cardsEl.innerHTML = '<div class="empty-state">AUCUNE ARCHIVE TROUVÉE DANS LE CLOUD</div>';
       return;
     }
 
-    statusEl.textContent = `${entries.length} entrées (plus récent en premier)`;
+    statusEl.textContent = `${entries.length} FICHIERS TROUVÉS`;
 
     for (const entry of entries) {
       const card = document.createElement('div');
-      card.className = 'card';
+      card.className = 'data-card';
 
-      const meta = document.createElement('div');
-      meta.className = 'meta';
+      const isImport = entry.action === 'import';
+      const badgeClass = isImport ? 'badge-import' : 'badge-export';
+      const badgeIcon = isImport ? '📥' : '💾';
 
-      const left = document.createElement('div');
-      const badge = document.createElement('span');
-      badge.className = 'badge';
-      badge.textContent = entry.action === 'import' ? 'Import' : 'Export';
-      left.appendChild(badge);
+      card.innerHTML = `
+        <div class="card-top">
+          <span class="badge ${badgeClass}">${badgeIcon} ${entry.action.toUpperCase()}</span>
+          <span class="card-date">${fmtDate(entry.createdAt)}</span>
+        </div>
+        <div class="card-key" title="${entry.key}">${entry.key}</div>
+        <div class="card-actions">
+          <button class="btn-cyber btn-dl">TÉLÉCHARGER</button>
+          <button class="btn-cyber btn-del">SUPPRIMER</button>
+        </div>
+      `;
 
-      const right = document.createElement('div');
-      right.textContent = fmtDate(entry.createdAt);
+      const btnDl = card.querySelector('.btn-dl');
+      const btnDel = card.querySelector('.btn-del');
 
-      meta.appendChild(left);
-      meta.appendChild(right);
-
-      const keyLine = document.createElement('div');
-      keyLine.style.opacity = '0.75';
-      keyLine.style.fontSize = '12px';
-      keyLine.style.wordBreak = 'break-all';
-      keyLine.textContent = entry.key;
-
-      const actions = document.createElement('div');
-      actions.className = 'actions';
-
-      const btnDl = document.createElement('button');
-      btnDl.className = 'action';
-      btnDl.textContent = 'Télécharger';
       btnDl.addEventListener('click', async () => {
         btnDl.disabled = true;
+        btnDl.textContent = '...';
         try {
           const data = await apiGet(entry.key);
           const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -140,47 +165,42 @@
           a.click();
           URL.revokeObjectURL(a.href);
           a.remove();
+          btnDl.textContent = 'OK';
         } catch (e) {
           alert('Erreur téléchargement.');
+          btnDl.textContent = 'ERR';
         } finally {
-          btnDl.disabled = false;
+          setTimeout(() => { btnDl.disabled = false; btnDl.textContent = 'TÉLÉCHARGER'; }, 2000);
         }
       });
 
-      const btnDel = document.createElement('button');
-      btnDel.className = 'action danger';
-      btnDel.textContent = 'Supprimer';
       btnDel.addEventListener('click', async () => {
-        if (!confirm('Supprimer cette entrée ?')) return;
+        if (!confirm('CONFIRMER LA SUPPRESSION DÉFINITIVE DU CLOUD ?')) return;
         btnDel.disabled = true;
+        btnDel.textContent = '...';
         try {
           await apiDelete(entry.key);
           await refreshPage(page);
         } catch (e) {
           alert('Erreur suppression.');
+          btnDel.textContent = 'ERR';
           btnDel.disabled = false;
         }
       });
 
-      actions.appendChild(btnDl);
-      actions.appendChild(btnDel);
-
-      card.appendChild(meta);
-      card.appendChild(keyLine);
-      card.appendChild(actions);
       cardsEl.appendChild(card);
     }
   }
 
   async function refreshPage(page) {
     const statusEl = document.getElementById(`status-${page}`);
-    statusEl.textContent = 'Chargement…';
+    statusEl.textContent = 'CONNEXION NEURAL LINK...';
     try {
       const entries = await apiList(page);
       render(page, entries);
     } catch (e) {
-      statusEl.textContent = "Impossible de charger (Netlify Functions/Blobs non disponibles ?).";
-      document.getElementById(`cards-${page}`).innerHTML = '';
+      statusEl.textContent = "ERREUR DE CONNEXION (NETLIFY BLOBS)";
+      document.getElementById(`cards-${page}`).innerHTML = '<div class="error-state">OFFLINE / ERROR</div>';
     }
   }
 
