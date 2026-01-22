@@ -12,6 +12,7 @@ function jsonResponse(statusCode, obj) {
 
 function parseKey(key) {
   // key format: "<page>/<ts>_<action>_<uuid>"
+  // Exemple: point/17300000_export-MissionAlpha_uuid...
   const [page, rest] = key.split("/", 2);
   const parts = (rest || "").split("_");
   const ts = Number(parts[0] || 0);
@@ -19,7 +20,7 @@ function parseKey(key) {
   return {
     key,
     page,
-    action,
+    action, // Contient maintenant "export-NomDeLaMission"
     ts,
     createdAt: Number.isFinite(ts) && ts > 0 ? new Date(ts).toISOString() : null,
   };
@@ -39,7 +40,8 @@ exports.handler = async (event) => {
 
     const entries = (blobs || [])
       .map((b) => parseKey(b.key))
-      .filter((e) => e.page === page && (e.action === "import" || e.action === "export"));
+      // CORRECTION ICI : On utilise startsWith pour accepter les noms personnalisés
+      .filter((e) => e.page === page && (e.action.startsWith("import") || e.action.startsWith("export")));
 
     entries.sort((a, b) => (b.ts || 0) - (a.ts || 0));
 

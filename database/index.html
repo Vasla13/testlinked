@@ -22,7 +22,7 @@
         <img src="../point/logo-bni-linked.png" alt="BNI Linked" class="app-logo">
         <div class="titles">
           <h1 class="main-title">SYSTEM DATABASE</h1>
-          <span class="sub-title">MANAGEMENT DES ARCHIVES JSON (NETLIFY BLOBS)</span>
+          <span class="sub-title">ARCHIVES NETLIFY BLOBS</span>
         </div>
       </div>
       
@@ -64,6 +64,7 @@
   </div>
 
 <script>
+  // --- LOGIQUE JAVASCRIPT ---
   const tabs = document.querySelectorAll('.tab-btn');
   const panels = {
     point: document.getElementById('panel-point'),
@@ -133,15 +134,33 @@
       const card = document.createElement('div');
       card.className = 'data-card';
 
-      const isImport = entry.action === 'import';
-      const badgeClass = isImport ? 'badge-import' : 'badge-export';
-      const badgeIcon = isImport ? '📥' : '💾';
+      // Analyse du nom de l'action pour affichage propre
+      let actionType = 'UNK';
+      let customName = '';
+
+      if (entry.action.startsWith('import')) {
+          actionType = '📥 IMPORT';
+          customName = entry.action.substring(7); 
+      } else if (entry.action.startsWith('export')) {
+          actionType = '💾 EXPORT';
+          customName = entry.action.substring(7); 
+      } else {
+          actionType = entry.action.toUpperCase();
+      }
+      
+      // Nettoyage tiret initial éventuel
+      if (customName.startsWith('-')) customName = customName.substring(1);
+      if (!customName) customName = "Standard";
+
+      // Badge style
+      const badgeClass = entry.action.includes('import') ? 'badge-import' : 'badge-export';
 
       card.innerHTML = `
         <div class="card-top">
-          <span class="badge ${badgeClass}">${badgeIcon} ${entry.action.toUpperCase()}</span>
+          <span class="badge ${badgeClass}">${actionType}</span>
           <span class="card-date">${fmtDate(entry.createdAt)}</span>
         </div>
+        <div class="card-title">${customName.toUpperCase()}</div>
         <div class="card-key" title="${entry.key}">${entry.key}</div>
         <div class="card-actions">
           <button class="btn-cyber btn-dl">TÉLÉCHARGER</button>
@@ -204,6 +223,7 @@
     }
   }
 
+  // Init
   refreshPage('point');
   refreshPage('map');
 </script>
