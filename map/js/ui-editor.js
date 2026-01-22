@@ -1,8 +1,7 @@
 import { state } from './state.js';
 import { ICONS } from './constants.js';
 import { customConfirm, customAlert } from './ui-modals.js';
-// CORRECTION : On importe aussi gpsToPercentage pour la conversion inverse
-import { percentageToGps, gpsToPercentage } from './utils.js';
+import { percentageToGps, gpsToPercentage } from './utils.js'; // Imports conversion
 import { renderAll } from './render.js';
 import { renderGroupsList } from './ui-list.js';
 import { deselect } from './ui.js';
@@ -34,11 +33,9 @@ function renderZoneEditor() {
     const zone = group.zones[zoneIndex];
     const isCircle = (zone.type === 'CIRCLE');
 
-    // CONVERSION : On calcule les coordonnées GPS pour l'affichage
-    // (zone.cx/cy sont en %, on veut afficher des mètres)
+    // CONVERSION : Pourcentage -> GPS pour affichage
     const gpsCoords = percentageToGps(zone.cx || 0, zone.cy || 0);
 
-    // Options pour changer de groupe
     const groupOptions = state.groups.map((g, i) => 
         `<option value="${i}" ${i===groupIndex ? 'selected':''}>${g.name}</option>`
     ).join('');
@@ -80,7 +77,6 @@ function renderZoneEditor() {
         </div>
     `;
 
-    // Listeners Zone
     document.getElementById('ezName').oninput = (e) => { zone.name = e.target.value; renderAll(); };
     document.getElementById('ezGroup').onchange = (e) => {
         const newG = parseInt(e.target.value);
@@ -96,10 +92,9 @@ function renderZoneEditor() {
         const inpY = document.getElementById('ezY');
         
         const update = () => {
-            // Rayon reste en % pour l'instant (visuel)
             zone.r = parseFloat(inpR.value) || 0;
             
-            // CONVERSION INVERSE : L'utilisateur tape du GPS, on stocke du %
+            // CONVERSION INVERSE : GPS -> Pourcentage
             const valX = parseFloat(inpX.value) || 0;
             const valY = parseFloat(inpY.value) || 0;
             
@@ -123,13 +118,16 @@ function renderZoneEditor() {
     document.getElementById('btnClose').onclick = deselect;
 }
 
-// --- EDITEUR POINT (Inchangé mais inclus pour cohérence) ---
+// --- EDITEUR POINT ---
 function renderPointEditor() {
     sidebarRight.classList.add('active');
     const { groupIndex, pointIndex } = state.selectedPoint;
     const group = state.groups[groupIndex];
     if (!group || !group.points[pointIndex]) { deselect(); return; }
     const point = group.points[pointIndex];
+
+    // CORRECTION : Calcul des coordonnées GPS réelles pour l'affichage
+    const gpsCoords = percentageToGps(point.x, point.y);
 
     let iconOptions = '';
     for (const [key, val] of Object.entries(ICONS)) {
@@ -173,12 +171,12 @@ function renderPointEditor() {
         </div>
 
         <div class="editor-section" style="border-left-color: #fff;">
-            <div class="editor-section-title">POSITION</div>
+            <div class="editor-section-title">POSITION (GPS)</div>
             <div class="editor-row">
-                <div class="editor-col"><input type="number" id="edX" value="${point.x.toFixed(2)}" step="0.1" class="cyber-input"></div>
-                <div class="editor-col"><input type="number" id="edY" value="${point.y.toFixed(2)}" step="0.1" class="cyber-input"></div>
+                <div class="editor-col"><label>X</label><input type="number" id="edX" value="${gpsCoords.x.toFixed(2)}" step="1" class="cyber-input"></div>
+                <div class="editor-col"><label>Y</label><input type="number" id="edY" value="${gpsCoords.y.toFixed(2)}" step="1" class="cyber-input"></div>
             </div>
-            <button id="btnCopyCoords" class="btn-close-editor" style="margin-top:5px;">COPIER CORDS (GTA)</button>
+            <button id="btnCopyCoords" class="btn-close-editor" style="margin-top:5px;">COPIER CORDS</button>
         </div>
 
         <div class="editor-section" style="border-left-color: var(--accent-pink);">
@@ -196,9 +194,21 @@ function renderPointEditor() {
     document.getElementById('edIcon').onchange = (e) => { point.iconType = e.target.value; renderAll(); };
     document.getElementById('edType').oninput = (e) => { point.type = e.target.value; };
     document.getElementById('edNotes').oninput = (e) => { point.notes = e.target.value; };
-    const updateCoords = () => { point.x = parseFloat(document.getElementById('edX').value)||0; point.y = parseFloat(document.getElementById('edY').value)||0; renderAll(); };
+
+    // CORRECTION : Fonction de mise à jour qui fait la conversion inverse (GPS vers Pourcentage)
+    const updateCoords = () => { 
+        const valX = parseFloat(document.getElementById('edX').value) || 0; 
+        const valY = parseFloat(document.getElementById('edY').value) || 0; 
+        
+        const percent = gpsToPercentage(valX, valY);
+        point.x = percent.x;
+        point.y = percent.y;
+        
+        renderAll(); 
+    };
     document.getElementById('edX').oninput = updateCoords;
     document.getElementById('edY').oninput = updateCoords;
+
     document.getElementById('edGroup').onchange = (e) => {
         const newGIndex = parseInt(e.target.value);
         group.points.splice(pointIndex, 1);
@@ -211,7 +221,7 @@ function renderPointEditor() {
         customAlert("MODE LIAISON", "Cliquez sur un second point."); document.body.style.cursor = 'crosshair';
     };
     document.getElementById('btnCopyId').onclick = () => navigator.clipboard.writeText(point.id);
-    document.getElementById('btnCopyCoords').onclick = () => { const gps = percentageToGps(point.x, point.y); navigator.clipboard.writeText(`${gps.x.toFixed(2)}, ${gps.y.toFixed(2)}`); };
+    document.getElementById('btnCopyCoords').onclick = () => navigator.clipboard.writeText(`${gpsCoords.x.toFixed(2)}, ${gpsCoords.y.toFixed(2)}`);
     document.getElementById('btnDelete').onclick = async () => { if(await customConfirm("SUPPRESSION", "Supprimer ?")) { group.points.splice(pointIndex, 1); deselect(); renderGroupsList(); } };
     document.getElementById('btnClose').onclick = deselect;
 }
