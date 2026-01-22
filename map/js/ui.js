@@ -1,4 +1,4 @@
-import { state, addTacticalLink, saveLocalState } from './state.js'; // AJOUT saveLocalState
+import { state, addTacticalLink, saveLocalState } from './state.js';
 import { renderAll } from './render.js'; 
 import { renderEditor, closeEditor } from './ui-editor.js';
 import { customAlert } from './ui-modals.js';
@@ -42,16 +42,7 @@ export function initUI() {
         });
     }
 
-    const btnMeasure = document.getElementById('btnMeasure');
-    if(btnMeasure) {
-        btnMeasure.onclick = () => {
-            state.measuringMode = !state.measuringMode;
-            state.measureStep = 0;
-            state.measurePoints = [];
-            btnMeasure.classList.toggle('active', state.measuringMode);
-            renderAll();
-        };
-    }
+    // SUPPRIME : Gestion du bouton mesure (btnMeasure) car l'élément est retiré du HTML
 
     const chkLabels = document.getElementById('chkLabels');
     if(chkLabels) {
@@ -71,7 +62,7 @@ export function handlePointClick(gIndex, pIndex) {
             const success = addTacticalLink(state.linkStartId, point.id);
             if (success) {
                 customAlert("SUCCÈS", "Lien tactique créé.");
-                saveLocalState(); // <-- SAVE LIEN
+                saveLocalState();
             } else {
                 customAlert("INFO", "Ce lien existe déjà ou est invalide.");
             }

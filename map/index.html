@@ -8,7 +8,6 @@
     <link rel="stylesheet" href="style.css">
 
     <style>
-        /* --- STYLES HARMONISÉS AVEC LE RÉSEAU (POINT) --- */
         body { overflow: hidden; background: #05070a; }
         
         @media (min-width: 769px) {
@@ -72,11 +71,9 @@
         <div id="modal-box">
             <div id="modal-title">TITRE</div>
             <div id="modal-content">Message...</div>
-            
             <div id="modal-input-container" style="display:none;">
                 <input type="text" id="modal-input" class="gps-input full-width" autocomplete="off">
             </div>
-
             <div id="modal-color-picker" style="display:none;">
                 <div id="color-swatches" class="color-grid"></div>
                 <div class="separator-h" style="margin: 10px 0;"></div>
@@ -86,7 +83,6 @@
                     <span id="modal-color-hex" style="font-family:monospace; color:var(--text-main);">#FFFFFF</span>
                 </div>
             </div>
-
             <div id="modal-actions"></div>
         </div>
     </div>
@@ -94,7 +90,6 @@
     <div id="context-menu" class="context-menu">
         <button id="ctx-new-point">📍 NOUVEAU POINT ICI</button>
         <button id="ctx-new-zone">⭕ NOUVELLE ZONE</button>
-        <button id="ctx-measure">📏 MESURER DEPUIS ICI</button>
         <div class="separator-h"></div>
         <button id="ctx-cancel" style="color:var(--text-dim)">❌ ANNULER</button>
     </div>
@@ -172,7 +167,6 @@
             <div id="hud-bottom">
                 <div id="coords-display" class="desktop-only">00.00 | 00.00</div>
                 <div class="separator desktop-only"></div>
-                <button id="btnMeasure" class="hud-btn" title="Mesurer">📏</button>
                 <button id="btnResetView" class="hud-btn">🎯</button>
                 <label class="hud-toggle" style="margin-left:10px;">
                     <input type="checkbox" id="chkLabels" checked> <span class="desktop-only">NOMS</span>

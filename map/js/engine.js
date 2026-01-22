@@ -1,6 +1,7 @@
 import { state, saveLocalState } from './state.js';
 import { renderAll, getMapPercentCoords } from './render.js';
 import { handlePointClick } from './ui.js';
+import { percentageToGps } from './utils.js'; // AJOUT : Import de la conversion
 
 const viewport = document.getElementById('viewport');
 const mapWorld = document.getElementById('map-world');
@@ -16,7 +17,6 @@ export function updateTransform() {
         markersLayer.style.width = `${state.mapWidth * state.view.scale}px`;
         markersLayer.style.height = `${state.mapHeight * state.view.scale}px`;
         
-        // AJOUT : On passe l'échelle au CSS pour gérer la taille dynamique (Textes vs Icônes)
         markersLayer.style.setProperty('--map-scale', state.view.scale);
     }
 }
@@ -72,6 +72,8 @@ export function initEngine() {
         if (state.draggingMarker) return; 
         if (state.drawingMode) return; 
         
+        // Note: La logique de mesure peut rester ici sans effet si le bouton est supprimé, 
+        // ou on peut la laisser pour un usage futur.
         if (state.measuringMode && e.button === 0) {
             const coords = getMapPercentCoords(e.clientX, e.clientY);
             if (state.measureStep === 0 || state.measureStep === 2) {
@@ -162,5 +164,10 @@ export function centerMap() {
 function updateHUDCoords(e) {
     if(state.mapWidth === 0) return;
     const coords = getMapPercentCoords(e.clientX, e.clientY);
-    if(hudCoords) hudCoords.innerText = `COORD: ${coords.x.toFixed(2)} | ${coords.y.toFixed(2)}`;
+    
+    // CORRECTION : Conversion en coordonnées GPS réelles
+    const gps = percentageToGps(coords.x, coords.y);
+    
+    // Affichage formaté (X | Y) avec 2 décimales pour la précision
+    if(hudCoords) hudCoords.innerText = `GPS: ${gps.x.toFixed(2)} | ${gps.y.toFixed(2)}`;
 }

@@ -1,4 +1,4 @@
-import { state, updateTacticalLink, removeTacticalLink, findPointById, saveLocalState } from './state.js'; // AJOUT saveLocalState
+import { state, updateTacticalLink, removeTacticalLink, findPointById, saveLocalState } from './state.js';
 import { renderAll, getMapPercentCoords } from './render.js';
 import { customConfirm, customPrompt, customAlert } from './ui-modals.js';
 import { percentageToGps } from './utils.js';
@@ -54,10 +54,8 @@ export function initContextMenu() {
         };
     }
     
-    document.getElementById('ctx-measure').onclick = () => {
-        menu.classList.remove('visible');
-        startMeasurementAt(lastClickPercent);
-    };
+    // SUPPRIME : Gestion du clic sur ctx-measure
+
     document.getElementById('ctx-cancel').onclick = () => menu.classList.remove('visible');
 }
 
@@ -67,16 +65,6 @@ function openGpsPanelWithCoords(coords) {
     document.getElementById('gpsInputX').value = gpsCoords.x.toFixed(2);
     document.getElementById('gpsInputY').value = gpsCoords.y.toFixed(2);
     gpsPanel.style.display = 'block';
-}
-
-function startMeasurementAt(coords) {
-    state.measuringMode = true;
-    state.measureStep = 1; 
-    state.measurePoints = [coords, coords]; 
-    const btnMeasure = document.getElementById('btnMeasure');
-    if(btnMeasure) btnMeasure.classList.add('active');
-    document.body.style.cursor = 'crosshair';
-    renderAll();
 }
 
 export function handleLinkClick(e, link) {
