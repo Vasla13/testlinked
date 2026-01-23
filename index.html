@@ -1,26 +1,183 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" />
-  <title>BNI Linked</title>
-
-  <!-- Redirection automatique vers le module "point" -->
-  <meta http-equiv="refresh" content="0; url=point/" />
-
-  <!-- Petite sécurité SEO / compatibilité -->
-  <link rel="canonical" href="point/" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>BNI LINKED // OS v3.5</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Rajdhani:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <noscript>
-    <p>
-      JavaScript est désactivé.
-      <a href="point/">Clique ici pour accéder à BNI Linked — mode points</a>.
-    </p>
-  </noscript>
 
-  <p>
-    Redirection vers
-    <a href="point/">BNI Linked — mode points</a>…
-  </p>
+    <div id="boot-layer">
+        <div id="boot-text"></div>
+        <span class="boot-cursor"></span>
+    </div>
+
+    <div id="bio-layer">
+        <div class="scanner-box">
+            <div class="holo-circle"></div>
+            <svg class="fingerprint-svg" viewBox="0 0 100 100" id="fingerprint-svg">
+                <path d="M50,10 C35,10 25,25 25,40 C25,50 30,60 35,70" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+                <path d="M50,20 C42,20 35,30 35,40 C35,46 38,52 41,58" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+                <path d="M50,30 C46,30 43,33 43,40" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+                <path d="M50,10 C65,10 75,25 75,40 C75,50 70,60 65,70" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+                <path d="M50,20 C58,20 65,30 65,40 C65,46 62,52 59,58" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+                <path d="M50,30 C54,30 57,33 57,40" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+                <path d="M35,80 Q50,95 65,80" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+                <path d="M40,75 Q50,85 60,75" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+            </svg>
+            <div class="scan-laser"></div>
+        </div>
+        <div class="bio-text">IDENTIFICATION REQUISE</div>
+        <div class="bio-status" id="bio-status">EN ATTENTE DU SUJET...</div>
+    </div>
+
+    <div id="tablet-interface">
+        
+        <div class="top-hud">
+            <div class="hud-group">
+                <div>BNI-OS v3.5.0</div>
+            </div>
+            <div class="hud-group">
+                <div id="realtime-clock">--:--</div>
+                <div style="display:flex; align-items:center; gap:5px;">
+                    <span>100%</span>
+                    <div class="batt-icon"><div class="batt-fill"></div></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            
+            <header class="header-hero">
+                <img src="map/logo-bni-linked.png" alt="BNI Logo" class="main-logo">
+                <div class="welcome-msg">BIENVENUE SUR LA TABLETTE BNI-LINKED</div>
+            </header>
+
+            <nav class="modules-grid">
+                
+                <a href="./point/" class="module-card mod-net">
+                    <div class="corner top-left"></div>
+                    <div class="corner btm-right"></div>
+                    <div class="card-icon">
+                        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5-9h10v2H7z"/></svg>
+                    </div>
+                    <div class="card-title">RÉTICULE</div>
+                    <div class="card-desc">DATABASE & RÉSEAU</div>
+                </a>
+
+                <a href="./map/" class="module-card mod-map">
+                    <div class="corner top-left"></div>
+                    <div class="corner btm-right"></div>
+                    <div class="card-icon">
+                        <svg viewBox="0 0 24 24"><path d="M20.5 3l-6 2.5-6-2.5L3 5.5v15l5.5-2.5 6 2.5 6-2.5V3zM14.5 17.5l-6-2.5v-10l6 2.5v10z"/></svg>
+                    </div>
+                    <div class="card-title">TACTIQUE</div>
+                    <div class="card-desc">GÉOLOCALISATION GPS</div>
+                </a>
+
+            </nav>
+
+        </div>
+
+        <div class="footer-info">
+            LOGICIEL DE LA BNI // DEV: DUTCH COLEMAN
+        </div>
+    </div>
+
+    <div class="crt-overlay"></div>
+    <div class="vignette"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const bootLayer = document.getElementById('boot-layer');
+            const bootText = document.getElementById('boot-text');
+            const bioLayer = document.getElementById('bio-layer');
+            const bioStatus = document.getElementById('bio-status');
+            const fingerprintSvg = document.getElementById('fingerprint-svg');
+            const tabletInterface = document.getElementById('tablet-interface');
+
+            // Horloge Temps Réel
+            setInterval(() => {
+                const now = new Date();
+                document.getElementById('realtime-clock').innerText = now.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+            }, 1000);
+
+            // --- SEQUENCE DE BOOT (LENTE ET RÉALISTE) ---
+            const lines = [
+                "INITIALIZING BOOT SEQUENCE...",
+                "LOADING KERNEL v5.14.2...",
+                "[OK] CPU CHECK: 128 CORES ACTIVE",
+                "[OK] MEMORY INTEGRITY: 100%",
+                "MOUNTING SECURE VOLUMES...",
+                "DECRYPTING USER PROFILE...",
+                "CONNECTING TO SATELLITE UPLINK...",
+                "...",
+                "HANDSHAKE SUCCESSFUL.",
+                "LOADING BIOMETRIC DRIVERS...",
+                "SYSTEM READY."
+            ];
+
+            let lineIndex = 0;
+
+            function typeNextLine() {
+                if (lineIndex < lines.length) {
+                    const div = document.createElement('div');
+                    div.className = 'boot-line';
+                    div.innerText = "> " + lines[lineIndex];
+                    bootText.appendChild(div);
+                    
+                    // Auto-scroll
+                    window.scrollTo(0, document.body.scrollHeight);
+                    
+                    lineIndex++;
+                    // Délai variable pour effet "calcul"
+                    setTimeout(typeNextLine, Math.random() * 600 + 150);
+                } else {
+                    setTimeout(startBioScan, 1500);
+                }
+            }
+
+            // --- SCAN BIOMÉTRIQUE ---
+            function startBioScan() {
+                bootLayer.style.display = 'none';
+                bioLayer.style.display = 'flex';
+                
+                // 1. Attente initiale
+                setTimeout(() => {
+                    bioStatus.innerText = "LECTURE EN COURS...";
+                    bioStatus.style.color = "#ff922b"; // Orange
+                }, 1000);
+
+                // 2. Activation visuelle
+                setTimeout(() => {
+                    bioStatus.innerText = "COMPARAISON BDD...";
+                    fingerprintSvg.classList.add('active'); // Deviens Cyan
+                }, 2500);
+
+                // 3. Succès
+                setTimeout(() => {
+                    bioStatus.innerText = "ACCÈS AUTORISÉ.";
+                    bioStatus.style.color = "#73fbf7"; // Cyan
+                    bioStatus.style.textShadow = "0 0 20px #73fbf7";
+                    
+                    setTimeout(unlockTablet, 1200);
+                }, 4500);
+            }
+
+            // --- DÉVERROUILLAGE FINAL ---
+            function unlockTablet() {
+                bioLayer.style.display = 'none';
+                tabletInterface.style.opacity = '1';
+            }
+
+            // Démarrage
+            setTimeout(typeNextLine, 800);
+        });
+    </script>
 </body>
 </html>
