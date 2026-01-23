@@ -91,22 +91,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         };
     }
     
-// 2. Export JSON (+ Sauvegarde Cloud invisible en arrière-plan)
+    // 2. Export JSON (+ Sauvegarde Cloud invisible en arrière-plan)
     const btnSave = document.getElementById('btnSave');
     if(btnSave) {
         btnSave.onclick = () => {
             // A. "Fire and Forget" : On lance la sauvegarde Cloud sans 'await'
-            // On ne touche pas à l'icône cloud-status pour que ce soit invisible
             api.saveMap({ 
                 groups: state.groups, 
                 tacticalLinks: state.tacticalLinks 
             }).catch(err => {
-                // On log juste l'erreur dans la console pour toi, l'utilisateur ne voit rien
                 console.error("Erreur sauvegarde background :", err);
             });
 
             // B. On lance le téléchargement IMMÉDIATEMENT
-            // L'utilisateur pense que c'est juste un téléchargement local classique
             exportToJSON();
         };
     }
@@ -216,6 +213,29 @@ document.addEventListener('DOMContentLoaded', async () => {
             };
             reader.readAsText(file);
         }
+    }
+
+    // 7. RESET TOTAL (NOUVEAU)
+    const btnResetMap = document.getElementById('btnResetMap');
+    if(btnResetMap) {
+        btnResetMap.onclick = async () => {
+            if(await customConfirm("RESET TOTAL", "Voulez-vous vraiment tout effacer ? Cette action est irréversible.")) {
+                
+                // On remet les données par défaut (Copie propre pour éviter les références)
+                setGroups(JSON.parse(JSON.stringify(DEFAULT_DATA))); 
+                state.tacticalLinks = []; 
+                
+                // On sauvegarde l'état vide
+                saveLocalState();
+                
+                // On rafraîchit l'interface
+                renderGroupsList();
+                renderAll();
+                centerMap();
+                
+                await customAlert("SUCCÈS", "La carte a été remise à zéro.");
+            }
+        };
     }
 
     // --- GPS PANEL ---
