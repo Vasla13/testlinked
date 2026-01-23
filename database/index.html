@@ -22,7 +22,7 @@
         <img src="../point/logo-bni-linked.png" alt="BNI Linked" class="app-logo">
         <div class="titles">
           <h1 class="main-title">SYSTEM DATABASE</h1>
-          <span class="sub-title">ARCHIVES NETLIFY BLOBS</span>
+          <span class="sub-title">ARCHIVES CLOUD SÉCURISÉES</span>
         </div>
       </div>
       
@@ -63,8 +63,70 @@
     </main>
   </div>
 
+  <div id="custom-modal" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header" id="modal-title">TITRE</div>
+      <div class="modal-body" id="modal-text">Texte de la modale...</div>
+      <div class="modal-footer" id="modal-footer">
+        </div>
+    </div>
+  </div>
+
 <script>
-  // --- LOGIQUE JAVASCRIPT ---
+  // --- GESTION DES MODALES ---
+  const modal = document.getElementById('custom-modal');
+  const modalTitle = document.getElementById('modal-title');
+  const modalText = document.getElementById('modal-text');
+  const modalFooter = document.getElementById('modal-footer');
+
+  function showModal(title, text, type = 'alert') {
+    return new Promise((resolve) => {
+      modalTitle.textContent = title;
+      modalText.textContent = text;
+      modalFooter.innerHTML = '';
+
+      if (type === 'confirm') {
+        // Bouton Annuler
+        const btnCancel = document.createElement('button');
+        btnCancel.className = 'modal-btn';
+        btnCancel.textContent = 'ANNULER';
+        btnCancel.onclick = () => { closeModal(); resolve(false); };
+        
+        // Bouton Confirmer (Danger)
+        const btnConfirm = document.createElement('button');
+        btnConfirm.className = 'modal-btn danger';
+        btnConfirm.textContent = 'CONFIRMER';
+        btnConfirm.onclick = () => { closeModal(); resolve(true); };
+
+        modalFooter.appendChild(btnCancel);
+        modalFooter.appendChild(btnConfirm);
+      } else {
+        // Mode Alert (OK seulement)
+        const btnOk = document.createElement('button');
+        btnOk.className = 'modal-btn confirm';
+        btnOk.textContent = 'OK';
+        btnOk.onclick = () => { closeModal(); resolve(true); };
+        modalFooter.appendChild(btnOk);
+      }
+
+      modal.classList.add('visible');
+    });
+  }
+
+  function closeModal() {
+    modal.classList.remove('visible');
+  }
+
+  async function customAlert(text) {
+    await showModal('INFORMATION', text, 'alert');
+  }
+
+  async function customConfirm(text) {
+    return await showModal('CONFIRMATION REQUISE', text, 'confirm');
+  }
+
+
+  // --- LOGIQUE JAVASCRIPT PRINCIPALE ---
   const tabs = document.querySelectorAll('.tab-btn');
   const panels = {
     point: document.getElementById('panel-point'),
@@ -93,12 +155,14 @@
     return `${entry.page}_${entry.action}_${safeDate || entry.ts}.json`;
   }
 
+  // --- API CLIENT ---
+
   async function apiList(page) {
-    const res = await fetch(`/.netlify/functions/db-list?page=${encodeURIComponent(page)}`);
+    const res = await fetch(`/.netlify/functions/db-list?page=${encodeURIComponent(page)}&limit=50`);
     if (!res.ok) throw new Error('Erreur réseau');
     const out = await res.json();
     if (!out.ok) throw new Error(out.error || 'Erreur API');
-    return out.entries || [];
+    return out; 
   }
 
   async function apiGet(key) {
@@ -117,24 +181,32 @@
     if (!res.ok || !out.ok) throw new Error(out.error || 'Erreur suppression');
   }
 
-  function render(page, entries) {
+  // --- RENDU ---
+
+  function render(page, entries, totalFound) {
     const statusEl = document.getElementById(`status-${page}`);
     const cardsEl = document.getElementById(`cards-${page}`);
     cardsEl.innerHTML = '';
 
-    if (!entries.length) {
+    if (!entries || !entries.length) {
       statusEl.textContent = 'Aucune donnée.';
       cardsEl.innerHTML = '<div class="empty-state">AUCUNE ARCHIVE TROUVÉE DANS LE CLOUD</div>';
       return;
     }
 
-    statusEl.textContent = `${entries.length} FICHIERS TROUVÉS`;
+    const count = entries.length;
+    const total = totalFound || count;
+    
+    if (total > count) {
+        statusEl.textContent = `${count} RÉCENTS AFFICHÉS (SUR ${total} TOTAL)`;
+    } else {
+        statusEl.textContent = `${count} FICHIERS SYNCHRONISÉS`;
+    }
 
     for (const entry of entries) {
       const card = document.createElement('div');
       card.className = 'data-card';
 
-      // Analyse du nom de l'action pour affichage propre
       let actionType = 'UNK';
       let customName = '';
 
@@ -148,11 +220,9 @@
           actionType = entry.action.toUpperCase();
       }
       
-      // Nettoyage tiret initial éventuel
       if (customName.startsWith('-')) customName = customName.substring(1);
       if (!customName) customName = "Standard";
 
-      // Badge style
       const badgeClass = entry.action.includes('import') ? 'badge-import' : 'badge-export';
 
       card.innerHTML = `
@@ -161,7 +231,7 @@
           <span class="card-date">${fmtDate(entry.createdAt)}</span>
         </div>
         <div class="card-title">${customName.toUpperCase()}</div>
-        <div class="card-key" title="${entry.key}">${entry.key}</div>
+        <div class="card-key" style="opacity:0.3; font-size:0.7em;">ID: ${entry.ts}</div>
         <div class="card-actions">
           <button class="btn-cyber btn-dl">TÉLÉCHARGER</button>
           <button class="btn-cyber btn-del">SUPPRIMER</button>
@@ -171,6 +241,7 @@
       const btnDl = card.querySelector('.btn-dl');
       const btnDel = card.querySelector('.btn-del');
 
+      // TÉLÉCHARGER
       btnDl.addEventListener('click', async () => {
         btnDl.disabled = true;
         btnDl.textContent = '...';
@@ -186,22 +257,43 @@
           a.remove();
           btnDl.textContent = 'OK';
         } catch (e) {
-          alert('Erreur téléchargement.');
+          await customAlert('Erreur lors du téléchargement du fichier.');
           btnDl.textContent = 'ERR';
         } finally {
           setTimeout(() => { btnDl.disabled = false; btnDl.textContent = 'TÉLÉCHARGER'; }, 2000);
         }
       });
 
+      // SUPPRIMER (FIX AMÉLIORÉ)
       btnDel.addEventListener('click', async () => {
-        if (!confirm('CONFIRMER LA SUPPRESSION DÉFINITIVE DU CLOUD ?')) return;
+        // 1. Modale de confirmation
+        const confirmed = await customConfirm('Voulez-vous vraiment supprimer définitivement ce fichier du Cloud ?');
+        if (!confirmed) return;
+
         btnDel.disabled = true;
         btnDel.textContent = '...';
+        
         try {
+          // 2. Appel API
           await apiDelete(entry.key);
-          await refreshPage(page);
+          
+          // 3. Suppression VISUELLE immédiate (Feedback instantané)
+          // On fait disparaître la carte pour que l'utilisateur voit que ça a marché
+          card.style.opacity = '0';
+          card.style.transform = 'scale(0.9)';
+          
+          setTimeout(async () => {
+             card.remove(); // On retire du DOM
+             
+             // 4. Attente de propagation (Le fix pour "ça supprime pas")
+             // On attend 1 seconde pour que Netlify Blobs se mette à jour avant de relire la liste
+             await new Promise(r => setTimeout(r, 1000));
+             await refreshPage(page);
+          }, 300);
+
         } catch (e) {
-          alert('Erreur suppression.');
+          console.error(e);
+          await customAlert('Erreur lors de la suppression. Vérifiez votre connexion.');
           btnDel.textContent = 'ERR';
           btnDel.disabled = false;
         }
@@ -215,11 +307,12 @@
     const statusEl = document.getElementById(`status-${page}`);
     statusEl.textContent = 'CONNEXION NEURAL LINK...';
     try {
-      const entries = await apiList(page);
-      render(page, entries);
+      const data = await apiList(page);
+      render(page, data.entries || [], data.totalFound);
     } catch (e) {
-      statusEl.textContent = "ERREUR DE CONNEXION (NETLIFY BLOBS)";
-      document.getElementById(`cards-${page}`).innerHTML = '<div class="error-state">OFFLINE / ERROR</div>';
+      statusEl.textContent = "ERREUR DE CONNEXION (DATA LINK)";
+      console.warn("Erreur DB:", e);
+      document.getElementById(`cards-${page}`).innerHTML = '<div class="error-state">CONNEXION SERVEUR ÉCHOUÉE</div>';
     }
   }
 

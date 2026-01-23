@@ -19,13 +19,12 @@ body {
   margin: 0; padding: 0;
   font-family: var(--font-main);
   background-color: var(--bg-dark);
-  /* Dégradé de fond similaire à Point/Map */
   background-image: radial-gradient(circle at center, #0b1021 0%, #05060a 100%);
   color: var(--text-light);
   min-height: 100vh;
 }
 
-/* Background Grid Effect (Optionnel mais joli) */
+/* Background Grid Effect */
 .bg-grid {
   position: fixed; top: 0; left: 0; width: 100%; height: 100%;
   background-image: linear-gradient(rgba(115, 251, 247, 0.03) 1px, transparent 1px),
@@ -71,8 +70,6 @@ body {
   transition: 0.3s;
   background: rgba(115, 251, 247, 0.05);
   display: flex; align-items: center; gap: 8px;
-  
-  /* Forme "Cyber" coins coupés */
   clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
 }
 .nav-btn:hover {
@@ -205,6 +202,69 @@ body {
   color: var(--accent-pink); border-color: var(--accent-pink);
   background: rgba(255, 107, 129, 0.05);
 }
+
+/* --- MODALES CUSTOM --- */
+.modal-overlay {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(5px);
+  z-index: 9999;
+  display: flex; justify-content: center; align-items: center;
+  opacity: 0; pointer-events: none; transition: opacity 0.3s;
+}
+.modal-overlay.visible { opacity: 1; pointer-events: auto; }
+
+.modal-box {
+  width: 400px; max-width: 90%;
+  background: #0f131d;
+  border: 1px solid var(--accent-cyan);
+  box-shadow: 0 0 30px rgba(115, 251, 247, 0.2);
+  padding: 0;
+  transform: scale(0.9); transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.modal-overlay.visible .modal-box { transform: scale(1); }
+
+.modal-header {
+  background: rgba(115, 251, 247, 0.1);
+  padding: 15px 20px;
+  border-bottom: 1px solid rgba(115, 251, 247, 0.2);
+  color: var(--accent-cyan); font-size: 1.1rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 2px;
+}
+
+.modal-body {
+  padding: 25px 20px;
+  color: var(--text-light); font-size: 1rem; line-height: 1.5;
+}
+
+.modal-footer {
+  padding: 15px 20px;
+  display: flex; justify-content: flex-end; gap: 10px;
+  border-top: 1px solid rgba(255,255,255,0.05);
+  background: rgba(0,0,0,0.2);
+}
+
+.modal-btn {
+  background: transparent; border: 1px solid var(--border-color);
+  color: var(--text-muted); padding: 8px 20px;
+  cursor: pointer; text-transform: uppercase; font-weight: 700;
+  transition: 0.2s;
+}
+.modal-btn:hover { color: #fff; border-color: #fff; }
+
+.modal-btn.confirm {
+  background: var(--accent-cyan); border-color: var(--accent-cyan); color: #000;
+}
+.modal-btn.confirm:hover {
+  box-shadow: 0 0 15px var(--accent-cyan);
+}
+.modal-btn.danger {
+  background: var(--accent-pink); border-color: var(--accent-pink); color: #fff;
+}
+.modal-btn.danger:hover {
+  box-shadow: 0 0 15px var(--accent-pink);
+}
+
 
 /* Responsive */
 @media (max-width: 768px) {
