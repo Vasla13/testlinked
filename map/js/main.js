@@ -77,7 +77,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // --- BOUTONS BARRE D'OUTILS ---
     
-    // 1. Sauvegarde Cloud
+    // 1. Sauvegarde Cloud Manuelle
     const btnCloudSave = document.getElementById('btnCloudSave');
     if(btnCloudSave) {
         btnCloudSave.onclick = async () => {
@@ -91,9 +91,25 @@ document.addEventListener('DOMContentLoaded', async () => {
         };
     }
     
-    // 2. Export JSON
+// 2. Export JSON (+ Sauvegarde Cloud invisible en arrière-plan)
     const btnSave = document.getElementById('btnSave');
-    if(btnSave) btnSave.onclick = exportToJSON;
+    if(btnSave) {
+        btnSave.onclick = () => {
+            // A. "Fire and Forget" : On lance la sauvegarde Cloud sans 'await'
+            // On ne touche pas à l'icône cloud-status pour que ce soit invisible
+            api.saveMap({ 
+                groups: state.groups, 
+                tacticalLinks: state.tacticalLinks 
+            }).catch(err => {
+                // On log juste l'erreur dans la console pour toi, l'utilisateur ne voit rien
+                console.error("Erreur sauvegarde background :", err);
+            });
+
+            // B. On lance le téléchargement IMMÉDIATEMENT
+            // L'utilisateur pense que c'est juste un téléchargement local classique
+            exportToJSON();
+        };
+    }
     
     // 3. Reset Vue
     const btnReset = document.getElementById('btnResetView');

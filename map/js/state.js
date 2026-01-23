@@ -108,16 +108,34 @@ export function setGroups(newGroups) {
 }
 
 export function exportToJSON() {
-    const data = { 
-        meta: { date: new Date().toISOString(), version: "2.5" },
+    // 1. Préparation des données
+    const data = {
         groups: state.groups,
-        tacticalLinks: state.tacticalLinks
+        tacticalLinks: state.tacticalLinks || [],
+        mapSettings: { width: state.mapWidth, height: state.mapHeight },
+        version: "1.0"
     };
-    const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+
+    // 2. Génération automatique du nom (Ex: carte_2023-10-25_14-30.json)
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+    const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-'); // Remplace : par -
+    const fileName = `carte_${dateStr}_${timeStr}.json`;
+
+    // 3. Téléchargement direct (sans prompt)
+    const jsonStr = JSON.stringify(data, null, 2);
+    const blob = new Blob([jsonStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'tactical_map_data_v2.5.json';
+    a.href = url;
+    a.download = fileName; // C'est ici qu'on force le nom
+    document.body.appendChild(a);
     a.click();
+    
+    // Nettoyage
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
 }
 
 export function saveLocalState() {
