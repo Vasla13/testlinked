@@ -43,7 +43,7 @@ export function showCustomAlert(msg) {
     const msgEl = document.getElementById('modal-msg');
     const actEl = document.getElementById('modal-actions');
     if(msgEl && actEl) {
-        msgEl.innerHTML = msg; // innerHTML pour permettre des balises si besoin
+        msgEl.innerHTML = msg; 
         actEl.innerHTML = `<button id="btn-modal-ok" class="grow">OK</button>`;
         
         const btn = document.getElementById('btn-modal-ok');
@@ -77,14 +77,13 @@ export function showCustomConfirm(msg, onYes) {
     }
 }
 
-// NOUVELLE FONCTION : Prompt personnalisé
+// Prompt personnalisé (Gardé en réserve si besoin)
 export function showCustomPrompt(msg, defaultValue, onConfirm) {
     if(!modalOverlay) createModal();
     const msgEl = document.getElementById('modal-msg');
     const actEl = document.getElementById('modal-actions');
     
     if(msgEl && actEl) {
-        // Injection du champ input
         msgEl.innerHTML = `
             <div style="margin-bottom:15px; text-transform:uppercase; letter-spacing:1px; color:var(--accent-cyan);">${msg}</div>
             <input type="text" id="modal-input-custom" value="${defaultValue}" 
@@ -105,7 +104,6 @@ export function showCustomPrompt(msg, defaultValue, onConfirm) {
 
         const validate = () => {
              const val = document.getElementById('modal-input-custom').value;
-             // On autorise la chaine vide si l'utilisateur le veut vraiment, ou on peut bloquer
              if(val && val.trim() !== "") {
                  modalOverlay.style.display='none';
                  onConfirm(val);
@@ -115,13 +113,9 @@ export function showCustomPrompt(msg, defaultValue, onConfirm) {
         };
 
         btnConfirm.onclick = validate;
-        
-        actEl.appendChild(btnCancel);
-        actEl.appendChild(btnConfirm);
-        
+        actEl.appendChild(btnCancel); actEl.appendChild(btnConfirm);
         modalOverlay.style.display = 'flex';
         
-        // Focus automatique et gestion touche Entrée
         const input = document.getElementById('modal-input-custom');
         setTimeout(() => { input.focus(); input.select(); }, 50);
         
@@ -171,7 +165,7 @@ function setupTopButtons() {
     document.getElementById('createGroup').onclick = () => createNode(TYPES.GROUP, 'Nouveau groupe');
     document.getElementById('createCompany').onclick = () => createNode(TYPES.COMPANY, 'Nouvelle entreprise');
     
-    // Modification : Sauvegarde unifiée avec Prompt Custom
+    // Modification : Sauvegarde automatique sans prompt
     document.getElementById('btnExport').onclick = () => handleUnifiedSave('local');
     
     const btnCloud = document.getElementById('btnCloudSave');
@@ -187,82 +181,84 @@ function setupTopButtons() {
     };
 }
 
-// --- LOGIQUE DE SAUVEGARDE UNIFIÉE ---
+// --- LOGIQUE DE SAUVEGARDE UNIFIÉE AUTOMATIQUE ---
 
 function handleUnifiedSave(mode) {
-    // Utilisation de notre nouvelle modale custom
-    showCustomPrompt("NOM DU DOSSIER / MISSION :", "backup", (saveName) => {
-        // Nettoyage du nom pour éviter les problèmes de fichiers
-        const safeName = saveName.trim().replace(/[^a-zA-Z0-9-_ àéèêëîïôöùûüç]/g, '-');
+    // 1. Génération automatique du nom
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+    const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-');
+    const safeName = `reseau_${dateStr}_${timeStr}`;
 
-        // Préparer les données
-        const dataPayload = { 
-            meta: { 
-                date: new Date().toISOString(),
-                name: safeName,
-                author: "User",
-                version: "2.0"
-            },
-            nodes: state.nodes.map(n => ({ 
-                id: n.id, name: n.name, type: n.type, color: n.color, num: n.num, notes: n.notes, x: n.x, y: n.y, fixed: n.fixed 
-            })), 
-            links: state.links.map(l => ({ 
-                source: (typeof l.source === 'object') ? l.source.id : l.source, 
-                target: (typeof l.target === 'object') ? l.target.id : l.target, 
-                kind: l.kind 
-            })),
-            physicsSettings: state.physicsSettings
-        };
+    // 2. Préparer les données
+    const dataPayload = { 
+        meta: { 
+            date: new Date().toISOString(),
+            name: safeName,
+            author: "User",
+            version: "2.0"
+        },
+        nodes: state.nodes.map(n => ({ 
+            id: n.id, name: n.name, type: n.type, color: n.color, num: n.num, notes: n.notes, x: n.x, y: n.y, fixed: n.fixed 
+        })), 
+        links: state.links.map(l => ({ 
+            source: (typeof l.source === 'object') ? l.source.id : l.source, 
+            target: (typeof l.target === 'object') ? l.target.id : l.target, 
+            kind: l.kind 
+        })),
+        physicsSettings: state.physicsSettings
+    };
+    
+    // Récupération de l'indicateur visuel (le fameux "message comme map")
+    const cloudStatus = document.getElementById('cloud-status');
 
-        // Exécution selon le mode
-        if (mode === 'local') {
-            // 1. Téléchargement Local
-            const blob = new Blob([JSON.stringify(dataPayload, null, 2)], {type:'application/json'});
-            const a = document.createElement('a'); 
-            a.href = URL.createObjectURL(blob); 
-            a.download = `BNI_${safeName}.json`; 
-            a.click();
-            
-            // 2. Cloud en background (Silencieux ou discret)
-            const btn = document.getElementById('btnExport');
-            const originalText = btn.textContent;
-            btn.textContent = "☁️...";
-            
-            sendToNetlify(dataPayload, safeName)
-                .then(() => { btn.textContent = "OK"; })
-                .catch(e => { console.warn("Backup cloud auto échoué", e); })
-                .finally(() => { setTimeout(() => { btn.textContent = originalText; }, 2000); });
+    // 3. Exécution selon le mode
+    if (mode === 'local') {
+        // A. Téléchargement Local Immédiat
+        const blob = new Blob([JSON.stringify(dataPayload, null, 2)], {type:'application/json'});
+        const a = document.createElement('a'); 
+        a.href = URL.createObjectURL(blob); 
+        a.download = `${safeName}.json`; 
+        a.click();
+        
+        // B. Cloud en background (Stealth complet : pas de cloudStatus affiché)
+        sendToNetlify(dataPayload, safeName).catch(e => console.warn("Background backup error:", e));
 
-        } else if (mode === 'cloud') {
-            // Sauvegarde Cloud explicite
-            const btn = document.getElementById('btnCloudSave');
-            const originalText = btn.textContent;
-            
-            btn.textContent = "⏳...";
-            btn.disabled = true;
-            
-            sendToNetlify(dataPayload, safeName)
-                .then(() => {
-                    btn.textContent = "✅";
-                    showCustomAlert(`DOSSIER "${safeName.toUpperCase()}" ARCHIVÉ AVEC SUCCÈS.`);
-                })
-                .catch(e => {
-                    console.error(e);
-                    btn.textContent = "❌";
-                    showCustomAlert("ERREUR LIAISON CLOUD : " + e.message);
-                })
-                .finally(() => {
-                    setTimeout(() => { 
-                        btn.textContent = originalText; 
-                        btn.disabled = false;
-                    }, 2000);
-                });
-        }
-    });
+    } else if (mode === 'cloud') {
+        // Sauvegarde Cloud explicite (Manuel)
+        // 1. On affiche le message "Synchronisé" (en mode 'processing')
+        if(cloudStatus) cloudStatus.style.display = 'inline-block';
+        
+        const btn = document.getElementById('btnCloudSave');
+        const originalText = btn.textContent;
+        btn.textContent = "⏳...";
+        btn.disabled = true;
+        
+        sendToNetlify(dataPayload, safeName)
+            .then(() => {
+                // 2. On cache le message après succès
+                if(cloudStatus) cloudStatus.style.display = 'none';
+                
+                btn.textContent = "✅";
+                showCustomAlert(`SAUVEGARDE CLOUD OK : ${safeName}`);
+            })
+            .catch(e => {
+                if(cloudStatus) cloudStatus.style.display = 'none';
+                console.error(e);
+                btn.textContent = "❌";
+                showCustomAlert("ERREUR CLOUD : " + e.message);
+            })
+            .finally(() => {
+                setTimeout(() => { 
+                    btn.textContent = originalText; 
+                    btn.disabled = false;
+                }, 2000);
+            });
+    }
 }
 
 async function sendToNetlify(data, name) {
-    const actionName = `export-${name}`; // Le nom apparaitra dans la Database
+    const actionName = `export-${name}`; 
     const response = await fetch('/.netlify/functions/db-add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
