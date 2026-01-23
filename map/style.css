@@ -13,11 +13,27 @@
 
 * { box-sizing: border-box; user-select: none; }
 
+/* --- 0. CURSEUR CUSTOM (SCI-FI STYLE) --- */
+/* Réticule de visée pour le mode normal */
 body {
     margin: 0; background-color: #000; color: var(--text-main);
     font-family: var(--font-main); overflow: hidden; height: 100vh;
     display: flex; flex-direction: column;
+
+    /* SVG Crosshair Cyan encodé */
+    cursor: url('data:image/svg+xml;utf8,<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2V8M12 16V22M2 12H8M16 12H22" stroke="%2373fbf7" stroke-width="2"/><circle cx="12" cy="12" r="2" fill="%2373fbf7"/></svg>') 12 12, crosshair;
 }
+
+/* Curseur de pointeur (Hover) plus agressif */
+a, button, .nav-btn, .action-btn, .file-btn, label, select, input, .marker, .group-header, .hud-btn {
+    cursor: url('data:image/svg+xml;utf8,<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 2L11 21L14 14L21 11L2 2Z" fill="%2373fbf7" stroke="%23000" stroke-width="1.5"/></svg>') 2 2, pointer !important;
+}
+
+/* Lors du Drag de la map */
+#viewport:active {
+    cursor: grabbing !important;
+}
+
 
 /* --- 1. TOP BAR --- */
 #top-bar {
@@ -43,8 +59,8 @@ body {
     font-weight: 600;
     letter-spacing: 1px;
     padding: 8px 16px;
-    cursor: pointer;
-    transition: all 0.2s;
+    /* transition: all 0.2s;  <-- Retiré pour éviter latence curseur */
+    transition: background 0.2s, color 0.2s, box-shadow 0.2s;
     border-radius: 4px;
     clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
     display: inline-flex; justify-content: center; align-items: center;
@@ -105,11 +121,11 @@ body {
     background-image: 
         linear-gradient(rgba(115, 251, 247, 0.03) 1px, transparent 1px),
         linear-gradient(90deg, rgba(115, 251, 247, 0.03) 1px, transparent 1px);
-    background-size: 50px 50px; overflow: hidden; cursor: grab;
+    background-size: 50px 50px; overflow: hidden;
+    /* Le curseur par défaut est géré sur le body maintenant */
     box-shadow: inset 0 0 100px rgba(0,0,0,0.8);
     perspective: 1000px;
 }
-#viewport:active { cursor: grabbing; }
 
 #map-world { 
     position: absolute; top: 0; left: 0; 
@@ -120,27 +136,22 @@ body {
 #map-image { 
     display: block; 
     pointer-events: none; 
-    
-    /* État par défaut : Sombre et contrasté */
     filter: brightness(0.6) contrast(1.2) grayscale(0.2);
-    
-    /* Transition fluide pour l'allumage */
     transition: filter 0.5s ease, mix-blend-mode 0.5s ease, opacity 0.5s ease;
 }
 
 /* Mode Haute Lumière (Activé via bouton) */
 body.high-light-mode #map-image {
     filter: brightness(1.4) contrast(1.1) saturate(1.2) grayscale(0);
-    mix-blend-mode: screen; /* Effet projection */
+    mix-blend-mode: screen; 
     opacity: 0.9;
 }
 
 #zones-layer, #links-layer, #markers-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
 
 
-/* --- 4. MARQUEURS TACTIQUES (HUD & FIXES) --- */
+/* --- 4. MARQUEURS TACTIQUES --- */
 
-/* Animation pour le statut DANGER uniquement */
 .marker.status-danger {
     animation: pulse-danger 2s infinite;
     --marker-color: #ff4444 !important;
@@ -151,76 +162,63 @@ body.high-light-mode #map-image {
 
 .marker {
     position: absolute;
-    transform: translate(-50%, -50%); /* Centrage parfait */
+    transform: translate(-50%, -50%); 
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    cursor: pointer; z-index: 100; pointer-events: auto;
-    
-    /* La couleur vient du JS (Groupe) */
+    z-index: 100; pointer-events: auto;
     will-change: left, top;
 }
 
-/* CONTENEUR GLOBAL */
 .marker-content-wrapper {
     position: relative;
     display: flex; flex-direction: column; align-items: center;
     transition: transform 0.2s ease-out;
 }
 
-/* BOITE DE L'ICÔNE (Style "Bracket" Fixe - Taille Fixe) */
 .marker-icon-box {
     position: relative;
     width: 34px; height: 34px; 
-    background: rgba(5, 7, 10, 0.9); /* Fond sombre opaque */
-    
+    background: rgba(5, 7, 10, 0.9); 
     display: flex; justify-content: center; align-items: center;
     color: var(--marker-color);
     box-shadow: 0 4px 15px rgba(0,0,0,0.6);
     transition: all 0.2s;
 }
 
-/* LES CROCHETS [ ] (Fixes) */
 .marker-icon-box::after {
     content: '';
     position: absolute;
     inset: 0;
     border: 2px solid var(--marker-color);
     clip-path: polygon(
-        0 0, 30% 0, 30% 100%, 0 100%,    /* Gauche */
-        0 100%, 100% 100%, 100% 0, 0 0,  /* Cadre */
-        100% 0, 70% 0, 70% 100%, 100% 100% /* Droite */
+        0 0, 30% 0, 30% 100%, 0 100%,    
+        0 100%, 100% 100%, 100% 0, 0 0,  
+        100% 0, 70% 0, 70% 100%, 100% 100% 
     );
 }
 
-/* L'ICÔNE SVG */
 .marker svg { 
     width: 20px; height: 20px;
     fill: currentColor; 
     filter: drop-shadow(0 0 5px var(--marker-color));
 }
 
-/* LE NOM (Label déporté sur le coté) */
 .marker-label {
     position: absolute;
-    left: 40px; /* À droite */
+    left: 40px; 
     top: 50%; transform: translateY(-50%);
-    
     background: rgba(0, 0, 0, 0.8);
     border-left: 3px solid var(--marker-color);
-    
     color: #fff;
     padding: 4px 8px;
     border-radius: 0 4px 4px 0;
-    
     font-size: 11px; font-weight: 600; 
     letter-spacing: 0.5px; text-transform: uppercase;
     white-space: nowrap;
     pointer-events: none;
-    
     opacity: 0.8;
     transition: all 0.2s;
 }
 
-/* LIGNE DE LIAISON */
 .marker-label::before {
     content: '';
     position: absolute;
@@ -230,27 +228,22 @@ body.high-light-mode #map-image {
     opacity: 0.5;
 }
 
-/* --- INTERACTIONS STANDARD --- */
+/* Interactions Standard */
 .marker:hover { z-index: 1000; }
-
 .marker:hover .marker-content-wrapper { transform: scale(1.1); }
-
 .marker:hover .marker-icon-box {
     background: var(--marker-color); 
     color: #000; 
     box-shadow: 0 0 20px var(--marker-color);
 }
 .marker:hover .marker-icon-box::after { border-color: #000; }
-
 .marker:hover .marker-label {
     opacity: 1;
     background: #000;
     padding-left: 10px;
 }
 
-/* --- MODE DÉZOOMÉ (PETITS POINTS) --- */
-/* Activé par le JS quand on dézoome */
-
+/* Mode Dézoomé */
 body.view-zoomed-out .marker-icon-box {
     width: 10px; height: 10px;
     background: var(--marker-color);
@@ -258,17 +251,14 @@ body.view-zoomed-out .marker-icon-box {
     box-shadow: 0 0 5px var(--marker-color);
     padding: 0;
 }
-/* On cache les détails */
 body.view-zoomed-out .marker-icon-box::after { display: none; }
 body.view-zoomed-out .marker svg { display: none; }
 body.view-zoomed-out .marker-label { display: none; }
 body.view-zoomed-out .marker-label::before { display: none; }
 
-/* === EXCEPTION SURVOL EN MODE DÉZOOMÉ === */
-/* Force l'affichage du nom au survol */
 body.view-zoomed-out .marker:hover .marker-label {
     display: block !important;
-    left: 20px; /* Ajusté */
+    left: 20px; 
     opacity: 1;
     z-index: 2000;
 }
@@ -404,10 +394,6 @@ label { display: block; color: var(--text-dim); font-size: 0.8rem; margin-bottom
 .link-menu button:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
 .separator-h { height: 1px; background: rgba(255,255,255,0.1); margin: 2px 0; }
 .link-tooltip { position: fixed; z-index: 20001; pointer-events: none; background: rgba(0,0,0,0.85); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); padding: 5px 10px; border-radius: 4px; font-size: 0.8rem; box-shadow: 0 0 10px rgba(0,0,0,0.5); display: none; }
-
-/* ... tout le CSS précédent (marquers HUD, layout, etc.) ... */
-/* COPIEZ TOUT CE QUI ÉTAIT DANS LA RÉPONSE PRÉCÉDENTE POUR LE FICHIER STYLE.CSS */
-/* AJOUTEZ CECI À LA FIN DU FICHIER : */
 
 /* --- BARRE D'OUTILS DESSIN --- */
 .floating-panel.compact {

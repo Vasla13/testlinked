@@ -14,14 +14,12 @@ export function updateTransform() {
     mapWorld.style.transform = `translate(${state.view.x}px, ${state.view.y}px) scale(${state.view.scale})`;
 
     if (markersLayer && state.mapWidth && state.mapHeight) {
-        // 2. Pour les marqueurs, on change juste la taille du conteneur (width/height)
-        // On ne met PAS de scale() ici, donc les points garderont leur taille CSS fixe (ex: 32px)
+        // 2. Pour les marqueurs, on change juste la taille du conteneur
         markersLayer.style.transform = `translate(${state.view.x}px, ${state.view.y}px)`;
         markersLayer.style.width = `${state.mapWidth * state.view.scale}px`;
         markersLayer.style.height = `${state.mapHeight * state.view.scale}px`;
         
         // 3. Gestion du Level of Detail (LOD)
-        // Si on est très dézoomé (scale < 0.5), on active le mode "petits points" via une classe CSS
         if (state.view.scale < 0.5) {
             document.body.classList.add('view-zoomed-out');
         } else {
@@ -43,10 +41,12 @@ export function startMarkerDrag(e, gIndex, pIndex) {
         offsetX: point.x - mouseStart.x,
         offsetY: point.y - mouseStart.y
     };
+    // Force cursor grabbing via CSS class on body usually, or inline
     viewport.style.cursor = 'grabbing';
 }
 
 export function initEngine() {
+    // Gestion du chargement de l'image
     if(mapImage.complete) {
         state.mapWidth = mapImage.naturalWidth;
         state.mapHeight = mapImage.naturalHeight;
@@ -57,8 +57,13 @@ export function initEngine() {
             state.mapHeight = mapImage.naturalHeight;
             centerMap();
         };
+        // Sécurité si l'image plante
+        mapImage.onerror = () => {
+            console.error("Erreur chargement carte.jpg");
+        };
     }
 
+    // Gestion du ZOOM (Wheel)
     viewport.addEventListener('wheel', (e) => {
         e.preventDefault();
         const delta = e.deltaY > 0 ? -1 : 1;
@@ -75,14 +80,17 @@ export function initEngine() {
         state.view.y = mouseY - (mouseY - state.view.y) * (newScale / state.view.scale);
         state.view.scale = newScale;
         
+        // On rend direct pour le zoom car c'est critique pour l'œil
         renderAll();
         updateTransform();
-    });
+    }, { passive: false });
 
+    // Gestion du CLIC (Drag Map start)
     viewport.addEventListener('mousedown', (e) => {
         if (state.draggingMarker) return; 
         if (state.drawingMode) return; 
         
+        // Outil Mesure
         if (state.measuringMode && e.button === 0) {
             const coords = getMapPercentCoords(e.clientX, e.clientY);
             if (state.measureStep === 0 || state.measureStep === 2) {
@@ -96,6 +104,7 @@ export function initEngine() {
             return;
         }
 
+        // Drag Map
         if(e.button === 0) {
             state.isDragging = true;
             state.lastMouse = { x: e.clientX, y: e.clientY };
@@ -103,9 +112,33 @@ export function initEngine() {
         }
     });
 
+    // --- OPTIMISATION : BOUCLE DE RENDU SOURIS (requestAnimationFrame) ---
+    let isMouseMovePending = false;
+    let mouseEvent = null;
+
     window.addEventListener('mousemove', (e) => {
+        // On stocke l'event le plus récent
+        mouseEvent = e;
+
+        // Si une frame est déjà prévue, on ne fait rien (on attend qu'elle se lance)
+        if (!isMouseMovePending) {
+            isMouseMovePending = true;
+            requestAnimationFrame(processMouseMove);
+        }
+    });
+
+    function processMouseMove() {
+        if (!mouseEvent) {
+            isMouseMovePending = false;
+            return;
+        }
+
+        const e = mouseEvent;
+        
+        // 1. Mise à jour HUD (optimisée)
         updateHUDCoords(e);
         
+        // 2. Drag d'un marqueur
         if (state.draggingMarker) {
             const dx = Math.abs(e.clientX - state.draggingMarker.startX);
             const dy = Math.abs(e.clientY - state.draggingMarker.startY);
@@ -122,18 +155,15 @@ export function initEngine() {
                 
                 renderAll(); 
             }
-            return; 
         }
-
-        if (state.measuringMode && state.measureStep === 1) {
+        // 3. Outil Mesure (étape intermédiaire)
+        else if (state.measuringMode && state.measureStep === 1) {
             const coords = getMapPercentCoords(e.clientX, e.clientY);
             state.measurePoints[1] = coords;
             renderAll(); 
         }
-
-        if (state.drawingMode) return; 
-
-        if (state.isDragging) {
+        // 4. Drag de la carte
+        else if (state.isDragging && !state.drawingMode) {
             const dx = e.clientX - state.lastMouse.x;
             const dy = e.clientY - state.lastMouse.y;
             state.view.x += dx;
@@ -141,8 +171,12 @@ export function initEngine() {
             state.lastMouse = { x: e.clientX, y: e.clientY };
             updateTransform();
         }
-    });
 
+        // Fin du traitement, on autorise la prochaine frame
+        isMouseMovePending = false;
+    }
+
+    // Gestion RELACHEMENT CLIC
     window.addEventListener('mouseup', () => {
         if (state.draggingMarker) {
             if (!state.draggingMarker.hasMoved) {
@@ -155,7 +189,10 @@ export function initEngine() {
         }
 
         state.isDragging = false;
-        if(!state.drawingMode && !state.measuringMode) viewport.style.cursor = 'grab';
+        // Reset curseur si pas d'outil actif
+        if(!state.drawingMode && !state.measuringMode) {
+             viewport.style.cursor = ''; // Laisse le CSS gérer (crosshair)
+        }
     });
 }
 
@@ -171,8 +208,8 @@ export function centerMap() {
 }
 
 function updateHUDCoords(e) {
-    if(state.mapWidth === 0) return;
+    if(state.mapWidth === 0 || !hudCoords) return;
     const coords = getMapPercentCoords(e.clientX, e.clientY);
     const gps = percentageToGps(coords.x, coords.y);
-    if(hudCoords) hudCoords.innerText = `GPS: ${gps.x.toFixed(2)} | ${gps.y.toFixed(2)}`;
+    hudCoords.innerText = `GPS: ${gps.x.toFixed(2)} | ${gps.y.toFixed(2)}`;
 }
