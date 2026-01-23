@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>BNI LINKED // MAP TACTIQUE</title>
-    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 
     <style>
@@ -25,14 +25,15 @@
         
         .section-title {
             font-size: 0.9rem; text-transform: uppercase; letter-spacing: 2px;
-            color: var(--text-muted); margin-bottom: 5px; display: block;
+            color: var(--text-dim); margin-bottom: 5px; display: block; font-weight: 700;
         }
 
         .file-btn { 
-            font-size: 0.85rem; color: var(--text-muted); cursor: pointer; 
+            font-size: 0.85rem; color: var(--text-dim); cursor: pointer; 
             border: 1px dashed var(--border-color); padding: 8px; 
-            text-align: center; border-radius: 4px; transition: 0.2s;
+            text-align: center; border-radius: 0px; transition: 0.2s;
             background: rgba(0,0,0,0.2); display: block; width: 100%;
+            font-weight: 700; text-transform: uppercase;
         }
         .file-btn:hover { border-color: var(--accent-cyan); color: var(--accent-cyan); background: rgba(115, 251, 247, 0.05); }
 
@@ -43,7 +44,7 @@
             width: 100%; font-size: 0.8rem; padding: 8px;
             background: rgba(115, 251, 247, 0.1); border: 1px solid var(--accent-cyan);
             color: var(--accent-cyan); text-transform: uppercase; letter-spacing: 1px;
-            cursor: pointer; margin-top: 10px;
+            cursor: pointer; margin-top: 10px; font-weight: 700;
             clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
         }
         .btn-switch:hover { background: var(--accent-cyan); color: #000; }
@@ -56,7 +57,7 @@
         }
         .loader-text { 
             font-family: 'Rajdhani', sans-serif; font-size: 1.5rem; letter-spacing: 4px; 
-            animation: pulse 1.5s infinite; text-transform: uppercase; 
+            animation: pulse 1.5s infinite; text-transform: uppercase; font-weight: 800;
         }
         @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; text-shadow: 0 0 15px #73fbf7; } 100% { opacity: 0.5; } }
     </style>
@@ -71,18 +72,21 @@
         <div id="modal-box">
             <div id="modal-title">TITRE</div>
             <div id="modal-content">Message...</div>
+            
             <div id="modal-input-container" style="display:none;">
                 <input type="text" id="modal-input" class="gps-input full-width" autocomplete="off">
             </div>
-            <div id="modal-color-picker" style="display:none;">
+            
+            <div id="modal-color-picker" style="display:none; padding: 0 20px 20px 20px;">
                 <div id="color-swatches" class="color-grid"></div>
                 <div class="separator-h" style="margin: 10px 0;"></div>
                 <label style="font-size:0.8rem; color:#8892b0;">Ou personnalisé :</label>
                 <div style="display:flex; align-items:center; gap:10px; margin-top:5px;">
-                    <input type="color" id="modal-color-input" value="#ffffff" style="width:50px; height:40px; border:none; background:none;">
+                    <input type="color" id="modal-color-input" value="#ffffff" style="width:50px; height:30px; border:1px solid #333; background:none; padding:0;">
                     <span id="modal-color-hex" style="font-family:monospace; color:var(--text-main);">#FFFFFF</span>
                 </div>
             </div>
+
             <div id="modal-actions"></div>
         </div>
     </div>
@@ -117,26 +121,27 @@
             </div>
 
             <div class="panel-section">
-                <span class="section-title">DONNÉES</span>
+                <span class="section-title">DONNÉES TACTIQUES</span>
                 <input type="file" id="fileImport" accept=".json" style="display:none">
                 <input type="file" id="fileMerge" accept=".json" style="display:none">
 
                 <div class="btn-row">
-                    <button id="btnCloudSave" class="mini-btn grow" style="justify-content:center;">☁️ SAVE</button>
-                    <button id="btnSave" class="mini-btn grow" style="justify-content:center;">💾 JSON</button>
+                    <button id="btnCloudSave" class="mini-btn grow" style="justify-content:center;">☁️ CLOUD SAVE</button>
+                    <button id="btnSave" class="mini-btn grow" style="justify-content:center;">💾 LOCAL JSON</button>
                 </div>
+
+                <button id="btnResetMap" class="file-btn" style="margin-top:5px; margin-bottom:5px; border-color:#ff4444; color:#ff4444; background:rgba(255,68,68,0.05);">
+                    ⚠️ RESET CARTE
+                </button>
+
                 <div class="btn-row">
                     <button id="btnTriggerImport" class="file-btn">📂 Ouvrir</button>
                     <button id="btnTriggerMerge" class="file-btn">🧩 Fusionner</button>
                 </div>
-
-                <button id="btnResetMap" class="file-btn" style="margin-top:5px; border-color:#ff6b81; color:#ff6b81;">
-                    RESET CARTE
-                </button>
             </div>
 
             <div class="panel-section" style="padding-bottom: 5px;">
-                <span class="section-title">RECHERCHE</span>
+                <span class="section-title">RECHERCHE CIBLE</span>
                 <div class="search-container">
                     <span class="search-icon">🔍</span>
                     <input type="text" id="searchInput" placeholder="Nom, matricule..." autocomplete="off">
@@ -193,7 +198,7 @@
                     </div>
                     <div style="margin-bottom:10px;">
                         <label style="font-size:0.7rem; color:var(--text-dim);">CALQUE CIBLE</label>
-                        <select id="gpsGroupSelect" style="width:100%; background:rgba(0,0,0,0.3); color:white; border:1px solid #333; padding:5px;"></select>
+                        <select id="gpsGroupSelect" style="width:100%; background:rgba(0,0,0,0.5); color:white; border:1px solid #333; padding:5px; border-radius:0;"></select>
                     </div>
                     <input type="text" id="gpsName" placeholder="Nom du point">
                     <div class="gps-row">
@@ -201,7 +206,7 @@
                         <div style="flex:1"><input type="text" id="gpsAffiliation" placeholder="Type"></div>
                     </div>
                     <textarea id="gpsNotes" placeholder="Notes..."></textarea>
-                    <button id="btnAddGpsPoint" class="btn-primary full-width" style="margin-top:10px;">
+                    <button id="btnAddGpsPoint" class="action-btn full-width" style="margin-top:10px; width:100%; justify-content:center;">
                         📍 PLACER
                     </button>
                 </div>
@@ -215,7 +220,7 @@
                     <div class="tool-row">
                         <label>ÉPAISSEUR</label>
                         <input type="range" id="drawWidth" min="1" max="10" value="2" step="1">
-                        <span id="drawWidthVal" style="width:30px; text-align:right;">2px</span>
+                        <span id="drawWidthVal" style="width:30px; text-align:right; font-family:monospace;">2px</span>
                     </div>
                     <div class="tool-row">
                         <label>STYLE</label>
