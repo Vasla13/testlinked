@@ -1,3 +1,5 @@
+import { LINK_KIND_EMOJI, KINDS } from './constants.js';
+
 // Génère un ID unique
 export function uid() {
     return Date.now().toString(36) + Math.random().toString(36).substr(2);
@@ -43,11 +45,8 @@ export function clamp(val, min, max) {
     return Math.min(Math.max(val, min), max);
 }
 
-// --- CORRECTION CRITIQUE ICI ---
 // Convertit les coordonnées écran (Souris) en coordonnées Monde (Simulation)
 export function screenToWorld(screenX, screenY, canvas, view) {
-    // On utilise clientWidth/clientHeight pour avoir la taille d'affichage CSS réelle
-    // C'est ça qui corrige le décalage du clic
     const w = canvas.clientWidth;
     const h = canvas.clientHeight;
     
@@ -58,23 +57,35 @@ export function screenToWorld(screenX, screenY, canvas, view) {
 }
 
 export function kindToLabel(kind) {
+    if (!kind) return 'Lien';
     return kind.charAt(0).toUpperCase() + kind.slice(1);
 }
 
+// CORRECTION : Utilise maintenant la source de vérité dans constants.js
 export function linkKindEmoji(kind) {
-    const map = {
-        ami: '💚', ennemi: '⚔️', relation: '🔹',
-        employe: '💼', patron: '👑', membre: '🎗️',
-        allie: '🤝', chef: '⭐'
-    };
-    return map[kind] || '🔗';
+    return LINK_KIND_EMOJI[kind] || '🔗';
 }
 
+// CORRECTION : Liste complète des couleurs pour tous les types (KINDS)
 export function computeLinkColor(link) {
     const map = {
-        ami: '#2ecc71', ennemi: '#e74c3c', relation: '#95a5a6',
-        employe: '#f1c40f', patron: '#9b59b6', membre: '#3498db',
-        allie: '#1abc9c', chef: '#e67e22'
+        [KINDS.PATRON]: '#9b59b6',      // Violet
+        [KINDS.EMPLOYE]: '#f1c40f',     // Jaune
+        [KINDS.COLLEGUE]: '#e67e22',    // Orange
+        [KINDS.PARTENAIRE]: '#1abc9c',  // Turquoise
+        
+        [KINDS.FAMILLE]: '#8e44ad',     // Violet Foncé
+        [KINDS.COUPLE]: '#e84393',      // Rose Foncé
+        [KINDS.AMOUR]: '#fd79a8',       // Rose Clair
+        [KINDS.AMI]: '#2ecc71',         // Vert
+        [KINDS.CONNAISSANCE]: '#bdc3c7', // Gris Clair
+        
+        [KINDS.ENNEMI]: '#e74c3c',      // Rouge
+        [KINDS.RIVAL]: '#d35400',       // Orange Foncé
+        
+        [KINDS.AFFILIATION]: '#3498db', // Bleu
+        [KINDS.MEMBRE]: '#2980b9',      // Bleu Foncé
+        [KINDS.RELATION]: '#95a5a6'     // Gris
     };
     return map[link.kind] || '#999';
 }

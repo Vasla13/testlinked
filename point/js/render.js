@@ -171,16 +171,26 @@ export function draw() {
         ctx.globalAlpha = globalAlpha;
         ctx.stroke();
 
+        // AFFICHAGE DE L'EMOJI SUR LE LIEN
         if (showTypes && p.scale > 0.6 && !dimmed && !isPathLink && !isHVT) {
             const mx = (l.source.x + l.target.x) / 2;
             const my = (l.source.y + l.target.y) / 2;
             const color = computeLinkColor(l);
+            
             ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+            
+            // Fond rond noir
             ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(mx, my, 10 / Math.sqrt(p.scale), 0, Math.PI*2); ctx.fill();
+            
+            // Cercle coloré
             ctx.strokeStyle = color; ctx.lineWidth = 1 / Math.sqrt(p.scale); ctx.stroke();
+            
+            // Emoji
             ctx.fillStyle = '#fff'; ctx.font = `${14 / Math.sqrt(p.scale)}px sans-serif`; 
             ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-            const emoji = LINK_KIND_EMOJI[l.kind] || '•';
+            
+            // CORRECTION ICI : Si l'emoji n'est pas trouvé, on met '🔗' au lieu de '•'
+            const emoji = LINK_KIND_EMOJI[l.kind] || '🔗';
             ctx.fillText(emoji, mx, my);
         }
     }
@@ -211,18 +221,15 @@ export function draw() {
         let alpha = (isPath && state.pathPath.has(n.id)) ? 1.0 : (dimmed ? 0.4 : 1.0);
         let nodeColor = safeHex(n.color);
         
-        // --- LOGIQUE VISUELLE HVT (MODIFIÉE) ---
+        // --- LOGIQUE VISUELLE HVT ---
         let isBoss = false;
         if (isHVT) {
             const score = n.hvtScore || 0;
             if (score > 0.6) { 
-                // LE BOSS : Très gros, mais garde sa couleur
                 isBoss = true;
-                rad = rad * (1 + score * 0.8); // Grossissement statique
-                // nodeColor = '#ff0000';  <-- LIGNE SUPPRIMÉE, on garde n.color
+                rad = rad * (1 + score * 0.8); 
                 alpha = 1.0;
             } else if (score < 0.2) { 
-                // LE PETIT : Très transparent
                 alpha = 0.15; 
                 rad *= 0.8;
             } else { 
@@ -242,7 +249,7 @@ export function draw() {
         const isPathfindingNode = state.pathfinding.active && state.pathfinding.pathNodes.has(n.id);
         const isPathStart = state.pathfinding.startId === n.id;
 
-        // Gestion Contour (Sans animation lourde)
+        // Gestion Contour
         if (state.selection === n.id || state.hoverId === n.id || isPathNode || isPathfindingNode || isPathStart) {
             ctx.shadowBlur = 20; 
             let strokeColor = '#ffffff';
@@ -253,10 +260,9 @@ export function draw() {
             ctx.lineWidth = 3 / Math.sqrt(p.scale);
             ctx.stroke();
         } else if (isBoss) {
-            // Boss HVT : Contour de sa propre couleur (plus lumineux) ou blanc
             ctx.shadowBlur = 15;
-            ctx.shadowColor = nodeColor; // Glow de la couleur du point
-            ctx.strokeStyle = '#ffffff'; // Contour blanc pour bien détacher
+            ctx.shadowColor = nodeColor;
+            ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 3 / Math.sqrt(p.scale);
             ctx.stroke();
         } else {
@@ -326,7 +332,6 @@ export function draw() {
                 let strokeColor = safeHex(n.color);
                 if (isPathNode || isPathfindingNode) strokeColor = '#00ffff';
                 if (isPathStart) strokeColor = '#ffff00';
-                // En HVT, le label garde la couleur du point (pas de rouge forcé)
                 
                 ctx.strokeStyle = strokeColor;
                 ctx.lineWidth = ((isPathNode || isPathfindingNode || isPathStart || (isHVT && n.hvtScore > 0.6)) ? 2 : 1) / Math.sqrt(p.scale);
@@ -336,6 +341,5 @@ export function draw() {
             }
         }
     }
-    // Pas de requestAnimationFrame ici -> Performance sauvée
     ctx.restore();
 }
