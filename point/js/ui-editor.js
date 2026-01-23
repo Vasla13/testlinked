@@ -1,4 +1,4 @@
-import { state, nodeById, pushHistory } from './state.js';
+import { state, nodeById, pushHistory, saveState } from './state.js'; // AJOUT saveState
 import { ensureNode, addLink, mergeNodes, updatePersonColors } from './logic.js';
 import { renderEditorHTML } from './templates.js';
 import { restartSim } from './physics.js';
@@ -14,7 +14,6 @@ const ui = {
 
 export function renderEditor() {
     const n = nodeById(state.selection);
-    
     updatePathfindingPanel();
 
     if (!n) {
@@ -27,6 +26,38 @@ export function renderEditor() {
     ui.editorTitle.style.display = 'none';
     ui.editorBody.innerHTML = renderEditorHTML(n, state);
     
+    // --- BOUTON CROSS-MODULE INTELLIGENT ---
+    const targetId = n.linkedMapPointId ? n.linkedMapPointId : n.id;
+    const isLinked = !!n.linkedMapPointId;
+    
+    const btnCrossModule = document.createElement('button');
+    btnCrossModule.className = 'primary';
+    btnCrossModule.style.width = '100%';
+    btnCrossModule.style.marginTop = '0px';
+    btnCrossModule.style.marginBottom = '15px';
+    
+    if(isLinked) {
+        btnCrossModule.style.background = 'rgba(115, 251, 247, 0.15)';
+        btnCrossModule.style.border = '1px solid #73fbf7';
+        btnCrossModule.style.color = '#73fbf7';
+        btnCrossModule.innerHTML = `🛰️ LOCALISER TACTIQUE <span style="font-size:0.8em; opacity:0.8;">[LIÉ]</span>`;
+        btnCrossModule.style.boxShadow = '0 0 10px rgba(115, 251, 247, 0.2)';
+    } else {
+        btnCrossModule.style.background = 'rgba(255, 255, 255, 0.05)';
+        btnCrossModule.style.border = '1px dashed #555';
+        btnCrossModule.style.color = '#888';
+        btnCrossModule.innerHTML = `🛰️ LOCALISER TACTIQUE <span style="font-size:0.8em; opacity:0.6;">[AUTO]</span>`;
+    }
+    
+    btnCrossModule.style.fontWeight = 'bold';
+    btnCrossModule.style.textTransform = 'uppercase';
+    
+    btnCrossModule.onclick = () => {
+        window.location.href = `../map/index.html?focus=${targetId}`;
+    };
+
+    ui.editorBody.insertBefore(btnCrossModule, ui.editorBody.firstChild);
+
     const dl = document.getElementById('datalist-all');
     if(dl) {
         dl.innerHTML = state.nodes
@@ -73,27 +104,27 @@ function setupEditorListeners(n) {
     if(inpNum) inpNum.oninput = (e) => { n.num = e.target.value; };
     document.getElementById('edNotes').oninput = (e) => { n.notes = e.target.value; };
 
-    // --- LOGIQUE LIAISON MAP ---
+    // --- FIX : SAUVEGARDE IMMÉDIATE LORS DE LA VALIDATION ---
+    const btnValMap = document.getElementById('btnValidateMapId');
     const inpMapId = document.getElementById('edMapId');
-    if(inpMapId) {
-        inpMapId.onchange = (e) => { 
-            n.linkedMapPointId = e.target.value.trim(); 
-            renderEditor(); // Re-render pour faire apparaître le bouton si ID valide
+    
+    if(btnValMap && inpMapId) {
+        btnValMap.onclick = () => {
+            n.linkedMapPointId = inpMapId.value.trim();
+            saveState(); // <--- SAUVEGARDE FORCÉE ICI
+            renderEditor(); 
+            showCustomAlert("LIAISON ENREGISTRÉE");
         };
-    }
-    const btnGoToMap = document.getElementById('btnGoToMap');
-    if(btnGoToMap) {
-        btnGoToMap.onclick = () => {
-            if(n.linkedMapPointId) {
-                // Redirection vers le dossier parent map avec le paramètre focus
-                window.location.href = `../map/index.html?focus=${n.linkedMapPointId}`;
-            }
-        };
+        inpMapId.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') btnValMap.click();
+        });
     }
 
     // Création Liens
     const bindAdd = (type, btnId, inpId, selId) => {
-        document.getElementById(btnId).onclick = () => {
+        const btn = document.getElementById(btnId);
+        if(!btn) return;
+        btn.onclick = () => {
             const nameInput = document.getElementById(inpId);
             const kindSelect = document.getElementById(selId);
             const name = nameInput.value.trim();

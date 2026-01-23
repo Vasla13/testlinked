@@ -382,3 +382,33 @@ label { display: block; color: var(--text-dim); font-size: 0.8rem; margin-bottom
 
 input[type="range"] { flex: 1; height: 2px; background: var(--border-color); appearance: none; border-radius: 0px; outline: none; }
 input[type="range"]::-webkit-slider-thumb { appearance: none; width: 12px; height: 12px; background: var(--accent-cyan); border-radius: 0px; cursor: pointer; box-shadow: 0 0 5px var(--accent-cyan); border: 1px solid #fff; }
+
+/* Effet de flash "Target Locked" sur le panneau latéral */
+@keyframes target-flash {
+    0% { box-shadow: 0 0 0 rgba(115, 251, 247, 0); border-color: rgba(115, 251, 247, 0.3); }
+    50% { box-shadow: 0 0 50px rgba(115, 251, 247, 0.5); border-color: #fff; background: rgba(115, 251, 247, 0.2); }
+    100% { box-shadow: 0 0 0 rgba(115, 251, 247, 0); border-color: rgba(115, 251, 247, 0.3); }
+}
+
+.target-locked {
+    animation: target-flash 0.5s ease-in-out 3; /* Clignote 3 fois */
+}
+
+/* Notification centrale "CIBLE ACQUISE" */
+.target-notification {
+    position: absolute;
+    top: 30%; left: 50%; transform: translate(-50%, -50%);
+    background: rgba(5, 7, 10, 0.9);
+    border: 1px solid var(--accent-cyan);
+    color: var(--accent-cyan);
+    padding: 15px 30px;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 1.5rem;
+    font-weight: 800;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    box-shadow: 0 0 50px rgba(115, 251, 247, 0.3);
+    z-index: 9999;
+    pointer-events: none;
+    animation: slideIn 0.5s ease-out, pulse-cloud 2s infinite;
+}

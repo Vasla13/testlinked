@@ -8,12 +8,10 @@ function getLinkOptions() {
 
 // =============================================================================
 // --- 1. BARRE LATÉRALE GAUCHE (PATHFINDING / IA) ---
-// C'est cette partie qui manquait (environ 100 lignes)
 // =============================================================================
 export function renderPathfindingSidebar(state, selectedNode) {
     const cyan = 'var(--accent-cyan)';
     const pink = 'var(--accent-pink)';
-    const bgPanel = 'rgba(10, 15, 30, 0.6)';
     
     const renderDataBox = (label, value, color, isActive, icon) => `
         <div style="
@@ -39,30 +37,19 @@ export function renderPathfindingSidebar(state, selectedNode) {
     if (!state.pathfinding.startId) {
         if (selectedNode) {
             return `
-                <div style="display:flex; flex-direction:column; gap:10px; padding:10px; border:1px solid rgba(255,255,255,0.1); border-radius:8px; background:${bgPanel};">
+                <div style="display:flex; flex-direction:column; gap:10px; padding:10px; border:1px solid rgba(255,255,255,0.1); border-radius:8px; background:rgba(10, 15, 30, 0.6);">
                     <div style="color:${cyan}; font-size:0.8rem; text-transform:uppercase; letter-spacing:2px; border-bottom:1px solid rgba(115,251,247,0.2); padding-bottom:5px; margin-bottom:5px;">
                         /// SYSTÈME DE TRAÇAGE
                     </div>
                     ${renderDataBox('Candidat Source', escapeHtml(selectedNode.name), cyan, true, '👤')}
-                    <button id="btnPathStart" class="primary" style="
-                        width:100%; margin-top:5px; padding:10px;
-                        background: linear-gradient(90deg, rgba(115,251,247,0.1), rgba(115,251,247,0.2));
-                        border: 1px solid ${cyan}; color: ${cyan};
-                        font-weight:bold; letter-spacing:1px;
-                        clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
-                        transition: all 0.2s; cursor: pointer;
-                    ">
+                    <button id="btnPathStart" class="primary" style="width:100%; margin-top:5px; padding:10px; border: 1px solid ${cyan}; color: ${cyan}; font-weight:bold; letter-spacing:1px;">
                         [ INITIALISER SOURCE ]
                     </button>
                 </div>
             `;
         } else {
-            // MODIFICATION ICI : Version compacte
             return `
-                <div style="
-                    padding:12px; text-align:center; border:1px dashed rgba(255,255,255,0.15); 
-                    border-radius:6px; color:#666; font-style:italic; background:rgba(0,0,0,0.15);
-                ">
+                <div style="padding:12px; text-align:center; border:1px dashed rgba(255,255,255,0.15); border-radius:6px; color:#666; font-style:italic; background:rgba(0,0,0,0.15);">
                     <div style="font-size:0.8rem; display:flex; align-items:center; justify-content:center; gap:6px;">
                         <span style="font-size:1rem; opacity:0.7;">📡</span> 
                         <span>En attente de signal...</span>
@@ -72,78 +59,39 @@ export function renderPathfindingSidebar(state, selectedNode) {
         }
     }
 
-    // CAS 2 : Source définie, en attente de cible ou calcul
+    // CAS 2 : Source définie
     const startNode = state.nodes.find(n => n.id === state.pathfinding.startId);
     const startName = startNode ? escapeHtml(startNode.name) : "ERR_UNKNOWN";
     const targetNode = (selectedNode && selectedNode.id !== state.pathfinding.startId) ? selectedNode : null;
     const hasTarget = !!targetNode;
 
     let statusDisplay = '';
-    
     if (state.pathfinding.active) {
-        statusDisplay = `
-            <div style="
-                margin-top:10px; padding:8px; background:rgba(0, 255, 0, 0.1); 
-                border:1px solid #00ff00; border-radius:4px; text-align:center;
-                color:#00ff00; font-weight:bold; font-size:0.8rem; letter-spacing:1px;
-                box-shadow: 0 0 15px rgba(0,255,0,0.1); text-transform:uppercase;
-            ">
-                ✅ Liaison Établie
-            </div>`;
+        statusDisplay = `<div style="margin-top:10px; padding:8px; background:rgba(0, 255, 0, 0.1); border:1px solid #00ff00; border-radius:4px; text-align:center; color:#00ff00; font-weight:bold; font-size:0.8rem;">✅ Liaison Établie</div>`;
     } else if (hasTarget) {
-         statusDisplay = `
-            <button id="btnPathCalc" style="
-                width:100%; margin-top:10px; padding:10px;
-                background: linear-gradient(90deg, rgba(255,107,129,0.1), rgba(255,107,129,0.2));
-                border: 1px solid ${pink}; color: ${pink};
-                font-weight:bold; letter-spacing:1px; text-transform:uppercase;
-                clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
-                cursor: pointer; transition: all 0.2s;
-            " onmouseover="this.style.background='${pink}'; this.style.color='#000';" onmouseout="this.style.background='rgba(255,107,129,0.1)'; this.style.color='${pink}';">
-                ⚡ CALCULER ROUTE
-            </button>`;
+         statusDisplay = `<button id="btnPathCalc" style="width:100%; margin-top:10px; padding:10px; border: 1px solid ${pink}; color: ${pink}; font-weight:bold; background:rgba(255,107,129,0.1);">⚡ CALCULER ROUTE</button>`;
     } else {
-        statusDisplay = `
-            <div style="margin-top:10px; padding:8px; border:1px solid rgba(255,255,255,0.1); border-radius:4px; text-align:center; color:#666; font-size:0.75rem; font-style:italic;">
-                En attente de cible...
-            </div>`;
+        statusDisplay = `<div style="margin-top:10px; padding:8px; text-align:center; color:#666; font-size:0.75rem; font-style:italic;">En attente de cible...</div>`;
     }
 
     return `
         <div style="border:1px solid rgba(115, 251, 247, 0.3); border-radius:6px; overflow:hidden; background:rgba(5,7,10,0.4); backdrop-filter:blur(5px);">
-            <div style="
-                background: linear-gradient(90deg, rgba(115, 251, 247, 0.1), transparent);
-                padding: 6px 10px; border-bottom:1px solid rgba(115, 251, 247, 0.2);
-                display:flex; justify-content:space-between; align-items:center;
-            ">
+            <div style="background: linear-gradient(90deg, rgba(115, 251, 247, 0.1), transparent); padding: 6px 10px; border-bottom:1px solid rgba(115, 251, 247, 0.2); display:flex; justify-content:space-between; align-items:center;">
                 <span style="font-size:0.75rem; color:${cyan}; font-weight:bold; letter-spacing:2px;">/// NET.LINK</span>
                 <span style="width:6px; height:6px; background:${state.pathfinding.active ? '#0f0' : '#f00'}; border-radius:50%; box-shadow:0 0 5px currentColor;"></span>
             </div>
-
             <div style="padding:12px; display:flex; flex-direction:column; gap:10px;">
                 ${renderDataBox('Source (A)', startName, cyan, true, '🚩')}
-                <div style="display:flex; align-items:center; justify-content:center; opacity:0.6;">
-                    <div style="height:20px; width:1px; background:linear-gradient(to bottom, ${cyan}, ${pink});"></div>
-                    <div style="font-size:0.8rem; color:#fff; margin:0 5px;">▼</div>
-                    <div style="height:20px; width:1px; background:linear-gradient(to bottom, ${cyan}, ${pink});"></div>
-                </div>
                 ${renderDataBox('Destination (B)', targetNode ? escapeHtml(targetNode.name) : 'Sélectionner...', pink, hasTarget, '🎯')}
                 ${statusDisplay}
-                <button id="btnPathCancel" style="
-                    width:100%; margin-top:5px; padding:6px;
-                    background: transparent; border: 1px solid #444; color: #888;
-                    font-size:0.7rem; text-transform:uppercase; letter-spacing:1px;
-                    border-radius:4px; cursor: pointer; transition: all 0.2s;
-                " onmouseover="this.style.borderColor='#fff'; this.style.color='#fff';" onmouseout="this.style.borderColor='#444'; this.style.color='#888';">
-                    ✖ Annuler séquence
-                </button>
+                <button id="btnPathCancel" style="width:100%; margin-top:5px; padding:6px; background:transparent; border:1px solid #444; color:#888; font-size:0.7rem; border-radius:4px; cursor:pointer;">✖ Annuler séquence</button>
             </div>
         </div>
     `;
 }
 
 // =============================================================================
-// --- 2. BARRE LATÉRALE DROITE (ÉDITEUR AVEC LIAISON MAP) ---
+// --- 2. BARRE LATÉRALE DROITE (ÉDITEUR) ---
 // =============================================================================
 export function renderEditorHTML(n, state) {
     const isP = (n.type === TYPES.PERSON);
@@ -155,10 +103,15 @@ export function renderEditorHTML(n, state) {
         <option value="${TYPES.COMPANY}" ${n.type===TYPES.COMPANY?'selected':''}>Entreprise</option>
     `;
 
-    // BOUTON LIAISON MAP (Ping Croisé)
-    const mapLinkBtn = n.linkedMapPointId 
-        ? `<button id="btnGoToMap" class="mini-btn" style="width:auto; padding:0 8px; border:1px solid var(--accent-cyan); color:var(--accent-cyan); margin-left:5px;" title="Voir sur la Carte Tactique">🗺️</button>` 
-        : '';
+    // --- LOGIQUE VISUELLE LIAISON ---
+    const isLinked = !!n.linkedMapPointId;
+    const inputBorder = isLinked ? '1px solid #73fbf7' : '1px solid #333';
+    const inputColor = isLinked ? '#73fbf7' : 'var(--accent-orange)';
+    // Bouton de validation : Vert/Coche si lié, Gris/Flèche si pas lié
+    const btnStyle = isLinked 
+        ? 'background:rgba(115,251,247,0.2); color:#73fbf7; border:1px solid #73fbf7;' 
+        : 'background:rgba(255,255,255,0.05); color:#888; border:1px solid #444;';
+    const btnIcon = isLinked ? '✔' : 'OK';
 
     return `
     <h3 style="margin:0 0 10px 0; color:var(--accent-cyan); text-transform:uppercase; letter-spacing:1px; border-bottom:1px solid var(--border-color); padding-bottom:5px;">
@@ -198,12 +151,23 @@ export function renderEditorHTML(n, state) {
             <input type="text" id="edNum" value="${escapeHtml(n.num || '')}" placeholder="555-...">
         </div>` : ''}
 
-        <div style="margin-top:8px; padding-top:8px; border-top:1px dashed rgba(255,255,255,0.1);">
-             <label style="font-size:0.7rem; color:#888;">Liaison Carte Tactique</label>
-             <div class="flex-row-force">
-                 <input type="text" id="edMapId" value="${escapeHtml(n.linkedMapPointId || '')}" placeholder="ID Point Map..." class="flex-grow-input" style="font-size:0.8rem; font-family:monospace; color:var(--accent-orange);">
-                 ${mapLinkBtn}
+        <div style="margin-top:10px; padding-top:10px; border-top:1px dashed rgba(255,255,255,0.1);">
+             <label style="font-size:0.7rem; color:#aaa; display:flex; justify-content:space-between;">
+                <span>ID LIAISON TACTIQUE (MAP)</span>
+                ${isLinked ? '<span style="color:#73fbf7; font-weight:bold;">[ ACTIF ]</span>' : ''}
+             </label>
+             <div class="flex-row-force" style="gap:5px;">
+                 <input type="text" id="edMapId" 
+                        value="${escapeHtml(n.linkedMapPointId || '')}" 
+                        placeholder="Coller l'ID ici..." 
+                        class="flex-grow-input" 
+                        style="font-size:0.8rem; font-family:monospace; color:${inputColor}; border:${inputBorder};">
+                 
+                 <button id="btnValidateMapId" class="mini-btn" style="width:auto; padding:0 10px; font-weight:bold; ${btnStyle}" title="Valider la liaison">
+                    ${btnIcon}
+                 </button>
              </div>
+             ${isLinked ? `<div style="font-size:0.65rem; color:#555; margin-top:2px;">Cible verrouillée : ${n.linkedMapPointId}</div>` : ''}
         </div>
     </div>
 
@@ -213,32 +177,27 @@ export function renderEditorHTML(n, state) {
     </div>
 
     <div style="border:1px solid var(--border-color); border-radius:8px; padding:10px; background:rgba(0,0,0,0.2); margin-bottom:10px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
-            <div style="font-size:0.75rem; color:#73fbf7; font-weight:bold;">AJOUTER / CRÉER RELATION</div>
-        </div>
-
+        <div style="font-size:0.75rem; color:#73fbf7; margin-bottom:5px; font-weight:bold;">AJOUTER RELATION</div>
+        
         <div style="margin-bottom:6px;">
-            <label style="font-size:0.7rem; color:#aaa;">Entreprise</label>
             <div class="flex-row-force">
-                <input id="inpCompany" list="datalist-companies" placeholder="Nom..." class="flex-grow-input" style="font-size:0.85rem;">
+                <input id="inpCompany" list="datalist-companies" placeholder="Entreprise..." class="flex-grow-input" style="font-size:0.85rem;">
                 <select id="selKindCompany" class="compact-select" style="width:90px;">${getLinkOptions()}</select>
                 <button id="btnAddCompany" class="mini-btn primary" style="width:30px;">+</button>
             </div>
         </div>
 
         <div style="margin-bottom:6px;">
-            <label style="font-size:0.7rem; color:#aaa;">Groupuscule</label>
             <div class="flex-row-force">
-                <input id="inpGroup" list="datalist-groups" placeholder="Nom..." class="flex-grow-input" style="font-size:0.85rem;">
+                <input id="inpGroup" list="datalist-groups" placeholder="Groupe..." class="flex-grow-input" style="font-size:0.85rem;">
                 <select id="selKindGroup" class="compact-select" style="width:90px;">${getLinkOptions()}</select>
                 <button id="btnAddGroup" class="mini-btn primary" style="width:30px;">+</button>
             </div>
         </div>
 
         <div>
-            <label style="font-size:0.7rem; color:#aaa;">Personnel</label>
             <div class="flex-row-force">
-                <input id="inpPerson" list="datalist-people" placeholder="Nom..." class="flex-grow-input" style="font-size:0.85rem;">
+                <input id="inpPerson" list="datalist-people" placeholder="Personne..." class="flex-grow-input" style="font-size:0.85rem;">
                 <select id="selKindPerson" class="compact-select" style="width:90px;">${getLinkOptions()}</select>
                 <button id="btnAddPerson" class="mini-btn primary" style="width:30px;">+</button>
             </div>
@@ -251,9 +210,6 @@ export function renderEditorHTML(n, state) {
             <div class="flex-row-force">
                <input id="mergeTarget" list="datalist-all" placeholder="Vers qui fusionner ?" class="flex-grow-input" style="border-color:#ff5555;">
                <button id="btnMerge" class="mini-btn danger" style="width:40px;">⚗️</button>
-            </div>
-            <div style="font-size:0.7rem; color:#aaa; margin-top:5px; font-style:italic;">
-                ⚠️ Fusionner déplacera tous les liens vers la cible et supprimera ce nœud.
             </div>
         </div>
     </details>

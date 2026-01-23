@@ -25,7 +25,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // --- GESTION DU CTRL+Z (UNDO) ---
     document.addEventListener('keydown', (e) => {
-        // Déclenchement sur Ctrl+Z ou Cmd+Z (Mac)
         if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
             e.preventDefault(); 
             if (undo()) {
@@ -33,7 +32,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 saveLocalState();
                 renderGroupsList();
                 renderAll();
-                // Petit flash visuel sur le HUD pour confirmer
                 const hud = document.getElementById('hud-bottom');
                 if(hud) {
                     const original = hud.style.borderColor || 'var(--border-color)';
@@ -71,34 +69,92 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderGroupsList();
     renderAll(); 
 
-    // --- AUTO-FOCUS VIA URL ---
+    // --- LIAISON CROSS-MODULE (AUTO-FOCUS ROBUSTE) ---
     const params = new URLSearchParams(window.location.search);
     const focusId = params.get('focus');
+    
     if(focusId) {
-        let found = null;
-        state.groups.forEach((g, gIdx) => {
-            g.points.forEach((p, pIdx) => {
-                if(p.id === focusId) found = { p, gIdx, pIdx };
+        console.log("🛰️ Séquence de verrouillage cible initiée pour ID:", focusId);
+        
+        // On attend que TOUT soit prêt (Données JSON + Image Carte)
+        // Intervalle de vérification toutes les 100ms
+        const checkInterval = setInterval(() => {
+            // 1. Vérif Données chargées
+            if (!state.groups || state.groups.length === 0) return;
+            
+            // 2. Vérif Image Carte chargée (Dimensions connues)
+            // C'est crucial : sans ça, le calcul de zoom échoue ou est écrasé
+            if (!state.mapWidth || state.mapWidth === 0) return;
+
+            // --- Tout est prêt, on exécute ---
+            clearInterval(checkInterval);
+
+            // Recherche du point
+            let found = null;
+            state.groups.some((g, gIdx) => {
+                const pIdx = g.points.findIndex(p => p.id === focusId);
+                if(pIdx !== -1) {
+                    found = { p: g.points[pIdx], gIdx, pIdx };
+                    return true;
+                }
+                return false;
             });
-        });
 
-        if(found) {
-            state.view.scale = 3.5;
-            const viewport = document.getElementById('viewport');
-            const mapW = state.mapWidth || 2000; 
-            const vw = viewport ? viewport.clientWidth : window.innerWidth;
-            const vh = viewport ? viewport.clientHeight : window.innerHeight;
+            if(found) {
+                console.log("🎯 CIBLE ACQUISE :", found.p.name);
 
-            state.view.x = (vw / 2) - (found.p.x * mapW / 100) * state.view.scale;
-            state.view.y = (vh / 2) - (found.p.y * mapH / 100) * state.view.scale;
-            updateTransform();
-            selectItem('point', found.gIdx, found.pIdx);
-        }
+                // Calcul du Zoom (Avec les dimensions maintenant garanties)
+                state.view.scale = 3.0; // Zoom Fort
+                
+                const viewport = document.getElementById('viewport');
+                const mapW = state.mapWidth; 
+                const mapH = state.mapHeight; // CORRECTION ICI (c'était manquant)
+                
+                const vw = viewport ? viewport.clientWidth : window.innerWidth;
+                const vh = viewport ? viewport.clientHeight : window.innerHeight;
+
+                // Centrage précis
+                state.view.x = (vw / 2) - (found.p.x * mapW / 100) * state.view.scale;
+                state.view.y = (vh / 2) - (found.p.y * mapH / 100) * state.view.scale;
+                
+                updateTransform();
+                
+                // Sélection UI (Ouvre le panneau de droite)
+                selectItem('point', found.gIdx, found.pIdx);
+
+                // --- EFFETS VISUELS IMMERSIFS ---
+                
+                // 1. Flash Rouge/Cyan sur le panneau éditeur
+                const editor = document.getElementById('sidebar-right');
+                if(editor) {
+                    editor.classList.remove('target-locked');
+                    void editor.offsetWidth; // Reset animation
+                    editor.classList.add('target-locked');
+                }
+
+                // 2. Notification HUD Centrale
+                const existingNotif = document.querySelector('.target-notification');
+                if(existingNotif) existingNotif.remove();
+
+                const notif = document.createElement('div');
+                notif.className = 'target-notification';
+                notif.innerHTML = `⚠️ VERROUILLAGE TACTIQUE<br><span style="font-size:0.8em; color:#fff;">${found.p.name}</span>`;
+                document.body.appendChild(notif);
+                
+                // Son (Optionnel, décommenter si vous ajoutez des sons)
+                // const audio = new Audio('sounds/lock.mp3'); audio.play().catch(e=>{});
+
+                setTimeout(() => notif.remove(), 4000);
+            } else {
+                console.warn("❌ Cible introuvable malgré l'ID valide.");
+            }
+        }, 100);
+
+        // Sécurité : Arrêt de la recherche après 10 secondes si ça charge pas
+        setTimeout(() => clearInterval(checkInterval), 10000);
     }
 
     // --- BOUTONS BARRE D'OUTILS ---
-    
-    // 1. Sauvegarde Cloud Manuelle
     const btnCloudSave = document.getElementById('btnCloudSave');
     if(btnCloudSave) {
         btnCloudSave.onclick = async () => {
@@ -112,26 +168,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         };
     }
     
-    // 2. Export JSON (+ Sync Cloud auto + Stealth Mode)
     const btnSave = document.getElementById('btnSave');
     if(btnSave) {
         btnSave.onclick = () => {
-            // A. Sauvegarde Cloud silencieuse ("Fire & Forget")
-            api.saveMap({ 
-                groups: state.groups, 
-                tacticalLinks: state.tacticalLinks 
-            }).catch(err => console.error("Auto-save background error:", err));
-
-            // B. Téléchargement immédiat (nom auto)
+            api.saveMap({ groups: state.groups, tacticalLinks: state.tacticalLinks })
+               .catch(err => console.error("Auto-save background error:", err));
             exportToJSON();
         };
     }
     
-    // 3. Reset Vue
     const btnReset = document.getElementById('btnResetView');
     if(btnReset) btnReset.onclick = centerMap;
     
-    // 4. Ajouter Groupe
     const btnAddGroup = document.getElementById('btnAddGroup');
     if(btnAddGroup) btnAddGroup.onclick = async () => {
         const name = await customPrompt("NOUVEAU CALQUE", "Nom :");
@@ -139,14 +187,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         const color = await customColorPicker("COULEUR DU CALQUE", "#ffffff");
         if(!color) return; 
 
-        pushHistory(); // <--- SAUVEGARDE ETAT
-
+        pushHistory(); 
         state.groups.push({ name, color, visible: true, points: [], zones: [] });
         saveLocalState();
         renderGroupsList();
     };
     
-    // 5. IMPORT (OUVRIR / REMPLACER)
     const fileInput = document.getElementById('fileImport');
     const btnTriggerImport = document.getElementById('btnTriggerImport');
     if (btnTriggerImport && fileInput) {
@@ -159,11 +205,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 try {
                     const json = JSON.parse(evt.target.result);
                     if (json.groups) {
-                        pushHistory(); // <--- SAUVEGARDE ETAT
-
+                        pushHistory(); 
                         setGroups(json.groups);
                         if(json.tacticalLinks) state.tacticalLinks = json.tacticalLinks;
-                        
                         saveLocalState();
                         renderGroupsList(); renderAll();
                         await customAlert("OUVERTURE", "Carte chargée (Remplacement total).");
@@ -175,7 +219,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         };
     }
 
-    // 6. FUSION (MERGE)
     const fileMerge = document.getElementById('fileMerge');
     const btnTriggerMerge = document.getElementById('btnTriggerMerge');
     if(btnTriggerMerge && fileMerge) {
@@ -188,10 +231,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 try {
                     const json = JSON.parse(evt.target.result);
                     let importedCount = 0;
-                    
                     if(json.groups) {
-                        pushHistory(); // <--- SAUVEGARDE ETAT
-
+                        pushHistory(); 
                         json.groups.forEach(newGroup => {
                             const existingGroup = state.groups.find(g => g.name === newGroup.name);
                             if(existingGroup) {
@@ -213,7 +254,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 importedCount += (newGroup.points ? newGroup.points.length : 0);
                             }
                         });
-                        
                         if(json.tacticalLinks) {
                             if(!state.tacticalLinks) state.tacticalLinks = [];
                             json.tacticalLinks.forEach(l => {
@@ -222,7 +262,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 }
                             });
                         }
-
                         saveLocalState();
                         renderGroupsList(); renderAll();
                         await customAlert("FUSION", `${importedCount} points importés.`);
@@ -234,28 +273,22 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // 7. RESET TOTAL (AVEC UNDO)
     const btnResetMap = document.getElementById('btnResetMap');
     if(btnResetMap) {
         btnResetMap.onclick = async () => {
             if(await customConfirm("RESET TOTAL", "Voulez-vous vraiment tout effacer ?")) {
-                
-                pushHistory(); // <--- SAUVEGARDE ETAT (Permet d'annuler le reset !)
-                
+                pushHistory(); 
                 setGroups(JSON.parse(JSON.stringify(DEFAULT_DATA))); 
                 state.tacticalLinks = []; 
-                
                 saveLocalState();
                 renderGroupsList();
                 renderAll();
                 centerMap();
-                
                 await customAlert("SUCCÈS", "Carte remise à zéro. (Ctrl+Z pour annuler)");
             }
         };
     }
 
-    // --- GPS PANEL ---
     const gpsIconSelect = document.getElementById('gpsIconType');
     if(gpsIconSelect) {
         let opts = ''; for(const k in ICONS) opts += `<option value="${k}">${k}</option>`;
@@ -269,7 +302,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     if(gpsPanel && btnToggleGps) {
         btnToggleGps.onclick = () => { 
             const isHidden = (gpsPanel.style.display === 'none');
-            
             if(isHidden) {
                 const selectEl = document.getElementById('gpsGroupSelect');
                 if(selectEl) {
@@ -312,7 +344,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             const iconVal = document.getElementById('gpsIconType').value || 'DEFAULT';
             const affVal = document.getElementById('gpsAffiliation').value || '';
             const notesVal = document.getElementById('gpsNotes').value || '';
-            
             const selectEl = document.getElementById('gpsGroupSelect');
             const groupIdx = selectEl ? parseInt(selectEl.value) : 0;
 
@@ -323,8 +354,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 let targetGroup = state.groups[groupIdx];
                 if (!targetGroup) targetGroup = state.groups[0];
                 targetGroup.visible = true;
-                
-                pushHistory(); // <--- SAUVEGARDE ETAT
+                pushHistory(); 
 
                 const newPoint = { 
                     id: generateID(),
@@ -338,7 +368,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 
                 targetGroup.points.push(newPoint);
                 saveLocalState();
-                
                 renderGroupsList(); renderAll();
 
                 const viewport = document.getElementById('viewport');

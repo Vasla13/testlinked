@@ -505,3 +505,30 @@ option:disabled {
   border-color:#a11;
 }
 
+
+/* --- AJOUTS LIAISON CROSS-MODULE --- */
+@keyframes target-flash {
+    0% { box-shadow: 0 0 0 rgba(122, 162, 255, 0); border-color: #222737; }
+    50% { box-shadow: 0 0 50px rgba(122, 162, 255, 0.4); border-color: #fff; background: rgba(122, 162, 255, 0.1); }
+    100% { box-shadow: 0 0 0 rgba(122, 162, 255, 0); border-color: #222737; }
+}
+
+.target-locked {
+    animation: target-flash 0.5s ease-in-out 3;
+}
+
+.target-notification {
+    position: absolute;
+    top: 20%; left: 50%; transform: translate(-50%, -50%);
+    background: rgba(15, 20, 30, 0.95);
+    border: 1px solid #7aa2ff;
+    color: #7aa2ff;
+    padding: 12px 24px;
+    font-family: 'Inter', sans-serif; /* Ou Rajdhani si dispo */
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    box-shadow: 0 0 30px rgba(122, 162, 255, 0.25);
+    z-index: 9999;
+    pointer-events: none;
+}
