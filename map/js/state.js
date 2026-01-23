@@ -40,6 +40,10 @@ export const state = {
 
     statusFilter: 'ALL',
     searchTerm: '',
+    
+    // NOUVEAU : Mode d'affichage des étiquettes ('auto', 'always', 'never')
+    labelMode: 'auto',
+
     mapWidth: 0,
     mapHeight: 0
 };

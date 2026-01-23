@@ -1,4 +1,4 @@
-import { state } from './state.js';
+import { state, saveLocalState } from './state.js';
 import { ICONS } from './constants.js';
 import { customConfirm, customAlert } from './ui-modals.js';
 import { percentageToGps, gpsToPercentage } from './utils.js';
@@ -72,13 +72,19 @@ function renderZoneEditor() {
         </div>
     `;
 
-    document.getElementById('ezName').oninput = (e) => { zone.name = e.target.value; renderAll(); };
+    document.getElementById('ezName').oninput = (e) => { 
+        zone.name = e.target.value; 
+        renderAll(); 
+        saveLocalState(); 
+    };
+    
     document.getElementById('ezGroup').onchange = (e) => {
         const newG = parseInt(e.target.value);
         group.zones.splice(zoneIndex, 1);
         state.groups[newG].zones.push(zone);
         state.selectedZone = { groupIndex: newG, zoneIndex: state.groups[newG].zones.length - 1 };
-        renderGroupsList(); renderAll(); renderEditor();
+        renderGroupsList(); renderAll(); renderEditor(); 
+        saveLocalState();
     };
 
     if(isCircle) {
@@ -94,6 +100,7 @@ function renderZoneEditor() {
             zone.cx = percentCoords.x;
             zone.cy = percentCoords.y;
             renderAll();
+            saveLocalState();
         };
         inpR.oninput = update;
         inpX.oninput = update;
@@ -104,6 +111,7 @@ function renderZoneEditor() {
         if(await customConfirm("SUPPRESSION", "Supprimer cette zone ?")) {
             group.zones.splice(zoneIndex, 1);
             deselect();
+            saveLocalState();
         }
     };
     document.getElementById('btnClose').onclick = deselect;
@@ -182,10 +190,27 @@ function renderPointEditor() {
         </div>
     `;
 
-    document.getElementById('edName').oninput = (e) => { point.name = e.target.value; renderAll(); };
-    document.getElementById('edIcon').onchange = (e) => { point.iconType = e.target.value; renderAll(); };
-    document.getElementById('edType').oninput = (e) => { point.type = e.target.value; };
-    document.getElementById('edNotes').oninput = (e) => { point.notes = e.target.value; };
+    document.getElementById('edName').oninput = (e) => { 
+        point.name = e.target.value; 
+        renderAll(); 
+        saveLocalState(); 
+    };
+    
+    document.getElementById('edIcon').onchange = (e) => { 
+        point.iconType = e.target.value; 
+        renderAll(); 
+        saveLocalState(); 
+    };
+    
+    document.getElementById('edType').oninput = (e) => { 
+        point.type = e.target.value; 
+        saveLocalState(); 
+    };
+    
+    document.getElementById('edNotes').oninput = (e) => { 
+        point.notes = e.target.value; 
+        saveLocalState(); 
+    };
 
     const updateCoords = () => { 
         const valX = parseFloat(document.getElementById('edX').value) || 0; 
@@ -194,6 +219,7 @@ function renderPointEditor() {
         point.x = percent.x;
         point.y = percent.y;
         renderAll(); 
+        saveLocalState();
     };
     document.getElementById('edX').oninput = updateCoords;
     document.getElementById('edY').oninput = updateCoords;
@@ -203,7 +229,8 @@ function renderPointEditor() {
         group.points.splice(pointIndex, 1);
         state.groups[newGIndex].points.push(point);
         state.selectedPoint = { groupIndex: newGIndex, pointIndex: state.groups[newGIndex].points.length - 1 };
-        renderGroupsList(); renderAll(); renderEditor();
+        renderGroupsList(); renderAll(); renderEditor(); 
+        saveLocalState();
     };
 
     // LOGIQUE DE NAVIGATION CROSS-MODULE
@@ -218,7 +245,14 @@ function renderPointEditor() {
     };
     document.getElementById('btnCopyId').onclick = () => navigator.clipboard.writeText(point.id);
     document.getElementById('btnCopyCoords').onclick = () => navigator.clipboard.writeText(`${gpsCoords.x.toFixed(2)}, ${gpsCoords.y.toFixed(2)}`);
-    document.getElementById('btnDelete').onclick = async () => { if(await customConfirm("SUPPRESSION", "Supprimer ?")) { group.points.splice(pointIndex, 1); deselect(); renderGroupsList(); } };
+    document.getElementById('btnDelete').onclick = async () => { 
+        if(await customConfirm("SUPPRESSION", "Supprimer ?")) { 
+            group.points.splice(pointIndex, 1); 
+            deselect(); 
+            renderGroupsList(); 
+            saveLocalState();
+        } 
+    };
     document.getElementById('btnClose').onclick = deselect;
 }
 

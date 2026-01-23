@@ -34,22 +34,40 @@ export function initUI() {
         };
     }
 
+    // FIX SEARCH : Écouteur pour la recherche en temps réel
     const searchInput = document.getElementById('searchInput');
     if(searchInput) {
         searchInput.addEventListener('input', (e) => {
             state.searchTerm = e.target.value.toLowerCase();
-            renderGroupsList();
+            renderGroupsList(); // Met à jour la liste à gauche
+            renderAll();        // Met à jour la carte (filtrage visuel)
         });
     }
 
-    // SUPPRIME : Gestion du bouton mesure (btnMeasure) car l'élément est retiré du HTML
-
-    const chkLabels = document.getElementById('chkLabels');
-    if(chkLabels) {
-        chkLabels.addEventListener('change', (e) => {
-            document.body.classList.toggle('show-labels', e.target.checked);
-        });
-        if(chkLabels.checked) document.body.classList.add('show-labels');
+    // FIX LABELS : Gestion du bouton 3 états (Auto -> Always -> Never)
+    const btnLabels = document.getElementById('btnToggleLabels');
+    if(btnLabels) {
+        btnLabels.onclick = () => {
+            const body = document.body;
+            body.classList.remove('labels-auto', 'labels-always', 'labels-never');
+            
+            if (state.labelMode === 'auto') {
+                state.labelMode = 'always';
+                body.classList.add('labels-always');
+                btnLabels.innerText = "NOMS: TOUJOURS";
+                btnLabels.style.color = "#fff";
+            } else if (state.labelMode === 'always') {
+                state.labelMode = 'never';
+                body.classList.add('labels-never');
+                btnLabels.innerText = "NOMS: JAMAIS";
+                btnLabels.style.color = "var(--text-dim)";
+            } else {
+                state.labelMode = 'auto';
+                body.classList.add('labels-auto');
+                btnLabels.innerText = "NOMS: AUTO";
+                btnLabels.style.color = "var(--text-dim)";
+            }
+        };
     }
 }
 

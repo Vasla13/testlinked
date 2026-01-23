@@ -1,7 +1,7 @@
 :root {
     --font-main: 'Rajdhani', sans-serif;
     --bg-dark: #05070a;
-    --panel-bg: rgba(10, 15, 25, 0.95); /* Légèrement plus opaque pour un look plus "solide" comme Point */
+    --panel-bg: rgba(10, 15, 25, 0.95); /* Légèrement plus opaque pour un look plus "solide" */
     --accent-cyan: #73fbf7;
     --accent-pink: #ff6b81;
     --accent-orange: #ff922b;
@@ -12,6 +12,14 @@
 }
 
 * { box-sizing: border-box; user-select: none; }
+
+/* --- FIX DRAG & DROP BUG --- */
+/* Empêche le navigateur de vouloir glisser l'image elle-même, ce qui bloquait le déplacement du point */
+img {
+    -webkit-user-drag: none;
+    user-drag: none;
+    pointer-events: none; /* Laisse le clic passer au div parent (le marker) */
+}
 
 /* --- 0. CURSEUR CUSTOM (SCI-FI STYLE) --- */
 body {
@@ -42,18 +50,17 @@ a, button, .nav-btn, .action-btn, .file-btn, label, select, input, .marker, .gro
 .toolbar { display: flex; align-items: center; gap: 10px; }
 .separator { width: 1px; height: 24px; background: var(--border-color); margin: 0 5px; opacity: 0.5; }
 
-/* BOUTONS UNIFIÉS (STYLE POINT: Plus nets, sans arrondi) */
+/* BOUTONS UNIFIÉS */
 .nav-btn, .action-btn, button {
     background: rgba(115, 251, 247, 0.05);
     border: 1px solid var(--accent-cyan);
     color: var(--accent-cyan);
     font-family: var(--font-main);
     text-transform: uppercase;
-    font-weight: 700; /* Plus gras comme sur Point */
+    font-weight: 700;
     letter-spacing: 1px;
     padding: 8px 16px;
     transition: background 0.2s, color 0.2s, box-shadow 0.2s;
-    /* CHANGEMENT ICI : border-radius: 0 pour un look tranchant */
     border-radius: 0px; 
     clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
     display: inline-flex; justify-content: center; align-items: center;
@@ -68,7 +75,6 @@ a, button, .nav-btn, .action-btn, .file-btn, label, select, input, .marker, .gro
 .nav-link {
     text-decoration: none; color: var(--accent-cyan); font-weight: 700;
     padding: 8px 12px; border: 1px solid var(--border-color);
-    /* CHANGEMENT ICI */
     border-radius: 0px;
     transition: all 0.2s;
 }
@@ -79,12 +85,12 @@ a, button, .nav-btn, .action-btn, .file-btn, label, select, input, .marker, .gro
 #app-container { flex: 1; display: flex; position: relative; overflow: hidden; }
 
 #sidebar-left, #sidebar-right {
-    width: 320px; /* Légèrement plus étroit */
+    width: 320px;
     background: var(--panel-bg); 
-    /* Moins de flou, plus de solidité pour matcher Point */
     backdrop-filter: blur(5px);
     border-right: 1px solid var(--border-color); display: flex; flex-direction: column;
     z-index: 150; transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+    max-height: 100vh; /* Important pour gérer le scroll interne */
 }
 
 #sidebar-right {
@@ -95,35 +101,39 @@ a, button, .nav-btn, .action-btn, .file-btn, label, select, input, .marker, .gro
 }
 #sidebar-right.active { transform: translateX(0); }
 
-/* RESSERRAGE DU CONTENU DE LA SIDEBAR DROITE (STYLE POINT) */
 #sidebar-right .panel-section {
-    padding: 12px; /* Padding réduit */
+    padding: 12px;
     border-bottom: 1px solid rgba(115, 251, 247, 0.1);
+    flex-shrink: 0; /* Empêche l'écrasement des sections fixes */
 }
 
-/* Pour que les boutons dans la sidebar prennent toute la largeur et soient collés */
 #sidebar-right .action-btn, #sidebar-right .file-btn {
     width: 100%;
-    margin-bottom: 8px; /* Espace réduit entre les boutons empilés */
+    margin-bottom: 8px;
     text-align: center;
 }
-#sidebar-right .action-btn:last-child {
-    margin-bottom: 0;
+#sidebar-right .action-btn:last-child { margin-bottom: 0; }
+
+/* FIX SCROLL DROIT : Conteneur de l'éditeur */
+#editor-content {
+    flex: 1;
+    overflow-y: auto;
+    padding-bottom: 20px;
 }
 
-
 .panel-header {
-    padding: 12px 15px; border-bottom: 2px solid var(--border-color); /* Bordure plus épaisse */
+    padding: 12px 15px; border-bottom: 2px solid var(--border-color);
     color: var(--accent-cyan); font-weight: 800; letter-spacing: 2px; font-size: 1rem;
     display: flex; justify-content: space-between; align-items: center;
     background: linear-gradient(90deg, rgba(115, 251, 247, 0.1), transparent);
     text-transform: uppercase;
+    flex-shrink: 0;
 }
 
-.panel-section { padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+.panel-section { padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.05); flex-shrink: 0; }
 .scrollable-content { flex: 1; overflow-y: auto; padding: 10px; }
 
-/* Scrollbars plus fines et carrées */
+/* Scrollbars */
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: rgba(0,0,0,0.3); }
 ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 0px; }
@@ -160,7 +170,7 @@ body.high-light-mode #map-image {
 #zones-layer, #links-layer, #markers-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
 
 
-/* --- 4. MARQUEURS TACTIQUES --- */
+/* --- 4. MARQUEURS TACTIQUES & CORRECTIFS COULEURS --- */
 .marker.status-danger { animation: pulse-danger 2s infinite; --marker-color: #ff4444 !important; }
 @keyframes pulse-danger { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
 
@@ -179,25 +189,30 @@ body.high-light-mode #map-image {
     position: relative; width: 34px; height: 34px; 
     background: rgba(5, 7, 10, 0.9); 
     display: flex; justify-content: center; align-items: center;
-    color: var(--marker-color);
+    /* FIX COLOR : On utilise explicitement la variable CSS injectée par le JS */
+    color: var(--marker-color) !important;
     box-shadow: 0 4px 15px rgba(0,0,0,0.6);
     transition: all 0.2s;
 }
 
 .marker-icon-box::after {
     content: ''; position: absolute; inset: 0;
-    border: 2px solid var(--marker-color);
+    border: 2px solid var(--marker-color); /* FIX COLOR */
     clip-path: polygon(0 0, 30% 0, 30% 100%, 0 100%, 0 100%, 100% 100%, 100% 0, 0 0, 100% 0, 70% 0, 70% 100%, 100% 100%);
 }
 
-.marker svg { width: 20px; height: 20px; fill: currentColor; filter: drop-shadow(0 0 5px var(--marker-color)); }
+.marker svg { 
+    width: 20px; height: 20px; 
+    fill: currentColor; /* Pour hériter de color */
+    filter: drop-shadow(0 0 5px var(--marker-color)); 
+}
 
+/* Étiquettes */
 .marker-label {
     position: absolute; left: 40px; top: 50%; transform: translateY(-50%);
     background: rgba(0, 0, 0, 0.8);
     border-left: 3px solid var(--marker-color);
     color: #fff; padding: 4px 8px;
-    /* CHANGEMENT ICI: Pas d'arrondi */
     border-radius: 0px;
     font-size: 11px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase;
     white-space: nowrap; pointer-events: none; opacity: 0.8; transition: all 0.2s;
@@ -208,27 +223,44 @@ body.high-light-mode #map-image {
     width: 15px; height: 1px; background: var(--marker-color); opacity: 0.5;
 }
 
+/* --- LOGIQUE D'AFFICHAGE DES NOMS (3 ÉTATS) --- */
+/* État 1: AUTO (Défaut - Hover seulement) */
+body.labels-auto .marker-label { opacity: 0; transform: translateY(-50%) translateX(-10px); }
+body.labels-auto .marker:hover .marker-label { opacity: 1; transform: translateY(-50%) translateX(0); }
+body.labels-auto .marker:hover .marker-label::before { opacity: 0.5; } /* ligne guide */
+
+/* État 2: ALWAYS (Toujours visibles) */
+body.labels-always .marker-label { opacity: 1; transform: translateY(-50%); left: 40px; }
+body.labels-always .marker-label::before { display: block; }
+
+/* État 3: NEVER (Jamais visibles) */
+body.labels-never .marker-label { display: none !important; }
+body.labels-never .marker-label::before { display: none !important; }
+
+
 .marker:hover { z-index: 1000; }
 .marker:hover .marker-content-wrapper { transform: scale(1.1); }
-.marker:hover .marker-icon-box { background: var(--marker-color); color: #000; box-shadow: 0 0 20px var(--marker-color); }
+.marker:hover .marker-icon-box { background: var(--marker-color); color: #000 !important; box-shadow: 0 0 20px var(--marker-color); }
 .marker:hover .marker-icon-box::after { border-color: #000; }
-.marker:hover .marker-label { opacity: 1; background: #000; padding-left: 10px; }
 
+.marker.selected .marker-icon-box { background: var(--marker-color); color: #000 !important; box-shadow: 0 0 20px var(--marker-color); border-color: #fff; }
+.marker.selected .marker-icon-box::after { border-color: #fff; }
+
+/* Zoomed out view */
 body.view-zoomed-out .marker-icon-box { width: 10px; height: 10px; background: var(--marker-color); border-radius: 50%; box-shadow: 0 0 5px var(--marker-color); padding: 0; }
 body.view-zoomed-out .marker-icon-box::after { display: none; }
 body.view-zoomed-out .marker svg { display: none; }
 body.view-zoomed-out .marker-label { display: none; }
 body.view-zoomed-out .marker-label::before { display: none; }
-body.view-zoomed-out .marker:hover .marker-label { display: block !important; left: 20px; opacity: 1; z-index: 2000; }
-body.view-zoomed-out .marker:hover .marker-label::before { display: block !important; width: 10px; left: -10px; }
+/* En zoomed out, on réactive au hover si pas en mode 'never' */
+body.view-zoomed-out:not(.labels-never) .marker:hover .marker-label { display: block !important; left: 20px; opacity: 1; z-index: 2000; transform: translateY(-50%); }
 
 
-/* --- 5. UI FORMULAIRES & INPUTS (STYLE POINT: Carrés) --- */
+/* --- 5. UI FORMULAIRES & INPUTS --- */
 input[type="text"], input[type="number"], select, textarea {
-    background: rgba(0, 0, 0, 0.8); /* Plus sombre */
+    background: rgba(0, 0, 0, 0.8);
     border: 1px solid #333; color: #fff;
     padding: 10px; width: 100%;
-    /* CHANGEMENT ICI: Bordures carrées */
     border-radius: 0px;
     font-family: inherit; font-size: 0.95rem;
     outline: none; margin-bottom: 10px;
@@ -237,6 +269,19 @@ input[type="text"], input[type="number"], select, textarea {
 input:focus, select:focus, textarea:focus { border-color: var(--accent-cyan); box-shadow: 0 0 5px rgba(115, 251, 247, 0.2); }
 textarea { resize: vertical; min-height: 100px; line-height: 1.5; }
 label { display: block; color: var(--text-dim); font-size: 0.8rem; margin-bottom: 5px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; }
+
+/* FIX SEARCH : Nouveau style compact pour la recherche dans la sidebar */
+.compact-search {
+    display: flex; align-items: center; gap: 5px;
+    background: rgba(0,0,0,0.3); border: 1px solid var(--border-color);
+    margin-bottom: 10px; padding: 5px;
+}
+.compact-search input {
+    background: transparent; border: none; padding: 5px; margin: 0;
+    font-size: 0.85rem; color: var(--text-main);
+    width: 100%;
+}
+.compact-search input:focus { box-shadow: none; border: none; }
 
 .search-container { position: relative; width: 100%; }
 .search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--accent-cyan); pointer-events: none; }
@@ -248,7 +293,6 @@ label { display: block; color: var(--text-dim); font-size: 0.8rem; margin-bottom
 .floating-panel {
     position: absolute; top: 80px; left: 340px; width: 340px;
     background: rgba(8, 12, 22, 0.98); border: 1px solid var(--accent-cyan);
-    /* CHANGEMENT ICI: Bordures carrées */
     border-radius: 0px;
     box-shadow: 0 20px 60px rgba(0,0,0,0.9);
     z-index: 500; backdrop-filter: blur(10px);
@@ -263,7 +307,6 @@ label { display: block; color: var(--text-dim); font-size: 0.8rem; margin-bottom
     display: flex; gap: 15px; align-items: center;
     background: rgba(5, 7, 12, 0.95); border: 1px solid var(--border-color);
     padding: 8px 25px; 
-    /* CHANGEMENT ICI: Bordures carrées */
     border-radius: 0px;
     z-index: 200; box-shadow: 0 5px 20px rgba(0,0,0,0.8);
 }
@@ -287,7 +330,7 @@ label { display: block; color: var(--text-dim); font-size: 0.8rem; margin-bottom
 .btn-close-editor { width: 100%; background: transparent; border: 1px solid var(--border-color); color: var(--text-dim); padding: 8px; font-size: 0.8rem; margin-top: 5px; cursor: pointer; text-transform: uppercase; font-weight: 700; border-radius: 0px; }
 .btn-close-editor:hover { color: #fff; border-color: #fff; background: rgba(255,255,255,0.05); }
 
-/* MENU CONTEXTUEL & MODALES (Modifiés pour être carrés) */
+/* MENU CONTEXTUEL & MODALES */
 .context-menu { position: fixed; z-index: 2000; width: 220px; background: rgba(5, 7, 10, 0.98); border: 1px solid var(--accent-cyan); box-shadow: 0 5px 20px rgba(0,0,0,0.5); border-radius: 0px; padding: 5px; display: flex; flex-direction: column; gap: 2px; backdrop-filter: blur(10px); opacity: 0; pointer-events: none; transform: scale(0.95); transition: opacity 0.1s, transform 0.1s; }
 .context-menu.visible { opacity: 1; pointer-events: auto; transform: scale(1); }
 .context-menu button { background: transparent; border: none; color: var(--text-main); text-align: left; padding: 10px 12px; font-size: 0.85rem; cursor: pointer; border-radius: 0px; text-transform: uppercase; font-weight: 700; transition: all 0.1s; display: block; width: 100%; }
@@ -310,7 +353,7 @@ label { display: block; color: var(--text-dim); font-size: 0.8rem; margin-bottom
 .group-item { background: rgba(255,255,255,0.03); border-radius: 0px; margin-bottom: 5px; border-left: 3px solid transparent; transition: all 0.2s; }
 .group-item:hover { background: rgba(255,255,255,0.06); border-left-color: var(--accent-cyan); }
 .group-header { padding: 10px; display: flex; align-items: center; gap: 10px; cursor: pointer; font-weight: 700; }
-.color-dot { width: 12px; height: 12px; border-radius: 0px; /* Carré */ box-shadow: 0 0 5px currentColor; }
+.color-dot { width: 12px; height: 12px; border-radius: 0px; box-shadow: 0 0 5px currentColor; }
 .mini-btn { font-size: 0.8rem; padding: 4px 10px; width: auto; background: rgba(255,255,255,0.1); color: #fff; border: none; border-radius: 0px; cursor: pointer; font-weight: 700; }
 .mini-btn:hover { background: var(--accent-cyan); color: #000; }
 .empty-state { text-align: center; color: var(--text-dim); padding: 40px 20px; border: 1px dashed var(--border-color); border-radius: 0px; text-transform: uppercase; letter-spacing: 1px; }
@@ -339,9 +382,59 @@ label { display: block; color: var(--text-dim); font-size: 0.8rem; margin-bottom
 
 .mobile-only { display: none; }
 #sidebar-overlay { display: none; }
-@media (min-width: 769px) { #sidebar-overlay { display: none !important; } }
+@media (min-width: 769px) { 
+    #sidebar-overlay { display: none !important; } 
+    #top-bar { display: none !important; }
+    #app-container { top: 0 !important; height: 100vh !important; }
+    #sidebar-left { padding-top: 10px; }
+}
 
-/* COLOR PICKER (Carrés maintenant) */
+.panel-section {
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 15px;
+    margin-bottom: 15px;
+    display: flex; flex-direction: column; gap: 10px;
+}
+
+.section-title {
+    font-size: 0.9rem; text-transform: uppercase; letter-spacing: 2px;
+    color: var(--text-dim); margin-bottom: 5px; display: block; font-weight: 700;
+}
+
+.file-btn { 
+    font-size: 0.85rem; color: var(--text-dim); cursor: pointer; 
+    border: 1px dashed var(--border-color); padding: 8px; 
+    text-align: center; border-radius: 0px; transition: 0.2s;
+    background: rgba(0,0,0,0.2); display: block; width: 100%;
+    font-weight: 700; text-transform: uppercase;
+}
+.file-btn:hover { border-color: var(--accent-cyan); color: var(--accent-cyan); background: rgba(115, 251, 247, 0.05); }
+
+.btn-row { display: flex; gap: 5px; }
+.btn-row > * { flex: 1; }
+
+.btn-switch {
+    width: 100%; font-size: 0.8rem; padding: 8px;
+    background: rgba(115, 251, 247, 0.1); border: 1px solid var(--accent-cyan);
+    color: var(--accent-cyan); text-transform: uppercase; letter-spacing: 1px;
+    cursor: pointer; margin-top: 10px; font-weight: 700;
+    clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+}
+.btn-switch:hover { background: var(--accent-cyan); color: #000; }
+
+#app-loader {
+    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+    background: #05070a; z-index: 9999;
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    color: #73fbf7; transition: opacity 0.5s ease;
+}
+.loader-text { 
+    font-family: 'Rajdhani', sans-serif; font-size: 1.5rem; letter-spacing: 4px; 
+    animation: pulse 1.5s infinite; text-transform: uppercase; font-weight: 800;
+}
+@keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; text-shadow: 0 0 15px #73fbf7; } 100% { opacity: 0.5; } }
+
+/* COLOR PICKER */
 .color-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 10px; }
 .color-swatch-btn { width: 100%; height: 30px; border-radius: 0px; border: 1px solid rgba(255,255,255,0.2); cursor: pointer; transition: all 0.2s; }
 .color-swatch-btn:hover { border-color: #fff; box-shadow: 0 0 10px var(--color); }
@@ -391,7 +484,7 @@ input[type="range"]::-webkit-slider-thumb { appearance: none; width: 12px; heigh
 }
 
 .target-locked {
-    animation: target-flash 0.5s ease-in-out 3; /* Clignote 3 fois */
+    animation: target-flash 0.5s ease-in-out 3;
 }
 
 /* Notification centrale "CIBLE ACQUISE" */

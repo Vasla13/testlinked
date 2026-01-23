@@ -10,8 +10,22 @@ export function renderGroupsList() {
     container.innerHTML = ''; 
 
     state.groups.forEach((group, gIndex) => {
-        // Calcul totaux
-        const pointCount = group.points.length;
+        // --- FILTRAGE RECHERCHE ---
+        const term = state.searchTerm ? state.searchTerm.toLowerCase() : '';
+        
+        // On filtre les points qui correspondent à la recherche (Nom ou Type)
+        const filteredPoints = group.points.filter(p => {
+            if (!term) return true;
+            return (p.name && p.name.toLowerCase().includes(term)) || 
+                   (p.type && p.type.toLowerCase().includes(term));
+        });
+
+        // Si une recherche est active et que le groupe est vide (pas de point matchant ni zone), on le cache
+        if (term && filteredPoints.length === 0 && (!group.zones || group.zones.length === 0)) {
+            return;
+        }
+
+        const pointCount = filteredPoints.length;
         const zoneCount = group.zones ? group.zones.length : 0;
         const totalCount = pointCount + zoneCount;
 
@@ -48,13 +62,17 @@ export function renderGroupsList() {
         // --- LISTE DÉROULANTE ---
         const contentList = document.createElement('div');
         contentList.className = 'group-content';
-        contentList.style.display = 'none'; 
+        // Si recherche active, on ouvre automatiquement la liste
+        contentList.style.display = term ? 'block' : 'none'; 
         contentList.style.padding = '0 0 10px 25px';
         contentList.style.fontSize = '0.8rem';
 
-        // A) POINTS
-        if(group.points.length > 0) {
-            group.points.forEach((p, pIndex) => {
+        // A) POINTS (Affichage des points filtrés)
+        if(filteredPoints.length > 0) {
+            filteredPoints.forEach((p) => {
+                // IMPORTANT : On récupère l'index réel dans le tableau complet pour la sélection
+                const originalPIndex = group.points.indexOf(p);
+
                 const pRow = document.createElement('div');
                 pRow.style.padding = '4px 0';
                 pRow.style.color = '#8892b0';
@@ -66,8 +84,8 @@ export function renderGroupsList() {
                 // CLIC SUR POINT : Sélectionne ET Focus
                 pRow.onclick = (e) => {
                     e.stopPropagation();
-                    selectItem('point', gIndex, pIndex);
-                    focusOnTarget(p.x, p.y); // <-- NOUVEAU : Focus caméra
+                    selectItem('point', gIndex, originalPIndex);
+                    focusOnTarget(p.x, p.y); // Focus caméra
                 };
                 contentList.appendChild(pRow);
             });
@@ -104,7 +122,7 @@ export function renderGroupsList() {
                         targetY = sumY / z.points.length;
                     }
                     
-                    focusOnTarget(targetX, targetY); // <-- NOUVEAU : Focus caméra
+                    focusOnTarget(targetX, targetY);
                 };
                 contentList.appendChild(zRow);
             });

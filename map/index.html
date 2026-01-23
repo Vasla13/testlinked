@@ -62,7 +62,7 @@
         @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; text-shadow: 0 0 15px #73fbf7; } 100% { opacity: 0.5; } }
     </style>
 </head>
-<body>
+<body class="labels-auto">
 
     <div id="app-loader">
         <div class="loader-text">Initialisation Tactical Map...</div>
@@ -140,21 +140,19 @@
                 </div>
             </div>
 
-            <div class="panel-section" style="padding-bottom: 5px;">
-                <span class="section-title">RECHERCHE CIBLE</span>
-                <div class="search-container">
-                    <span class="search-icon">🔍</span>
-                    <input type="text" id="searchInput" placeholder="Nom, matricule..." autocomplete="off">
-                </div>
-            </div>
-
             <div class="panel-section">
                 <button id="btnToggleGpsPanel" class="action-btn full-width">📡 SAISIE COORDONNÉES</button>
             </div>
 
-            <div class="panel-header">
-                <span>CALQUES OPÉRATIONNELS</span>
-                <button id="btnAddGroup" class="mini-btn" title="Nouveau Groupe">＋</button>
+            <div class="panel-header" style="flex-direction:column; align-items:stretch; gap:10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span>CALQUES OPÉRATIONNELS</span>
+                    <button id="btnAddGroup" class="mini-btn" title="Nouveau Groupe">＋</button>
+                </div>
+                <div class="compact-search">
+                    <span style="font-size:0.8rem;">🔍</span>
+                    <input type="text" id="searchInput" placeholder="Filtrer cibles..." autocomplete="off">
+                </div>
             </div>
             <div id="groups-list" class="scrollable-content"></div>
         </div>
@@ -181,9 +179,10 @@
                 <div class="separator desktop-only"></div>
                 <button id="btnToggleLight" class="hud-btn" title="Mode Lumière / Hologramme">💡</button>
                 <button id="btnResetView" class="hud-btn" title="Recentrer">🎯</button>
-                <label class="hud-toggle" style="margin-left:10px;">
-                    <input type="checkbox" id="chkLabels" checked> <span class="desktop-only">NOMS</span>
-                </label>
+                
+                <button id="btnToggleLabels" class="hud-btn" style="min-width:100px;">
+                    NOMS: AUTO
+                </button>
             </div>
 
             <div id="gps-panel" class="floating-panel" style="display:none;">

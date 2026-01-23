@@ -201,7 +201,6 @@ function renderTacticalLinks() {
     });
 }
 
-// --- RENDU DES MARQUEURS (MODIFIÉ POUR IMAGES) ---
 function renderMarkersAndClusters() {
     markersLayer.innerHTML = '';
 
@@ -210,10 +209,21 @@ function renderMarkersAndClusters() {
         group.points.forEach((point, pIndex) => {
             if (state.statusFilter !== 'ALL' && (point.status || 'ACTIVE') !== state.statusFilter) return;
             
+            // --- FIX SEARCH : FILTRE RECHERCHE ---
+            if (state.searchTerm) {
+                const term = state.searchTerm.toLowerCase();
+                const matchName = point.name.toLowerCase().includes(term);
+                const matchType = (point.type || '').toLowerCase().includes(term);
+                // Si ni le nom ni le type ne correspondent, on n'affiche pas ce marqueur
+                if (!matchName && !matchType) return;
+            }
+
             const el = document.createElement('div');
             el.className = `marker status-${(point.status || 'ACTIVE').toLowerCase()}`;
             el.style.left = `${point.x}%`;
             el.style.top = `${point.y}%`;
+            
+            // --- FIX COLOR : Injection de la couleur pour le CSS ---
             el.style.setProperty('--marker-color', group.color || '#00ffff');
             el.style.pointerEvents = 'auto'; 
 
@@ -225,19 +235,18 @@ function renderMarkersAndClusters() {
             }
 
             const iconData = ICONS[point.iconType] || ICONS.DEFAULT;
-            
-            // --- DETECTION : URL ou SVG ? ---
             let innerContent = '';
             
-            // Si ça commence par http (lien) ou data: (image encodée) ou ./ (local)
+            // Detection : Image ou SVG ?
             if (iconData.startsWith('http') || iconData.startsWith('data:') || iconData.startsWith('./') || iconData.startsWith('/')) {
-                // C'est une IMAGE
+                // IMAGE : Le CSS img { pointer-events: none; } dans style.css est crucial ici
+                // pour que le drag fonctionne sur le conteneur et pas sur l'image
                 innerContent = `
                     <div class="marker-icon-box">
                         <img src="${iconData}" alt="icon" style="width:20px; height:20px; object-fit:contain; filter: drop-shadow(0 0 2px var(--marker-color));">
                     </div>`;
             } else {
-                // C'est du SVG (Code HTML)
+                // SVG
                 innerContent = `
                     <div class="marker-icon-box">
                         <svg viewBox="0 0 24 24">${iconData}</svg>
