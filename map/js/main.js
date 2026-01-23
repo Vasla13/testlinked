@@ -1,4 +1,4 @@
-import { state, setGroups, exportToJSON, generateID, loadLocalState, saveLocalState } from './state.js';
+import { state, setGroups, exportToJSON, generateID, loadLocalState, saveLocalState, pushHistory, undo } from './state.js';
 import { initEngine, centerMap, updateTransform } from './engine.js'; 
 import { renderGroupsList, initUI, selectItem } from './ui.js';
 import { customAlert, customConfirm, customPrompt, customColorPicker } from './ui-modals.js';
@@ -23,6 +23,27 @@ document.addEventListener('DOMContentLoaded', async () => {
     const cloudStatus = document.getElementById('cloud-status');
     if(cloudStatus) cloudStatus.style.display = 'inline-block';
     
+    // --- GESTION DU CTRL+Z (UNDO) ---
+    document.addEventListener('keydown', (e) => {
+        // Déclenchement sur Ctrl+Z ou Cmd+Z (Mac)
+        if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+            e.preventDefault(); 
+            if (undo()) {
+                console.log("⏪ Undo effectué");
+                saveLocalState();
+                renderGroupsList();
+                renderAll();
+                // Petit flash visuel sur le HUD pour confirmer
+                const hud = document.getElementById('hud-bottom');
+                if(hud) {
+                    const original = hud.style.borderColor || 'var(--border-color)';
+                    hud.style.borderColor = '#73fbf7';
+                    setTimeout(() => hud.style.borderColor = original, 200);
+                }
+            }
+        }
+    });
+
     // --- CHARGEMENT DONNÉES ---
     const localData = loadLocalState();
     
@@ -91,19 +112,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         };
     }
     
-    // 2. Export JSON (+ Sauvegarde Cloud invisible en arrière-plan)
+    // 2. Export JSON (+ Sync Cloud auto + Stealth Mode)
     const btnSave = document.getElementById('btnSave');
     if(btnSave) {
         btnSave.onclick = () => {
-            // A. "Fire and Forget" : On lance la sauvegarde Cloud sans 'await'
+            // A. Sauvegarde Cloud silencieuse ("Fire & Forget")
             api.saveMap({ 
                 groups: state.groups, 
                 tacticalLinks: state.tacticalLinks 
-            }).catch(err => {
-                console.error("Erreur sauvegarde background :", err);
-            });
+            }).catch(err => console.error("Auto-save background error:", err));
 
-            // B. On lance le téléchargement IMMÉDIATEMENT
+            // B. Téléchargement immédiat (nom auto)
             exportToJSON();
         };
     }
@@ -119,6 +138,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         if(!name) return; 
         const color = await customColorPicker("COULEUR DU CALQUE", "#ffffff");
         if(!color) return; 
+
+        pushHistory(); // <--- SAUVEGARDE ETAT
 
         state.groups.push({ name, color, visible: true, points: [], zones: [] });
         saveLocalState();
@@ -138,6 +159,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 try {
                     const json = JSON.parse(evt.target.result);
                     if (json.groups) {
+                        pushHistory(); // <--- SAUVEGARDE ETAT
+
                         setGroups(json.groups);
                         if(json.tacticalLinks) state.tacticalLinks = json.tacticalLinks;
                         
@@ -167,34 +190,30 @@ document.addEventListener('DOMContentLoaded', async () => {
                     let importedCount = 0;
                     
                     if(json.groups) {
+                        pushHistory(); // <--- SAUVEGARDE ETAT
+
                         json.groups.forEach(newGroup => {
-                            // Chercher si le groupe existe déjà
                             const existingGroup = state.groups.find(g => g.name === newGroup.name);
                             if(existingGroup) {
-                                // Fusionner les points dans le groupe existant
                                 if(newGroup.points) {
                                     newGroup.points.forEach(p => {
-                                        // On évite les doublons d'ID exacts, sinon on ajoute
                                         if(!existingGroup.points.some(ep => ep.id === p.id)) {
                                             existingGroup.points.push(p);
                                             importedCount++;
                                         }
                                     });
                                 }
-                                // Fusionner les zones
                                 if(newGroup.zones) {
                                     newGroup.zones.forEach(z => {
                                         existingGroup.zones.push(z);
                                     });
                                 }
                             } else {
-                                // Nouveau groupe complet
                                 state.groups.push(newGroup);
                                 importedCount += (newGroup.points ? newGroup.points.length : 0);
                             }
                         });
                         
-                        // Fusionner les liens tactiques
                         if(json.tacticalLinks) {
                             if(!state.tacticalLinks) state.tacticalLinks = [];
                             json.tacticalLinks.forEach(l => {
@@ -215,25 +234,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // 7. RESET TOTAL (NOUVEAU)
+    // 7. RESET TOTAL (AVEC UNDO)
     const btnResetMap = document.getElementById('btnResetMap');
     if(btnResetMap) {
         btnResetMap.onclick = async () => {
-            if(await customConfirm("RESET TOTAL", "Voulez-vous vraiment tout effacer ? Cette action est irréversible.")) {
+            if(await customConfirm("RESET TOTAL", "Voulez-vous vraiment tout effacer ?")) {
                 
-                // On remet les données par défaut (Copie propre pour éviter les références)
+                pushHistory(); // <--- SAUVEGARDE ETAT (Permet d'annuler le reset !)
+                
                 setGroups(JSON.parse(JSON.stringify(DEFAULT_DATA))); 
                 state.tacticalLinks = []; 
                 
-                // On sauvegarde l'état vide
                 saveLocalState();
-                
-                // On rafraîchit l'interface
                 renderGroupsList();
                 renderAll();
                 centerMap();
                 
-                await customAlert("SUCCÈS", "La carte a été remise à zéro.");
+                await customAlert("SUCCÈS", "Carte remise à zéro. (Ctrl+Z pour annuler)");
             }
         };
     }
@@ -307,6 +324,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (!targetGroup) targetGroup = state.groups[0];
                 targetGroup.visible = true;
                 
+                pushHistory(); // <--- SAUVEGARDE ETAT
+
                 const newPoint = { 
                     id: generateID(),
                     name: nameVal, 

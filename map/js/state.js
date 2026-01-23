@@ -44,6 +44,41 @@ export const state = {
     mapHeight: 0
 };
 
+// --- SYSTÈME D'HISTORIQUE (UNDO) ---
+const history = [];
+const MAX_HISTORY = 50; // On retient les 50 dernières actions
+
+export function pushHistory() {
+    // On sauvegarde l'état ACTUEL (avant la modification)
+    const snapshot = JSON.stringify({
+        groups: state.groups,
+        tacticalLinks: state.tacticalLinks
+    });
+
+    // Évite de sauvegarder 2 fois la même chose d'affilée
+    if (history.length > 0 && history[history.length - 1] === snapshot) return;
+
+    history.push(snapshot);
+    if (history.length > MAX_HISTORY) history.shift();
+}
+
+export function undo() {
+    if (history.length === 0) return false; // Rien à annuler
+
+    try {
+        const prevJSON = history.pop();
+        const prevData = JSON.parse(prevJSON);
+        
+        // Restauration de l'état
+        state.groups = prevData.groups;
+        state.tacticalLinks = prevData.tacticalLinks || [];
+        return true;
+    } catch (e) {
+        console.error("Erreur Undo:", e);
+        return false;
+    }
+}
+
 export function generateID() {
     return 'id_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
 }
@@ -67,7 +102,6 @@ export function addTacticalLink(idA, idB) {
     state.tacticalLinks.push({
         id: generateID(),
         from: idA, to: idB,
-        // CORRECTION : null par défaut pour hériter de la couleur des points
         color: null, 
         type: 'Standard'
     });
@@ -107,35 +141,28 @@ export function setGroups(newGroups) {
     }
 }
 
+// Export "Stealth" (Nom automatique, pas de prompt)
 export function exportToJSON() {
-    // 1. Préparation des données
-    const data = {
+    const data = { 
+        meta: { date: new Date().toISOString(), version: "2.5" },
         groups: state.groups,
-        tacticalLinks: state.tacticalLinks || [],
-        mapSettings: { width: state.mapWidth, height: state.mapHeight },
-        version: "1.0"
+        tacticalLinks: state.tacticalLinks
     };
-
-    // 2. Génération automatique du nom (Ex: carte_2023-10-25_14-30.json)
+    
+    // Génération du nom : carte_2023-10-27_14-30.json
     const now = new Date();
     const dateStr = now.toISOString().split('T')[0];
-    const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-'); // Remplace : par -
+    const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-');
     const fileName = `carte_${dateStr}_${timeStr}.json`;
 
-    // 3. Téléchargement direct (sans prompt)
-    const jsonStr = JSON.stringify(data, null, 2);
-    const blob = new Blob([jsonStr], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    
+    const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
     const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName; // C'est ici qu'on force le nom
+    a.href = URL.createObjectURL(blob);
+    a.download = fileName;
     document.body.appendChild(a);
     a.click();
-    
-    // Nettoyage
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    URL.revokeObjectURL(a.href);
 }
 
 export function saveLocalState() {
