@@ -3,31 +3,22 @@ export const state = {
     tacticalLinks: [],
     view: { x: 0, y: 0, scale: 0.5 },
     
-    // Interaction Map
     isDragging: false,
     lastMouse: { x: 0, y: 0 },
-    
-    // Sélection
     selectedPoint: null, 
     selectedZone: null,
 
-    // Outils & Modes
     drawingMode: false,
     drawingType: null,
     drawingGroupIndex: null,
     tempZone: null,
     tempPoints: [],
     
-    // Dessin Libre Avancé
     isFreeMode: false,
     isFreeDrawing: false,
     drawingPending: false,
     
-    // Options de style par défaut
-    drawOptions: {
-        width: 2,
-        style: 'solid'
-    },
+    drawOptions: { width: 2, style: 'solid' },
     
     draggingMarker: null, 
 
@@ -42,14 +33,13 @@ export const state = {
     searchTerm: '',
     labelMode: 'auto',
 
-    // Stockage du nom de fichier actuel
     currentFileName: null,
 
     mapWidth: 0,
     mapHeight: 0
 };
 
-// --- SYSTÈME D'HISTORIQUE (UNDO) ---
+// --- HISTORIQUE ---
 const history = [];
 const MAX_HISTORY = 50; 
 
@@ -58,9 +48,7 @@ export function pushHistory() {
         groups: state.groups,
         tacticalLinks: state.tacticalLinks
     });
-
     if (history.length > 0 && history[history.length - 1] === snapshot) return;
-
     history.push(snapshot);
     if (history.length > MAX_HISTORY) history.shift();
 }
@@ -97,13 +85,7 @@ export function addTacticalLink(idA, idB) {
         (l.from === idA && l.to === idB) || (l.from === idB && l.to === idA)
     );
     if (exists) return false;
-
-    state.tacticalLinks.push({
-        id: generateID(),
-        from: idA, to: idB,
-        color: null, 
-        type: 'Standard'
-    });
+    state.tacticalLinks.push({ id: generateID(), from: idA, to: idB, color: null, type: 'Standard' });
     return true;
 }
 
@@ -130,7 +112,6 @@ export function setGroups(newGroups) {
         });
     });
     state.groups = newGroups; 
-    
     if(state.tacticalLinks) {
         state.tacticalLinks.forEach(l => {
             if(!l.id) l.id = generateID();
@@ -139,19 +120,19 @@ export function setGroups(newGroups) {
     }
 }
 
-// Fonction d'export modifiée pour accepter un nom personnalisé
-export function exportToJSON(fileNameOverride) {
-    const meta = { date: new Date().toISOString(), version: "2.5" };
-    const data = { 
-        meta: meta,
+// Helper pour récupérer les données proprement
+export function getMapData() {
+    return { 
+        meta: { date: new Date().toISOString(), version: "2.5" },
         groups: state.groups,
         tacticalLinks: state.tacticalLinks
     };
+}
+
+export function exportToJSON(fileNameOverride) {
+    const data = getMapData();
     
-    // Détermination du nom de fichier
     let finalName = fileNameOverride;
-    
-    // Si aucun nom n'est fourni, on cherche dans le state, sinon on met un défaut
     if (!finalName) {
          if (state.currentFileName) {
              finalName = state.currentFileName;
@@ -162,8 +143,6 @@ export function exportToJSON(fileNameOverride) {
              finalName = `carte_tactique_${dateStr}_${timeStr}`;
          }
     }
-    
-    // Ajout extension
     if (!finalName.endsWith('.json')) finalName += '.json';
 
     const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
@@ -180,14 +159,10 @@ export function saveLocalState() {
     const data = {
         groups: state.groups,
         tacticalLinks: state.tacticalLinks,
-        currentFileName: state.currentFileName, // Sauvegarde aussi le nom actuel
+        currentFileName: state.currentFileName,
         meta: { date: new Date().toISOString(), savedBy: "AutoSave" }
     };
-    try {
-        localStorage.setItem('tacticalMapData', JSON.stringify(data));
-    } catch (e) {
-        console.error("Local Save Error:", e);
-    }
+    try { localStorage.setItem('tacticalMapData', JSON.stringify(data)); } catch (e) {}
 }
 
 export function loadLocalState() {
@@ -195,8 +170,5 @@ export function loadLocalState() {
         const json = localStorage.getItem('tacticalMapData');
         if (!json) return null;
         return JSON.parse(json);
-    } catch (e) {
-        console.error("Local Load Error:", e);
-        return null;
-    }
+    } catch (e) { return null; }
 }
