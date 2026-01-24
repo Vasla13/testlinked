@@ -40,9 +40,10 @@ export const state = {
 
     statusFilter: 'ALL',
     searchTerm: '',
-    
-    // NOUVEAU : Mode d'affichage des étiquettes ('auto', 'always', 'never')
     labelMode: 'auto',
+
+    // Stockage du nom de fichier actuel
+    currentFileName: null,
 
     mapWidth: 0,
     mapHeight: 0
@@ -50,16 +51,14 @@ export const state = {
 
 // --- SYSTÈME D'HISTORIQUE (UNDO) ---
 const history = [];
-const MAX_HISTORY = 50; // On retient les 50 dernières actions
+const MAX_HISTORY = 50; 
 
 export function pushHistory() {
-    // On sauvegarde l'état ACTUEL (avant la modification)
     const snapshot = JSON.stringify({
         groups: state.groups,
         tacticalLinks: state.tacticalLinks
     });
 
-    // Évite de sauvegarder 2 fois la même chose d'affilée
     if (history.length > 0 && history[history.length - 1] === snapshot) return;
 
     history.push(snapshot);
@@ -67,13 +66,10 @@ export function pushHistory() {
 }
 
 export function undo() {
-    if (history.length === 0) return false; // Rien à annuler
-
+    if (history.length === 0) return false;
     try {
         const prevJSON = history.pop();
         const prevData = JSON.parse(prevJSON);
-        
-        // Restauration de l'état
         state.groups = prevData.groups;
         state.tacticalLinks = prevData.tacticalLinks || [];
         return true;
@@ -95,7 +91,6 @@ export function findPointById(id) {
     return null;
 }
 
-// --- LIENS TACTIQUES ---
 export function addTacticalLink(idA, idB) {
     if (!idA || !idB || idA === idB) return false;
     const exists = state.tacticalLinks.find(l => 
@@ -121,7 +116,6 @@ export function updateTacticalLink(linkId, newData) {
     if (link) Object.assign(link, newData);
 }
 
-// --- INITIALISATION DONNÉES ---
 export function setGroups(newGroups) { 
     newGroups.forEach(g => {
         if(!g.zones) g.zones = [];
@@ -145,24 +139,37 @@ export function setGroups(newGroups) {
     }
 }
 
-// Export "Stealth" (Nom automatique, pas de prompt)
-export function exportToJSON() {
+// Fonction d'export modifiée pour accepter un nom personnalisé
+export function exportToJSON(fileNameOverride) {
+    const meta = { date: new Date().toISOString(), version: "2.5" };
     const data = { 
-        meta: { date: new Date().toISOString(), version: "2.5" },
+        meta: meta,
         groups: state.groups,
         tacticalLinks: state.tacticalLinks
     };
     
-    // Génération du nom : carte_2023-10-27_14-30.json
-    const now = new Date();
-    const dateStr = now.toISOString().split('T')[0];
-    const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-');
-    const fileName = `carte_${dateStr}_${timeStr}.json`;
+    // Détermination du nom de fichier
+    let finalName = fileNameOverride;
+    
+    // Si aucun nom n'est fourni, on cherche dans le state, sinon on met un défaut
+    if (!finalName) {
+         if (state.currentFileName) {
+             finalName = state.currentFileName;
+         } else {
+             const now = new Date();
+             const dateStr = now.toISOString().split('T')[0];
+             const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-');
+             finalName = `carte_tactique_${dateStr}_${timeStr}`;
+         }
+    }
+    
+    // Ajout extension
+    if (!finalName.endsWith('.json')) finalName += '.json';
 
     const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = fileName;
+    a.download = finalName;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -173,6 +180,7 @@ export function saveLocalState() {
     const data = {
         groups: state.groups,
         tacticalLinks: state.tacticalLinks,
+        currentFileName: state.currentFileName, // Sauvegarde aussi le nom actuel
         meta: { date: new Date().toISOString(), savedBy: "AutoSave" }
     };
     try {

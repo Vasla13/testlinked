@@ -116,8 +116,6 @@
                 <button class="btn-switch" onclick="window.location.href='../point/index.html';">
                     🕸️ Mode Réseau
                 </button>
-                
-                <div id="cloud-status" style="font-size:0.8rem; color:var(--text-dim); margin-top:5px; display:none;">☁️ Synchronisé</div>
             </div>
 
             <div class="panel-section">
@@ -126,17 +124,13 @@
                 <input type="file" id="fileMerge" accept=".json" style="display:none">
 
                 <div class="btn-row">
-                    <button id="btnCloudSave" class="mini-btn grow" style="justify-content:center;">☁️ CLOUD SAVE</button>
-                    <button id="btnSave" class="mini-btn grow" style="justify-content:center;">💾 LOCAL JSON</button>
+                    <button id="btnSave" class="action-btn" style="flex:1;">💾 SAUVEGARDER</button>
+                    <button id="btnTriggerImport" class="action-btn" style="flex:1;">📂 OUVRIR</button>
                 </div>
 
-                <button id="btnResetMap" class="file-btn" style="margin-top:5px; margin-bottom:5px; border-color:#ff4444; color:#ff4444; background:rgba(255,68,68,0.05);">
-                    ⚠️ RESET CARTE
-                </button>
-
-                <div class="btn-row">
-                    <button id="btnTriggerImport" class="file-btn">📂 Ouvrir</button>
-                    <button id="btnTriggerMerge" class="file-btn">🧩 Fusionner</button>
+                <div class="btn-row" style="margin-top:5px;">
+                    <button id="btnTriggerMerge" class="file-btn" style="flex:1;">🧩 FUSIONNER</button>
+                    <button id="btnResetMap" class="file-btn" style="flex:1; border-color:var(--danger); color:var(--danger); background:rgba(255,68,68,0.05);">⚠️ RESET</button>
                 </div>
             </div>
 
@@ -179,7 +173,6 @@
                 <div class="separator desktop-only"></div>
                 <button id="btnToggleLight" class="hud-btn" title="Mode Lumière / Hologramme">💡</button>
                 <button id="btnResetView" class="hud-btn" title="Recentrer">🎯</button>
-                
                 <button id="btnToggleLabels" class="hud-btn" style="min-width:100px;">
                     NOMS: AUTO
                 </button>
