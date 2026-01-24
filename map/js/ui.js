@@ -1,16 +1,18 @@
-import { state, addTacticalLink, saveLocalState } from './state.js';
+import { state, saveLocalState } from './state.js';
 import { renderAll } from './render.js'; 
 import { renderEditor, closeEditor } from './ui-editor.js';
 import { customAlert } from './ui-modals.js';
 import { renderGroupsList } from './ui-list.js'; 
 import { initContextMenu, handleLinkClick, handleLinkHover, handleLinkOut, moveTooltip } from './ui-menus.js';
 import { handleMapMouseDown, handleMapMouseMove, handleMapMouseUp } from './zone-editor.js';
+import { addTacticalLink } from './state.js'; // Correction import
 
 export { handleLinkClick, handleLinkHover, handleLinkOut, moveTooltip };
 
 export function initUI() {
     initContextMenu(); 
     
+    // Gestionnaire Souris Global
     const viewport = document.getElementById('viewport');
     if (viewport) {
         viewport.addEventListener('mousedown', (e) => handleMapMouseDown(e));
@@ -18,6 +20,7 @@ export function initUI() {
         window.addEventListener('mouseup', (e) => handleMapMouseUp(e));
     }
 
+    // Menu Mobile
     const btnMobileMenu = document.getElementById('btnMobileMenu');
     const sidebarLeft = document.getElementById('sidebar-left');
     const sidebarOverlay = document.getElementById('sidebar-overlay');
@@ -34,23 +37,24 @@ export function initUI() {
         };
     }
 
-    // FIX SEARCH : Écouteur pour la recherche en temps réel
+    // --- RECHERCHE (CRUCIAL) ---
     const searchInput = document.getElementById('searchInput');
     if(searchInput) {
         searchInput.addEventListener('input', (e) => {
             state.searchTerm = e.target.value.toLowerCase();
-            renderGroupsList(); // Met à jour la liste à gauche
-            renderAll();        // Met à jour la carte (filtrage visuel)
+            renderGroupsList(); // Met à jour la liste (ouvre les dossiers)
+            renderAll();        // Met à jour la carte (cache les points)
         });
     }
 
-    // FIX LABELS : Gestion du bouton 3 états (Auto -> Always -> Never)
+    // --- BOUTON NOMS (3 ÉTATS : AUTO -> ALWAYS -> NEVER) ---
     const btnLabels = document.getElementById('btnToggleLabels');
     if(btnLabels) {
         btnLabels.onclick = () => {
             const body = document.body;
             body.classList.remove('labels-auto', 'labels-always', 'labels-never');
             
+            // Cycle : Auto -> Always -> Never -> Auto
             if (state.labelMode === 'auto') {
                 state.labelMode = 'always';
                 body.classList.add('labels-always');
@@ -75,6 +79,7 @@ export function handlePointClick(gIndex, pIndex) {
     const group = state.groups[gIndex];
     const point = group.points[pIndex];
     
+    // Mode création de lien
     if (state.linkingMode) {
         if (state.linkStartId && state.linkStartId !== point.id) {
             const success = addTacticalLink(state.linkStartId, point.id);
@@ -91,6 +96,8 @@ export function handlePointClick(gIndex, pIndex) {
         }
         return;
     }
+    
+    // Sélection normale
     selectItem('point', gIndex, pIndex);
 }
 
