@@ -6,42 +6,57 @@ const STORE_NAME = "bni-linked-db";
 function jsonResponse(statusCode, obj) {
   return {
     statusCode,
-    headers: { "Content-Type": "application/json; charset=utf-8" },
+    headers: { 
+        "Content-Type": "application/json; charset=utf-8",
+        "Access-Control-Allow-Origin": "*" // Utile si accès hors domaine
+    },
     body: JSON.stringify(obj),
   };
 }
 
-// Analyse de la clé pour extraire les métadonnées
-// Format attendu : "page/timestamp_action_uuid"
+// Analyse sécurisée de la clé
 function parseKey(key) {
-  const [page, rest] = key.split("/", 2);
-  const parts = (rest || "").split("_");
-  const ts = Number(parts[0] || 0);
-  // Reconstitution de l'action si elle contient des underscores (ex: export_mission_alpha)
-  // On prend tout ce qu'il y a entre le timestamp et le dernier segment (uuid)
-  const actionParts = parts.slice(1, parts.length - 1); 
-  const action = actionParts.join("_") || "unknown";
-  
-  return {
-    key,
-    page,
-    action,
-    ts,
-    createdAt: Number.isFinite(ts) && ts > 0 ? new Date(ts).toISOString() : null,
-  };
+  try {
+    // Format attendu : "page/timestamp_action_uuid"
+    const [page, rest] = key.split("/", 2);
+    if (!rest) return null; // Clé invalide
+
+    const parts = rest.split("_");
+    const ts = Number(parts[0]);
+    
+    // Si le timestamp n'est pas valide, on ignore ce fichier
+    if (!Number.isFinite(ts) || ts <= 0) return null;
+
+    // Reconstitution de l'action (tout entre le timestamp et le dernier segment uuid)
+    // Ex: 123456_export_mission_alpha_uuid -> export_mission_alpha
+    const actionParts = parts.slice(1, parts.length - 1); 
+    const action = actionParts.join("_") || "unknown";
+    
+    return {
+      key,
+      page,
+      action,
+      ts,
+      createdAt: new Date(ts).toISOString(),
+    };
+  } catch (e) {
+    return null; // En cas de clé malformée
+  }
 }
 
 exports.handler = async (event) => {
+  // Initialisation du contexte pour Netlify Blobs
   connectLambda(event);
 
-  // 1. Récupération et validation des paramètres
+  // 1. Validation des paramètres
   const page = String(event.queryStringParameters?.page || "").toLowerCase();
   
-  // Par défaut, on ne renvoie que les 50 derniers fichiers pour éviter de surcharger le client
+  // Gestion de la limite (sécurité)
   let limit = parseInt(event.queryStringParameters?.limit || "50", 10);
   if (limit < 1) limit = 50;
-  if (limit > 500) limit = 500; // Sécurité max
+  if (limit > 500) limit = 500; 
 
+  // Validation stricte de la "page" pour éviter de scanner n'importe quoi
   if (!["point", "map"].includes(page)) {
     return jsonResponse(400, { ok: false, error: "Invalid page parameter" });
   }
@@ -49,11 +64,12 @@ exports.handler = async (event) => {
   try {
     const store = getStore(STORE_NAME);
     
-    // 2. Boucle de récupération (Pagination Netlify Blobs)
-    // L'API renvoie les données par pages (ex: 1000 par appel).
-    // Pour trier correctement par date (le plus récent), on doit tout récupérer.
-    let allBlobs = [];
+    // 2. Boucle de récupération optimisée
+    // On récupère les blobs, on les parse et on filtre immédiatement pour économiser la RAM
+    let allEntries = [];
     let cursor = undefined;
+    let safetyCounter = 0;
+    const MAX_SCAN_FILES = 5000; // Limite dure pour éviter le timeout
     
     do {
         const result = await store.list({ 
@@ -61,33 +77,38 @@ exports.handler = async (event) => {
             cursor: cursor 
         });
         
-        if (result.blobs) {
-            allBlobs = allBlobs.concat(result.blobs);
+        // Traitement immédiat du lot reçu
+        if (result.blobs && result.blobs.length > 0) {
+            const batchProcessed = result.blobs
+                .map(b => parseKey(b.key)) // Transformation
+                .filter(e => e !== null)   // Retrait des clés invalides
+                .filter(e => e.page === page && (e.action.startsWith("import") || e.action.startsWith("export"))); // Filtrage métier
+
+            allEntries = allEntries.concat(batchProcessed);
         }
+
         cursor = result.cursor;
+        safetyCounter += (result.blobs ? result.blobs.length : 0);
         
-        // Sécurité anti-timeout : si on a plus de 5000 backups, on arrête pour ne pas crasher la fonction
-        if (allBlobs.length > 5000) break; 
+        // Arrêt d'urgence si trop de fichiers
+        if (safetyCounter >= MAX_SCAN_FILES) {
+            console.warn(`[DB-LIST] Limite de scan atteinte (${MAX_SCAN_FILES} fichiers). Résultat partiel.`);
+            break; 
+        }
         
     } while (cursor);
 
-    // 3. Traitement des données en mémoire
-    const entries = allBlobs
-      .map((b) => parseKey(b.key))
-      // Filtrage : on garde la page demandée et les actions valides (import/export)
-      .filter((e) => e.page === page && (e.action.startsWith("import") || e.action.startsWith("export")));
+    // 3. Tri final : Du plus récent au plus ancien
+    allEntries.sort((a, b) => b.ts - a.ts);
 
-    // 4. Tri par date décroissante (Le plus récent en premier)
-    entries.sort((a, b) => (b.ts || 0) - (a.ts || 0));
-
-    // 5. Application de la limite (Slicing)
-    // On ne renvoie que les 'limit' premiers éléments après le tri
-    const limitedEntries = entries.slice(0, limit);
+    // 4. Découpage (Pagination finale)
+    const limitedEntries = allEntries.slice(0, limit);
 
     return jsonResponse(200, { 
         ok: true, 
         count: limitedEntries.length,
-        totalFound: entries.length, // Info utile pour le frontend (ex: "Affichage 50/230")
+        totalScanned: safetyCounter,
+        totalFound: allEntries.length, 
         entries: limitedEntries 
     });
 
