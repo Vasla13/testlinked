@@ -2,20 +2,20 @@ import { state, saveLocalState } from './state.js';
 import { selectItem } from './ui.js';
 import { renderAll } from './render.js';
 import { updateTransform } from './engine.js'; 
+import { openGroupEditor } from './ui-modals.js'; // IMPORT NÉCESSAIRE
 
 export function renderGroupsList() {
     const container = document.getElementById('groups-list');
     if (!container) return;
     
-    // FIX SCROLL : On sauvegarde la position actuelle de l'ascenseur
+    // FIX SCROLL
     const currentScroll = container.scrollTop;
 
     container.innerHTML = ''; 
 
     state.groups.forEach((group, gIndex) => {
-        // --- FILTRAGE RECHERCHE ---
+        // FILTRAGE
         const term = state.searchTerm ? state.searchTerm.toLowerCase() : '';
-        
         const filteredPoints = group.points.filter(p => {
             if (!term) return true;
             return (p.name && p.name.toLowerCase().includes(term)) || 
@@ -34,7 +34,7 @@ export function renderGroupsList() {
         groupEl.className = 'group-item';
         groupEl.style.borderLeft = `3px solid ${group.color}`;
         
-        // --- HEADER DU GROUPE ---
+        // HEADER
         const header = document.createElement('div');
         header.className = 'group-header';
         header.style.cursor = 'pointer';
@@ -44,8 +44,6 @@ export function renderGroupsList() {
         header.style.padding = '10px';
         header.style.background = 'rgba(255,255,255,0.02)';
 
-        // AMÉLIORATION UX : Icônes plus claires (Cible pour Focus, Œil pour Visibilité)
-        // L'opacité de l'œil change selon l'état visible/invisible
         const eyeOpacity = group.visible ? '1' : '0.3';
         const eyeColor = group.visible ? '#fff' : 'var(--text-dim)';
 
@@ -59,7 +57,11 @@ export function renderGroupsList() {
                     ${totalCount}
                 </span>
                 
-                <button class="mini-btn btn-focus" title="Centrer la vue sur ce groupe" style="padding:4px 8px;">
+                <button class="mini-btn btn-settings" title="Modifier/Supprimer" style="padding:4px 8px; color:var(--accent-cyan);">
+                    ⚙️
+                </button>
+
+                <button class="mini-btn btn-focus" title="Centrer la vue" style="padding:4px 8px;">
                     🎯
                 </button>
                 
@@ -69,14 +71,14 @@ export function renderGroupsList() {
             </div>
         `;
 
-        // --- LISTE DÉROULANTE (CONTENU) ---
+        // LISTE CONTENU
         const contentList = document.createElement('div');
         contentList.className = 'group-content';
-        contentList.style.display = term ? 'block' : 'none'; // Auto-open si recherche
+        contentList.style.display = term ? 'block' : 'none'; 
         contentList.style.padding = '0 0 10px 25px';
         contentList.style.fontSize = '0.8rem';
 
-        // A) POINTS
+        // Points
         if(filteredPoints.length > 0) {
             filteredPoints.forEach((p) => {
                 const originalPIndex = group.points.indexOf(p);
@@ -87,7 +89,6 @@ export function renderGroupsList() {
                 pRow.innerHTML = `📍 ${p.name}`;
                 pRow.onmouseover = () => pRow.style.color = '#fff';
                 pRow.onmouseout = () => pRow.style.color = '#8892b0';
-                
                 pRow.onclick = (e) => {
                     e.stopPropagation();
                     selectItem('point', gIndex, originalPIndex);
@@ -97,7 +98,7 @@ export function renderGroupsList() {
             });
         }
 
-        // B) ZONES
+        // Zones
         if(group.zones && group.zones.length > 0) {
             group.zones.forEach((z, zIndex) => {
                 const zRow = document.createElement('div');
@@ -108,15 +109,13 @@ export function renderGroupsList() {
                 zRow.innerHTML = `${icon} ${z.name || 'Zone sans nom'}`;
                 zRow.onmouseover = () => zRow.style.color = '#fff';
                 zRow.onmouseout = () => zRow.style.color = '#8892b0';
-
                 zRow.onclick = (e) => {
                     e.stopPropagation();
                     selectItem('zone', gIndex, zIndex);
-                    
+                    // Calcul centre
                     let targetX = 0, targetY = 0;
-                    if (z.type === 'CIRCLE') {
-                        targetX = z.cx; targetY = z.cy;
-                    } else if (z.points && z.points.length > 0) {
+                    if (z.type === 'CIRCLE') { targetX = z.cx; targetY = z.cy; } 
+                    else if (z.points) {
                         let sumX = 0, sumY = 0;
                         z.points.forEach(pt => { sumX += pt.x; sumY += pt.y; });
                         targetX = sumX / z.points.length; targetY = sumY / z.points.length;
@@ -127,55 +126,43 @@ export function renderGroupsList() {
             });
         }
 
-        // --- GESTION DES CLICS HEADER ---
-        
-        // 1. Ouvrir/Fermer le dossier (si on clique sur le header mais PAS sur un bouton)
+        // EVENTS HEADER
         header.onclick = (e) => {
-            // Sécurité supplémentaire : si le clic vient d'un bouton, on ignore ici
             if(e.target.closest('button')) return;
-            
             const isClosed = contentList.style.display === 'none';
             contentList.style.display = isClosed ? 'block' : 'none';
             header.style.background = isClosed ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.02)';
         };
 
-        // 2. Gestionnaire Visibilité (ŒIL)
         const btnVis = header.querySelector('.btn-visibility');
-        if (btnVis) {
-            btnVis.onclick = (e) => {
-                e.stopPropagation(); // EMPÊCHE d'ouvrir/fermer le dossier
-                e.preventDefault();
-                
-                group.visible = !group.visible;
-                
-                // Mise à jour visuelle immédiate
-                renderAll(); 
-                renderGroupsList(); 
-                saveLocalState();
-            };
-        }
+        if (btnVis) btnVis.onclick = (e) => {
+            e.stopPropagation();
+            group.visible = !group.visible;
+            renderAll(); 
+            renderGroupsList(); 
+            saveLocalState();
+        };
 
-        // 3. Gestionnaire Focus (CIBLE)
         const btnFocus = header.querySelector('.btn-focus');
-        if (btnFocus) {
-            btnFocus.onclick = (e) => {
-                e.stopPropagation(); // EMPÊCHE d'ouvrir/fermer le dossier
-                e.preventDefault();
-                
-                focusOnGroup(group);
-            };
-        }
+        if (btnFocus) btnFocus.onclick = (e) => {
+            e.stopPropagation();
+            focusOnGroup(group);
+        };
+        
+        // LOGIQUE BOUTON EDIT (NOUVEAU)
+        const btnEdit = header.querySelector('.btn-settings');
+        if (btnEdit) btnEdit.onclick = (e) => {
+            e.stopPropagation();
+            openGroupEditor(gIndex); // Appel à la modale
+        };
 
         groupEl.appendChild(header);
         groupEl.appendChild(contentList);
         container.appendChild(groupEl);
     });
 
-    // FIX SCROLL : On restaure la position de l'ascenseur après le rendu
     container.scrollTop = currentScroll;
 }
-
-// --- FONCTIONS UTILITAIRES DE ZOOM ---
 
 function focusOnTarget(percentX, percentY) {
     const viewport = document.getElementById('viewport');
@@ -193,13 +180,11 @@ function focusOnTarget(percentX, percentY) {
 }
 
 function focusOnGroup(group) {
-    // Si le groupe est vide, on ne fait rien
     if ((!group.points || group.points.length === 0) && (!group.zones || group.zones.length === 0)) return;
 
     let minX = 100, maxX = 0, minY = 100, maxY = 0;
     let found = false;
 
-    // Bornes Points
     if(group.points) {
         group.points.forEach(p => {
             if (p.x < minX) minX = p.x;
@@ -210,11 +195,9 @@ function focusOnGroup(group) {
         });
     }
 
-    // Bornes Zones
     if (group.zones) {
         group.zones.forEach(z => {
             if(z.type === 'CIRCLE') {
-                // Approx pour cercle (centre)
                 if (z.cx < minX) minX = z.cx;
                 if (z.cx > maxX) maxX = z.cx;
                 if (z.cy < minY) minY = z.cy;
@@ -233,15 +216,11 @@ function focusOnGroup(group) {
     }
 
     if (found) {
-        // Ajout d'une marge (padding) de 10%
-        const padding = 10;
         const centerX = (minX + maxX) / 2;
         const centerY = (minY + maxY) / 2;
-        
         let width = maxX - minX;
         let height = maxY - minY;
         
-        // Si c'est un point unique ou très petit
         if(width < 1) width = 10;
         if(height < 1) height = 10;
 
@@ -251,15 +230,11 @@ function focusOnGroup(group) {
         const mapW = state.mapWidth || 2000; 
         const mapH = state.mapHeight || 2000;
 
-        // Calcul du scale optimal pour faire tenir la bounding box dans l'écran
-        // On convertit les % en pixels virtuels pour le calcul
         const contentW = (width / 100) * mapW;
         const contentH = (height / 100) * mapH;
         
-        const scaleX = vw / (contentW * 1.5); // 1.5 pour la marge
+        const scaleX = vw / (contentW * 1.5); 
         const scaleY = vh / (contentH * 1.5);
-        
-        // On limite le zoom max et min
         const newScale = Math.min(Math.max(Math.min(scaleX, scaleY), 0.2), 4.0);
 
         state.view.scale = newScale;
