@@ -31,6 +31,8 @@ export function renderAll() {
 }
 
 function renderZones() {
+    // Note : Pour les zones, on garde la méthode simple car elles bougent moins souvent
+    // Si elles clignotent aussi, on appliquera la même logique que pour les liens.
     zonesLayer.innerHTML = '';
     
     state.groups.forEach((group, gIndex) => {
@@ -85,7 +87,7 @@ function renderZones() {
         });
     });
 
-    // Dessin en cours
+    // Dessin en cours (Zone temporaire)
     if (state.drawingMode) {
         let draftWidth = (state.drawOptions.width * 0.05).toString();
         let draftDash = "";
@@ -114,19 +116,20 @@ function renderZones() {
     }
 }
 
+// FIX CLIGNOTEMENT : Rendu optimisé par mise à jour (Diffing) au lieu de tout effacer
 function renderTacticalLinks() {
     if(!linksLayer) return;
-    linksLayer.innerHTML = ''; 
-    linksLayer.style.pointerEvents = 'none'; 
+    // On n'efface plus linksLayer.innerHTML ici !
 
     if(!state.tacticalLinks) return;
 
+    // Gestion unique du DEFS (pour les marqueurs et gradients)
     let defs = linksLayer.querySelector('defs');
     if (!defs) {
         defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
         linksLayer.appendChild(defs);
-    } else {
-        defs.innerHTML = ''; 
+        
+        // Création unique du marqueur flèche
         const marker = document.createElementNS("http://www.w3.org/2000/svg", "marker");
         marker.setAttribute("id", "arrowhead");
         marker.setAttribute("markerWidth", "10"); marker.setAttribute("markerHeight", "7");
@@ -147,6 +150,9 @@ function renderTacticalLinks() {
         return null;
     };
 
+    // Liste des IDs valides pour ce cycle de rendu
+    const activeLinkIds = new Set();
+
     state.tacticalLinks.forEach(link => {
         const fromInfo = findPointInfo(link.from);
         const toInfo = findPointInfo(link.to);
@@ -156,47 +162,80 @@ function renderTacticalLinks() {
             const pTo = toInfo.point;
             const cFrom = fromInfo.color;
             const cTo = toInfo.color;
-
-            const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-            line.setAttribute("x1", pFrom.x); line.setAttribute("y1", pFrom.y);
-            line.setAttribute("x2", pTo.x); line.setAttribute("y2", pTo.y);
             
+            // ID unique pour le DOM (stable)
+            const domId = `link-line-${link.id}`;
+            activeLinkIds.add(domId);
+
+            // 1. Récupérer ou créer la ligne
+            let line = document.getElementById(domId);
+            if (!line) {
+                line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                line.setAttribute("id", domId);
+                line.setAttribute("class", "tactical-link-line");
+                line.style.pointerEvents = 'visibleStroke'; 
+                line.style.cursor = 'pointer';
+                
+                // Events (attachés une seule fois à la création)
+                line.onclick = (e) => { e.stopPropagation(); handleLinkClick(e, link); };
+                line.onmouseover = (e) => { line.setAttribute("stroke-width", "0.4"); handleLinkHover(e, link); };
+                line.onmouseout = (e) => { line.setAttribute("stroke-width", "0.15"); handleLinkOut(); };
+                
+                linksLayer.appendChild(line);
+            }
+            
+            // 2. Mettre à jour les coordonnées (rapide)
+            line.setAttribute("x1", pFrom.x); 
+            line.setAttribute("y1", pFrom.y);
+            line.setAttribute("x2", pTo.x); 
+            line.setAttribute("y2", pTo.y);
+            
+            // 3. Gestion Couleur / Gradient
             let finalColor = link.color;
             if (!finalColor || finalColor === '#ffffff') {
                 if (cFrom === cTo) {
                     finalColor = cFrom;
                 } else {
                     const gradId = `grad_${link.id}`;
-                    const grad = document.createElementNS("http://www.w3.org/2000/svg", "linearGradient");
-                    grad.setAttribute("id", gradId);
-                    grad.setAttribute("gradientUnits", "userSpaceOnUse");
-                    grad.setAttribute("x1", pFrom.x); grad.setAttribute("y1", pFrom.y);
-                    grad.setAttribute("x2", pTo.x); grad.setAttribute("y2", pTo.y);
-                    
-                    const stop1 = document.createElementNS("http://www.w3.org/2000/svg", "stop");
-                    stop1.setAttribute("offset", "0%"); stop1.setAttribute("stop-color", cFrom);
-                    
-                    const stop2 = document.createElementNS("http://www.w3.org/2000/svg", "stop");
-                    stop2.setAttribute("offset", "100%"); stop2.setAttribute("stop-color", cTo);
-                    
-                    grad.appendChild(stop1);
-                    grad.appendChild(stop2);
-                    defs.appendChild(grad);
-                    
+                    // Vérifier si le gradient existe déjà
+                    if (!document.getElementById(gradId)) {
+                        const grad = document.createElementNS("http://www.w3.org/2000/svg", "linearGradient");
+                        grad.setAttribute("id", gradId);
+                        grad.setAttribute("gradientUnits", "userSpaceOnUse");
+                        // Les coords du gradient doivent être mises à jour aussi
+                        grad.setAttribute("x1", pFrom.x); grad.setAttribute("y1", pFrom.y);
+                        grad.setAttribute("x2", pTo.x); grad.setAttribute("y2", pTo.y);
+                        
+                        const stop1 = document.createElementNS("http://www.w3.org/2000/svg", "stop");
+                        stop1.setAttribute("offset", "0%"); stop1.setAttribute("stop-color", cFrom);
+                        const stop2 = document.createElementNS("http://www.w3.org/2000/svg", "stop");
+                        stop2.setAttribute("offset", "100%"); stop2.setAttribute("stop-color", cTo);
+                        
+                        grad.appendChild(stop1);
+                        grad.appendChild(stop2);
+                        defs.appendChild(grad);
+                    } else {
+                        // Mise à jour des coords du gradient existant
+                        const grad = document.getElementById(gradId);
+                        grad.setAttribute("x1", pFrom.x); grad.setAttribute("y1", pFrom.y);
+                        grad.setAttribute("x2", pTo.x); grad.setAttribute("y2", pTo.y);
+                    }
                     finalColor = `url(#${gradId})`;
                 }
             }
-
+            
             line.setAttribute("stroke", finalColor);
             line.setAttribute("stroke-width", "0.15");
-            line.setAttribute("class", "tactical-link-line");
-            line.style.pointerEvents = 'visibleStroke'; 
-            line.style.cursor = 'pointer';
-            
-            line.onclick = (e) => { e.stopPropagation(); handleLinkClick(e, link); };
-            line.onmouseover = (e) => { line.setAttribute("stroke-width", "0.4"); handleLinkHover(e, link); };
-            line.onmouseout = (e) => { line.setAttribute("stroke-width", "0.15"); handleLinkOut(); };
-            linksLayer.appendChild(line);
+        }
+    });
+
+    // NETTOYAGE : Supprimer les lignes qui n'existent plus dans l'état
+    // On parcourt les enfants directs du layer (sauf DEFS)
+    Array.from(linksLayer.children).forEach(child => {
+        if (child.tagName === 'line' && child.classList.contains('tactical-link-line')) {
+            if (!activeLinkIds.has(child.id)) {
+                child.remove();
+            }
         }
     });
 }
@@ -214,7 +253,6 @@ function renderMarkersAndClusters() {
                 const term = state.searchTerm.toLowerCase();
                 const matchName = point.name.toLowerCase().includes(term);
                 const matchType = (point.type || '').toLowerCase().includes(term);
-                // Si ni le nom ni le type ne correspondent, on n'affiche pas ce marqueur
                 if (!matchName && !matchType) return;
             }
 
@@ -239,8 +277,6 @@ function renderMarkersAndClusters() {
             
             // Detection : Image ou SVG ?
             if (iconData.startsWith('http') || iconData.startsWith('data:') || iconData.startsWith('./') || iconData.startsWith('/')) {
-                // IMAGE : Le CSS img { pointer-events: none; } dans style.css est crucial ici
-                // pour que le drag fonctionne sur le conteneur et pas sur l'image
                 innerContent = `
                     <div class="marker-icon-box">
                         <img src="${iconData}" alt="icon" style="width:20px; height:20px; object-fit:contain; filter: drop-shadow(0 0 2px var(--marker-color));">
@@ -273,16 +309,27 @@ function renderMarkersAndClusters() {
 }
 
 function renderMeasureTool() {
+    // Note : Pour l'outil de mesure, la destruction/création est acceptable car temporaire et unique
     if (state.measurePoints.length === 2) {
         const [p1, p2] = state.measurePoints;
-        const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        
+        // On nettoie l'ancienne ligne de mesure s'il y en a une dans linksLayer (sauf si c'est géré ailleurs)
+        // Ici on l'ajoute simplement, mais idéalement il faudrait une ID fixe aussi.
+        // Pour faire simple : on cherche la ligne avec ID 'measure-line'
+        
+        let line = document.getElementById('measure-line');
+        if(!line) {
+            line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+            line.setAttribute("id", "measure-line");
+            line.setAttribute("stroke", "#ff00ff");
+            line.setAttribute("stroke-width", "0.2");
+            line.setAttribute("stroke-dasharray", "1");
+            line.style.pointerEvents = "none";
+            linksLayer.appendChild(line);
+        }
+        
         line.setAttribute("x1", p1.x); line.setAttribute("y1", p1.y);
         line.setAttribute("x2", p2.x); line.setAttribute("y2", p2.y);
-        line.setAttribute("stroke", "#ff00ff");
-        line.setAttribute("stroke-width", "0.2");
-        line.setAttribute("stroke-dasharray", "1");
-        line.style.pointerEvents = "none";
-        linksLayer.appendChild(line);
 
         const existingLabel = document.getElementById('measure-label');
         if(existingLabel) existingLabel.remove();
@@ -300,6 +347,9 @@ function renderMeasureTool() {
         
         markersLayer.appendChild(label);
     } else {
+        const line = document.getElementById('measure-line');
+        if(line) line.remove();
+        
         const existingLabel = document.getElementById('measure-label');
         if(existingLabel) existingLabel.remove();
     }
