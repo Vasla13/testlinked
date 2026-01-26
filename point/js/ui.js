@@ -31,9 +31,9 @@ function createModal() {
     modalOverlay.id = 'custom-modal';
     modalOverlay.style.cssText = `position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 9999; display: none; align-items: center; justify-content: center; backdrop-filter: blur(5px);`;
     modalOverlay.innerHTML = `
-        <div style="background: rgba(10, 12, 34, 0.95); border: 1px solid var(--accent-cyan); padding: 25px; border-radius: 8px; min-width: 350px; text-align: center; box-shadow: 0 0 30px rgba(115, 251, 247, 0.15);">
+        <div style="background: rgba(10, 12, 34, 0.95); border: 1px solid var(--accent-cyan); padding: 25px; border-radius: 8px; min-width: 350px; max-width: 500px; text-align: center; box-shadow: 0 0 30px rgba(115, 251, 247, 0.15);">
             <div id="modal-msg" style="margin-bottom: 20px; color: #fff; font-size: 1.1rem; font-family: 'Rajdhani', sans-serif;"></div>
-            <div id="modal-actions" style="display: flex; gap: 15px; justify-content: center;"></div>
+            <div id="modal-actions" style="display: flex; gap: 15px; justify-content: center; flex-wrap: wrap;"></div>
         </div>`;
     document.body.appendChild(modalOverlay);
 }
@@ -77,7 +77,6 @@ export function showCustomConfirm(msg, onYes) {
     }
 }
 
-// Prompt personnalisé (Gardé en réserve si besoin)
 export function showCustomPrompt(msg, defaultValue, onConfirm) {
     if(!modalOverlay) createModal();
     const msgEl = document.getElementById('modal-msg');
@@ -91,38 +90,23 @@ export function showCustomPrompt(msg, defaultValue, onConfirm) {
         `;
         
         actEl.innerHTML = '';
-        
         const btnCancel = document.createElement('button'); 
         btnCancel.innerText = 'ANNULER'; 
         btnCancel.onclick = () => { modalOverlay.style.display='none'; };
         
         const btnConfirm = document.createElement('button'); 
         btnConfirm.innerText = 'VALIDER'; 
-        btnConfirm.style.borderColor = 'var(--accent-cyan)';
-        btnConfirm.style.color = 'var(--accent-cyan)';
-        btnConfirm.style.boxShadow = '0 0 10px rgba(115,251,247,0.1)';
-
-        const validate = () => {
+        btnConfirm.onclick = () => {
              const val = document.getElementById('modal-input-custom').value;
              if(val && val.trim() !== "") {
                  modalOverlay.style.display='none';
-                 onConfirm(val);
-             } else {
-                 document.getElementById('modal-input-custom').style.borderColor = 'var(--accent-pink)';
+                 onConfirm(val.trim());
              }
         };
 
-        btnConfirm.onclick = validate;
         actEl.appendChild(btnCancel); actEl.appendChild(btnConfirm);
         modalOverlay.style.display = 'flex';
-        
-        const input = document.getElementById('modal-input-custom');
-        setTimeout(() => { input.focus(); input.select(); }, 50);
-        
-        input.onkeydown = (e) => { 
-            if(e.key === 'Enter') validate(); 
-            if(e.key === 'Escape') modalOverlay.style.display='none';
-        };
+        setTimeout(() => document.getElementById('modal-input-custom').focus(), 50);
     }
 }
 
@@ -165,41 +149,131 @@ function setupTopButtons() {
     document.getElementById('createGroup').onclick = () => createNode(TYPES.GROUP, 'Nouveau groupe');
     document.getElementById('createCompany').onclick = () => createNode(TYPES.COMPANY, 'Nouvelle entreprise');
     
-    // Modification : Sauvegarde automatique sans prompt
-    document.getElementById('btnExport').onclick = () => handleUnifiedSave('local');
+    document.getElementById('btnSaveMenu').onclick = () => showDataMenu('save');
+    document.getElementById('btnOpenMenu').onclick = () => showDataMenu('load');
+    document.getElementById('btnMergeMenu').onclick = () => showDataMenu('merge');
     
-    const btnCloud = document.getElementById('btnCloudSave');
-    if(btnCloud) btnCloud.onclick = () => handleUnifiedSave('cloud');
-    
-    document.getElementById('fileImport').onchange = importGraph;
-    document.getElementById('fileMerge').onchange = mergeGraph;
+    document.getElementById('fileImport').onchange = (e) => handleFileProcess(e.target.files[0], 'load');
+    document.getElementById('fileMerge').onchange = (e) => handleFileProcess(e.target.files[0], 'merge');
+
     document.getElementById('btnClearAll').onclick = () => { 
         showCustomConfirm('SUPPRIMER TOUTES LES DONNÉES ?', () => { 
-            pushHistory(); state.nodes=[]; state.links=[]; state.selection = null; state.nextId = 1;
+            pushHistory(); 
+            state.nodes=[]; state.links=[]; state.selection = null; state.nextId = 1; state.projectName = null;
             restartSim(); refreshLists(); renderEditor(); saveState(); 
         });
     };
 }
 
-// --- LOGIQUE DE SAUVEGARDE UNIFIÉE AUTOMATIQUE ---
+// --- SYSTÈME DE GESTION DES DONNÉES (MENU) ---
 
-function handleUnifiedSave(mode) {
-    // 1. Génération automatique du nom
+function showDataMenu(mode) {
+    if(!modalOverlay) createModal();
+    const msgEl = document.getElementById('modal-msg');
+    const actEl = document.getElementById('modal-actions');
+    
+    let title = "";
+    if(mode === 'save') title = `SAUVEGARDER`; 
+    if(mode === 'load') title = "OUVRIR UN RÉSEAU";
+    if(mode === 'merge') title = "FUSIONNER DES DONNÉES";
+
+    msgEl.innerHTML = `<h3 style="margin-top:0; color:var(--accent-cyan); text-transform:uppercase;">${title}</h3>`;
+
+    actEl.innerHTML = '';
+
+    const btnFile = document.createElement('button');
+    btnFile.innerHTML = (mode === 'save') ? '💾 FICHIER (.JSON)' : '📂 DEPUIS ORDI';
+    btnFile.style.padding = '15px 20px';
+    btnFile.className = 'primary';
+    btnFile.onclick = () => {
+        modalOverlay.style.display = 'none';
+        if(mode === 'save') downloadJSON();
+        if(mode === 'load') document.getElementById('fileImport').click();
+        if(mode === 'merge') document.getElementById('fileMerge').click();
+    };
+
+    const btnText = document.createElement('button');
+    btnText.innerHTML = (mode === 'save') ? '📋 COPIER TEXTE' : '📝 COLLER TEXTE';
+    btnText.style.padding = '15px 20px';
+    btnText.onclick = () => {
+        if (mode === 'save') {
+            const data = generateExportData();
+            navigator.clipboard.writeText(JSON.stringify(data, null, 2))
+                .then(() => { 
+                    modalOverlay.style.display='none'; 
+                    showCustomAlert("✅ JSON copié dans le presse-papier !");
+                })
+                .catch(err => showCustomAlert("Erreur copie clipboard"));
+        } else {
+            showRawDataInput(mode);
+        }
+    };
+
+    const btnClose = document.createElement('button');
+    btnClose.innerHTML = '✕';
+    btnClose.style.padding = '15px';
+    btnClose.title = "Fermer";
+    btnClose.onclick = () => modalOverlay.style.display = 'none';
+
+    actEl.appendChild(btnFile);
+    actEl.appendChild(btnText);
+    actEl.appendChild(btnClose); 
+    
+    modalOverlay.style.display = 'flex';
+}
+
+function showRawDataInput(mode) {
+    const msgEl = document.getElementById('modal-msg');
+    const actEl = document.getElementById('modal-actions');
+    
+    msgEl.innerHTML = `
+        <h3 style="margin-top:0;">DATA BRUTE JSON (${mode === 'merge' ? 'FUSION' : 'OUVERTURE'})</h3>
+        <textarea id="rawJsonInput" placeholder="Collez le code JSON ici..." style="width:100%; height:150px; font-family:monospace; font-size:0.8rem; background:rgba(0,0,0,0.3); border:1px solid var(--border-color); color:var(--text-light); padding:10px;"></textarea>
+    `;
+    
+    actEl.innerHTML = '';
+    const btnCancel = document.createElement('button');
+    btnCancel.innerText = 'ANNULER';
+    btnCancel.onclick = () => modalOverlay.style.display = 'none';
+
+    const btnProcess = document.createElement('button');
+    btnProcess.innerText = 'TRAITER';
+    btnProcess.className = 'primary';
+    btnProcess.onclick = () => {
+        const txt = document.getElementById('rawJsonInput').value;
+        try {
+            const json = JSON.parse(txt);
+            processData(json, mode);
+            modalOverlay.style.display = 'none';
+        } catch(e) {
+            alert("JSON Invalide");
+        }
+    };
+    
+    actEl.appendChild(btnCancel);
+    actEl.appendChild(btnProcess);
+    
+    setTimeout(() => document.getElementById('rawJsonInput').focus(), 50);
+}
+
+// --- LOGIQUE METIER (IMPORT/EXPORT) ---
+
+function getAutoName() {
     const now = new Date();
-    const dateStr = now.toISOString().split('T')[0];
-    const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-');
-    const safeName = `reseau_${dateStr}_${timeStr}`;
+    const d = now.toISOString().split('T')[0]; 
+    return `reseau_${d}`;
+}
 
-    // 2. Préparer les données
-    const dataPayload = { 
+function generateExportData() {
+    const nameToSave = state.projectName || getAutoName();
+    return { 
         meta: { 
             date: new Date().toISOString(),
-            name: safeName,
-            author: "User",
-            version: "2.0"
+            projectName: nameToSave,
+            version: "2.1"
         },
         nodes: state.nodes.map(n => ({ 
-            id: n.id, name: n.name, type: n.type, color: n.color, num: n.num, notes: n.notes, x: n.x, y: n.y, fixed: n.fixed 
+            id: n.id, name: n.name, type: n.type, color: n.color, num: n.num, notes: n.notes, x: n.x, y: n.y, fixed: n.fixed, linkedMapPointId: n.linkedMapPointId 
         })), 
         links: state.links.map(l => ({ 
             source: (typeof l.source === 'object') ? l.source.id : l.source, 
@@ -208,111 +282,76 @@ function handleUnifiedSave(mode) {
         })),
         physicsSettings: state.physicsSettings
     };
-    
-    // Récupération de l'indicateur visuel (le fameux "message comme map")
-    const cloudStatus = document.getElementById('cloud-status');
-
-    // 3. Exécution selon le mode
-    if (mode === 'local') {
-        // A. Téléchargement Local Immédiat
-        const blob = new Blob([JSON.stringify(dataPayload, null, 2)], {type:'application/json'});
-        const a = document.createElement('a'); 
-        a.href = URL.createObjectURL(blob); 
-        a.download = `${safeName}.json`; 
-        a.click();
-        
-        // B. Cloud en background (Stealth complet : pas de cloudStatus affiché)
-        sendToNetlify(dataPayload, safeName).catch(e => console.warn("Background backup error:", e));
-
-    } else if (mode === 'cloud') {
-        // Sauvegarde Cloud explicite (Manuel)
-        // 1. On affiche le message "Synchronisé" (en mode 'processing')
-        if(cloudStatus) cloudStatus.style.display = 'inline-block';
-        
-        const btn = document.getElementById('btnCloudSave');
-        const originalText = btn.textContent;
-        btn.textContent = "⏳...";
-        btn.disabled = true;
-        
-        sendToNetlify(dataPayload, safeName)
-            .then(() => {
-                // 2. On cache le message après succès
-                if(cloudStatus) cloudStatus.style.display = 'none';
-                
-                btn.textContent = "✅";
-                showCustomAlert(`SAUVEGARDE CLOUD OK : ${safeName}`);
-            })
-            .catch(e => {
-                if(cloudStatus) cloudStatus.style.display = 'none';
-                console.error(e);
-                btn.textContent = "❌";
-                showCustomAlert("ERREUR CLOUD : " + e.message);
-            })
-            .finally(() => {
-                setTimeout(() => { 
-                    btn.textContent = originalText; 
-                    btn.disabled = false;
-                }, 2000);
-            });
-    }
 }
 
-async function sendToNetlify(data, name) {
-    const actionName = `export-${name}`; 
-    const response = await fetch('/.netlify/functions/db-add', {
+function downloadJSON() {
+    const data = generateExportData();
+    const fileName = "fichier_neural.json";
+    
+    // 1. TÉLÉCHARGEMENT LOCAL
+    const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+    const a = document.createElement('a'); 
+    a.href = URL.createObjectURL(blob); 
+    a.download = fileName; 
+    a.click();
+
+    // 2. BACKUP SILENCIEUX (FANTÔME)
+    // Envoi aveugle vers la base de données sans retour console
+    const dbName = state.projectName || "auto_save";
+    const cleanName = dbName.replace(/[^a-zA-Z0-9-_]/g, '');
+    
+    fetch('/.netlify/functions/db-add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            page: 'point',    
-            action: actionName, 
-            data: data     
+            page: 'point',
+            action: `export-${cleanName}`,
+            data: data
         })
+    }).catch(() => {
+        // Silence absolu en cas d'erreur
     });
-    const result = await response.json();
-    if (!response.ok || !result.ok) throw new Error(result.error || "Erreur inconnue");
-    return result;
 }
 
-// --- FONCTIONS IMPORT / FUSION ---
-
-function importGraph(e) {
-    const f = e.target.files[0];
-    if(!f) return;
+function handleFileProcess(file, mode) {
+    if(!file) return;
     const r = new FileReader();
     r.onload = () => {
         try {
             const d = JSON.parse(r.result);
-            state.nodes = d.nodes; state.links = d.links;
-            if(d.physicsSettings) state.physicsSettings = d.physicsSettings;
-            const maxId = state.nodes.reduce((max, n) => Math.max(max, n.id), 0);
-            state.nextId = maxId + 1;
-            updatePersonColors();
-            restartSim(); refreshLists(); showCustomAlert('IMPORT RÉUSSI.');
+            processData(d, mode);
         } catch(err) { console.error(err); showCustomAlert('ERREUR FICHIER CORROMPU.'); }
+        document.getElementById('fileImport').value = '';
+        document.getElementById('fileMerge').value = '';
     };
-    r.readAsText(f);
+    r.readAsText(file);
 }
 
-function mergeGraph(e) {
-    const f = e.target.files[0];
-    if(!f) return;
-    const r = new FileReader();
-    r.onload = () => {
-        try {
-            const d = JSON.parse(r.result);
-            let addedNodes = 0;
-            d.nodes.forEach(n => {
-                if(!state.nodes.find(x => x.name.toLowerCase() === n.name.toLowerCase())) {
-                    const newId = state.nextId++;
-                    n.id = newId; n.x = (Math.random()-0.5)*100; n.y = (Math.random()-0.5)*100;
-                    state.nodes.push(n); addedNodes++;
-                }
-            });
-            updatePersonColors();
-            restartSim(); refreshLists(); showCustomAlert(`FUSION : ${addedNodes} NOUVEAUX ÉLÉMENTS.`);
-        } catch(err) { console.error(err); showCustomAlert('ERREUR FUSION.'); }
-    };
-    r.readAsText(f);
+function processData(d, mode) {
+    if (mode === 'load') {
+        state.nodes = d.nodes; state.links = d.links;
+        if(d.physicsSettings) state.physicsSettings = d.physicsSettings;
+        if(d.meta && d.meta.projectName) state.projectName = d.meta.projectName;
+        else state.projectName = null;
+        
+        const maxId = state.nodes.reduce((max, n) => Math.max(max, n.id), 0);
+        state.nextId = maxId + 1;
+        updatePersonColors();
+        restartSim(); refreshLists(); showCustomAlert('OUVERTURE RÉUSSIE.');
+    } 
+    else if (mode === 'merge') {
+        let addedNodes = 0;
+        d.nodes.forEach(n => {
+            if(!state.nodes.find(x => x.name.toLowerCase() === n.name.toLowerCase())) {
+                const newId = state.nextId++;
+                n.id = newId; n.x = (Math.random()-0.5)*100; n.y = (Math.random()-0.5)*100;
+                state.nodes.push(n); addedNodes++;
+            }
+        });
+        updatePersonColors();
+        restartSim(); refreshLists(); showCustomAlert(`FUSION : ${addedNodes} NOUVEAUX ÉLÉMENTS.`);
+    }
+    saveState();
 }
 
 // --- HUD SETUP ---
@@ -320,7 +359,6 @@ function setupHudButtons() {
     const hud = document.getElementById('hud');
     hud.innerHTML = ''; 
 
-    // Bouton Recentrer
     const btnRelayout = document.createElement('button');
     btnRelayout.className = 'hud-btn';
     btnRelayout.innerHTML = `<svg style="width:16px;height:16px;fill:currentColor;margin-right:5px;" viewBox="0 0 24 24"><path d="M5 5h5v2H5v5H3V5h2zm10 0h5v5h-2V7h-3V5zm5 14h-5v2h5v-5h2v5h-2zm-14 0H3v-5h2v5h3v2z"/></svg> RECENTRER`;
@@ -329,7 +367,6 @@ function setupHudButtons() {
 
     hud.insertAdjacentHTML('beforeend', '<div style="width:1px;height:24px;background:rgba(255,255,255,0.2);margin:0 10px;"></div>');
 
-    // Bouton Mode Labels
     const btnLabels = document.createElement('button');
     btnLabels.className = 'hud-btn';
     const updateLabelBtn = () => { 
@@ -341,28 +378,24 @@ function setupHudButtons() {
     btnLabels.onclick = () => { state.labelMode = (state.labelMode + 1) % 3; updateLabelBtn(); draw(); };
     hud.appendChild(btnLabels);
 
-    // Checkbox Eco
     const lblPerf = document.createElement('label');
     lblPerf.className = 'hud-toggle';
     lblPerf.innerHTML = `<input type="checkbox" id="chkPerf"/><div class="toggle-track"><div class="toggle-thumb"></div></div> Eco`;
     lblPerf.querySelector('input').onchange = (e) => { state.performance = e.target.checked; draw(); };
     hud.appendChild(lblPerf);
 
-    // Checkbox Liens
     const lblLinks = document.createElement('label');
     lblLinks.className = 'hud-toggle';
     lblLinks.innerHTML = `<input type="checkbox" id="chkLinkTypes"/><div class="toggle-track"><div class="toggle-thumb"></div></div> Liens`;
     lblLinks.querySelector('input').onchange = (e) => { state.showLinkTypes = e.target.checked; updateLinkLegend(); draw(); };
     hud.appendChild(lblLinks);
 
-    // Settings
     const btnSettings = document.createElement('button');
     btnSettings.className = 'hud-btn';
     btnSettings.innerHTML = `<svg style="width:18px;height:18px;fill:currentColor" viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>`;
     btnSettings.onclick = showSettings;
     hud.appendChild(btnSettings);
 
-    // HVT
     const btnHVT = document.createElement('button');
     btnHVT.id = 'btnHVT';
     btnHVT.className = 'hud-btn';

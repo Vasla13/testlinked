@@ -17,7 +17,8 @@ export const state = {
         collision: 50, enemyForce: 300, structureRepulsion: 0.1
     },
     history: [], tempLink: null, labelMode: 1, showLinkTypes: false, 
-    performance: false, view: { x: 0, y: 0, scale: 0.8 }, forceSimulation: false
+    performance: false, view: { x: 0, y: 0, scale: 0.8 }, forceSimulation: false,
+    projectName: null // AJOUT DU NOM DU PROJET
 };
 
 const STORAGE_KEY = 'pointPageState_v13'; 
@@ -25,10 +26,10 @@ const STORAGE_KEY = 'pointPageState_v13';
 export function saveState() {
     try {
         const payload = {
+            meta: { projectName: state.projectName }, // SAUVEGARDE DU NOM
             nodes: state.nodes.map(n => ({
                 id: n.id, name: n.name, type: n.type, color: n.color, 
                 num: n.num, notes: n.notes, x: n.x, y: n.y, fixed: n.fixed,
-                // --- FIX : ON SAUVEGARDE BIEN L'ID DE LA CARTE ---
                 linkedMapPointId: n.linkedMapPointId 
             })),
             links: state.links.map(l => ({
@@ -57,6 +58,7 @@ export function loadState() {
         if (data.activeFilter) state.activeFilter = data.activeFilter;
         if (typeof data.globeMode === 'boolean') state.globeMode = data.globeMode;
         if (data.physicsSettings) state.physicsSettings = { ...state.physicsSettings, ...data.physicsSettings };
+        if (data.meta && data.meta.projectName) state.projectName = data.meta.projectName; // CHARGEMENT DU NOM
         state.pathfinding = { startId: null, active: false, pathNodes: new Set(), pathLinks: new Set() };
         state.hvtMode = false;
         return true;
@@ -66,7 +68,7 @@ export function loadState() {
 export function pushHistory() {
     if (state.history.length > 50) state.history.shift();
     const snapshot = {
-        nodes: state.nodes.map(n => ({...n})), // Copie tout, y compris linkedMapPointId
+        nodes: state.nodes.map(n => ({...n})),
         links: state.links.map(l => ({
             source: (typeof l.source === 'object') ? l.source.id : l.source,
             target: (typeof l.target === 'object') ? l.target.id : l.target,

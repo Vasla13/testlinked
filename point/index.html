@@ -10,8 +10,6 @@
   <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
   
   <script src="https://d3js.org/d3.v7.min.js"></script>
-  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
-
   <style>
     /* --- VARIABLES & RESET --- */
     :root { 
@@ -245,11 +243,9 @@
     .grow { flex: 1; }
     .create-buttons { display: flex; gap: 5px; }
     .create-buttons button { flex: 1; font-size: 0.8rem; padding: 8px 4px; }
-    .file-btn { 
-      font-size: 0.85rem; color: var(--text-muted); cursor: pointer; 
-      border: 1px dashed var(--border-color); padding: 8px; text-align: center; border-radius: 4px; margin-top: 5px; transition: 0.2s;
-    }
-    .file-btn:hover { border-color: var(--accent-cyan); color: var(--accent-cyan); background: rgba(115, 251, 247, 0.05); }
+    
+    /* Inputs cachés pour le file upload */
+    .hidden-input { display: none; }
 
     /* Responsive rapide */
     @media (max-width: 900px) {
@@ -276,7 +272,6 @@
         <button type="button" onclick="window.location.href='../map/index.html';" style="width: 100%; font-size:0.8rem;">
           🗺️ Basculer vers Mode Carte
         </button>
-        <div id="cloud-status" style="font-size:0.8rem; color:var(--text-muted); margin-top:5px; display:none;">☁️ Synchronisé</div>
       </div>
 
       <div class="section">
@@ -289,16 +284,16 @@
       <div class="section">
         <h2>Données</h2>
         <div style="display:flex; gap:5px;">
-          <button id="btnExport" type="button" class="grow">Sauvegarder</button>
-          <button id="btnCloudSave" type="button" class="grow" style="border-color:var(--accent-cyan); color:var(--accent-cyan);">☁️ Cloud</button>
+          <button id="btnSaveMenu" type="button" class="grow">Sauvegarder</button>
+          <button id="btnOpenMenu" type="button" class="grow">Ouvrir</button>
         </div>
         <div style="display:flex; gap:5px;">
+          <button id="btnMergeMenu" type="button" class="grow">Fusionner</button>
           <button id="btnClearAll" type="button" class="danger grow">Reset</button>
         </div>
-        <div style="display:flex; gap:5px;">
-          <label class="file-btn grow">📂 Charger <input id="fileImport" type="file" accept=".json" style="display:none;"/></label>
-          <label class="file-btn grow">🔗 Fusionner <input id="fileMerge" type="file" accept=".json" style="display:none;"/></label>
-        </div>
+        
+        <input id="fileImport" type="file" accept=".json" class="hidden-input"/>
+        <input id="fileMerge" type="file" accept=".json" class="hidden-input"/>
       </div>
 
       <div class="section">
@@ -368,10 +363,6 @@
   <datalist id="datalist-people"></datalist>
   <datalist id="datalist-groups"></datalist>
   <datalist id="datalist-companies"></datalist>
-
-  <script type="text/javascript">
-    (function() { try { emailjs.init({ publicKey: "VpguoxdGrPojq9q11" }); } catch(e){} })();
-  </script>
 
   <script type="module" src="js/main.js"></script>
   
