@@ -10,6 +10,8 @@ export const state = {
     focusMode: false,
     focusSet: new Set(),
     hvtMode: false,
+    hvtTopN: 10,
+    hvtTopIds: new Set(),
     pathfinding: { startId: null, active: false, pathNodes: new Set(), pathLinks: new Set() },
     pathMode: false,
     pathPath: new Set(),
@@ -43,7 +45,7 @@ export function saveState() {
                 kind: l.kind
             })),
             view: state.view, labelMode: state.labelMode, showLinkTypes: state.showLinkTypes,
-            activeFilter: state.activeFilter, globeMode: state.globeMode,
+            activeFilter: state.activeFilter, globeMode: state.globeMode, hvtTopN: state.hvtTopN,
             physicsSettings: state.physicsSettings, nextId: state.nextId
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -70,11 +72,13 @@ export function loadState() {
         if (typeof data.labelMode === 'number') state.labelMode = data.labelMode;
         if (data.activeFilter) state.activeFilter = data.activeFilter;
         if (typeof data.globeMode === 'boolean') state.globeMode = data.globeMode;
+        if (typeof data.hvtTopN === 'number') state.hvtTopN = data.hvtTopN;
         if (data.physicsSettings) state.physicsSettings = { ...state.physicsSettings, ...data.physicsSettings };
         if (data.meta && data.meta.projectName) state.projectName = data.meta.projectName; // CHARGEMENT DU NOM
         ensureLinkIds();
         state.pathfinding = { startId: null, active: false, pathNodes: new Set(), pathLinks: new Set() };
         state.hvtMode = false;
+        state.hvtTopIds = new Set();
         return true;
     } catch (e) { return false; }
 }

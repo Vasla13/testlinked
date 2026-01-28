@@ -19,6 +19,14 @@ const ui = {
 };
 
 let modalOverlay = null;
+let hvtPanel = null;
+let hvtSelectedId = null;
+
+const TYPE_LABEL = {
+    [TYPES.PERSON]: 'Personne',
+    [TYPES.COMPANY]: 'Entreprise',
+    [TYPES.GROUP]: 'Groupe'
+};
 
 // EXPORTS
 export { renderEditor, showSettings, showContextMenu, hideContextMenu };
@@ -142,6 +150,7 @@ export function initUI() {
     setupTopButtons(); 
     
     window.zoomToNode = zoomToNode;
+    window.updateHvtPanel = updateHvtPanel;
 }
 
 function setupTopButtons() {
@@ -404,11 +413,198 @@ function setupHudButtons() {
     btnHVT.innerHTML = `<svg style="width:16px;height:16px;fill:currentColor;margin-right:5px;" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-4-8c0 2.21 1.79 4 4 4s4-1.79 4-4-1.79-4-4-4-4 1.79-4 4z"/></svg> HVT`;
     btnHVT.onclick = () => {
         state.hvtMode = !state.hvtMode;
-        if(state.hvtMode) { calculateHVT(); btnHVT.classList.add('active'); } 
-        else { btnHVT.classList.remove('active'); }
+        if(state.hvtMode) { 
+            calculateHVT(); 
+            btnHVT.classList.add('active'); 
+            showHvtPanel();
+        } else { 
+            btnHVT.classList.remove('active'); 
+            hideHvtPanel();
+        }
         draw();
     };
     hud.appendChild(btnHVT);
+}
+
+function ensureHvtPanel() {
+    if (hvtPanel) return;
+    hvtPanel = document.createElement('div');
+    hvtPanel.id = 'hvt-panel';
+    hvtPanel.innerHTML = `
+        <div class="hvt-header">
+            <div class="hvt-title">HVT RANKING</div>
+            <div class="hvt-close" id="btnHvtPanelClose">✕</div>
+        </div>
+        <div class="hvt-sub">
+            <span id="hvt-subtitle">Top</span>
+            <span id="hvt-count"></span>
+        </div>
+        <div id="hvt-list"></div>
+        <div id="hvt-details"></div>
+    `;
+    document.body.appendChild(hvtPanel);
+    const closeBtn = document.getElementById('btnHvtPanelClose');
+    if (closeBtn) closeBtn.onclick = () => {
+        const btn = document.getElementById('btnHVT');
+        if (btn) btn.click();
+        else hideHvtPanel();
+    };
+
+    const header = hvtPanel.querySelector('.hvt-header');
+    if (header) {
+        let isDragging = false;
+        let offsetX = 0;
+        let offsetY = 0;
+
+        header.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return;
+            if (e.target && e.target.closest('#btnHvtPanelClose')) return;
+            const rect = hvtPanel.getBoundingClientRect();
+            isDragging = true;
+            offsetX = e.clientX - rect.left;
+            offsetY = e.clientY - rect.top;
+            hvtPanel.classList.add('dragging');
+            e.preventDefault();
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            let x = e.clientX - offsetX;
+            let y = e.clientY - offsetY;
+            const maxX = window.innerWidth - hvtPanel.offsetWidth - 10;
+            const maxY = window.innerHeight - hvtPanel.offsetHeight - 10;
+            x = Math.max(10, Math.min(x, maxX));
+            y = Math.max(10, Math.min(y, maxY));
+            hvtPanel.style.left = `${x}px`;
+            hvtPanel.style.top = `${y}px`;
+            hvtPanel.style.right = 'auto';
+        });
+
+        window.addEventListener('mouseup', () => {
+            if (!isDragging) return;
+            isDragging = false;
+            hvtPanel.classList.remove('dragging');
+        });
+    }
+}
+
+function showHvtPanel() {
+    ensureHvtPanel();
+    hvtPanel.style.display = 'flex';
+    updateHvtPanel();
+}
+
+function hideHvtPanel() {
+    if (hvtPanel) hvtPanel.style.display = 'none';
+    hvtSelectedId = null;
+}
+
+export function updateHvtPanel() {
+    if (!hvtPanel || hvtPanel.style.display === 'none') return;
+    const listEl = document.getElementById('hvt-list');
+    const detailsEl = document.getElementById('hvt-details');
+    const subtitleEl = document.getElementById('hvt-subtitle');
+    const countEl = document.getElementById('hvt-count');
+    if (!listEl || !detailsEl) return;
+
+    const ranked = [...state.nodes]
+        .filter(n => (n.hvtScore || 0) > 0)
+        .sort((a, b) => (b.hvtScore || 0) - (a.hvtScore || 0));
+    const limit = (state.hvtTopN && state.hvtTopN > 0) ? state.hvtTopN : Math.min(20, ranked.length);
+    const list = ranked.slice(0, limit);
+    const label = (state.hvtTopN && state.hvtTopN > 0) ? `Top ${state.hvtTopN}` : `Top ${limit}`;
+    if (subtitleEl) subtitleEl.textContent = label;
+    if (countEl) countEl.textContent = `${list.length}/${ranked.length}`;
+
+    if (list.length === 0) {
+        listEl.innerHTML = '<div style="padding:8px; color:#666; text-align:center;">Aucun HVT détecté</div>';
+        detailsEl.innerHTML = '';
+        return;
+    }
+
+    listEl.innerHTML = list.map((n, i) => {
+        const score = Math.round((n.hvtScore || 0) * 100);
+        const typeLabel = TYPE_LABEL[n.type] || n.type;
+        const isActive = String(n.id) === String(hvtSelectedId);
+        return `
+            <div class="hvt-row ${isActive ? 'active' : ''}" data-id="${n.id}">
+                <div class="hvt-rank">#${i + 1}</div>
+                <div class="hvt-name">${escapeHtml(n.name)}</div>
+                <div class="hvt-type">${typeLabel}</div>
+                <div class="hvt-score">${score}%</div>
+            </div>
+        `;
+    }).join('');
+
+    listEl.querySelectorAll('.hvt-row').forEach(row => {
+        row.onclick = () => {
+            const id = row.dataset.id;
+            hvtSelectedId = id;
+            const node = nodeById(id);
+            if (node) {
+                zoomToNode(node.id);
+            }
+            updateHvtPanel();
+        };
+    });
+
+    const selected = nodeById(hvtSelectedId) || list[0];
+    if (!selected) { detailsEl.innerHTML = ''; return; }
+    hvtSelectedId = selected.id;
+    detailsEl.innerHTML = renderHvtDetails(selected);
+}
+
+function renderHvtDetails(n) {
+    const links = state.links.filter(l => {
+        const s = (typeof l.source === 'object') ? l.source.id : l.source;
+        const t = (typeof l.target === 'object') ? l.target.id : l.target;
+        return s === n.id || t === n.id;
+    });
+    const neighbors = new Map();
+    const kindCounts = {};
+    links.forEach(l => {
+        const s = (typeof l.source === 'object') ? l.source.id : l.source;
+        const t = (typeof l.target === 'object') ? l.target.id : l.target;
+        const otherId = (s === n.id) ? t : s;
+        neighbors.set(otherId, (neighbors.get(otherId) || 0) + 1);
+        kindCounts[l.kind] = (kindCounts[l.kind] || 0) + 1;
+    });
+    const topKinds = Object.entries(kindCounts)
+        .sort((a,b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([k, c]) => `<span class="hvt-tag">${linkKindEmoji(k)} ${kindToLabel(k)} ×${c}</span>`)
+        .join('') || '<span class="hvt-tag">Aucun</span>';
+
+    const topNeighbors = [...neighbors.entries()]
+        .sort((a,b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([id, c]) => {
+            const other = nodeById(id);
+            if (!other) return '';
+            return `<span class="hvt-tag">${escapeHtml(other.name)} ×${c}</span>`;
+        })
+        .filter(Boolean)
+        .join('') || '<span class="hvt-tag">Aucun</span>';
+
+    const score = Math.round((n.hvtScore || 0) * 100);
+    return `
+        <div class="hvt-detail-title">Détails</div>
+        <div class="hvt-detail-name">${escapeHtml(n.name)}</div>
+        <div class="hvt-detail-row"><span>Type</span><span>${TYPE_LABEL[n.type] || n.type}</span></div>
+        <div class="hvt-detail-row"><span>Score HVT</span><span>${score}%</span></div>
+        <div class="hvt-detail-row"><span>Liens</span><span>${links.length}</span></div>
+        <div class="hvt-detail-row"><span>Relations uniques</span><span>${neighbors.size}</span></div>
+        <div class="hvt-detail-sub">Types dominants</div>
+        <div class="hvt-tags">${topKinds}</div>
+        <div class="hvt-detail-sub">Top connexions</div>
+        <div class="hvt-tags">${topNeighbors}</div>
+    `;
+}
+
+export function refreshHvt() {
+    if (!state.hvtMode) return;
+    calculateHVT();
+    updateHvtPanel();
 }
 
 function setupSearch() {
@@ -458,7 +654,7 @@ function createNode(type, baseName) {
 
 export function addLink(a, b, kind) {
     const res = logicAddLink(a, b, kind);
-    if(res) { refreshLists(); renderEditor(); scheduleSave(); }
+    if(res) { refreshLists(); renderEditor(); scheduleSave(); refreshHvt(); }
     return res;
 }
 
@@ -518,6 +714,7 @@ export function refreshLists() {
     fillDL('datalist-companies', state.nodes.filter(isCompany));
     
     updateLinkLegend();
+    if (state.hvtMode) updateHvtPanel();
 }
 
 export function updatePathfindingPanel() {

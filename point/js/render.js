@@ -58,6 +58,7 @@ export function draw() {
     const isFocus = state.focusMode;
     const isPath = state.pathMode;
     const isHVT = state.hvtMode; 
+    const topSet = (isHVT && state.hvtTopN > 0 && state.hvtTopIds && state.hvtTopIds.size) ? state.hvtTopIds : null;
     const showTypes = state.showLinkTypes; 
     const labelMode = state.labelMode; 
     const activeFilter = state.activeFilter; 
@@ -147,6 +148,16 @@ export function draw() {
 
         const isPathLink = state.pathfinding.active && !dimmed;
 
+        let sTop = false;
+        let tTop = false;
+        if (topSet) {
+            const sId = l.source.id || l.source;
+            const tId = l.target.id || l.target;
+            sTop = topSet.has(sId);
+            tTop = topSet.has(tId);
+            if (!sTop && !tTop) continue;
+        }
+
         if (showTypes || isPathLink) {
              const color = isPathLink ? '#00ffff' : computeLinkColor(l);
              ctx.strokeStyle = color;
@@ -168,6 +179,7 @@ export function draw() {
              ctx.lineWidth = (dimmed ? 1 : 1.5) / Math.sqrt(p.scale);
              ctx.shadowBlur = 0;
         }
+        if (topSet && (sTop ^ tTop)) globalAlpha = Math.min(globalAlpha, 0.25);
         ctx.globalAlpha = globalAlpha;
         ctx.stroke();
 
@@ -220,12 +232,16 @@ export function draw() {
         let rad = nodeRadius(n); 
         let alpha = (isPath && state.pathPath.has(n.id)) ? 1.0 : (dimmed ? 0.4 : 1.0);
         let nodeColor = safeHex(n.color);
+        const isTop = topSet ? topSet.has(n.id) : true;
         
         // --- LOGIQUE VISUELLE HVT ---
         let isBoss = false;
         if (isHVT) {
             const score = n.hvtScore || 0;
-            if (score > 0.6) { 
+            if (topSet && !isTop) {
+                alpha = 0.06;
+                rad *= 0.75;
+            } else if (score > 0.6) { 
                 isBoss = true;
                 rad = rad * (1 + score * 0.8); 
                 alpha = 1.0;
@@ -294,7 +310,10 @@ export function draw() {
             if (isFocus && !state.focusSet.has(n.id)) continue;
             
             // Filtre HVT pour labels
-            if (isHVT && n.hvtScore < 0.5) continue;
+            if (isHVT) {
+                if (topSet && !topSet.has(n.id)) continue;
+                if (!topSet && n.hvtScore < 0.5) continue;
+            }
 
             const rad = nodeRadius(n);
             const dimmed = isDimmed('node', n);
@@ -310,7 +329,8 @@ export function draw() {
             if (labelMode === 2) showName = true;
             else if (labelMode === 1) showName = isHover || isPathNode || isPathfindingNode || isPathStart || (p.scale > 0.5 || isImportant);
             
-            if (isHVT && n.hvtScore > 0.6) showName = true;
+            if (isHVT && topSet && topSet.has(n.id)) showName = true;
+            else if (isHVT && n.hvtScore > 0.6) showName = true;
 
             if (showName) {
                 const baseFontSize = (isPathNode || isPathfindingNode || isPathStart || (isHVT && n.hvtScore > 0.6) ? 16 : 13);

@@ -3,7 +3,7 @@ import { ensureNode, addLink, mergeNodes, updatePersonColors } from './logic.js'
 import { renderEditorHTML } from './templates.js';
 import { restartSim } from './physics.js';
 import { draw, updateDegreeCache } from './render.js';
-import { refreshLists, updatePathfindingPanel, selectNode, showCustomConfirm, showCustomAlert } from './ui.js';
+import { refreshLists, updatePathfindingPanel, selectNode, showCustomConfirm, showCustomAlert, refreshHvt } from './ui.js';
 import { escapeHtml, kindToLabel, linkKindEmoji, computeLinkColor } from './utils.js';
 import { TYPES, KINDS, KIND_LABELS, PERSON_PERSON_KINDS, PERSON_ORG_KINDS, ORG_ORG_KINDS } from './constants.js';
 
@@ -104,6 +104,7 @@ function setupEditorListeners(n) {
             state.links = state.links.filter(l => !linkHasNode(l, n.id));
             state.selection = null; restartSim(); refreshLists(); renderEditor(); updatePathfindingPanel();
             scheduleSave();
+            refreshHvt();
         });
     };
 
@@ -162,7 +163,7 @@ function setupEditorListeners(n) {
         const targetName = document.getElementById('mergeTarget').value.trim();
         const target = state.nodes.find(x => x.name.toLowerCase() === targetName.toLowerCase());
         if (target && target.id !== n.id) {
-            showCustomConfirm(`Fusionner "${n.name}" DANS "${target.name}" ?`, () => { mergeNodes(n.id, target.id); selectNode(target.id); scheduleSave(); });
+            showCustomConfirm(`Fusionner "${n.name}" DANS "${target.name}" ?`, () => { mergeNodes(n.id, target.id); selectNode(target.id); scheduleSave(); refreshHvt(); });
         } else { showCustomAlert("Cible invalide."); }
     };
 
@@ -265,7 +266,7 @@ function renderActiveLinks(n) {
             pushHistory();
             const linkId = delBtn.dataset.id;
             state.links = state.links.filter(l => String(l.id) !== String(linkId));
-            updatePersonColors(); updateDegreeCache(); restartSim(); renderEditor(); updatePathfindingPanel(); draw(); scheduleSave();
+            updatePersonColors(); updateDegreeCache(); restartSim(); renderEditor(); updatePathfindingPanel(); draw(); scheduleSave(); refreshHvt();
             return;
         }
 
@@ -316,6 +317,7 @@ function renderActiveLinks(n) {
                     restartSim();
                     updatePathfindingPanel();
                     scheduleSave();
+                    refreshHvt();
                 }
                 renderEditor();
             };

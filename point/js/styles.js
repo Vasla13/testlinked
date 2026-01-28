@@ -116,6 +116,45 @@ export function injectStyles() {
 
         .hud-sep { width: 1px; height: 20px; background: rgba(255,255,255,0.1); }
 
+        /* --- HVT PANEL --- */
+        #hvt-panel {
+            position: fixed;
+            right: 20px;
+            top: 90px;
+            width: 340px;
+            max-height: 75vh;
+            display: none;
+            flex-direction: column;
+            background: rgba(5, 7, 20, 0.98);
+            border: 1px solid rgba(255, 85, 85, 0.5);
+            border-radius: 10px;
+            padding: 12px;
+            z-index: 10002;
+            box-shadow: 0 0 40px rgba(0,0,0,0.8);
+            backdrop-filter: blur(12px);
+        }
+        .hvt-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; cursor: move; user-select: none; }
+        #hvt-panel.dragging { cursor: grabbing; }
+        .hvt-title { color: #ff5555; text-transform: uppercase; letter-spacing: 2px; font-weight: 700; font-size: 0.8rem; }
+        .hvt-close { cursor: pointer; color: #999; font-weight: bold; padding: 2px 6px; border-radius: 4px; }
+        .hvt-close:hover { color: #fff; background: rgba(255,255,255,0.08); }
+        .hvt-sub { display: flex; align-items: center; justify-content: space-between; color: #888; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 8px; }
+        #hvt-list { max-height: 260px; overflow-y: auto; border-top: 1px solid rgba(255,255,255,0.08); border-bottom: 1px solid rgba(255,255,255,0.08); padding: 6px 0; }
+        .hvt-row { display: flex; align-items: center; gap: 8px; padding: 6px 6px; border-radius: 6px; cursor: pointer; transition: background 0.2s; }
+        .hvt-row:hover { background: rgba(255,255,255,0.06); }
+        .hvt-row.active { background: rgba(255, 85, 85, 0.2); border: 1px solid rgba(255, 85, 85, 0.5); }
+        .hvt-rank { width: 22px; font-size: 0.7rem; color: var(--accent-cyan); font-weight: bold; text-align: right; }
+        .hvt-name { font-size: 0.85rem; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+        .hvt-type { font-size: 0.7rem; color: #888; }
+        .hvt-score { font-size: 0.7rem; color: #ffb3b3; font-weight: bold; }
+        #hvt-details { padding-top: 8px; font-size: 0.8rem; color: #cfcfcf; }
+        .hvt-detail-title { color: var(--accent-cyan); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+        .hvt-detail-name { font-size: 1rem; font-weight: bold; margin-bottom: 6px; color: #fff; }
+        .hvt-detail-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+        .hvt-detail-sub { margin-top: 8px; margin-bottom: 4px; font-size: 0.7rem; text-transform: uppercase; color: #888; letter-spacing: 1px; }
+        .hvt-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+        .hvt-tag { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 2px 6px; font-size: 0.7rem; color: #ddd; }
+
         /* --- CONTEXT MENU --- */
         #context-menu {
             position: fixed; z-index: 10000; 

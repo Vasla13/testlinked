@@ -3,7 +3,7 @@ import { restartSim } from './physics.js'; // CORRECTION : Import depuis physics
 import { calculateHVT } from './logic.js';
 import { draw } from './render.js';
 // On importe depuis ui.js les fonctions nécessaires
-import { selectNode, renderEditor, updatePathfindingPanel, refreshLists, showCustomConfirm } from './ui.js';
+import { selectNode, renderEditor, updatePathfindingPanel, refreshLists, showCustomConfirm, refreshHvt } from './ui.js';
 
 let settingsPanel = null;
 let contextMenu = null;
@@ -50,6 +50,11 @@ function createSettingsPanel() {
         <div class="setting-row"><label>Collision <span id="val-collision" class="setting-val"></span></label><input type="range" id="sl-collision" min="0" max="200" step="5"></div>
         <div class="setting-row"><label>Friction <span id="val-friction" class="setting-val"></span></label><input type="range" id="sl-friction" min="0.1" max="0.9" step="0.05"></div>
         
+        <div class="setting-row" style="margin-top:20px; border-top:1px solid rgba(255,255,255,0.1); padding-top:12px;">
+            <label>Top HVT <span id="val-hvtTop" class="setting-val"></span></label>
+            <input type="range" id="sl-hvtTop" min="0" max="30" step="1">
+        </div>
+        
         <div class="settings-actions">
             <button class="primary" style="width:100%;" id="btnResetPhysics">Rétablir défaut</button>
         </div>
@@ -68,6 +73,7 @@ function createSettingsPanel() {
     bindSlider('sl-friction', 'friction');
     bindSlider('sl-enemyForce', 'enemyForce');
     bindSlider('sl-structureRepulsion', 'structureRepulsion');
+    bindHvtTop();
 }
 
 function bindSlider(id, key) {
@@ -104,6 +110,14 @@ function updateSettingsUI() {
     
     const globe = document.getElementById('chkGlobeInner');
     if(globe) globe.checked = state.globeMode;
+
+    const hvtSl = document.getElementById('sl-hvtTop');
+    const hvtVal = document.getElementById('val-hvtTop');
+    if (hvtSl && hvtVal) {
+        const n = Math.max(0, Number(state.hvtTopN) || 0);
+        hvtSl.value = n;
+        hvtVal.innerText = n === 0 ? 'OFF' : n;
+    }
 }
 
 function resetPhysicsDefaults() {
@@ -112,6 +126,20 @@ function resetPhysicsDefaults() {
     updateSettingsUI();
     restartSim();
     scheduleSave();
+}
+
+function bindHvtTop() {
+    const sl = document.getElementById('sl-hvtTop');
+    if (sl) {
+        sl.oninput = (e) => {
+            state.hvtTopN = parseInt(e.target.value, 10) || 0;
+            updateSettingsUI();
+            calculateHVT();
+            draw();
+            scheduleSave();
+            if (window.updateHvtPanel) window.updateHvtPanel();
+        };
+    }
 }
 
 // --- GESTION DU CLIC DROIT (CONTEXT MENU) ---
@@ -160,6 +188,7 @@ function handleContextAction(action, n) {
             state.links = state.links.filter(l => !linkHasNode(l, n.id));
             state.selection = null; restartSim(); refreshLists(); renderEditor(); updatePathfindingPanel();
             scheduleSave();
+            refreshHvt();
         });
     } else if (action === 'source') {
         state.pathfinding.startId = n.id;

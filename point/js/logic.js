@@ -3,32 +3,81 @@ import { restartSim } from './physics.js';
 import { uid, randomPastel, hexToRgb, rgbToHex } from './utils.js';
 import { TYPES, KINDS } from './constants.js';
 
+const HVT_LINK_WEIGHTS = {
+    [KINDS.PATRON]: 2.6,
+    [KINDS.HAUT_GRADE]: 2.2,
+    [KINDS.EMPLOYE]: 1.3,
+    [KINDS.COLLEGUE]: 1.0,
+    [KINDS.PARTENAIRE]: 1.7,
+    [KINDS.FAMILLE]: 1.1,
+    [KINDS.COUPLE]: 1.2,
+    [KINDS.AMOUR]: 1.1,
+    [KINDS.AMI]: 0.9,
+    [KINDS.ENNEMI]: 1.8,
+    [KINDS.RIVAL]: 1.6,
+    [KINDS.CONNAISSANCE]: 0.6,
+    [KINDS.AFFILIATION]: 1.4,
+    [KINDS.MEMBRE]: 1.0,
+    [KINDS.RELATION]: 0.5
+};
+
 // --- NOUVEAU : ALGORITHME HVT ---
 export function calculateHVT() {
     const degrees = new Map();
+    const weighted = new Map();
     let maxDegree = 0;
+    let maxWeighted = 0;
 
     // 1. Initialisation
-    state.nodes.forEach(n => degrees.set(n.id, 0));
+    state.nodes.forEach(n => { degrees.set(n.id, 0); weighted.set(n.id, 0); });
 
     // 2. Comptage des connexions
     state.links.forEach(l => {
-        const s = (typeof l.source === 'object') ? l.source.id : l.source;
-        const t = (typeof l.target === 'object') ? l.target.id : l.target;
-        degrees.set(s, (degrees.get(s) || 0) + 1);
-        degrees.set(t, (degrees.get(t) || 0) + 1);
+        const sId = (typeof l.source === 'object') ? l.source.id : l.source;
+        const tId = (typeof l.target === 'object') ? l.target.id : l.target;
+        degrees.set(sId, (degrees.get(sId) || 0) + 1);
+        degrees.set(tId, (degrees.get(tId) || 0) + 1);
+        
+        const baseW = HVT_LINK_WEIGHTS[l.kind] ?? 0.8;
+        const sNode = (typeof l.source === 'object') ? l.source : nodeById(sId);
+        const tNode = (typeof l.target === 'object') ? l.target : nodeById(tId);
+        let sW = baseW;
+        let tW = baseW;
+        if (tNode?.type === TYPES.COMPANY) sW *= 1.2;
+        else if (tNode?.type === TYPES.GROUP) sW *= 1.1;
+        if (sNode?.type === TYPES.COMPANY) tW *= 1.2;
+        else if (sNode?.type === TYPES.GROUP) tW *= 1.1;
+        weighted.set(sId, (weighted.get(sId) || 0) + sW);
+        weighted.set(tId, (weighted.get(tId) || 0) + tW);
     });
 
     // 3. Trouver le max pour normaliser
     for (let d of degrees.values()) {
         if (d > maxDegree) maxDegree = d;
     }
+    for (let w of weighted.values()) {
+        if (w > maxWeighted) maxWeighted = w;
+    }
 
     // 4. Assigner le score HVT (0.0 à 1.0)
     state.nodes.forEach(n => {
         const d = degrees.get(n.id) || 0;
-        n.hvtScore = (maxDegree > 0) ? (d / maxDegree) : 0;
+        const w = weighted.get(n.id) || 0;
+        const dNorm = (maxDegree > 0) ? (d / maxDegree) : 0;
+        const wNorm = (maxWeighted > 0) ? (w / maxWeighted) : 0;
+        n.hvtScore = (dNorm * 0.6) + (wNorm * 0.4);
     });
+
+    updateHvtTopSet();
+}
+
+export function updateHvtTopSet() {
+    const topN = Math.max(0, Number(state.hvtTopN) || 0);
+    if (!state.hvtTopIds) state.hvtTopIds = new Set();
+    state.hvtTopIds.clear();
+    if (topN <= 0) return;
+    const ranked = [...state.nodes].sort((a, b) => (b.hvtScore || 0) - (a.hvtScore || 0));
+    ranked.slice(0, topN).forEach(n => state.hvtTopIds.add(n.id));
 }
 
 export function updatePersonColors() {
