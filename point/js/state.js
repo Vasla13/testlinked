@@ -1,5 +1,5 @@
 import { restartSim } from './physics.js';
-import { getId } from './utils.js';
+import { getId, uid } from './utils.js';
 
 export const state = {
     nodes: [],
@@ -25,6 +25,7 @@ export const state = {
 };
 
 const STORAGE_KEY = 'pointPageState_v13'; 
+let saveTimer = null;
 
 export function saveState() {
     try {
@@ -36,6 +37,7 @@ export function saveState() {
                 linkedMapPointId: n.linkedMapPointId 
             })),
             links: state.links.map(l => ({
+                id: l.id,
                 source: (typeof l.source === 'object') ? l.source.id : l.source,
                 target: (typeof l.target === 'object') ? l.target.id : l.target,
                 kind: l.kind
@@ -46,6 +48,14 @@ export function saveState() {
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch (e) { console.error("Save error", e); }
+}
+
+export function scheduleSave(delay = 400) {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+        saveTimer = null;
+        saveState();
+    }, delay);
 }
 
 export function loadState() {
@@ -62,6 +72,7 @@ export function loadState() {
         if (typeof data.globeMode === 'boolean') state.globeMode = data.globeMode;
         if (data.physicsSettings) state.physicsSettings = { ...state.physicsSettings, ...data.physicsSettings };
         if (data.meta && data.meta.projectName) state.projectName = data.meta.projectName; // CHARGEMENT DU NOM
+        ensureLinkIds();
         state.pathfinding = { startId: null, active: false, pathNodes: new Set(), pathLinks: new Set() };
         state.hvtMode = false;
         return true;
@@ -73,6 +84,7 @@ export function pushHistory() {
     const snapshot = {
         nodes: state.nodes.map(n => ({...n})),
         links: state.links.map(l => ({
+            id: l.id,
             source: (typeof l.source === 'object') ? l.source.id : l.source,
             target: (typeof l.target === 'object') ? l.target.id : l.target,
             kind: l.kind
@@ -88,8 +100,15 @@ export function undo() {
     const prev = JSON.parse(prevJSON);
     state.nodes = prev.nodes;
     state.links = prev.links;
+    ensureLinkIds();
     state.nextId = prev.nextId;
     restartSim();
+}
+
+export function ensureLinkIds() {
+    state.links.forEach(l => {
+        if (!l.id) l.id = uid();
+    });
 }
 
 export function nodeById(id) {

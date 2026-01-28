@@ -1,11 +1,11 @@
-import { state, nodeById, pushHistory, saveState, linkHasNode } from './state.js'; // AJOUT saveState
+import { state, nodeById, pushHistory, saveState, scheduleSave, linkHasNode } from './state.js'; // AJOUT saveState
 import { ensureNode, addLink, mergeNodes, updatePersonColors } from './logic.js';
 import { renderEditorHTML } from './templates.js';
 import { restartSim } from './physics.js';
-import { draw } from './render.js';
+import { draw, updateDegreeCache } from './render.js';
 import { refreshLists, updatePathfindingPanel, selectNode, showCustomConfirm, showCustomAlert } from './ui.js';
 import { escapeHtml, kindToLabel, linkKindEmoji, computeLinkColor } from './utils.js';
-import { TYPES } from './constants.js';
+import { TYPES, KINDS, KIND_LABELS, PERSON_PERSON_KINDS, PERSON_ORG_KINDS, ORG_ORG_KINDS } from './constants.js';
 
 const ui = {
     editorTitle: document.getElementById('editorTitle'),
@@ -71,6 +71,16 @@ export function renderEditor() {
 }
 
 function setupEditorListeners(n) {
+    let editHistoryArmed = false;
+    let editHistoryTimer = null;
+    const queueHistory = () => {
+        if (!editHistoryArmed) {
+            pushHistory();
+            editHistoryArmed = true;
+        }
+        if (editHistoryTimer) clearTimeout(editHistoryTimer);
+        editHistoryTimer = setTimeout(() => { editHistoryArmed = false; }, 800);
+    };
     document.getElementById('btnCenterNode').onclick = () => { state.view.x = -n.x * state.view.scale; state.view.y = -n.y * state.view.scale; restartSim(); };
     
     document.getElementById('btnFocusNode').onclick = () => {
@@ -93,16 +103,17 @@ function setupEditorListeners(n) {
             state.nodes = state.nodes.filter(x => x.id !== n.id);
             state.links = state.links.filter(l => !linkHasNode(l, n.id));
             state.selection = null; restartSim(); refreshLists(); renderEditor(); updatePathfindingPanel();
+            scheduleSave();
         });
     };
 
-    document.getElementById('edName').oninput = (e) => { n.name = e.target.value; refreshLists(); draw(); };
-    document.getElementById('edType').onchange = (e) => { n.type = e.target.value; updatePersonColors(); restartSim(); draw(); refreshLists(); renderEditor(); };
+    document.getElementById('edName').oninput = (e) => { queueHistory(); n.name = e.target.value; refreshLists(); draw(); scheduleSave(); };
+    document.getElementById('edType').onchange = (e) => { queueHistory(); n.type = e.target.value; updatePersonColors(); restartSim(); draw(); refreshLists(); renderEditor(); scheduleSave(); };
     const inpColor = document.getElementById('edColor');
-    if(inpColor) inpColor.oninput = (e) => { n.color = e.target.value; updatePersonColors(); draw(); };
+    if(inpColor) inpColor.oninput = (e) => { queueHistory(); n.color = e.target.value; updatePersonColors(); draw(); scheduleSave(); };
     const inpNum = document.getElementById('edNum');
-    if(inpNum) inpNum.oninput = (e) => { n.num = e.target.value; };
-    document.getElementById('edNotes').oninput = (e) => { n.notes = e.target.value; };
+    if(inpNum) inpNum.oninput = (e) => { queueHistory(); n.num = e.target.value; scheduleSave(); };
+    document.getElementById('edNotes').oninput = (e) => { queueHistory(); n.notes = e.target.value; scheduleSave(); };
 
     // --- FIX : SAUVEGARDE IMMÉDIATE LORS DE LA VALIDATION ---
     const btnValMap = document.getElementById('btnValidateMapId');
@@ -135,9 +146,11 @@ function setupEditorListeners(n) {
                 showCustomConfirm(`"${name}" n'existe pas. Créer ?`, () => {
                     target = ensureNode(type, name); addLink(n, target, kind);
                     nameInput.value = ''; renderEditor(); updatePathfindingPanel(); refreshLists();
+                    scheduleSave();
                 });
             } else {
                 addLink(n, target, kind); nameInput.value = ''; renderEditor(); updatePathfindingPanel();
+                scheduleSave();
             }
         };
     };
@@ -149,7 +162,7 @@ function setupEditorListeners(n) {
         const targetName = document.getElementById('mergeTarget').value.trim();
         const target = state.nodes.find(x => x.name.toLowerCase() === targetName.toLowerCase());
         if (target && target.id !== n.id) {
-            showCustomConfirm(`Fusionner "${n.name}" DANS "${target.name}" ?`, () => { mergeNodes(n.id, target.id); selectNode(target.id); });
+            showCustomConfirm(`Fusionner "${n.name}" DANS "${target.name}" ?`, () => { mergeNodes(n.id, target.id); selectNode(target.id); scheduleSave(); });
         } else { showCustomAlert("Cible invalide."); }
     };
 
@@ -174,6 +187,9 @@ function setupEditorListeners(n) {
 
 function renderActiveLinks(n) {
     const chipsContainer = document.getElementById('chipsLinks');
+    let activeSelect = null;
+    let activeBadge = null;
+    let outsideHandler = null;
     const myLinks = state.links.filter(l => {
         const s = (typeof l.source === 'object') ? l.source.id : l.source;
         const t = (typeof l.target === 'object') ? l.target.id : l.target;
@@ -194,6 +210,16 @@ function renderActiveLinks(n) {
         groups[other.type].push({ link: l, other });
     });
 
+    const getAllowedKinds = (sourceType, targetType) => {
+        let base;
+        if (sourceType === TYPES.PERSON && targetType === TYPES.PERSON) base = PERSON_PERSON_KINDS;
+        else if (sourceType === TYPES.PERSON || targetType === TYPES.PERSON) base = PERSON_ORG_KINDS;
+        else base = ORG_ORG_KINDS;
+        const allowed = new Set(base);
+        allowed.add(KINDS.RELATION);
+        return allowed;
+    };
+
     const renderGroup = (title, items) => {
         if (items.length === 0) return '';
         let html = `<div class="link-category">${title}</div>`;
@@ -202,12 +228,12 @@ function renderActiveLinks(n) {
             const typeLabel = kindToLabel(item.link.kind);
             const emoji = linkKindEmoji(item.link.kind);
             html += `
-            <div class="chip" style="border-left-color: ${linkColor};">
+            <div class="chip" data-link-id="${item.link.id}" style="border-left-color: ${linkColor};">
                 <div class="chip-content">
                     <span class="chip-name" onclick="window.zoomToNode(${item.other.id})">${escapeHtml(item.other.name)}</span>
-                    <div class="chip-meta"><span class="chip-badge" style="color: ${linkColor};">${emoji} ${typeLabel}</span></div>
+                    <div class="chip-meta"><span class="chip-badge" data-link-id="${item.link.id}" style="color: ${linkColor};">${emoji} ${typeLabel}</span></div>
                 </div>
-                <div class="x" title="Supprimer le lien" data-s="${item.link.source.id||item.link.source}" data-t="${item.link.target.id||item.link.target}">×</div>
+                <div class="x" title="Supprimer le lien" data-id="${item.link.id}">×</div>
             </div>`;
         });
         return html;
@@ -215,19 +241,100 @@ function renderActiveLinks(n) {
 
     chipsContainer.innerHTML = renderGroup('🏢 Entreprises', groups[TYPES.COMPANY]) + renderGroup('👥 Groupuscules', groups[TYPES.GROUP]) + renderGroup('👤 Personnes', groups[TYPES.PERSON]);
     
+    const closeActiveSelect = () => {
+        if (!activeSelect) return;
+        const badge = activeBadge;
+        const linkId = badge?.dataset.linkId;
+        const link = linkId ? state.links.find(l => String(l.id) === String(linkId)) : null;
+        if (badge && link) {
+            badge.textContent = `${linkKindEmoji(link.kind)} ${kindToLabel(link.kind)}`;
+        } else {
+            renderEditor();
+        }
+        activeSelect = null;
+        activeBadge = null;
+        if (outsideHandler) {
+            document.removeEventListener('click', outsideHandler);
+            outsideHandler = null;
+        }
+    };
+
     chipsContainer.onclick = (e) => {
-        if(e.target.classList.contains('x')) {
+        const delBtn = e.target.closest('.x');
+        if(delBtn) {
             pushHistory();
-            const sId = e.target.dataset.s;
-            const tId = e.target.dataset.t;
-            state.links = state.links.filter(l => {
-                const s = (typeof l.source === 'object') ? String(l.source.id) : String(l.source);
-                const t = (typeof l.target === 'object') ? String(l.target.id) : String(l.target);
-                const sKey = String(sId);
-                const tKey = String(tId);
-                return !((s === sKey && t === tKey) || (s === tKey && t === sKey));
-            });
-            updatePersonColors(); restartSim(); renderEditor(); updatePathfindingPanel();
+            const linkId = delBtn.dataset.id;
+            state.links = state.links.filter(l => String(l.id) !== String(linkId));
+            updatePersonColors(); updateDegreeCache(); restartSim(); renderEditor(); updatePathfindingPanel(); draw(); scheduleSave();
+            return;
+        }
+
+        if (activeSelect && activeSelect.contains(e.target)) return;
+
+        const badge = e.target.closest('.chip-badge');
+        if (badge) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (activeBadge && badge === activeBadge) return;
+            closeActiveSelect();
+
+            const linkId = badge.dataset.linkId || badge.closest('.chip')?.dataset.linkId;
+            const link = state.links.find(l => String(l.id) === String(linkId));
+            if (!link) return;
+
+            const s = (typeof link.source === 'object') ? link.source : nodeById(link.source);
+            const t = (typeof link.target === 'object') ? link.target : nodeById(link.target);
+            if (!s || !t) return;
+            const other = (s.id === n.id) ? t : s;
+
+            const allowedKinds = getAllowedKinds(n.type, other.type);
+            const kindsForUi = new Set(allowedKinds);
+            if (link.kind) kindsForUi.add(link.kind);
+            const options = Object.keys(KIND_LABELS)
+                .filter(k => kindsForUi.has(k))
+                .map(k => `<option value="${k}">${linkKindEmoji(k)} ${kindToLabel(k)}</option>`)
+                .join('');
+
+            const select = document.createElement('select');
+            select.className = 'compact-select';
+            select.style.fontSize = '0.7rem';
+            select.style.padding = '2px 6px';
+            select.innerHTML = options;
+            select.value = link.kind;
+
+            badge.textContent = '';
+            badge.appendChild(select);
+            activeSelect = select;
+            activeBadge = badge;
+
+            const applyChange = () => {
+                const nextKind = select.value;
+                if (nextKind && nextKind !== link.kind) {
+                    pushHistory();
+                    link.kind = nextKind;
+                    updatePersonColors();
+                    restartSim();
+                    updatePathfindingPanel();
+                    scheduleSave();
+                }
+                renderEditor();
+            };
+
+            select.onchange = applyChange;
+            select.onblur = () => {};
+            select.onkeydown = (ev) => {
+                if (ev.key === 'Enter') applyChange();
+                if (ev.key === 'Escape') renderEditor();
+            };
+            select.focus();
+
+            outsideHandler = (ev) => {
+                if (activeBadge && activeBadge.contains(ev.target)) return;
+                closeActiveSelect();
+            };
+            setTimeout(() => {
+                document.addEventListener('click', outsideHandler);
+            }, 0);
         }
     };
 }

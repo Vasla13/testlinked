@@ -96,12 +96,13 @@ export function addLink(a, b, kind) {
     const exists = state.links.find(l => {
         const s = (typeof l.source === 'object') ? l.source.id : l.source;
         const t = (typeof l.target === 'object') ? l.target.id : l.target;
-        return (s === A.id && t === B.id) || (s === B.id && t === A.id);
+        const samePair = (s === A.id && t === B.id) || (s === B.id && t === A.id);
+        return samePair && l.kind === kind;
     });
 
     if (!exists) {
         pushHistory(); 
-        state.links.push({ source: A.id, target: B.id, kind });
+        state.links.push({ id: uid(), source: A.id, target: B.id, kind });
         if (kind === KINDS.PATRON) propagateOrgNums();
         
         if (A.fx !== undefined) A.fx = null; if (A.fy !== undefined) A.fy = null;
@@ -130,10 +131,11 @@ export function mergeNodes(sourceId, targetId) {
         const exists = state.links.find(ex => {
             const es = (typeof ex.source === 'object') ? ex.source.id : ex.source;
             const et = (typeof ex.target === 'object') ? ex.target.id : ex.target;
-            return (es === targetId && et === otherId) || (es === otherId && et === targetId);
+            const samePair = (es === targetId && et === otherId) || (es === otherId && et === targetId);
+            return samePair && ex.kind === l.kind;
         });
         if (!exists) {
-            state.links.push({ source: targetId, target: otherId, kind: l.kind });
+            state.links.push({ id: uid(), source: targetId, target: otherId, kind: l.kind });
         }
     });
     state.links = state.links.filter(l => {
@@ -173,11 +175,12 @@ export function calculatePath(startId, endId) {
                 const u = path[i];
                 const v = path[i+1];
                 const link = state.links.find(l => {
+                    if (l.kind === KINDS.ENNEMI) return false;
                     const s = (typeof l.source === 'object') ? l.source.id : l.source;
                     const t = (typeof l.target === 'object') ? l.target.id : l.target;
                     return (s === u && t === v) || (s === v && t === u);
                 });
-                if (link && link.kind !== KINDS.ENNEMI) { 
+                if (link) { 
                     const s = (typeof link.source === 'object') ? link.source.id : link.source;
                     const t = (typeof link.target === 'object') ? link.target.id : link.target;
                     pathLinks.add(`${s}-${t}`);

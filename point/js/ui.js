@@ -1,4 +1,4 @@
-import { state, saveState, nodeById, isPerson, isCompany, isGroup, undo, pushHistory } from './state.js';
+import { state, saveState, scheduleSave, ensureLinkIds, nodeById, isPerson, isCompany, isGroup, undo, pushHistory } from './state.js';
 import { ensureNode, addLink as logicAddLink, calculatePath, clearPath, calculateHVT, updatePersonColors } from './logic.js';
 import { renderPathfindingSidebar } from './templates.js';
 import { restartSim } from './physics.js';
@@ -276,6 +276,7 @@ function generateExportData() {
             id: n.id, name: n.name, type: n.type, color: n.color, num: n.num, notes: n.notes, x: n.x, y: n.y, fixed: n.fixed, linkedMapPointId: n.linkedMapPointId 
         })), 
         links: state.links.map(l => ({ 
+            id: l.id,
             source: (typeof l.source === 'object') ? l.source.id : l.source, 
             target: (typeof l.target === 'object') ? l.target.id : l.target, 
             kind: l.kind 
@@ -336,6 +337,7 @@ function processData(d, mode) {
         
         const numericIds = state.nodes.map(n => Number(n.id)).filter(Number.isFinite);
         if (numericIds.length) state.nextId = Math.max(...numericIds) + 1;
+        ensureLinkIds();
         updatePersonColors();
         restartSim(); refreshLists(); showCustomAlert('OUVERTURE RÉUSSIE.');
     } 
@@ -451,11 +453,12 @@ function createNode(type, baseName) {
     while(state.nodes.find(n => n.name === name)) { name = `${baseName} ${++i}`; }
     const n = ensureNode(type, name);
     zoomToNode(n.id); restartSim(); 
+    scheduleSave();
 }
 
 export function addLink(a, b, kind) {
     const res = logicAddLink(a, b, kind);
-    if(res) { refreshLists(); renderEditor(); }
+    if(res) { refreshLists(); renderEditor(); scheduleSave(); }
     return res;
 }
 

@@ -1,4 +1,4 @@
-import { state, pushHistory, linkHasNode } from './state.js';
+import { state, pushHistory, scheduleSave, linkHasNode } from './state.js';
 import { restartSim } from './physics.js'; // CORRECTION : Import depuis physics.js
 import { calculateHVT } from './logic.js';
 import { draw } from './render.js';
@@ -58,7 +58,7 @@ function createSettingsPanel() {
 
     // Listeners
     document.getElementById('btnCloseSettings').onclick = () => { settingsPanel.style.display = 'none'; };
-    document.getElementById('chkGlobeInner').onchange = (e) => { state.globeMode = e.target.checked; restartSim(); };
+    document.getElementById('chkGlobeInner').onchange = (e) => { state.globeMode = e.target.checked; restartSim(); scheduleSave(); };
     document.getElementById('btnResetPhysics').onclick = resetPhysicsDefaults;
 
     bindSlider('sl-repulsion', 'repulsion');
@@ -77,6 +77,7 @@ function bindSlider(id, key) {
             state.physicsSettings[key] = parseFloat(e.target.value);
             updateSettingsUI();
             restartSim();
+            scheduleSave();
         };
     }
 }
@@ -110,6 +111,7 @@ function resetPhysicsDefaults() {
     state.globeMode = true;
     updateSettingsUI();
     restartSim();
+    scheduleSave();
 }
 
 // --- GESTION DU CLIC DROIT (CONTEXT MENU) ---
@@ -157,6 +159,7 @@ function handleContextAction(action, n) {
             state.nodes = state.nodes.filter(x => x.id !== n.id);
             state.links = state.links.filter(l => !linkHasNode(l, n.id));
             state.selection = null; restartSim(); refreshLists(); renderEditor(); updatePathfindingPanel();
+            scheduleSave();
         });
     } else if (action === 'source') {
         state.pathfinding.startId = n.id;
