@@ -2,6 +2,7 @@ import { state, generateID, saveLocalState, pushHistory, removeTacticalLink, upd
 import { renderAll, getMapPercentCoords } from './render.js';
 import { renderGroupsList, selectItem } from './ui.js';
 import { customAlert, customConfirm, customColorPicker } from './ui-modals.js';
+import { startDrawingCircle, startDrawingFree } from './zone-editor.js';
 
 let contextMenuOpen = false;
 let contextClickPos = { x: 0, y: 0 };
@@ -90,32 +91,25 @@ export function initContextMenu() {
         };
     }
 
-    // B. NOUVELLE ZONE (Polygone)
+    // B. NOUVELLE ZONE (Cercle)
     if (btnNewZone) {
         btnNewZone.onclick = () => {
-            if (state.groups.length === 0) return;
-            
-            state.drawingMode = true;
-            state.drawingType = 'POLYGON';
-            state.drawingGroupIndex = 0;
-            state.tempPoints = [];
-            state.tempPoints.push({ x: contextClickPos.x, y: contextClickPos.y }); // 1er point
-            
-            customAlert("MODE DESSIN", "Cliquez pour ajouter des points. Double-cliquez pour fermer.");
-            renderAll();
+            if (state.groups.length === 0) {
+                customAlert("ERREUR", "Créez d'abord un groupe dans le menu de gauche.");
+                return;
+            }
+            startDrawingCircle(0);
         };
     }
     
     // C. DESSIN LIBRE
     if (btnNewFree) {
         btnNewFree.onclick = () => {
-             const toolbar = document.getElementById('drawing-toolbar');
-             if(toolbar) toolbar.style.display = 'block';
-             
-             state.isFreeMode = true;
-             state.drawingGroupIndex = 0;
-             state.drawingPending = false; // Attente du premier clic
-             customAlert("DESSIN LIBRE", "Maintenez le clic pour dessiner.");
+            if (state.groups.length === 0) {
+                customAlert("ERREUR", "Créez d'abord un groupe dans le menu de gauche.");
+                return;
+            }
+            startDrawingFree(0);
         };
     }
 
