@@ -186,26 +186,52 @@ body.high-light-mode #map-image {
 }
 
 .marker-icon-box {
-    position: relative; width: 34px; height: 34px; 
-    background: rgba(5, 7, 10, 0.9); 
+    position: relative; width: 36px; height: 36px; 
+    background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.12), rgba(6,9,14,0.95) 60%, rgba(0,0,0,0.98) 100%);
+    border: 1px solid rgba(255,255,255,0.06);
     display: flex; justify-content: center; align-items: center;
     /* FIX COLOR : On utilise explicitement la variable CSS injectée par le JS */
     color: var(--marker-color) !important;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.6);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,0,0,0.7) inset, 0 0 10px var(--marker-color-deep);
     transition: all 0.2s;
+}
+
+.marker-icon-box::before {
+    content: ''; position: absolute; inset: 2px;
+    border: 1px solid rgba(255,255,255,0.08);
+    clip-path: polygon(0 0, 30% 0, 30% 100%, 0 100%, 0 100%, 100% 100%, 100% 0, 0 0, 100% 0, 70% 0, 70% 100%, 100% 100%);
+    pointer-events: none;
 }
 
 .marker-icon-box::after {
     content: ''; position: absolute; inset: 0;
-    border: 2px solid var(--marker-color); /* FIX COLOR */
+    border: 2px solid var(--marker-color-soft); /* FIX COLOR */
     clip-path: polygon(0 0, 30% 0, 30% 100%, 0 100%, 0 100%, 100% 100%, 100% 0, 0 0, 100% 0, 70% 0, 70% 100%, 100% 100%);
+    opacity: 0.85;
+    pointer-events: none;
 }
 
 .marker svg { 
-    width: 20px; height: 20px; 
+    width: 22px; height: 22px; 
     fill: currentColor; /* Pour hériter de color */
     filter: drop-shadow(0 0 5px var(--marker-color)); 
 }
+
+/* Icônes image */
+.marker-icon-img {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 22px;
+    height: 22px;
+    transform: translate(-50%, -50%);
+    object-fit: contain;
+    filter: drop-shadow(0 0 2px rgba(0,0,0,0.6)) drop-shadow(0 0 3px var(--marker-color));
+    pointer-events: none;
+}
+
+.marker-icon-tint { opacity: 0.85; }
+.marker-icon-mono { opacity: 0.25; mix-blend-mode: screen; }
 
 /* Étiquettes */
 .marker-label {
@@ -240,16 +266,27 @@ body.labels-never .marker-label::before { display: none !important; }
 
 .marker:hover { z-index: 1000; }
 .marker:hover .marker-content-wrapper { transform: scale(1.1); }
-.marker:hover .marker-icon-box { background: var(--marker-color); color: #000 !important; box-shadow: 0 0 20px var(--marker-color); }
-.marker:hover .marker-icon-box::after { border-color: #000; }
+.marker:hover .marker-icon-box { 
+    box-shadow: 0 0 18px var(--marker-color), 0 0 0 1px rgba(255,255,255,0.08) inset, 0 6px 20px rgba(0,0,0,0.7);
+    transform: translateZ(0);
+}
+.marker:hover .marker-icon-box::after { border-color: var(--marker-color); opacity: 1; }
+.marker:hover .marker-icon-mono { opacity: 0.7; }
+.marker:hover .marker-icon-tint { opacity: 0.55; }
 
-.marker.selected .marker-icon-box { background: var(--marker-color); color: #000 !important; box-shadow: 0 0 20px var(--marker-color); border-color: #fff; }
-.marker.selected .marker-icon-box::after { border-color: #fff; }
+.marker.selected .marker-icon-box { 
+    box-shadow: 0 0 22px var(--marker-color), 0 0 0 1px rgba(255,255,255,0.12) inset, 0 6px 20px rgba(0,0,0,0.8);
+}
+.marker.selected .marker-icon-box::after { border-color: var(--marker-color); opacity: 1; }
+.marker.selected .marker-icon-mono { opacity: 0.8; }
+.marker.selected .marker-icon-tint { opacity: 0.5; }
 
 /* Zoomed out view */
-body.view-zoomed-out .marker-icon-box { width: 10px; height: 10px; background: var(--marker-color); border-radius: 50%; box-shadow: 0 0 5px var(--marker-color); padding: 0; }
+body.view-zoomed-out .marker-icon-box { width: 12px; height: 12px; background: var(--marker-color); border-radius: 50%; box-shadow: 0 0 5px var(--marker-color); padding: 0; border: none; }
 body.view-zoomed-out .marker-icon-box::after { display: none; }
+body.view-zoomed-out .marker-icon-box::before { display: none; }
 body.view-zoomed-out .marker svg { display: none; }
+body.view-zoomed-out .marker-icon-img { display: none; }
 body.view-zoomed-out .marker-label { display: none; }
 body.view-zoomed-out .marker-label::before { display: none; }
 /* En zoomed out, on réactive au hover si pas en mode 'never' */

@@ -11,6 +11,45 @@ const linksLayer = document.getElementById('links-layer');
 
 document.addEventListener('mousemove', moveTooltip);
 
+const ICON_TINT_MIX = 0.65;
+
+function hexToRgb(hex) {
+    const clean = String(hex || '').replace('#', '').trim();
+    if (clean.length === 3) {
+        return {
+            r: parseInt(clean[0] + clean[0], 16),
+            g: parseInt(clean[1] + clean[1], 16),
+            b: parseInt(clean[2] + clean[2], 16)
+        };
+    }
+    if (clean.length === 6) {
+        return {
+            r: parseInt(clean.slice(0, 2), 16),
+            g: parseInt(clean.slice(2, 4), 16),
+            b: parseInt(clean.slice(4, 6), 16)
+        };
+    }
+    return null;
+}
+
+function mixHex(baseHex, mixHexColor, mixRatio) {
+    const base = hexToRgb(baseHex);
+    const mix = hexToRgb(mixHexColor);
+    if (!base || !mix) return null;
+    const r = Math.round(base.r * (1 - mixRatio) + mix.r * mixRatio);
+    const g = Math.round(base.g * (1 - mixRatio) + mix.g * mixRatio);
+    const b = Math.round(base.b * (1 - mixRatio) + mix.b * mixRatio);
+    const toHex = (v) => v.toString(16).padStart(2, '0');
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+function getContrastColor(hex) {
+    const rgb = hexToRgb(hex);
+    if (!rgb) return '#ffffff';
+    const lum = (0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b) / 255;
+    return lum > 0.6 ? '#000000' : '#ffffff';
+}
+
 function configureSVG(layer) {
     if (layer) {
         layer.setAttribute("viewBox", "0 0 100 100");
@@ -271,7 +310,14 @@ function renderMarkersAndClusters() {
             el.style.top = `${point.y}%`;
             
             // --- FIX COLOR : Injection de la couleur pour le CSS ---
-            el.style.setProperty('--marker-color', group.color || '#00ffff');
+            const baseColor = group.color || '#00ffff';
+            const softColor = mixHex(baseColor, '#ffffff', 0.35) || baseColor;
+            const deepColor = mixHex(baseColor, '#000000', 0.5) || baseColor;
+            const contrastColor = getContrastColor(baseColor);
+            el.style.setProperty('--marker-color', baseColor);
+            el.style.setProperty('--marker-color-soft', softColor);
+            el.style.setProperty('--marker-color-deep', deepColor);
+            el.style.setProperty('--marker-color-contrast', contrastColor);
             el.style.pointerEvents = 'auto'; 
 
             if (state.selectedPoint && state.selectedPoint.groupIndex === gIndex && state.selectedPoint.pointIndex === pIndex) {
@@ -286,10 +332,26 @@ function renderMarkersAndClusters() {
             
             // Detection : Image ou SVG ?
             if (iconData.startsWith('http') || iconData.startsWith('data:') || iconData.startsWith('./') || iconData.startsWith('/')) {
-                innerContent = `
-                    <div class="marker-icon-box">
-                        <img src="${iconData}" alt="icon" style="width:20px; height:20px; object-fit:contain; filter: drop-shadow(0 0 2px var(--marker-color));">
-                    </div>`;
+                let iconUrl = iconData;
+                const isIcons8 = iconData.startsWith('http') && iconData.includes('img.icons8.com');
+                if (isIcons8) {
+                    const softened = mixHex(baseColor, '#ffffff', ICON_TINT_MIX) || baseColor;
+                    const colorHex = softened.replace('#', '').toLowerCase();
+                    iconUrl = iconData.replace(/(\/\d+\/)([0-9a-fA-F]{6})(\/)/, `$1${colorHex}$3`);
+                }
+
+                if (isIcons8) {
+                    innerContent = `
+                        <div class="marker-icon-box">
+                            <img class="marker-icon-img marker-icon-tint" src="${iconUrl}" alt="icon">
+                            <img class="marker-icon-img marker-icon-mono" src="${iconData}" alt="">
+                        </div>`;
+                } else {
+                    innerContent = `
+                        <div class="marker-icon-box">
+                            <img class="marker-icon-img marker-icon-tint" src="${iconUrl}" alt="icon">
+                        </div>`;
+                }
             } else {
                 // SVG
                 innerContent = `
