@@ -1,4 +1,4 @@
-import { state, exportToJSON, saveLocalState } from './state.js';
+import { state, exportToJSON, saveLocalState, pruneTacticalLinks } from './state.js';
 import { renderGroupsList } from './ui.js'; // Nécessaire pour rafraîchir la liste après modif
 import { renderAll } from './render.js';   // Nécessaire pour rafraîchir la carte
 
@@ -167,7 +167,9 @@ export function openGroupEditor(groupIndex) {
         overlay.classList.add('hidden');
         setTimeout(async () => {
             if(await customConfirm("SUPPRESSION", `Supprimer "${group.name}" et tout son contenu ?`)) {
+                const removedIds = group.points.map(p => p.id);
                 state.groups.splice(groupIndex, 1);
+                pruneTacticalLinks(removedIds);
                 renderGroupsList();
                 renderAll();
                 saveLocalState();

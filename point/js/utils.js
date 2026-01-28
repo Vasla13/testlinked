@@ -1,5 +1,11 @@
 import { LINK_KIND_EMOJI, KINDS } from './constants.js';
 
+// Normalise un ID (objet D3 ou valeur primitive) en string
+export function getId(value) {
+    if (value && typeof value === 'object') return String(value.id);
+    return String(value ?? '');
+}
+
 // Génère un ID unique
 export function uid() {
     return Date.now().toString(36) + Math.random().toString(36).substr(2);
@@ -70,6 +76,7 @@ export function linkKindEmoji(kind) {
 export function computeLinkColor(link) {
     const map = {
         [KINDS.PATRON]: '#9b59b6',      // Violet
+        [KINDS.HAUT_GRADE]: '#f39c12',  // Or
         [KINDS.EMPLOYE]: '#f1c40f',     // Jaune
         [KINDS.COLLEGUE]: '#e67e22',    // Orange
         [KINDS.PARTENAIRE]: '#1abc9c',  // Turquoise

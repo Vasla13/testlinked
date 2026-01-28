@@ -334,8 +334,8 @@ function processData(d, mode) {
         if(d.meta && d.meta.projectName) state.projectName = d.meta.projectName;
         else state.projectName = null;
         
-        const maxId = state.nodes.reduce((max, n) => Math.max(max, n.id), 0);
-        state.nextId = maxId + 1;
+        const numericIds = state.nodes.map(n => Number(n.id)).filter(Number.isFinite);
+        if (numericIds.length) state.nextId = Math.max(...numericIds) + 1;
         updatePersonColors();
         restartSim(); refreshLists(); showCustomAlert('OUVERTURE RÉUSSIE.');
     } 
@@ -417,7 +417,7 @@ function setupSearch() {
         const found = state.nodes.filter(n => n.name.toLowerCase().includes(q));
         if(found.length === 0) { res.innerHTML = '<span style="color:#666;">Aucun résultat</span>'; return; }
         res.innerHTML = found.slice(0, 10).map(n => `<span class="search-hit" data-id="${n.id}">${escapeHtml(n.name)}</span>`).join(' · ');
-        res.querySelectorAll('.search-hit').forEach(el => el.onclick = () => { zoomToNode(+el.dataset.id); e.target.value = ''; res.textContent = ''; });
+        res.querySelectorAll('.search-hit').forEach(el => el.onclick = () => { zoomToNode(el.dataset.id); e.target.value = ''; res.textContent = ''; });
     });
 }
 
@@ -469,7 +469,7 @@ export function selectNode(id) {
 function zoomToNode(id) {
     const n = nodeById(id);
     if (!n) return;
-    state.selection = id;
+    state.selection = n.id;
     state.view.scale = 1.6;
     state.view.x = -n.x * 1.6;
     state.view.y = -n.y * 1.6;

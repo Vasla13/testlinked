@@ -1,4 +1,5 @@
 import { restartSim } from './physics.js';
+import { getId } from './utils.js';
 
 export const state = {
     nodes: [],
@@ -10,6 +11,8 @@ export const state = {
     focusSet: new Set(),
     hvtMode: false,
     pathfinding: { startId: null, active: false, pathNodes: new Set(), pathLinks: new Set() },
+    pathMode: false,
+    pathPath: new Set(),
     activeFilter: 'ALL',
     globeMode: true,
     physicsSettings: {
@@ -89,7 +92,15 @@ export function undo() {
     restartSim();
 }
 
-export function nodeById(id) { return state.nodes.find(n => n.id === id); }
+export function nodeById(id) {
+    const target = String(id);
+    return state.nodes.find(n => String(n.id) === target);
+}
+
+export function linkHasNode(link, nodeId) {
+    const target = String(nodeId);
+    return getId(link.source) === target || getId(link.target) === target;
+}
 export function isPerson(n) { return n.type === 'person'; }
 export function isGroup(n) { return n.type === 'group'; }
 export function isCompany(n) { return n.type === 'company'; }

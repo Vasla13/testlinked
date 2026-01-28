@@ -1,4 +1,4 @@
-import { state, saveLocalState } from './state.js';
+import { state, saveLocalState, pruneTacticalLinks } from './state.js';
 import { ICONS } from './constants.js';
 import { customConfirm, customAlert } from './ui-modals.js';
 import { percentageToGps, gpsToPercentage } from './utils.js';
@@ -236,7 +236,7 @@ function renderPointEditor() {
     // LOGIQUE DE NAVIGATION CROSS-MODULE
     document.getElementById('btnOpenInPoint').onclick = () => {
         // Redirection vers le module Point avec l'ID du point actuel
-        window.location.href = `../point/index.html?focus=${point.id}`;
+        window.location.href = `../point/index.html?focus=${encodeURIComponent(point.id)}`;
     };
 
     document.getElementById('btnLinkPoint').onclick = () => {
@@ -247,7 +247,9 @@ function renderPointEditor() {
     document.getElementById('btnCopyCoords').onclick = () => navigator.clipboard.writeText(`${gpsCoords.x.toFixed(2)}, ${gpsCoords.y.toFixed(2)}`);
     document.getElementById('btnDelete').onclick = async () => { 
         if(await customConfirm("SUPPRESSION", "Supprimer ?")) { 
+            const removedId = point.id;
             group.points.splice(pointIndex, 1); 
+            pruneTacticalLinks([removedId]);
             deselect(); 
             renderGroupsList(); 
             saveLocalState();

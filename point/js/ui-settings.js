@@ -1,4 +1,4 @@
-import { state, nodeById, pushHistory } from './state.js';
+import { state, pushHistory, linkHasNode } from './state.js';
 import { restartSim } from './physics.js'; // CORRECTION : Import depuis physics.js
 import { calculateHVT } from './logic.js';
 import { draw } from './render.js';
@@ -155,7 +155,7 @@ function handleContextAction(action, n) {
         showCustomConfirm(`Supprimer "${n.name}" ?`, () => {
             pushHistory(); 
             state.nodes = state.nodes.filter(x => x.id !== n.id);
-            state.links = state.links.filter(l => l.source.id !== n.id && l.target.id !== n.id);
+            state.links = state.links.filter(l => !linkHasNode(l, n.id));
             state.selection = null; restartSim(); refreshLists(); renderEditor(); updatePathfindingPanel();
         });
     } else if (action === 'source') {

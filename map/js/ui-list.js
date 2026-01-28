@@ -3,6 +3,7 @@ import { selectItem } from './ui.js';
 import { renderAll } from './render.js';
 import { updateTransform } from './engine.js'; 
 import { openGroupEditor } from './ui-modals.js'; // IMPORT NÉCESSAIRE
+import { escapeHtml } from './utils.js';
 
 export function renderGroupsList() {
     const container = document.getElementById('groups-list');
@@ -50,7 +51,7 @@ export function renderGroupsList() {
         header.innerHTML = `
             <div style="display:flex; align-items:center; gap:10px;">
                 <span class="color-dot" style="background:${group.color}; box-shadow:0 0 5px ${group.color}"></span>
-                <span style="font-weight:700; font-size:0.9rem;">${group.name}</span>
+                <span style="font-weight:700; font-size:0.9rem;">${escapeHtml(group.name)}</span>
             </div>
             <div style="display:flex; align-items:center; gap:5px;">
                 <span style="font-size:0.75rem; color:#666; background:rgba(0,0,0,0.3); padding:2px 6px; border-radius:4px; margin-right:5px;">
@@ -86,7 +87,7 @@ export function renderGroupsList() {
                 pRow.style.padding = '4px 0';
                 pRow.style.color = '#8892b0';
                 pRow.style.cursor = 'pointer';
-                pRow.innerHTML = `📍 ${p.name}`;
+                pRow.innerHTML = `📍 ${escapeHtml(p.name)}`;
                 pRow.onmouseover = () => pRow.style.color = '#fff';
                 pRow.onmouseout = () => pRow.style.color = '#8892b0';
                 pRow.onclick = (e) => {
@@ -106,7 +107,7 @@ export function renderGroupsList() {
                 zRow.style.color = '#8892b0';
                 zRow.style.cursor = 'pointer';
                 const icon = z.type === 'CIRCLE' ? '⭕' : '📐';
-                zRow.innerHTML = `${icon} ${z.name || 'Zone sans nom'}`;
+                zRow.innerHTML = `${icon} ${escapeHtml(z.name || 'Zone sans nom')}`;
                 zRow.onmouseover = () => zRow.style.color = '#fff';
                 zRow.onmouseout = () => zRow.style.color = '#8892b0';
                 zRow.onclick = (e) => {

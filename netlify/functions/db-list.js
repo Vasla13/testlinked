@@ -1,6 +1,7 @@
 const { getStore, connectLambda } = require("@netlify/blobs");
 
 const STORE_NAME = "bni-linked-db";
+const API_KEY = process.env.BNI_LINKED_KEY;
 
 // Réponse JSON standardisée
 function jsonResponse(statusCode, obj) {
@@ -12,6 +13,12 @@ function jsonResponse(statusCode, obj) {
     },
     body: JSON.stringify(obj),
   };
+}
+
+function isAuthorized(event) {
+  if (!API_KEY) return true;
+  const key = event.headers?.["x-api-key"] || event.headers?.["X-API-Key"];
+  return key === API_KEY;
 }
 
 // Analyse sécurisée de la clé
@@ -48,8 +55,13 @@ exports.handler = async (event) => {
   // Initialisation du contexte pour Netlify Blobs
   connectLambda(event);
 
+  if (!isAuthorized(event)) {
+    return jsonResponse(401, { ok: false, error: "Unauthorized" });
+  }
+
   // 1. Validation des paramètres
   const page = String(event.queryStringParameters?.page || "").toLowerCase();
+  const fast = event.queryStringParameters?.fast === "1";
   
   // Gestion de la limite (sécurité)
   let limit = parseInt(event.queryStringParameters?.limit || "50", 10);
@@ -89,7 +101,13 @@ exports.handler = async (event) => {
 
         cursor = result.cursor;
         safetyCounter += (result.blobs ? result.blobs.length : 0);
-        
+
+        // Si mode rapide et assez d'entrées, on stoppe tôt
+        if (fast && allEntries.length >= limit) {
+            cursor = null;
+            break;
+        }
+
         // Arrêt d'urgence si trop de fichiers
         if (safetyCounter >= MAX_SCAN_FILES) {
             console.warn(`[DB-LIST] Limite de scan atteinte (${MAX_SCAN_FILES} fichiers). Résultat partiel.`);

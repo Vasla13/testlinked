@@ -98,6 +98,13 @@ export function updateTacticalLink(linkId, newData) {
     if (link) Object.assign(link, newData);
 }
 
+export function pruneTacticalLinks(removedIds) {
+    const ids = new Set(removedIds.map(id => String(id)));
+    state.tacticalLinks = state.tacticalLinks.filter(l =>
+        !ids.has(String(l.from)) && !ids.has(String(l.to))
+    );
+}
+
 export function setGroups(newGroups) { 
     newGroups.forEach(g => {
         if(!g.zones) g.zones = [];

@@ -6,6 +6,7 @@ export const TYPES = {
 
 export const KINDS = {
     PATRON: 'patron',
+    HAUT_GRADE: 'haut_grade',
     EMPLOYE: 'employe',
     COLLEGUE: 'collegue',
     PARTENAIRE: 'partenaire',
@@ -24,6 +25,7 @@ export const KINDS = {
 // AJOUT DE L'EXPORT MANQUANT
 export const KIND_LABELS = {
     [KINDS.PATRON]: '👑 Patron',
+    [KINDS.HAUT_GRADE]: '⭐ Haut grade',
     [KINDS.EMPLOYE]: '💼 Employé',
     [KINDS.COLLEGUE]: '🤝 Collègue',
     [KINDS.PARTENAIRE]: '🤝 Partenaire',
@@ -45,7 +47,7 @@ export const PERSON_PERSON_KINDS = new Set([
 ]);
 
 export const PERSON_ORG_KINDS = new Set([
-    KINDS.PATRON, KINDS.EMPLOYE, KINDS.AFFILIATION, KINDS.MEMBRE,
+    KINDS.PATRON, KINDS.HAUT_GRADE, KINDS.EMPLOYE, KINDS.AFFILIATION, KINDS.MEMBRE,
     KINDS.PARTENAIRE, KINDS.ENNEMI 
 ]);
 
@@ -74,7 +76,7 @@ export const R_MIN = { [TYPES.PERSON]: 12, [TYPES.COMPANY]: 25, [TYPES.GROUP]: 1
 export const R_MAX = { [TYPES.PERSON]: 50, [TYPES.COMPANY]: 100, [TYPES.GROUP]: 80 };
 
 export const LINK_KIND_EMOJI = {
-    [KINDS.PATRON]: '👑', [KINDS.EMPLOYE]: '💼', [KINDS.COLLEGUE]: '🤝',
+    [KINDS.PATRON]: '👑', [KINDS.HAUT_GRADE]: '⭐', [KINDS.EMPLOYE]: '💼', [KINDS.COLLEGUE]: '🤝',
     [KINDS.PARTENAIRE]: '🤝', [KINDS.FAMILLE]: '🏠', [KINDS.COUPLE]: '❤️',
     [KINDS.AMOUR]: '❤️', [KINDS.AMI]: '🍻', [KINDS.ENNEMI]: '⚔️',
     [KINDS.RIVAL]: '⚡', [KINDS.CONNAISSANCE]: '👋', [KINDS.AFFILIATION]: '🏴',

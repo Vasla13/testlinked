@@ -1,4 +1,4 @@
-import { state, nodeById, pushHistory, saveState } from './state.js'; // AJOUT saveState
+import { state, nodeById, pushHistory, saveState, linkHasNode } from './state.js'; // AJOUT saveState
 import { ensureNode, addLink, mergeNodes, updatePersonColors } from './logic.js';
 import { renderEditorHTML } from './templates.js';
 import { restartSim } from './physics.js';
@@ -53,7 +53,7 @@ export function renderEditor() {
     btnCrossModule.style.textTransform = 'uppercase';
     
     btnCrossModule.onclick = () => {
-        window.location.href = `../map/index.html?focus=${targetId}`;
+        window.location.href = `../map/index.html?focus=${encodeURIComponent(targetId)}`;
     };
 
     ui.editorBody.insertBefore(btnCrossModule, ui.editorBody.firstChild);
@@ -91,7 +91,7 @@ function setupEditorListeners(n) {
         showCustomConfirm(`Supprimer "${n.name}" ?`, () => {
             pushHistory(); 
             state.nodes = state.nodes.filter(x => x.id !== n.id);
-            state.links = state.links.filter(l => l.source.id !== n.id && l.target.id !== n.id);
+            state.links = state.links.filter(l => !linkHasNode(l, n.id));
             state.selection = null; restartSim(); refreshLists(); renderEditor(); updatePathfindingPanel();
         });
     };
@@ -218,12 +218,14 @@ function renderActiveLinks(n) {
     chipsContainer.onclick = (e) => {
         if(e.target.classList.contains('x')) {
             pushHistory();
-            const sId = parseInt(e.target.dataset.s);
-            const tId = parseInt(e.target.dataset.t);
+            const sId = e.target.dataset.s;
+            const tId = e.target.dataset.t;
             state.links = state.links.filter(l => {
-                const s = (typeof l.source === 'object') ? l.source.id : l.source;
-                const t = (typeof l.target === 'object') ? l.target.id : l.target;
-                return !((s === sId && t === tId) || (s === tId && t === sId));
+                const s = (typeof l.source === 'object') ? String(l.source.id) : String(l.source);
+                const t = (typeof l.target === 'object') ? String(l.target.id) : String(l.target);
+                const sKey = String(sId);
+                const tKey = String(tId);
+                return !((s === sKey && t === tKey) || (s === tKey && t === sKey));
             });
             updatePersonColors(); restartSim(); renderEditor(); updatePathfindingPanel();
         }

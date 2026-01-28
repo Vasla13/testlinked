@@ -3,6 +3,7 @@ import { ICONS, MAP_SCALE_UNIT } from './constants.js';
 import { handleLinkClick, handleLinkHover, handleLinkOut, moveTooltip, selectItem } from './ui.js';
 import { startMarkerDrag } from './engine.js'; 
 import { handleZoneMouseDown } from './zone-editor.js';
+import { escapeHtml } from './utils.js';
 
 const markersLayer = document.getElementById('markers-layer');
 const zonesLayer = document.getElementById('zones-layer');
@@ -152,6 +153,7 @@ function renderTacticalLinks() {
 
     // Liste des IDs valides pour ce cycle de rendu
     const activeLinkIds = new Set();
+    const activeGradIds = new Set();
 
     state.tacticalLinks.forEach(link => {
         const fromInfo = findPointInfo(link.from);
@@ -197,6 +199,7 @@ function renderTacticalLinks() {
                     finalColor = cFrom;
                 } else {
                     const gradId = `grad_${link.id}`;
+                    activeGradIds.add(gradId);
                     // Vérifier si le gradient existe déjà
                     if (!document.getElementById(gradId)) {
                         const grad = document.createElementNS("http://www.w3.org/2000/svg", "linearGradient");
@@ -238,6 +241,12 @@ function renderTacticalLinks() {
             }
         }
     });
+
+    if (defs) {
+        defs.querySelectorAll('linearGradient').forEach(grad => {
+            if (!activeGradIds.has(grad.id)) grad.remove();
+        });
+    }
 }
 
 function renderMarkersAndClusters() {
@@ -292,7 +301,7 @@ function renderMarkersAndClusters() {
             el.innerHTML = `
                 <div class="marker-content-wrapper">
                     ${innerContent}
-                    <div class="marker-label">${point.name}</div>
+                    <div class="marker-label">${escapeHtml(point.name)}</div>
                 </div>
             `;
 
