@@ -24,21 +24,21 @@ export const KINDS = {
 
 // AJOUT DE L'EXPORT MANQUANT
 export const KIND_LABELS = {
-    [KINDS.PATRON]: '👑 Patron',
-    [KINDS.HAUT_GRADE]: '⭐ Haut grade',
-    [KINDS.EMPLOYE]: '💼 Employé',
-    [KINDS.COLLEGUE]: '🤝 Collègue',
-    [KINDS.PARTENAIRE]: '🤝 Partenaire',
-    [KINDS.FAMILLE]: '🏠 Famille',
-    [KINDS.COUPLE]: '❤️ Couple',
-    [KINDS.AMOUR]: '💘 Amour',
-    [KINDS.AMI]: '🍻 Ami',
-    [KINDS.ENNEMI]: '⚔️ Ennemi',
-    [KINDS.RIVAL]: '⚡ Rival',
-    [KINDS.CONNAISSANCE]: '👋 Connaissance',
-    [KINDS.AFFILIATION]: '🏴 Affiliation',
-    [KINDS.MEMBRE]: '👤 Membre',
-    [KINDS.RELATION]: '🔗 Relation'
+    [KINDS.PATRON]: 'Patron',
+    [KINDS.HAUT_GRADE]: 'Haut grade',
+    [KINDS.EMPLOYE]: 'Employé',
+    [KINDS.COLLEGUE]: 'Collègue',
+    [KINDS.PARTENAIRE]: 'Partenaire',
+    [KINDS.FAMILLE]: 'Famille',
+    [KINDS.COUPLE]: 'Couple',
+    [KINDS.AMOUR]: 'Amour',
+    [KINDS.AMI]: 'Ami',
+    [KINDS.ENNEMI]: 'Ennemi',
+    [KINDS.RIVAL]: 'Rival',
+    [KINDS.CONNAISSANCE]: 'Connaissance',
+    [KINDS.AFFILIATION]: 'Affiliation',
+    [KINDS.MEMBRE]: 'Membre',
+    [KINDS.RELATION]: 'Relation'
 };
 
 export const PERSON_PERSON_KINDS = new Set([
@@ -78,7 +78,7 @@ export const R_MAX = { [TYPES.PERSON]: 50, [TYPES.COMPANY]: 100, [TYPES.GROUP]: 
 export const LINK_KIND_EMOJI = {
     [KINDS.PATRON]: '👑', [KINDS.HAUT_GRADE]: '⭐', [KINDS.EMPLOYE]: '💼', [KINDS.COLLEGUE]: '🤝',
     [KINDS.PARTENAIRE]: '🤝', [KINDS.FAMILLE]: '🏠', [KINDS.COUPLE]: '❤️',
-    [KINDS.AMOUR]: '❤️', [KINDS.AMI]: '🍻', [KINDS.ENNEMI]: '⚔️',
+    [KINDS.AMOUR]: '💘', [KINDS.AMI]: '🍻', [KINDS.ENNEMI]: '⚔️',
     [KINDS.RIVAL]: '⚡', [KINDS.CONNAISSANCE]: '👋', [KINDS.AFFILIATION]: '🏴',
     [KINDS.MEMBRE]: '👤', [KINDS.RELATION]: '🔗'
 };

@@ -1,4 +1,4 @@
-import { LINK_KIND_EMOJI, KINDS } from './constants.js';
+import { LINK_KIND_EMOJI, KINDS, KIND_LABELS } from './constants.js';
 
 // Normalise un ID (objet D3 ou valeur primitive) en string
 export function getId(value) {
@@ -64,7 +64,10 @@ export function screenToWorld(screenX, screenY, canvas, view) {
 
 export function kindToLabel(kind) {
     if (!kind) return 'Lien';
-    return kind.charAt(0).toUpperCase() + kind.slice(1);
+    if (KIND_LABELS[kind]) return KIND_LABELS[kind];
+    return String(kind)
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 // CORRECTION : Utilise maintenant la source de vérité dans constants.js

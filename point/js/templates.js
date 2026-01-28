@@ -1,9 +1,22 @@
-import { TYPES, KIND_LABELS } from './constants.js';
-import { escapeHtml, safeHex } from './utils.js';
+import { TYPES, KINDS, KIND_LABELS, PERSON_PERSON_KINDS, PERSON_ORG_KINDS, ORG_ORG_KINDS } from './constants.js';
+import { escapeHtml, safeHex, linkKindEmoji, kindToLabel } from './utils.js';
 
 // Génère les options pour les listes déroulantes de liens
-function getLinkOptions() {
-    return Object.entries(KIND_LABELS).map(([k, label]) => `<option value="${k}">${label}</option>`).join('');
+function getAllowedKinds(sourceType, targetType) {
+    let base;
+    if (sourceType === TYPES.PERSON && targetType === TYPES.PERSON) base = PERSON_PERSON_KINDS;
+    else if (sourceType === TYPES.PERSON || targetType === TYPES.PERSON) base = PERSON_ORG_KINDS;
+    else base = ORG_ORG_KINDS;
+    const allowed = new Set(base);
+    allowed.add(KINDS.RELATION);
+    return allowed;
+}
+
+function getLinkOptions(allowedKinds) {
+    return Object.keys(KIND_LABELS)
+        .filter(k => !allowedKinds || allowedKinds.has(k))
+        .map(k => `<option value="${k}">${linkKindEmoji(k)} ${kindToLabel(k)}</option>`)
+        .join('');
 }
 
 // =============================================================================
@@ -95,6 +108,9 @@ export function renderPathfindingSidebar(state, selectedNode) {
 // =============================================================================
 export function renderEditorHTML(n, state) {
     const isP = (n.type === TYPES.PERSON);
+    const kindsForCompany = getAllowedKinds(n.type, TYPES.COMPANY);
+    const kindsForGroup = getAllowedKinds(n.type, TYPES.GROUP);
+    const kindsForPerson = getAllowedKinds(n.type, TYPES.PERSON);
     
     // Options Type
     const typeOptions = `
@@ -182,7 +198,7 @@ export function renderEditorHTML(n, state) {
         <div style="margin-bottom:6px;">
             <div class="flex-row-force">
                 <input id="inpCompany" list="datalist-companies" placeholder="Entreprise..." class="flex-grow-input" style="font-size:0.85rem;">
-                <select id="selKindCompany" class="compact-select" style="width:90px;">${getLinkOptions()}</select>
+                <select id="selKindCompany" class="compact-select" style="width:90px;">${getLinkOptions(kindsForCompany)}</select>
                 <button id="btnAddCompany" class="mini-btn primary" style="width:30px;">+</button>
             </div>
         </div>
@@ -190,7 +206,7 @@ export function renderEditorHTML(n, state) {
         <div style="margin-bottom:6px;">
             <div class="flex-row-force">
                 <input id="inpGroup" list="datalist-groups" placeholder="Groupe..." class="flex-grow-input" style="font-size:0.85rem;">
-                <select id="selKindGroup" class="compact-select" style="width:90px;">${getLinkOptions()}</select>
+                <select id="selKindGroup" class="compact-select" style="width:90px;">${getLinkOptions(kindsForGroup)}</select>
                 <button id="btnAddGroup" class="mini-btn primary" style="width:30px;">+</button>
             </div>
         </div>
@@ -198,7 +214,7 @@ export function renderEditorHTML(n, state) {
         <div>
             <div class="flex-row-force">
                 <input id="inpPerson" list="datalist-people" placeholder="Personne..." class="flex-grow-input" style="font-size:0.85rem;">
-                <select id="selKindPerson" class="compact-select" style="width:90px;">${getLinkOptions()}</select>
+                <select id="selKindPerson" class="compact-select" style="width:90px;">${getLinkOptions(kindsForPerson)}</select>
                 <button id="btnAddPerson" class="mini-btn primary" style="width:30px;">+</button>
             </div>
         </div>

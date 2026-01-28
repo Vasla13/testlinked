@@ -313,7 +313,12 @@ export function draw() {
             if (isHVT && n.hvtScore > 0.6) showName = true;
 
             if (showName) {
-                const fontSize = (isPathNode || isPathfindingNode || isPathStart || (isHVT && n.hvtScore > 0.6) ? 16 : 13) / Math.sqrt(p.scale);
+                const baseFontSize = (isPathNode || isPathfindingNode || isPathStart || (isHVT && n.hvtScore > 0.6) ? 16 : 13);
+                let fontSize = baseFontSize / Math.sqrt(p.scale);
+                if (n.type === TYPES.PERSON && p.scale < 1) {
+                    const boost = Math.min(0.5, (1 - p.scale) * 0.6);
+                    fontSize *= (1 + boost);
+                }
                 ctx.font = `600 ${fontSize}px "Rajdhani", sans-serif`; 
                 const label = n.name;
                 const metrics = ctx.measureText(label);
