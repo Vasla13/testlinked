@@ -3,12 +3,13 @@ import { ensureNode, addLink as logicAddLink, calculatePath, clearPath, calculat
 import { renderPathfindingSidebar } from './templates.js';
 import { restartSim } from './physics.js';
 import { draw, updateDegreeCache, resizeCanvas } from './render.js';
-import { escapeHtml, linkKindEmoji, kindToLabel } from './utils.js';
+import { escapeHtml, linkKindEmoji, kindToLabel, clamp } from './utils.js';
 import { TYPES, FILTERS } from './constants.js';
 import { injectStyles } from './styles.js';
 import { setupCanvasEvents } from './interaction.js';
 import { showSettings, showContextMenu, hideContextMenu } from './ui-settings.js';
 import { renderEditor } from './ui-editor.js';
+import { computeLinkSuggestions, getAllowedKinds, recordFeedback } from './intel.js';
 
 const ui = {
     listCompanies: document.getElementById('listCompanies'),
@@ -21,6 +22,17 @@ const ui = {
 let modalOverlay = null;
 let hvtPanel = null;
 let hvtSelectedId = null;
+let intelPanel = null;
+let intelSuggestions = [];
+const INTEL_ACCESS_CODE = 'bni-dutch';
+
+function updateIntelButtonLockVisual() {
+    const btn = document.getElementById('btnIntel');
+    if (!btn) return;
+    const unlocked = !!state.aiSettings?.intelUnlocked;
+    btn.classList.toggle('locked', !unlocked);
+    btn.innerHTML = `<svg style="width:16px;height:16px;fill:currentColor;margin-right:5px;" viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-4 12.74V17a1 1 0 0 0 .29.7l2 2a1 1 0 0 0 .71.3h2a1 1 0 0 0 .7-.3l2-2a1 1 0 0 0 .3-.7v-2.26A7 7 0 0 0 12 2zm2 14.17V17h-4v-.83a1 1 0 0 0-.45-.83A5 5 0 1 1 14.45 15a1 1 0 0 0-.45.83z"/></svg> INTEL${unlocked ? '' : ' 🔒'}`;
+}
 
 const TYPE_LABEL = {
     [TYPES.PERSON]: 'Personne',
@@ -124,6 +136,7 @@ export function initUI() {
     injectStyles();
     createFilterBar();
     updatePathfindingPanel();
+    updateIntelButtonLockVisual();
 
     const canvas = document.getElementById('graph');
     window.addEventListener('resize', resizeCanvas);
@@ -365,6 +378,53 @@ function processData(d, mode) {
     saveState();
 }
 
+function showIntelUnlock(onUnlock) {
+    if(!modalOverlay) createModal();
+    const msgEl = document.getElementById('modal-msg');
+    const actEl = document.getElementById('modal-actions');
+    if(!msgEl || !actEl) return;
+
+    msgEl.innerHTML = `
+        <div style="text-transform:uppercase; letter-spacing:2px; color:var(--accent-cyan); margin-bottom:8px;">Acces INTEL Premium</div>
+        <div style="font-size:0.85rem; color:#888; margin-bottom:10px;">Entrez le code d'acces</div>
+        <input type="password" id="intel-unlock-input" placeholder="CODE D'ACCES" 
+            style="width:100%; background:rgba(0,0,0,0.5); border:1px solid var(--text-muted); color:white; padding:10px; border-radius:4px; text-align:center; font-family:'Rajdhani'; font-size:1.1rem; outline:none;">
+        <div id="intel-unlock-error" style="margin-top:8px; color:#ff6b81; font-size:0.8rem; min-height:16px;"></div>
+    `;
+
+    actEl.innerHTML = '';
+    const btnCancel = document.createElement('button');
+    btnCancel.innerText = 'ANNULER';
+    btnCancel.onclick = () => { modalOverlay.style.display='none'; };
+
+    const btnConfirm = document.createElement('button');
+    btnConfirm.innerText = 'VALIDER';
+    btnConfirm.className = 'primary';
+    btnConfirm.onclick = () => {
+        const input = document.getElementById('intel-unlock-input');
+        const errorEl = document.getElementById('intel-unlock-error');
+        const val = input ? input.value.trim() : '';
+        if (val === INTEL_ACCESS_CODE) {
+            state.aiSettings.intelUnlocked = true;
+            scheduleSave();
+            modalOverlay.style.display='none';
+            updateIntelButtonLockVisual();
+            if (typeof onUnlock === 'function') onUnlock();
+        } else {
+            if (errorEl) errorEl.textContent = 'Code invalide.';
+            if (input) input.focus();
+        }
+    };
+
+    actEl.appendChild(btnCancel);
+    actEl.appendChild(btnConfirm);
+    modalOverlay.style.display = 'flex';
+    setTimeout(() => {
+        const input = document.getElementById('intel-unlock-input');
+        if (input) input.focus();
+    }, 50);
+}
+
 // --- HUD SETUP ---
 function setupHudButtons() {
     const hud = document.getElementById('hud');
@@ -424,6 +484,30 @@ function setupHudButtons() {
         draw();
     };
     hud.appendChild(btnHVT);
+
+    const btnIntel = document.createElement('button');
+    btnIntel.id = 'btnIntel';
+    btnIntel.className = 'hud-btn';
+    btnIntel.innerHTML = `<svg style="width:16px;height:16px;fill:currentColor;margin-right:5px;" viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-4 12.74V17a1 1 0 0 0 .29.7l2 2a1 1 0 0 0 .71.3h2a1 1 0 0 0 .7-.3l2-2a1 1 0 0 0 .3-.7v-2.26A7 7 0 0 0 12 2zm2 14.17V17h-4v-.83a1 1 0 0 0-.45-.83A5 5 0 1 1 14.45 15a1 1 0 0 0-.45.83z"/></svg> INTEL`;
+    btnIntel.onclick = () => {
+        const active = intelPanel && intelPanel.style.display !== 'none';
+        if (active) {
+            hideIntelPanel();
+            btnIntel.classList.remove('active');
+            return;
+        }
+        if (!state.aiSettings?.intelUnlocked) {
+            showIntelUnlock(() => {
+                showIntelPanel();
+                btnIntel.classList.add('active');
+            });
+            return;
+        }
+        showIntelPanel();
+        btnIntel.classList.add('active');
+    };
+    hud.appendChild(btnIntel);
+    updateIntelButtonLockVisual();
 }
 
 function ensureHvtPanel() {
@@ -607,6 +691,407 @@ export function refreshHvt() {
     updateHvtPanel();
 }
 
+// --- INTEL PANEL (PREDICTION DE LIENS) ---
+function ensureIntelPanel() {
+    if (intelPanel) return;
+    intelPanel = document.createElement('div');
+    intelPanel.id = 'intel-panel';
+    intelPanel.innerHTML = `
+        <div class="intel-header">
+            <div class="intel-title">LINK INTEL</div>
+            <div class="intel-close" id="btnIntelClose">✕</div>
+        </div>
+        <div class="intel-sub">SUGGESTIONS INTELLIGENTES</div>
+        <div class="intel-controls">
+            <div class="intel-row">
+                <label>Mode</label>
+                <select id="intelMode" class="intel-select intel-grow">
+                    <option value="serieux">Serieux</option>
+                    <option value="decouverte">Decouverte</option>
+                    <option value="creatif">Creatif</option>
+                </select>
+            </div>
+            <div class="intel-row">
+                <label>Scope</label>
+                <div class="intel-actions intel-grow">
+                    <button id="intelScopeFocus" class="mini-btn">Cible</button>
+                    <button id="intelScopeGlobal" class="mini-btn">Global</button>
+                </div>
+                <span id="intelScopeName" class="intel-badge">--</span>
+            </div>
+            <div class="intel-row">
+                <label>Sources</label>
+                <div class="intel-toggle">
+                    <label><input type="checkbox" id="intelSrcGraph"/>Graph</label>
+                    <label><input type="checkbox" id="intelSrcText"/>Texte</label>
+                    <label><input type="checkbox" id="intelSrcTags"/>Tags</label>
+                    <label><input type="checkbox" id="intelSrcProfile"/>Profil</label>
+                    <label><input type="checkbox" id="intelSrcBridge"/>Ponts</label>
+                    <label><input type="checkbox" id="intelSrcLex"/>Lexique</label>
+                    <label><input type="checkbox" id="intelSrcGeo"/>Geo</label>
+                </div>
+            </div>
+            <div class="intel-row">
+                <label>Seuil</label>
+                <input id="intelMinScore" type="range" min="10" max="90" step="1" class="intel-grow"/>
+                <span id="intelMinScoreVal" class="intel-badge">35%</span>
+            </div>
+            <div class="intel-row">
+                <label>Nouvel.</label>
+                <input id="intelNovelty" type="range" min="0" max="60" step="1" class="intel-grow"/>
+                <span id="intelNoveltyVal" class="intel-badge">25%</span>
+            </div>
+            <div class="intel-row">
+                <label>Quantite</label>
+                <input id="intelLimit" type="number" min="5" max="80" class="intel-input" style="width:70px;"/>
+                <label><input id="intelExplain" type="checkbox"/>Explications</label>
+                <span id="intelCount" class="intel-badge">0</span>
+            </div>
+            <div class="intel-row">
+                <label>Overlay</label>
+                <label><input id="intelShowPredicted" type="checkbox"/>Liens predits</label>
+            </div>
+            <div class="intel-actions">
+                <button id="intelRun" class="mini-btn primary">Analyser</button>
+                <button id="intelClear" class="mini-btn">Effacer</button>
+            </div>
+        </div>
+        <div class="intel-divider"></div>
+        <div id="intel-list"></div>
+    `;
+    document.body.appendChild(intelPanel);
+
+    const closeBtn = document.getElementById('btnIntelClose');
+    if (closeBtn) closeBtn.onclick = () => {
+        const btn = document.getElementById('btnIntel');
+        if (btn) btn.classList.remove('active');
+        hideIntelPanel();
+    };
+
+    const header = intelPanel.querySelector('.intel-header');
+    if (header) {
+        let isDragging = false;
+        let offsetX = 0;
+        let offsetY = 0;
+
+        header.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return;
+            if (e.target && e.target.closest('#btnIntelClose')) return;
+            const rect = intelPanel.getBoundingClientRect();
+            isDragging = true;
+            offsetX = e.clientX - rect.left;
+            offsetY = e.clientY - rect.top;
+            intelPanel.classList.add('dragging');
+            e.preventDefault();
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            let x = e.clientX - offsetX;
+            let y = e.clientY - offsetY;
+            const maxX = window.innerWidth - intelPanel.offsetWidth - 10;
+            const maxY = window.innerHeight - intelPanel.offsetHeight - 10;
+            x = Math.max(10, Math.min(x, maxX));
+            y = Math.max(10, Math.min(y, maxY));
+            intelPanel.style.left = `${x}px`;
+            intelPanel.style.top = `${y}px`;
+            intelPanel.style.right = 'auto';
+        });
+
+        window.addEventListener('mouseup', () => {
+            if (!isDragging) return;
+            isDragging = false;
+            intelPanel.classList.remove('dragging');
+        });
+    }
+
+    setupIntelControls();
+}
+
+function setupIntelControls() {
+    const modeSel = document.getElementById('intelMode');
+    const scopeFocus = document.getElementById('intelScopeFocus');
+    const scopeGlobal = document.getElementById('intelScopeGlobal');
+    const scopeName = document.getElementById('intelScopeName');
+    const srcGraph = document.getElementById('intelSrcGraph');
+    const srcText = document.getElementById('intelSrcText');
+    const srcTags = document.getElementById('intelSrcTags');
+    const srcProfile = document.getElementById('intelSrcProfile');
+    const srcBridge = document.getElementById('intelSrcBridge');
+    const srcLex = document.getElementById('intelSrcLex');
+    const srcGeo = document.getElementById('intelSrcGeo');
+    const minScore = document.getElementById('intelMinScore');
+    const minScoreVal = document.getElementById('intelMinScoreVal');
+    const novelty = document.getElementById('intelNovelty');
+    const noveltyVal = document.getElementById('intelNoveltyVal');
+    const limitInp = document.getElementById('intelLimit');
+    const explainChk = document.getElementById('intelExplain');
+    const showPredicted = document.getElementById('intelShowPredicted');
+    const btnRun = document.getElementById('intelRun');
+    const btnClear = document.getElementById('intelClear');
+
+    const updateScopeName = () => {
+        const n = nodeById(state.selection);
+        if (scopeName) scopeName.textContent = n ? n.name : 'Aucune';
+    };
+
+    const setScope = (scope) => {
+        state.aiSettings.scope = scope;
+        if (scopeFocus) scopeFocus.classList.toggle('active', scope === 'selection');
+        if (scopeGlobal) scopeGlobal.classList.toggle('active', scope === 'global');
+        updateScopeName();
+        scheduleSave();
+    };
+
+    if (modeSel) modeSel.value = state.aiSettings.mode || 'decouverte';
+    if (minScore) minScore.value = Math.round((state.aiSettings.minScore || 0.35) * 100);
+    if (minScoreVal) minScoreVal.textContent = `${minScore.value}%`;
+    if (novelty) novelty.value = Math.round((state.aiSettings.noveltyRatio || 0.25) * 100);
+    if (noveltyVal) noveltyVal.textContent = `${novelty.value}%`;
+    if (limitInp) limitInp.value = state.aiSettings.limit || 20;
+    if (explainChk) explainChk.checked = state.aiSettings.showReasons !== false;
+    if (showPredicted) showPredicted.checked = state.aiSettings.showPredicted !== false;
+
+    const sources = state.aiSettings.sources || {};
+    if (srcGraph) srcGraph.checked = sources.graph !== false;
+    if (srcText) srcText.checked = sources.text !== false;
+    if (srcTags) srcTags.checked = sources.tags !== false;
+    if (srcProfile) srcProfile.checked = sources.profile !== false;
+    if (srcBridge) srcBridge.checked = sources.bridge !== false;
+    if (srcLex) srcLex.checked = sources.lex !== false;
+    if (srcGeo) srcGeo.checked = sources.geo !== false;
+
+    setScope(state.aiSettings.scope || 'selection');
+
+    if (modeSel) modeSel.onchange = () => {
+        state.aiSettings.mode = modeSel.value;
+        scheduleSave();
+        updateIntelPanel(true);
+    };
+    if (scopeFocus) scopeFocus.onclick = () => { setScope('selection'); updateIntelPanel(true); };
+    if (scopeGlobal) scopeGlobal.onclick = () => { setScope('global'); updateIntelPanel(true); };
+
+    if (minScore) minScore.oninput = () => {
+        const val = Number(minScore.value) || 0;
+        if (minScoreVal) minScoreVal.textContent = `${val}%`;
+        state.aiSettings.minScore = clamp(val / 100, 0.1, 0.9);
+        scheduleSave();
+    };
+    if (minScore) minScore.onchange = () => updateIntelPanel(true);
+
+    if (novelty) novelty.oninput = () => {
+        const val = Number(novelty.value) || 0;
+        if (noveltyVal) noveltyVal.textContent = `${val}%`;
+        state.aiSettings.noveltyRatio = clamp(val / 100, 0, 0.6);
+        scheduleSave();
+    };
+    if (novelty) novelty.onchange = () => updateIntelPanel(true);
+
+    if (limitInp) limitInp.onchange = () => {
+        const val = Number(limitInp.value) || 20;
+        state.aiSettings.limit = Math.max(5, Math.min(val, 80));
+        limitInp.value = state.aiSettings.limit;
+        scheduleSave();
+        updateIntelPanel(true);
+    };
+
+    if (explainChk) explainChk.onchange = () => {
+        state.aiSettings.showReasons = explainChk.checked;
+        scheduleSave();
+        updateIntelPanel(true);
+    };
+    if (showPredicted) showPredicted.onchange = () => {
+        state.aiSettings.showPredicted = showPredicted.checked;
+        scheduleSave();
+        draw();
+    };
+
+    const syncSources = () => {
+        state.aiSettings.sources = {
+            graph: srcGraph?.checked !== false,
+            text: srcText?.checked !== false,
+            tags: srcTags?.checked !== false,
+            profile: srcProfile?.checked !== false,
+            bridge: srcBridge?.checked !== false,
+            lex: srcLex?.checked !== false,
+            geo: srcGeo?.checked !== false
+        };
+        scheduleSave();
+    };
+    [srcGraph, srcText, srcTags, srcProfile, srcBridge, srcLex, srcGeo].forEach(el => {
+        if (!el) return;
+        el.onchange = () => { syncSources(); updateIntelPanel(true); };
+    });
+
+    if (btnRun) btnRun.onclick = () => updateIntelPanel(true);
+    if (btnClear) btnClear.onclick = () => {
+        intelSuggestions = [];
+        state.aiPredictedLinks = [];
+        draw();
+        const listEl = document.getElementById('intel-list');
+        const countEl = document.getElementById('intelCount');
+        if (listEl) listEl.innerHTML = '<div style="padding:10px; color:#666; text-align:center;">Analyse effacee</div>';
+        if (countEl) countEl.textContent = '0';
+    };
+
+    updateScopeName();
+}
+
+function showIntelPanel() {
+    ensureIntelPanel();
+    intelPanel.style.display = 'flex';
+    updateIntelPanel(true);
+}
+
+function hideIntelPanel() {
+    if (intelPanel) intelPanel.style.display = 'none';
+}
+
+function centerOnPair(aId, bId) {
+    const a = nodeById(aId);
+    const b = nodeById(bId);
+    if (!a || !b) return;
+    const cx = (a.x + b.x) / 2;
+    const cy = (a.y + b.y) / 2;
+    state.view.scale = 1.2;
+    state.view.x = -cx * state.view.scale;
+    state.view.y = -cy * state.view.scale;
+    state.selection = a.id;
+    renderEditor();
+    draw();
+}
+
+function updateIntelPanel(force = false) {
+    if (!intelPanel || intelPanel.style.display === 'none') return;
+    const listEl = document.getElementById('intel-list');
+    const countEl = document.getElementById('intelCount');
+    const scopeName = document.getElementById('intelScopeName');
+    if (scopeName) {
+        const n = nodeById(state.selection);
+        scopeName.textContent = n ? n.name : 'Aucune';
+    }
+    if (!listEl) return;
+    if (!state.aiSettings?.intelUnlocked) {
+        listEl.innerHTML = '<div style="padding:10px; color:#666; text-align:center;">Acces verrouille</div>';
+        if (countEl) countEl.textContent = '0';
+        state.aiPredictedLinks = [];
+        draw();
+        return;
+    }
+
+    const scope = state.aiSettings.scope || 'selection';
+    const focusId = (scope === 'selection' && state.selection) ? state.selection : null;
+    if (scope === 'selection' && !focusId) {
+        listEl.innerHTML = '<div style="padding:10px; color:#666; text-align:center;">Selectionnez une cible</div>';
+        if (countEl) countEl.textContent = '0';
+        return;
+    }
+
+    const options = {
+        focusId,
+        mode: state.aiSettings.mode,
+        limit: state.aiSettings.limit,
+        minScore: state.aiSettings.minScore,
+        noveltyRatio: state.aiSettings.noveltyRatio,
+        sources: state.aiSettings.sources
+    };
+
+    if (force || intelSuggestions.length === 0) {
+        intelSuggestions = computeLinkSuggestions(options);
+    }
+
+    if (!intelSuggestions.length) {
+        listEl.innerHTML = '<div style="padding:10px; color:#666; text-align:center;">Aucune suggestion</div>';
+        if (countEl) countEl.textContent = '0';
+        state.aiPredictedLinks = [];
+        draw();
+        return;
+    }
+
+    if (countEl) countEl.textContent = `${intelSuggestions.length}`;
+    state.aiPredictedLinks = intelSuggestions.map(s => ({
+        aId: s.aId,
+        bId: s.bId,
+        score: s.score,
+        kind: s.kind,
+        confidence: s.confidence
+    }));
+    if (state.aiSettings.showPredicted) draw();
+
+    const showReasons = state.aiSettings.showReasons !== false;
+    listEl.innerHTML = intelSuggestions.map(s => {
+        const scorePct = Math.round(s.score * 100);
+        const confPct = Math.round(s.confidence * 100);
+        const isBridge = s.bridge ? `<span class="intel-badge">Pont</span>` : '';
+        const isSurprise = s.surprise >= 0.6 ? `<span class="intel-badge">Surprise</span>` : '';
+        const isAlias = s.alias ? `<span class="intel-badge">Alias?</span>` : '';
+        const isGeo = s.geoScore && s.geoScore > 0.55 ? `<span class="intel-badge">Geo</span>` : '';
+        const reasons = (showReasons && s.reasons && s.reasons.length) ? `<div class="intel-reasons">${s.reasons.slice(0, 3).map(r => escapeHtml(r)).join(' · ')}</div>` : '';
+        const allowedKinds = getAllowedKinds(s.a.type, s.b.type);
+        const options = Array.from(allowedKinds).map(k => `<option value="${k}" ${k === s.kind ? 'selected' : ''}>${linkKindEmoji(k)} ${kindToLabel(k)}</option>`).join('');
+        return `
+            <div class="intel-item ${s.surprise >= 0.6 ? 'highlight' : ''}" data-a="${s.aId}" data-b="${s.bId}">
+                <div class="intel-meta">
+                    <span class="intel-score">Score ${scorePct}%</span>
+                    <span class="intel-confidence">Confiance ${confPct}%</span>
+                </div>
+                <div class="intel-names">
+                    <span>${escapeHtml(s.a.name)} ⇄ ${escapeHtml(s.b.name)}</span>
+                    ${isBridge}${isSurprise}${isAlias}${isGeo}
+                </div>
+                ${reasons}
+                <div class="intel-cta">
+                    <select class="intel-select intel-kind" data-action="kind">${options}</select>
+                    <button class="mini-btn primary" data-action="apply">Valider</button>
+                    <button class="mini-btn" data-action="focus">Voir</button>
+                    <div class="intel-feedback">
+                        <button data-action="up">👍</button>
+                        <button data-action="down">👎</button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    listEl.querySelectorAll('.intel-item').forEach(row => {
+        const aId = row.dataset.a;
+        const bId = row.dataset.b;
+        row.querySelectorAll('[data-action]').forEach(btn => {
+            const action = btn.dataset.action;
+            if (action === 'apply') {
+                btn.onclick = () => {
+                    const kindSel = row.querySelector('.intel-kind');
+                    const kind = kindSel ? kindSel.value : null;
+                    const res = addLink(aId, bId, kind);
+                    if (res) updateIntelPanel(true);
+                };
+            }
+            if (action === 'focus') {
+                btn.onclick = () => centerOnPair(aId, bId);
+            }
+            if (action === 'up') {
+                btn.onclick = () => {
+                    recordFeedback(aId, bId, 1);
+                    scheduleSave();
+                    updateIntelPanel(true);
+                };
+            }
+            if (action === 'down') {
+                btn.onclick = () => {
+                    recordFeedback(aId, bId, -1);
+                    scheduleSave();
+                    updateIntelPanel(true);
+                };
+            }
+        });
+    });
+}
+
+export function refreshIntelPanel() {
+    if (!intelPanel || intelPanel.style.display === 'none') return;
+    updateIntelPanel(true);
+}
+
 function setupSearch() {
     document.getElementById('searchInput').addEventListener('input', (e) => {
         const q = e.target.value.trim().toLowerCase();
@@ -663,6 +1148,7 @@ export function selectNode(id) {
     renderEditor();
     updatePathfindingPanel();
     draw();
+    refreshIntelPanel();
 }
 
 function zoomToNode(id) {
@@ -715,6 +1201,7 @@ export function refreshLists() {
     
     updateLinkLegend();
     if (state.hvtMode) updateHvtPanel();
+    refreshIntelPanel();
 }
 
 export function updatePathfindingPanel() {

@@ -19,11 +19,24 @@ export const state = {
     globeMode: true,
     physicsSettings: {
         repulsion: 1200, gravity: 0.005, linkLength: 220, friction: 0.3, 
-        collision: 50, enemyForce: 300, structureRepulsion: 0.1
+        collision: 50, enemyForce: 300, structureRepulsion: 0.1, curveStrength: 1.0
     },
     history: [], tempLink: null, labelMode: 1, showLinkTypes: false, 
     performance: false, view: { x: 0, y: 0, scale: 0.8 }, forceSimulation: false,
-    projectName: null // AJOUT DU NOM DU PROJET
+    projectName: null, // AJOUT DU NOM DU PROJET
+    aiSettings: {
+        mode: 'decouverte',
+        scope: 'selection',
+        limit: 20,
+        minScore: 0.35,
+        noveltyRatio: 0.25,
+        sources: { graph: true, text: true, tags: true, profile: true, bridge: true, lex: true, geo: true },
+        showReasons: true,
+        showPredicted: true,
+        intelUnlocked: false
+    },
+    aiFeedback: {},
+    aiPredictedLinks: []
 };
 
 const STORAGE_KEY = 'pointPageState_v13'; 
@@ -46,7 +59,9 @@ export function saveState() {
             })),
             view: state.view, labelMode: state.labelMode, showLinkTypes: state.showLinkTypes,
             activeFilter: state.activeFilter, globeMode: state.globeMode, hvtTopN: state.hvtTopN,
-            physicsSettings: state.physicsSettings, nextId: state.nextId
+            physicsSettings: state.physicsSettings, nextId: state.nextId,
+            aiSettings: state.aiSettings, aiFeedback: state.aiFeedback,
+            aiPredictedLinks: state.aiPredictedLinks
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch (e) { console.error("Save error", e); }
@@ -74,6 +89,15 @@ export function loadState() {
         if (typeof data.globeMode === 'boolean') state.globeMode = data.globeMode;
         if (typeof data.hvtTopN === 'number') state.hvtTopN = data.hvtTopN;
         if (data.physicsSettings) state.physicsSettings = { ...state.physicsSettings, ...data.physicsSettings };
+        if (data.aiSettings) {
+            state.aiSettings = { ...state.aiSettings, ...data.aiSettings };
+            if (data.aiSettings.sources) {
+                state.aiSettings.sources = { ...state.aiSettings.sources, ...data.aiSettings.sources };
+            }
+        }
+        state.aiSettings.intelUnlocked = false;
+        if (data.aiFeedback) state.aiFeedback = data.aiFeedback;
+        if (data.aiPredictedLinks) state.aiPredictedLinks = data.aiPredictedLinks;
         if (data.meta && data.meta.projectName) state.projectName = data.meta.projectName; // CHARGEMENT DU NOM
         ensureLinkIds();
         state.pathfinding = { startId: null, active: false, pathNodes: new Set(), pathLinks: new Set() };

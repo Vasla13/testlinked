@@ -114,6 +114,11 @@ export function injectStyles() {
         #btnHVT:hover { background: rgba(255, 85, 85, 0.2); box-shadow: 0 0 10px rgba(255, 85, 85, 0.3); }
         #btnHVT.active { background: #ff5555; color: #000; box-shadow: 0 0 15px #ff5555; }
 
+        #btnIntel { border: 1px solid var(--accent-cyan); color: var(--accent-cyan); background: rgba(115, 251, 247, 0.1); }
+        #btnIntel:hover { background: rgba(115, 251, 247, 0.2); box-shadow: 0 0 10px rgba(115, 251, 247, 0.35); }
+        #btnIntel.active { background: var(--accent-cyan); color: #000; box-shadow: 0 0 15px rgba(115, 251, 247, 0.6); }
+        #btnIntel.locked { opacity: 0.7; }
+
         .hud-sep { width: 1px; height: 20px; background: rgba(255,255,255,0.1); }
 
         /* --- HVT PANEL --- */
@@ -154,6 +159,67 @@ export function injectStyles() {
         .hvt-detail-sub { margin-top: 8px; margin-bottom: 4px; font-size: 0.7rem; text-transform: uppercase; color: #888; letter-spacing: 1px; }
         .hvt-tags { display: flex; flex-wrap: wrap; gap: 6px; }
         .hvt-tag { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 2px 6px; font-size: 0.7rem; color: #ddd; }
+
+        /* --- INTEL PANEL --- */
+        #intel-panel {
+            position: fixed;
+            right: 380px;
+            top: 90px;
+            width: 360px;
+            max-height: 78vh;
+            display: none;
+            flex-direction: column;
+            background: rgba(5, 7, 20, 0.98);
+            border: 1px solid rgba(115, 251, 247, 0.5);
+            border-radius: 10px;
+            padding: 12px;
+            z-index: 10003;
+            box-shadow: 0 0 40px rgba(0,0,0,0.8);
+            backdrop-filter: blur(12px);
+        }
+        .intel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; cursor: move; user-select: none; }
+        #intel-panel.dragging { cursor: grabbing; }
+        .intel-title { color: var(--accent-cyan); text-transform: uppercase; letter-spacing: 2px; font-weight: 700; font-size: 0.8rem; }
+        .intel-close { cursor: pointer; color: #999; font-weight: bold; padding: 2px 6px; border-radius: 4px; }
+        .intel-close:hover { color: #fff; background: rgba(255,255,255,0.08); }
+        .intel-sub { font-size: 0.7rem; text-transform: uppercase; color: #88a; letter-spacing: 1px; margin-bottom: 8px; }
+        .intel-controls { display: flex; flex-direction: column; gap: 8px; }
+        .intel-row { display: flex; align-items: center; gap: 8px; }
+        .intel-row label { font-size: 0.7rem; color: #888; text-transform: uppercase; letter-spacing: 1px; }
+        .intel-row .intel-grow { flex: 1; }
+        .intel-select, .intel-input {
+            background: rgba(0,0,0,0.4);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: #ddd;
+            font-size: 0.75rem;
+            padding: 6px 8px;
+            border-radius: 4px;
+        }
+        .intel-toggle { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+        .intel-toggle label { font-size: 0.7rem; color: #aaa; text-transform: uppercase; display: flex; align-items: center; gap: 4px; }
+        .intel-toggle input { accent-color: var(--accent-cyan); }
+        .intel-actions { display: flex; align-items: center; gap: 6px; }
+        .intel-actions button { font-size: 0.7rem; padding: 6px 8px; }
+        .intel-divider { height: 1px; background: rgba(255,255,255,0.08); margin: 6px 0; }
+        #intel-list { margin-top: 8px; overflow-y: auto; padding-right: 4px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 8px; }
+        .intel-item { background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 8px; margin-bottom: 8px; }
+        .intel-item.highlight { border-color: rgba(115, 251, 247, 0.4); box-shadow: 0 0 12px rgba(115, 251, 247, 0.12); }
+        .intel-meta { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 0.7rem; color: #999; }
+        .intel-score { color: var(--accent-cyan); font-weight: bold; }
+        .intel-confidence { color: #9fd4d2; font-weight: 600; }
+        .intel-names { font-size: 0.85rem; color: #fff; margin: 4px 0; display: flex; align-items: center; gap: 6px; }
+        .intel-badge { font-size: 0.65rem; text-transform: uppercase; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 2px 6px; color: #aaa; }
+        .intel-reasons { font-size: 0.7rem; color: #888; margin-top: 6px; line-height: 1.2; }
+        .intel-cta { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+        .intel-cta button { font-size: 0.65rem; padding: 5px 8px; border-radius: 4px; }
+        .intel-kind { font-size: 0.7rem; }
+        .intel-feedback { margin-left: auto; display: flex; gap: 4px; }
+        .intel-feedback button { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); color: #aaa; padding: 3px 6px; border-radius: 4px; font-size: 0.65rem; }
+        .intel-feedback button.active { border-color: var(--accent-cyan); color: var(--accent-cyan); }
+
+        @media (max-width: 1100px) {
+            #intel-panel { right: 20px; top: 90px; width: 320px; }
+        }
 
         /* --- CONTEXT MENU --- */
         #context-menu {

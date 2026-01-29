@@ -49,6 +49,7 @@ function createSettingsPanel() {
         <div class="setting-row"><label>Longueur Liens <span id="val-linkLength" class="setting-val"></span></label><input type="range" id="sl-linkLength" min="50" max="600" step="10"></div>
         <div class="setting-row"><label>Collision <span id="val-collision" class="setting-val"></span></label><input type="range" id="sl-collision" min="0" max="200" step="5"></div>
         <div class="setting-row"><label>Friction <span id="val-friction" class="setting-val"></span></label><input type="range" id="sl-friction" min="0.1" max="0.9" step="0.05"></div>
+        <div class="setting-row"><label>Courbure Liens <span id="val-curveStrength" class="setting-val"></span></label><input type="range" id="sl-curveStrength" min="0" max="3" step="0.1"></div>
         
         <div class="setting-row" style="margin-top:20px; border-top:1px solid rgba(255,255,255,0.1); padding-top:12px;">
             <label>Top HVT <span id="val-hvtTop" class="setting-val"></span></label>
@@ -71,6 +72,7 @@ function createSettingsPanel() {
     bindSlider('sl-linkLength', 'linkLength');
     bindSlider('sl-collision', 'collision');
     bindSlider('sl-friction', 'friction');
+    bindSlider('sl-curveStrength', 'curveStrength');
     bindSlider('sl-enemyForce', 'enemyForce');
     bindSlider('sl-structureRepulsion', 'structureRepulsion');
     bindHvtTop();
@@ -105,6 +107,7 @@ function updateSettingsUI() {
     updateVal('sl-linkLength', 'linkLength');
     updateVal('sl-collision', 'collision');
     updateVal('sl-friction', 'friction');
+    updateVal('sl-curveStrength', 'curveStrength');
     updateVal('sl-enemyForce', 'enemyForce');
     updateVal('sl-structureRepulsion', 'structureRepulsion');
     
@@ -121,7 +124,7 @@ function updateSettingsUI() {
 }
 
 function resetPhysicsDefaults() {
-    state.physicsSettings = { repulsion: 1200, gravity: 0.005, linkLength: 220, friction: 0.3, collision: 50, enemyForce: 300, structureRepulsion: 0.1 };
+    state.physicsSettings = { repulsion: 1200, gravity: 0.005, linkLength: 220, friction: 0.3, collision: 50, enemyForce: 300, structureRepulsion: 0.1, curveStrength: 1.0 };
     state.globeMode = true;
     updateSettingsUI();
     restartSim();

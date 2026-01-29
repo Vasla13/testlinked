@@ -1,6 +1,7 @@
 import { state } from './state.js';
 import { KINDS, TYPES } from './constants.js';
 import { nodeRadius, draw } from './render.js';
+import { clamp } from './utils.js';
 
 let simulation;
 
@@ -26,6 +27,7 @@ export function restartSim() {
     
     const nodeDegree = new Map();
     const connectedPairs = new Set();
+    let maxDegree = 0;
 
     state.nodes.forEach(n => nodeDegree.set(n.id, 0));
     state.links.forEach(l => {
@@ -36,8 +38,15 @@ export function restartSim() {
         connectedPairs.add(`${s}-${t}`);
         connectedPairs.add(`${t}-${s}`);
     });
+    nodeDegree.forEach(v => { if (v > maxDegree) maxDegree = v; });
 
     const S = state.physicsSettings; // Raccourci pour accéder aux sliders
+    const nodeCount = state.nodes.length || 1;
+    const linkCount = state.links.filter(l => l.kind !== KINDS.ENNEMI).length;
+    const avgDegree = (nodeCount > 0) ? (2 * linkCount) / nodeCount : 0;
+    const densityBoost = clamp((avgDegree - 3) / 8, 0, 1.5);
+    const adaptiveCollision = S.collision * (1 + densityBoost);
+    const adaptiveRepulsion = S.repulsion * (1 + densityBoost * 0.7);
 
     // 1. LIENS
     simulation.force("link", d3.forceLink(state.links)
@@ -106,7 +115,7 @@ export function restartSim() {
     // 4. CHARGE GLOBALE (Slider: Repulsion)
     simulation.force("charge", d3.forceManyBody()
         .strength(n => {
-            let strength = -S.repulsion; 
+            let strength = -adaptiveRepulsion; 
             if (n.type === TYPES.COMPANY) strength *= 5; 
             if (n.type === TYPES.GROUP) strength *= 3;
             const degree = nodeDegree.get(n.id) || 0;
@@ -119,7 +128,7 @@ export function restartSim() {
 
     // 5. COLLISION (Slider: Collision)
     simulation.force("collide", d3.forceCollide()
-        .radius(n => nodeRadius(n) + S.collision) 
+        .radius(n => nodeRadius(n) + adaptiveCollision) 
         .iterations(2)
     );
 
@@ -159,6 +168,49 @@ export function restartSim() {
                     
                     const angle = Math.atan2(dy, dx);
                     n.vx += Math.cos(angle) * push; n.vy += Math.sin(angle) * push;
+                }
+            }
+        }
+    });
+
+    // 8. HUB HVT (ramener les noyaux vers le centre sans les coller)
+    simulation.force("hub", (alpha) => {
+        if (!state.nodes.length) return;
+        const hubs = state.nodes
+            .map(n => {
+                const degree = nodeDegree.get(n.id) || 0;
+                const fallback = (maxDegree > 0) ? (degree / maxDegree) : 0;
+                const score = (typeof n.hvtScore === 'number') ? n.hvtScore : fallback;
+                return { n, score };
+            })
+            .filter(h => h.score > 0.55)
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 18);
+
+        const pullStrength = 0.08;
+        const repelRadius = 420;
+        const repelStrength = 0.12;
+
+        hubs.forEach(h => {
+            const n = h.n;
+            const s = h.score * alpha * pullStrength;
+            n.vx += (-n.x) * s;
+            n.vy += (-n.y) * s;
+        });
+
+        for (let i = 0; i < hubs.length; i++) {
+            for (let j = i + 1; j < hubs.length; j++) {
+                const a = hubs[i].n;
+                const b = hubs[j].n;
+                const dx = b.x - a.x;
+                const dy = b.y - a.y;
+                const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                if (dist < repelRadius) {
+                    const force = ((repelRadius - dist) / repelRadius) * repelStrength * alpha;
+                    const fx = (dx / dist) * force;
+                    const fy = (dy / dist) * force;
+                    a.vx -= fx; a.vy -= fy;
+                    b.vx += fx; b.vy += fy;
                 }
             }
         }

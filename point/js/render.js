@@ -9,6 +9,19 @@ const container = document.getElementById('center');
 const degreeCache = new Map();
 const NODE_ICONS = { [TYPES.PERSON]: '👤', [TYPES.COMPANY]: '🏢', [TYPES.GROUP]: '👥' };
 
+function pairKey(a, b) {
+    const s = String(a);
+    const t = String(b);
+    return (s < t) ? `${s}|${t}` : `${t}|${s}`;
+}
+
+function quadraticPoint(p0, p1, p2, t) {
+    const mt = 1 - t;
+    const x = (mt * mt * p0.x) + (2 * mt * t * p1.x) + (t * t * p2.x);
+    const y = (mt * mt * p0.y) + (2 * mt * t * p1.y) + (t * t * p2.y);
+    return { x, y };
+}
+
 export function updateDegreeCache() {
     degreeCache.clear();
     for (const l of state.links) {
@@ -62,6 +75,7 @@ export function draw() {
     const showTypes = state.showLinkTypes; 
     const labelMode = state.labelMode; 
     const activeFilter = state.activeFilter; 
+    const nodeMap = new Map(state.nodes.map(n => [String(n.id), n]));
 
     // NETTOYAGE
     ctx.save();
@@ -90,6 +104,7 @@ export function draw() {
     const allowedKinds = FILTER_RULES[activeFilter];
     const visibleLinks = new Set();
     const activeNodes = new Set(); 
+    const pairCounts = new Map();
 
     // Pré-calcul de visibilité
     for (const l of state.links) {
@@ -97,7 +112,49 @@ export function draw() {
         visibleLinks.add(l);
         activeNodes.add(l.source.id || l.source);
         activeNodes.add(l.target.id || l.target);
+        if (l.kind !== KINDS.ENNEMI) {
+            const sId = l.source.id || l.source;
+            const tId = l.target.id || l.target;
+            const key = pairKey(sId, tId);
+            pairCounts.set(key, (pairCounts.get(key) || 0) + 1);
+        }
     }
+
+    const predictedLinks = (state.aiSettings?.intelUnlocked && state.aiSettings?.showPredicted && Array.isArray(state.aiPredictedLinks)) ? state.aiPredictedLinks : [];
+    const predictedCounts = new Map();
+    if (predictedLinks.length) {
+        predictedLinks.forEach(l => {
+            if (!l || !l.aId || !l.bId) return;
+            if (allowedKinds && l.kind && !allowedKinds.has(l.kind)) return;
+            const key = pairKey(l.aId, l.bId);
+            predictedCounts.set(key, (predictedCounts.get(key) || 0) + 1);
+        });
+    }
+
+    const getCurve = (sx, sy, tx, ty, offset) => {
+        const dx = tx - sx;
+        const dy = ty - sy;
+        const len = Math.sqrt(dx * dx + dy * dy) || 1;
+        const nx = -dy / len;
+        const ny = dx / len;
+        const cx = (sx + tx) / 2 + nx * offset;
+        const cy = (sy + ty) / 2 + ny * offset;
+        return { cx, cy };
+    };
+
+    const getCurveOffset = (sId, tId, totalCount, index, degreeBoost = 0) => {
+        const curveStrength = (state.physicsSettings?.curveStrength ?? 1);
+        const base = 18 * Math.max(0, curveStrength);
+        if (base < 1) return 0;
+        if (totalCount <= 1) {
+            if (degreeBoost <= 0) return 0;
+            const hash = (String(sId).charCodeAt(0) + String(tId).charCodeAt(0)) % 2 ? 1 : -1;
+            return base * 0.4 * degreeBoost * hash;
+        }
+        const mid = (totalCount - 1) / 2;
+        const slot = (index - mid);
+        return slot * base * (1 + degreeBoost);
+    };
 
     // Helper pour griser ce qui n'est pas focus
     function isDimmed(objType, obj) {
@@ -125,7 +182,49 @@ export function draw() {
         return false;
     }
 
+    // 0. LIENS PREDITS (IA)
+    if (predictedLinks.length && (!isHVT || state.aiSettings?.showPredicted)) {
+        const pairIndex = new Map();
+        ctx.save();
+        ctx.setLineDash([6, 6]);
+        for (const pl of predictedLinks) {
+            if (!pl || !pl.aId || !pl.bId) continue;
+            if (allowedKinds && pl.kind && !allowedKinds.has(pl.kind)) continue;
+            const a = nodeMap.get(String(pl.aId));
+            const b = nodeMap.get(String(pl.bId));
+            if (!a || !b) continue;
+            const key = pairKey(pl.aId, pl.bId);
+            const total = predictedCounts.get(key) || 1;
+            const idx = pairIndex.get(key) || 0;
+            pairIndex.set(key, idx + 1);
+
+            const degA = degreeCache.get(a.id) || 0;
+            const degB = degreeCache.get(b.id) || 0;
+            const degreeBoost = Math.min(1.5, (degA + degB) / 10);
+            const offset = getCurveOffset(a.id, b.id, total, idx, degreeBoost);
+
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y);
+            if (offset !== 0) {
+                const { cx, cy } = getCurve(a.x, a.y, b.x, b.y, offset);
+                ctx.quadraticCurveTo(cx, cy, b.x, b.y);
+            } else {
+                ctx.lineTo(b.x, b.y);
+            }
+
+            const color = pl.kind ? computeLinkColor({ kind: pl.kind }) : 'rgba(115, 251, 247, 0.6)';
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1 / Math.sqrt(p.scale);
+            ctx.globalAlpha = 0.35;
+            ctx.shadowBlur = 0;
+            ctx.stroke();
+        }
+        ctx.setLineDash([]);
+        ctx.restore();
+    }
+
     // 1. DESSIN DES LIENS
+    const pairIndex = new Map();
     for (const l of state.links) {
         if (!visibleLinks.has(l)) continue;
         if (l.kind === KINDS.ENNEMI) continue; 
@@ -142,17 +241,32 @@ export function draw() {
             else globalAlpha = 0.4;
         }
 
+        const sId = l.source.id || l.source;
+        const tId = l.target.id || l.target;
+        const key = pairKey(sId, tId);
+        const total = pairCounts.get(key) || 1;
+        const idx = pairIndex.get(key) || 0;
+        pairIndex.set(key, idx + 1);
+
+        const degA = degreeCache.get(sId) || 0;
+        const degB = degreeCache.get(tId) || 0;
+        const degreeBoost = Math.min(1.5, (degA + degB) / 10);
+        const offset = getCurveOffset(sId, tId, total, idx, degreeBoost);
+
         ctx.beginPath();
         ctx.moveTo(l.source.x, l.source.y);
-        ctx.lineTo(l.target.x, l.target.y);
+        if (offset !== 0) {
+            const { cx, cy } = getCurve(l.source.x, l.source.y, l.target.x, l.target.y, offset);
+            ctx.quadraticCurveTo(cx, cy, l.target.x, l.target.y);
+        } else {
+            ctx.lineTo(l.target.x, l.target.y);
+        }
 
         const isPathLink = state.pathfinding.active && !dimmed;
 
         let sTop = false;
         let tTop = false;
         if (topSet) {
-            const sId = l.source.id || l.source;
-            const tId = l.target.id || l.target;
             sTop = topSet.has(sId);
             tTop = topSet.has(tId);
             if (!sTop && !tTop) continue;
@@ -185,8 +299,18 @@ export function draw() {
 
         // AFFICHAGE DE L'EMOJI SUR LE LIEN
         if (showTypes && p.scale > 0.6 && !dimmed && !isPathLink && !isHVT) {
-            const mx = (l.source.x + l.target.x) / 2;
-            const my = (l.source.y + l.target.y) / 2;
+            let mx = (l.source.x + l.target.x) / 2;
+            let my = (l.source.y + l.target.y) / 2;
+            if (offset !== 0) {
+                const control = getCurve(l.source.x, l.source.y, l.target.x, l.target.y, offset);
+                const mid = quadraticPoint(
+                    { x: l.source.x, y: l.source.y },
+                    { x: control.cx, y: control.cy },
+                    { x: l.target.x, y: l.target.y },
+                    0.5
+                );
+                mx = mid.x; my = mid.y;
+            }
             const color = computeLinkColor(l);
             
             ctx.globalAlpha = 1; ctx.shadowBlur = 0;
@@ -305,14 +429,16 @@ export function draw() {
     // 4. LABELS
     if (labelMode > 0) { 
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        const candidates = [];
+        const drawnBoxes = [];
+
         for (const n of sortedNodes) {
             if (activeFilter !== FILTERS.ALL) { if (n.type === TYPES.PERSON && !activeNodes.has(n.id)) continue; }
             if (isFocus && !state.focusSet.has(n.id)) continue;
             
-            // Filtre HVT pour labels
             if (isHVT) {
                 if (topSet && !topSet.has(n.id)) continue;
-                if (!topSet && n.hvtScore < 0.5) continue;
+                if (!topSet && (n.hvtScore || 0) < 0.5) continue;
             }
 
             const rad = nodeRadius(n);
@@ -322,48 +448,89 @@ export function draw() {
             const isImportant = (n.type === TYPES.COMPANY || n.type === TYPES.GROUP);
             const isPathNode = isPath && state.pathPath.has(n.id);
             const isPathfindingNode = state.pathfinding.active && state.pathfinding.pathNodes.has(n.id);
-            const isHover = (state.hoverId === n.id || state.selection === n.id);
+            const isHover = (state.hoverId === n.id);
+            const isSelected = (state.selection === n.id);
             const isPathStart = state.pathfinding.startId === n.id;
-            
+            const hvtScore = n.hvtScore || 0;
+            const degree = degreeCache.get(n.id) || 0;
+
             let showName = false;
             if (labelMode === 2) showName = true;
-            else if (labelMode === 1) showName = isHover || isPathNode || isPathfindingNode || isPathStart || (p.scale > 0.5 || isImportant);
+            else if (labelMode === 1) {
+                showName = isSelected || isHover || isPathNode || isPathfindingNode || isPathStart;
+                if (!showName) showName = (hvtScore > 0.55) || (degree > 6) || (isImportant && p.scale > 0.45) || (p.scale > 0.7);
+            }
             
             if (isHVT && topSet && topSet.has(n.id)) showName = true;
-            else if (isHVT && n.hvtScore > 0.6) showName = true;
+            else if (isHVT && hvtScore > 0.6) showName = true;
 
-            if (showName) {
-                const baseFontSize = (isPathNode || isPathfindingNode || isPathStart || (isHVT && n.hvtScore > 0.6) ? 16 : 13);
-                let fontSize = baseFontSize / Math.sqrt(p.scale);
-                if (n.type === TYPES.PERSON && p.scale < 1) {
-                    const boost = Math.min(0.5, (1 - p.scale) * 0.6);
-                    fontSize *= (1 + boost);
-                }
-                ctx.font = `600 ${fontSize}px "Rajdhani", sans-serif`; 
-                const label = n.name;
-                const metrics = ctx.measureText(label);
-                const textW = metrics.width;
-                const textH = fontSize * 1.4;
-                const padding = 6 / Math.sqrt(p.scale);
-                const boxX = n.x - textW / 2 - padding;
-                const boxY = n.y + rad + 6 / Math.sqrt(p.scale);
+            if (!showName) continue;
 
-                ctx.globalAlpha = 0.9; ctx.fillStyle = '#0a0c16'; 
-                ctx.beginPath();
-                if(ctx.roundRect) ctx.roundRect(boxX, boxY, textW + padding*2, textH + padding, 6);
-                else ctx.rect(boxX, boxY, textW + padding*2, textH + padding);
-                ctx.fill();
-                
-                let strokeColor = safeHex(n.color);
-                if (isPathNode || isPathfindingNode) strokeColor = '#00ffff';
-                if (isPathStart) strokeColor = '#ffff00';
-                
-                ctx.strokeStyle = strokeColor;
-                ctx.lineWidth = ((isPathNode || isPathfindingNode || isPathStart || (isHVT && n.hvtScore > 0.6)) ? 2 : 1) / Math.sqrt(p.scale);
-                ctx.stroke();
-                ctx.globalAlpha = 1.0; ctx.fillStyle = '#ffffff';
-                ctx.fillText(label, n.x, boxY + textH/2 + padding/2);
+            const baseFontSize = (isPathNode || isPathfindingNode || isPathStart || (isHVT && hvtScore > 0.6) ? 16 : 13);
+            let fontSize = baseFontSize / Math.sqrt(p.scale);
+            if (n.type === TYPES.PERSON && p.scale < 1) {
+                const boost = Math.min(0.5, (1 - p.scale) * 0.6);
+                fontSize *= (1 + boost);
             }
+            ctx.font = `600 ${fontSize}px "Rajdhani", sans-serif`;
+            const label = n.name;
+            const metrics = ctx.measureText(label);
+            const textW = metrics.width;
+            const textH = fontSize * 1.4;
+            const padding = 6 / Math.sqrt(p.scale);
+            const boxX = n.x - textW / 2 - padding;
+            const boxY = n.y + rad + 6 / Math.sqrt(p.scale);
+            const boxW = textW + padding * 2;
+            const boxH = textH + padding;
+
+            let priority = 0;
+            if (isSelected) priority += 100;
+            if (isHover) priority += 90;
+            if (isPathNode || isPathfindingNode || isPathStart) priority += 80;
+            if (hvtScore > 0.6) priority += 60;
+            priority += Math.min(30, Math.round(hvtScore * 30));
+            priority += Math.min(20, degree);
+            if (isImportant) priority += 10;
+
+            candidates.push({
+                n, label, boxX, boxY, boxW, boxH,
+                fontSize, rad, priority,
+                isPathNode, isPathfindingNode, isPathStart
+            });
+        }
+
+        candidates.sort((a, b) => b.priority - a.priority);
+
+        const overlaps = (a, b) => !(a.x + a.w < b.x || b.x + b.w < a.x || a.y + a.h < b.y || b.y + b.h < a.y);
+
+        for (const c of candidates) {
+            const rect = { x: c.boxX, y: c.boxY, w: c.boxW, h: c.boxH };
+            const mustDraw = c.priority >= 90;
+            let collide = false;
+            if (!mustDraw) {
+                for (const r of drawnBoxes) {
+                    if (overlaps(rect, r)) { collide = true; break; }
+                }
+            }
+            if (collide) continue;
+            drawnBoxes.push(rect);
+
+            ctx.globalAlpha = 0.9; ctx.fillStyle = '#0a0c16'; 
+            ctx.beginPath();
+            if(ctx.roundRect) ctx.roundRect(c.boxX, c.boxY, c.boxW, c.boxH, 6);
+            else ctx.rect(c.boxX, c.boxY, c.boxW, c.boxH);
+            ctx.fill();
+            
+            let strokeColor = safeHex(c.n.color);
+            if (c.isPathNode || c.isPathfindingNode) strokeColor = '#00ffff';
+            if (c.isPathStart) strokeColor = '#ffff00';
+            
+            ctx.strokeStyle = strokeColor;
+            ctx.lineWidth = ((c.isPathNode || c.isPathfindingNode || c.isPathStart || (isHVT && (c.n.hvtScore || 0) > 0.6)) ? 2 : 1) / Math.sqrt(p.scale);
+            ctx.stroke();
+            ctx.globalAlpha = 1.0; ctx.fillStyle = '#ffffff';
+            ctx.font = `600 ${c.fontSize}px "Rajdhani", sans-serif`;
+            ctx.fillText(c.label, c.n.x, c.boxY + (c.boxH / 2));
         }
     }
     ctx.restore();
