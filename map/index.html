@@ -62,7 +62,7 @@
         @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; text-shadow: 0 0 15px #73fbf7; } 100% { opacity: 0.5; } }
     </style>
 </head>
-<body class="labels-auto">
+<body class="labels-auto app-loading">
 
     <div id="app-loader">
         <div class="loader-text">Initialisation Tactical Map...</div>
@@ -483,14 +483,15 @@
             function applyHelpVisibilityState() {
                 const hiddenBySetting = !isGlobalHelpEnabled();
                 const hiddenBySession = dismissedForSession;
-                const hideWrap = hiddenBySession;
+                const canRenderHelp = ready;
+                const hideWrap = hiddenBySession || !canRenderHelp;
                 if (helpFabWrap) {
                     helpFabWrap.classList.toggle('hidden', hideWrap);
-                    helpFabWrap.classList.toggle('settings-only', hiddenBySetting && !hideWrap);
+                    helpFabWrap.classList.toggle('settings-only', canRenderHelp && hiddenBySetting && !hiddenBySession);
                 }
-                document.body.classList.toggle('help-ready', !hiddenBySetting && !hiddenBySession);
-                if (hiddenBySetting || hiddenBySession) hideNudge(false);
-                if (hiddenBySetting || hideWrap) closeHelpSettings();
+                document.body.classList.toggle('help-ready', canRenderHelp && !hiddenBySetting && !hiddenBySession);
+                if (!canRenderHelp || hiddenBySetting || hiddenBySession) hideNudge(false);
+                if (!canRenderHelp || hiddenBySetting || hideWrap) closeHelpSettings();
                 updateResumeDot();
             }
 
@@ -729,6 +730,7 @@
             function onReady() {
                 if (ready) return;
                 ready = true;
+                document.body.classList.remove('app-loading');
                 applyHelpVisibilityState();
                 if (isHelpHidden()) return;
                 setTimeout(showNudge, 1200);

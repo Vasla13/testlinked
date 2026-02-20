@@ -268,8 +268,16 @@
     100% { box-shadow: 0 12px 32px rgba(0,0,0,0.45), 0 0 0 rgba(115, 251, 247, 0); }
 }
 @keyframes helpTargetPulse {
-    0% { box-shadow: 0 0 0 0 rgba(115, 251, 247, 0.24), 0 0 24px rgba(115, 251, 247, 0.28); }
-    100% { box-shadow: 0 0 0 10px rgba(115, 251, 247, 0), 0 0 34px rgba(115, 251, 247, 0.4); }
+    0% { opacity: 0.9; transform: scale(1); }
+    100% { opacity: 0; transform: scale(1.045); }
+}
+body.app-loading .help-fab-wrap,
+body.app-loading .help-nudge,
+body.app-loading .help-settings-popover,
+body.app-loading .help-overlay {
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
 }
 .help-fab-wrap {
     position: fixed;
@@ -374,6 +382,9 @@ body.help-active .help-fab {
 }
 .help-fab-control-text {
     white-space: nowrap;
+}
+.help-fab-dismiss {
+    display: none;
 }
 .help-settings-popover {
     position: fixed;
@@ -548,8 +559,8 @@ body.help-active .help-fab {
     inset: 0;
     z-index: 13000;
     isolation: isolate;
-    background: rgba(4, 8, 14, 0.78);
-    backdrop-filter: blur(3px);
+    background: rgba(4, 8, 14, 0.28);
+    backdrop-filter: none;
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.25s ease;
@@ -764,12 +775,20 @@ body.help-active .help-fab {
 }
 .help-highlight {
     position: relative;
-    z-index: 12900;
+    z-index: 13001;
     pointer-events: none;
     outline: 3px solid rgba(115, 251, 247, 0.95);
     outline-offset: 4px;
     box-shadow: 0 0 0 6px rgba(115, 251, 247, 0.18), 0 0 34px rgba(115, 251, 247, 0.48);
     border-radius: 12px;
+}
+.help-highlight::after {
+    content: '';
+    position: absolute;
+    inset: -6px;
+    border-radius: 14px;
+    border: 2px solid rgba(115, 251, 247, 0.55);
+    pointer-events: none;
     animation: helpTargetPulse 1.4s ease-out infinite;
 }
 @media (max-width: 768px) {
@@ -805,7 +824,7 @@ body.help-active .help-fab {
   </style>
 </head>
 
-<body>
+<body class="app-loading">
 
   <div id="app-loader">
     <div class="loader-text">Initialisation Neural Link...</div>
@@ -1095,11 +1114,12 @@ body.help-active .help-fab {
       function applyHelpVisibilityState() {
         const hiddenBySetting = !isGlobalHelpEnabled();
         const hiddenBySession = dismissedForSession;
-        const hideWrap = hiddenBySession || hiddenBySetting;
+        const canRenderHelp = ready;
+        const hideWrap = hiddenBySession || hiddenBySetting || !canRenderHelp;
         if (helpFabWrap) {
           helpFabWrap.classList.toggle('hidden', hideWrap);
         }
-        document.body.classList.toggle('help-ready', !hideWrap);
+        document.body.classList.toggle('help-ready', canRenderHelp && !hideWrap);
         if (hideWrap) hideNudge(false);
         updateResumeDot();
       }
@@ -1338,6 +1358,7 @@ body.help-active .help-fab {
       function onReady() {
         if (ready) return;
         ready = true;
+        document.body.classList.remove('app-loading');
         applyHelpVisibilityState();
         if (isHelpHidden()) return;
         setTimeout(showNudge, 1200);

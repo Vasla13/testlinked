@@ -10,7 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Rajdhani:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="app-loading">
 
     <div id="boot-layer">
         <div class="boot-head">
@@ -58,12 +58,6 @@
                     <span>100%</span>
                     <div class="batt-icon"><div class="batt-fill"></div></div>
                 </div>
-                <button id="btn-video-help" class="hud-video-btn" type="button" aria-label="Voir le tutoriel vidéo">
-                    <span class="hud-video-icon-wrap" aria-hidden="true">
-                        <img class="hud-video-icon" src="aide.png" alt="">
-                    </span>
-                    <span class="hud-video-label">Lancer le tutoriel</span>
-                </button>
             </div>
         </div>
 
@@ -117,6 +111,10 @@
             <span class="help-resume-dot" id="help-resume-dot" aria-hidden="true"></span>
         </button>
         <div class="help-fab-controls" aria-label="Commandes aide">
+            <button id="btn-video-help" class="help-fab-video" type="button" aria-label="Voir le tutoriel video">
+                <span class="help-fab-control-icon" aria-hidden="true">▶</span>
+                <span class="help-fab-control-text">Tuto video</span>
+            </button>
             <button class="help-fab-dismiss" id="help-fab-dismiss" type="button" aria-label="Masquer l'aide pour cette session">
                 <span class="help-fab-control-icon" aria-hidden="true">-</span>
                 <span class="help-fab-control-text">Masquer</span>
@@ -535,14 +533,15 @@
                 function applyHelpVisibilityState() {
                     const hiddenBySetting = !isGlobalHelpEnabled();
                     const hiddenBySession = dismissedForSession;
-                    const hideWrap = hiddenBySession;
+                    const canRenderHelp = ready;
+                    const hideWrap = hiddenBySession || !canRenderHelp;
                     if (helpFabWrap) {
                         helpFabWrap.classList.toggle('hidden', hideWrap);
-                        helpFabWrap.classList.toggle('settings-only', hiddenBySetting && !hideWrap);
+                        helpFabWrap.classList.toggle('settings-only', canRenderHelp && hiddenBySetting && !hiddenBySession);
                     }
-                    document.body.classList.toggle('help-ready', !hiddenBySetting && !hiddenBySession);
-                    if (hiddenBySetting || hiddenBySession) hideNudge(false);
-                    if (hiddenBySetting || hideWrap) closeHelpSettings();
+                    document.body.classList.toggle('help-ready', canRenderHelp && !hiddenBySetting && !hiddenBySession);
+                    if (!canRenderHelp || hiddenBySetting || hiddenBySession) hideNudge(false);
+                    if (!canRenderHelp || hiddenBySetting || hideWrap) closeHelpSettings();
                     updateResumeDot();
                 }
 
@@ -781,6 +780,7 @@
                 function onReady() {
                     if (ready) return;
                     ready = true;
+                    document.body.classList.remove('app-loading');
                     applyHelpVisibilityState();
                     if (isHelpHidden()) return;
                     setTimeout(showNudge, 1200);

@@ -176,61 +176,18 @@ body {
 }
 .batt-icon { width: 24px; height: 12px; border: 2px solid var(--cyan); padding: 1px; }
 .batt-fill { width: 100%; height: 100%; background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
-.hud-video-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    position: fixed;
-    right: 20px;
-    bottom: max(10px, env(safe-area-inset-bottom));
-    z-index: 12640;
-    white-space: nowrap;
-    border: 1px solid rgba(115, 251, 247, 0.6);
-    background: linear-gradient(145deg, rgba(9, 21, 34, 0.96), rgba(12, 31, 46, 0.95));
-    color: #b9f9ff;
-    font-family: var(--font-ui);
-    font-size: 0.94rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    padding: 12px 18px 12px 10px;
-    min-width: 230px;
-    min-height: 62px;
-    border-radius: 999px;
-    cursor: pointer;
-    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45), 0 0 0 rgba(115, 251, 247, 0);
-}
-.hud-video-icon-wrap {
-    width: 36px;
-    height: 36px;
-    border-radius: 999px;
-    display: grid;
-    place-items: center;
-    border: 1px solid rgba(115, 251, 247, 0.45);
-    background: radial-gradient(circle at 30% 30%, rgba(26, 52, 70, 0.95), rgba(8, 18, 30, 0.95));
-}
-.hud-video-icon {
-    width: 24px;
-    height: 24px;
-    border-radius: 999px;
-    object-fit: cover;
-    filter: drop-shadow(0 0 5px rgba(115, 251, 247, 0.4));
-}
-.hud-video-label {
-    line-height: 1;
-    font-size: 0.94rem;
-}
-.hud-video-btn:hover {
-    transform: translateY(-2px) scale(1.01);
-    border-color: rgba(115, 251, 247, 0.96);
-    box-shadow: 0 10px 24px rgba(0,0,0,0.55), 0 0 16px rgba(115, 251, 247, 0.35);
-    background: linear-gradient(145deg, rgba(12, 30, 46, 0.98), rgba(17, 39, 58, 0.96));
-}
 
 body.video-help-active {
     overflow: hidden;
+}
+
+body.app-loading .help-fab-wrap,
+body.app-loading .help-nudge,
+body.app-loading .help-settings-popover,
+body.app-loading .help-overlay {
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
 }
 .video-help-overlay {
     position: fixed;
@@ -408,8 +365,8 @@ body.video-help-active {
     100% { box-shadow: 0 12px 32px rgba(0,0,0,0.45), 0 0 0 rgba(115, 251, 247, 0); }
 }
 @keyframes helpTargetPulse {
-    0% { box-shadow: 0 0 0 0 rgba(115, 251, 247, 0.24), 0 0 24px rgba(115, 251, 247, 0.28); }
-    100% { box-shadow: 0 0 0 10px rgba(115, 251, 247, 0), 0 0 34px rgba(115, 251, 247, 0.4); }
+    0% { opacity: 0.9; transform: scale(1); }
+    100% { opacity: 0; transform: scale(1.045); }
 }
 .help-fab-wrap {
     position: fixed;
@@ -474,7 +431,8 @@ body.help-active .help-fab {
     gap: 8px;
 }
 .help-fab-dismiss,
-.help-fab-settings {
+.help-fab-settings,
+.help-fab-video {
     min-height: 34px;
     padding: 0 12px;
     border-radius: 999px;
@@ -502,8 +460,14 @@ body.help-active .help-fab {
 .help-fab-settings {
     color: var(--accent-cyan, var(--cyan));
 }
+.help-fab-video {
+    color: #bfeffb;
+    border-color: rgba(115, 251, 247, 0.58);
+    background: linear-gradient(140deg, rgba(7, 24, 36, 0.95), rgba(10, 36, 52, 0.92));
+}
 .help-fab-dismiss:hover,
-.help-fab-settings:hover {
+.help-fab-settings:hover,
+.help-fab-video:hover {
     transform: translateY(-1px);
     border-color: rgba(115, 251, 247, 0.78);
     box-shadow: 0 11px 24px rgba(0,0,0,0.56);
@@ -514,6 +478,9 @@ body.help-active .help-fab {
 }
 .help-fab-control-text {
     white-space: nowrap;
+}
+.help-fab-dismiss {
+    display: none;
 }
 .help-settings-popover {
     position: fixed;
@@ -688,8 +655,8 @@ body.help-active .help-fab {
     inset: 0;
     z-index: 13000;
     isolation: isolate;
-    background: rgba(4, 8, 14, 0.78);
-    backdrop-filter: blur(3px);
+    background: rgba(4, 8, 14, 0.28);
+    backdrop-filter: none;
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.25s ease;
@@ -904,19 +871,28 @@ body.help-active .help-fab {
 }
 .help-highlight {
     position: relative;
-    z-index: 12900;
+    z-index: 13001;
     pointer-events: none;
     outline: 3px solid rgba(115, 251, 247, 0.95);
     outline-offset: 4px;
     box-shadow: 0 0 0 6px rgba(115, 251, 247, 0.18), 0 0 34px rgba(115, 251, 247, 0.48);
     border-radius: 12px;
+}
+.help-highlight::after {
+    content: '';
+    position: absolute;
+    inset: -6px;
+    border-radius: 14px;
+    border: 2px solid rgba(115, 251, 247, 0.55);
+    pointer-events: none;
     animation: helpTargetPulse 1.4s ease-out infinite;
 }
 @media (max-width: 768px) {
     .help-fab-wrap { right: 16px; bottom: 16px; gap: 8px; }
     .help-fab-controls { gap: 6px; }
     .help-fab-dismiss,
-    .help-fab-settings {
+    .help-fab-settings,
+    .help-fab-video {
         min-height: 32px;
         padding: 0 10px;
         font-size: 0.58rem;
@@ -964,16 +940,6 @@ body.help-active .help-fab {
     .top-hud { padding: 8px 12px; }
     .hud-group { gap: 8px; }
     .hud-group-right { margin-left: auto; }
-    .hud-video-btn {
-        right: 16px;
-        bottom: max(8px, env(safe-area-inset-bottom));
-        min-width: 196px;
-        min-height: 56px;
-        font-size: 0.86rem;
-        padding: 10px 14px 10px 9px;
-    }
-    .hud-video-icon-wrap { width: 30px; height: 30px; }
-    .hud-video-icon { width: 20px; height: 20px; }
     .video-help-overlay { padding: 10px; }
     .video-help-modal { padding: 12px; border-radius: 12px; }
     .video-help-header h3 { font-size: 1rem; }
@@ -981,7 +947,8 @@ body.help-active .help-fab {
     .help-fab-wrap { right: 16px; bottom: 16px; gap: 8px; }
     .help-fab-controls { gap: 6px; }
     .help-fab-dismiss,
-    .help-fab-settings {
+    .help-fab-settings,
+    .help-fab-video {
         min-height: 32px;
         padding: 0 10px;
         font-size: 0.58rem;
@@ -1005,18 +972,5 @@ body.help-active .help-fab {
         transform: none;
     }
     .help-overlay.is-mobile .help-panel::after { display: none; }
-}
-
-@media (max-width: 560px) {
-    .hud-video-btn {
-        min-width: 170px;
-        min-height: 50px;
-        font-size: 0.8rem;
-        padding: 9px 12px 9px 8px;
-        gap: 6px;
-    }
-    .hud-video-icon-wrap { width: 28px; height: 28px; }
-    .hud-video-icon { width: 18px; height: 18px; }
-    .hud-video-label { font-size: 0.82rem; }
 }
 
