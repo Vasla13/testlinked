@@ -133,6 +133,24 @@
     map: document.getElementById('panel-map')
   };
   const globalStatus = document.getElementById('global-status');
+  const API_KEY_STORAGE_KEY = 'bniLinkedApiKey';
+
+  function getApiKey() {
+    const fromWindow = (typeof window.BNI_LINKED_KEY === 'string') ? window.BNI_LINKED_KEY.trim() : '';
+    if (fromWindow) return fromWindow;
+    try {
+      const fromStorage = localStorage.getItem(API_KEY_STORAGE_KEY);
+      if (fromStorage && fromStorage.trim()) return fromStorage.trim();
+    } catch (e) {}
+    return '';
+  }
+
+  function withApiKey(headers = {}) {
+    const merged = { ...headers };
+    const key = getApiKey();
+    if (key) merged['x-api-key'] = key;
+    return merged;
+  }
 
   tabs.forEach(btn => {
     btn.addEventListener('click', () => {
@@ -167,7 +185,10 @@
   // --- API CLIENT ---
 
   async function apiList(page) {
-    const res = await fetch(`/.netlify/functions/db-list?page=${encodeURIComponent(page)}&limit=50`);
+    const res = await fetch(
+      `/.netlify/functions/db-list?page=${encodeURIComponent(page)}&limit=50`,
+      { headers: withApiKey() }
+    );
     if (!res.ok) throw new Error('Erreur réseau');
     const out = await res.json();
     if (!out.ok) throw new Error(out.error || 'Erreur API');
@@ -175,7 +196,10 @@
   }
 
   async function apiGet(key) {
-    const res = await fetch(`/.netlify/functions/db-get?key=${encodeURIComponent(key)}`);
+    const res = await fetch(
+      `/.netlify/functions/db-get?key=${encodeURIComponent(key)}`,
+      { headers: withApiKey() }
+    );
     if (!res.ok) throw new Error('Erreur récupération');
     return await res.json();
   }
@@ -183,7 +207,7 @@
   async function apiDelete(key) {
     const res = await fetch(`/.netlify/functions/db-delete`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: withApiKey({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ key })
     });
     const out = await res.json().catch(()=>({ok:false}));

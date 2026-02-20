@@ -1,4 +1,4 @@
-import { state, generateID } from './state.js';
+import { state, generateID, saveLocalState, pushHistory } from './state.js';
 import { renderAll, getMapPercentCoords } from './render.js';
 import { selectItem, renderGroupsList } from './ui.js'; // Import de renderGroupsList pour mettre à jour l'UI
 import { customAlert } from './ui-modals.js';
@@ -7,10 +7,6 @@ import { customAlert } from './ui-modals.js';
 
 export function startDrawingCircle(groupIndex) {
     setupDrawingMode('CIRCLE', groupIndex, "MODE CERCLE: Cliquez + Glissez pour le rayon");
-}
-
-export function startDrawingPolygon(groupIndex) {
-    setupDrawingMode('POLYGON', groupIndex, "MODE POLYGONE: Clic Gauche = Point, Clic Droit = Finir");
 }
 
 // Mode Dessin Libre
@@ -164,9 +160,18 @@ export function handleMapMouseMove(e) {
         const item = state.draggingItem;
         const group = state.groups[item.groupIndex];
         const zone = group.zones[item.zoneIndex];
+        if (!group || !zone) return;
         
         const deltaX = coords.x - item.startMouseMap.x;
         const deltaY = coords.y - item.startMouseMap.y;
+        const movedEnough = (deltaX * deltaX + deltaY * deltaY) > 0.00001;
+
+        if (!item.hasMoved && movedEnough) {
+            pushHistory();
+            item.hasMoved = true;
+        }
+
+        if (!item.hasMoved) return;
 
         if (zone.type === 'CIRCLE') {
             zone.cx = item.origCx + deltaX;
@@ -208,6 +213,10 @@ export function handleMapMouseUp(e) {
 
     // 3. FIN DU DRAG (On libère l'objet)
     if (state.draggingItem) {
+        if (state.draggingItem.hasMoved) {
+            saveLocalState();
+            renderGroupsList();
+        }
         state.draggingItem = null;
     }
 }
@@ -217,6 +226,7 @@ export function handleMapMouseUp(e) {
 function confirmDrawing() {
     const group = state.groups[state.drawingGroupIndex];
     if (group) {
+        pushHistory();
         group.zones.push({
             id: generateID(),
             name: "Zone " + (group.zones.length + 1),
@@ -228,6 +238,7 @@ function confirmDrawing() {
         
         // Mise à jour de la liste latérale (Compteur + Accordéon)
         renderGroupsList();
+        saveLocalState();
     }
     stopDrawing();
 }
@@ -269,10 +280,15 @@ function smoothDrawing() {
 // --- FINALISATION ---
 
 function finishCircle() {
-    if (state.tempZone.r < 0.2) { /* trop petit */ }
+    if (state.tempZone.r < 0.2) {
+        customAlert("INFO", "Zone trop petite.");
+        stopDrawing();
+        return;
+    }
     
     const group = state.groups[state.drawingGroupIndex];
     if (group) {
+        pushHistory();
         group.zones.push({
             id: generateID(),
             name: "Zone " + (group.zones.length + 1),
@@ -286,6 +302,7 @@ function finishCircle() {
         
         // Mise à jour de la liste latérale
         renderGroupsList();
+        saveLocalState();
     }
     stopDrawing();
 }
@@ -319,6 +336,7 @@ export function handleZoneMouseDown(e, gIndex, zIndex) {
         groupIndex: gIndex,
         zoneIndex: zIndex,
         startMouseMap: coords,
+        hasMoved: false,
         origCx: zone.cx || 0,
         origCy: zone.cy || 0,
         origPoints: zone.points ? JSON.parse(JSON.stringify(zone.points)) : []

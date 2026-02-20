@@ -69,7 +69,6 @@ export function draw() {
     const h = canvas.height / r;
     
     const isFocus = state.focusMode;
-    const isPath = state.pathMode;
     const isHVT = state.hvtMode; 
     const topSet = (isHVT && state.hvtTopN > 0 && state.hvtTopIds && state.hvtTopIds.size) ? state.hvtTopIds : null;
     const showTypes = state.showLinkTypes; 
@@ -354,7 +353,7 @@ export function draw() {
         
         const dimmed = isDimmed('node', n);
         let rad = nodeRadius(n); 
-        let alpha = (isPath && state.pathPath.has(n.id)) ? 1.0 : (dimmed ? 0.4 : 1.0);
+        let alpha = dimmed ? 0.4 : 1.0;
         let nodeColor = safeHex(n.color);
         const isTop = topSet ? topSet.has(n.id) : true;
         
@@ -385,15 +384,14 @@ export function draw() {
 
         ctx.fillStyle = nodeColor;
         
-        const isPathNode = isPath && state.pathPath.has(n.id);
         const isPathfindingNode = state.pathfinding.active && state.pathfinding.pathNodes.has(n.id);
         const isPathStart = state.pathfinding.startId === n.id;
 
         // Gestion Contour
-        if (state.selection === n.id || state.hoverId === n.id || isPathNode || isPathfindingNode || isPathStart) {
+        if (state.selection === n.id || state.hoverId === n.id || isPathfindingNode || isPathStart) {
             ctx.shadowBlur = 20; 
             let strokeColor = '#ffffff';
-            if (isPathNode || isPathfindingNode) strokeColor = '#00ffff';
+            if (isPathfindingNode) strokeColor = '#00ffff';
             if (isPathStart) strokeColor = '#ffff00';
             ctx.shadowColor = strokeColor;
             ctx.strokeStyle = strokeColor;
@@ -446,7 +444,6 @@ export function draw() {
             if (dimmed) continue;
             
             const isImportant = (n.type === TYPES.COMPANY || n.type === TYPES.GROUP);
-            const isPathNode = isPath && state.pathPath.has(n.id);
             const isPathfindingNode = state.pathfinding.active && state.pathfinding.pathNodes.has(n.id);
             const isHover = (state.hoverId === n.id);
             const isSelected = (state.selection === n.id);
@@ -457,7 +454,7 @@ export function draw() {
             let showName = false;
             if (labelMode === 2) showName = true;
             else if (labelMode === 1) {
-                showName = isSelected || isHover || isPathNode || isPathfindingNode || isPathStart;
+                showName = isSelected || isHover || isPathfindingNode || isPathStart;
                 if (!showName) showName = (hvtScore > 0.55) || (degree > 6) || (isImportant && p.scale > 0.45) || (p.scale > 0.7);
             }
             
@@ -466,7 +463,7 @@ export function draw() {
 
             if (!showName) continue;
 
-            const baseFontSize = (isPathNode || isPathfindingNode || isPathStart || (isHVT && hvtScore > 0.6) ? 16 : 13);
+            const baseFontSize = (isPathfindingNode || isPathStart || (isHVT && hvtScore > 0.6) ? 16 : 13);
             let fontSize = baseFontSize / Math.sqrt(p.scale);
             if (n.type === TYPES.PERSON && p.scale < 1) {
                 const boost = Math.min(0.5, (1 - p.scale) * 0.6);
@@ -486,7 +483,7 @@ export function draw() {
             let priority = 0;
             if (isSelected) priority += 100;
             if (isHover) priority += 90;
-            if (isPathNode || isPathfindingNode || isPathStart) priority += 80;
+            if (isPathfindingNode || isPathStart) priority += 80;
             if (hvtScore > 0.6) priority += 60;
             priority += Math.min(30, Math.round(hvtScore * 30));
             priority += Math.min(20, degree);
@@ -495,7 +492,7 @@ export function draw() {
             candidates.push({
                 n, label, boxX, boxY, boxW, boxH,
                 fontSize, rad, priority,
-                isPathNode, isPathfindingNode, isPathStart
+                isPathfindingNode, isPathStart
             });
         }
 
@@ -522,11 +519,11 @@ export function draw() {
             ctx.fill();
             
             let strokeColor = safeHex(c.n.color);
-            if (c.isPathNode || c.isPathfindingNode) strokeColor = '#00ffff';
+            if (c.isPathfindingNode) strokeColor = '#00ffff';
             if (c.isPathStart) strokeColor = '#ffff00';
             
             ctx.strokeStyle = strokeColor;
-            ctx.lineWidth = ((c.isPathNode || c.isPathfindingNode || c.isPathStart || (isHVT && (c.n.hvtScore || 0) > 0.6)) ? 2 : 1) / Math.sqrt(p.scale);
+            ctx.lineWidth = ((c.isPathfindingNode || c.isPathStart || (isHVT && (c.n.hvtScore || 0) > 0.6)) ? 2 : 1) / Math.sqrt(p.scale);
             ctx.stroke();
             ctx.globalAlpha = 1.0; ctx.fillStyle = '#ffffff';
             ctx.font = `600 ${c.fontSize}px "Rajdhani", sans-serif`;

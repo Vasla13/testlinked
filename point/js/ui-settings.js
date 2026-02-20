@@ -7,6 +7,29 @@ import { selectNode, renderEditor, updatePathfindingPanel, refreshLists, showCus
 
 let settingsPanel = null;
 let contextMenu = null;
+const HELP_ENABLED_STORAGE_KEY = 'bni-help-enabled';
+const HELP_SETTING_EVENT = 'bni:help-setting-changed';
+
+function isHelpEnabled() {
+    try {
+        const stored = localStorage.getItem(HELP_ENABLED_STORAGE_KEY);
+        if (stored === null) {
+            localStorage.setItem(HELP_ENABLED_STORAGE_KEY, '1');
+            return true;
+        }
+        return stored !== '0';
+    } catch (e) {
+        return true;
+    }
+}
+
+function setHelpEnabled(value) {
+    const enabled = Boolean(value);
+    try {
+        localStorage.setItem(HELP_ENABLED_STORAGE_KEY, enabled ? '1' : '0');
+    } catch (e) {}
+    window.dispatchEvent(new CustomEvent(HELP_SETTING_EVENT, { detail: { enabled } }));
+}
 
 // --- GESTION DU PANNEAU REGLAGES ---
 export function showSettings() {
@@ -42,6 +65,16 @@ function createSettingsPanel() {
             </label>
         </div>
 
+        <div style="background:rgba(255,255,255,0.05); padding:10px; border-radius:6px; margin-bottom:15px; display:flex; align-items:center; justify-content:space-between;">
+            <div style="display:flex; align-items:center; gap:10px; color:#fff; font-weight:bold;">
+                <span style="font-size:1.1rem;">🧭</span> <span>Aide guidée globale</span>
+            </div>
+            <label class="hud-toggle">
+                <input type="checkbox" id="chkHelpEnabled" checked/>
+                <div class="toggle-track"><div class="toggle-thumb"></div></div>
+            </label>
+        </div>
+
         <div class="setting-row"><label>Répulsion Globale <span id="val-repulsion" class="setting-val"></span></label><input type="range" id="sl-repulsion" min="100" max="5000" step="50"></div>
         <div class="setting-row"><label>Force Repousse Ennemis <span id="val-enemyForce" class="setting-val"></span></label><input type="range" id="sl-enemyForce" min="50" max="1000" step="10"></div>
         <div class="setting-row"><label>Force Repousse Entreprise <span id="val-structureRepulsion" class="setting-val"></span></label><input type="range" id="sl-structureRepulsion" min="0.01" max="0.5" step="0.01"></div>
@@ -65,6 +98,7 @@ function createSettingsPanel() {
     // Listeners
     document.getElementById('btnCloseSettings').onclick = () => { settingsPanel.style.display = 'none'; };
     document.getElementById('chkGlobeInner').onchange = (e) => { state.globeMode = e.target.checked; restartSim(); scheduleSave(); };
+    document.getElementById('chkHelpEnabled').onchange = (e) => { setHelpEnabled(e.target.checked); };
     document.getElementById('btnResetPhysics').onclick = resetPhysicsDefaults;
 
     bindSlider('sl-repulsion', 'repulsion');
@@ -113,6 +147,9 @@ function updateSettingsUI() {
     
     const globe = document.getElementById('chkGlobeInner');
     if(globe) globe.checked = state.globeMode;
+
+    const helpEnabled = document.getElementById('chkHelpEnabled');
+    if (helpEnabled) helpEnabled.checked = isHelpEnabled();
 
     const hvtSl = document.getElementById('sl-hvtTop');
     const hvtVal = document.getElementById('val-hvtTop');

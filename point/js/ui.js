@@ -25,6 +25,28 @@ let hvtSelectedId = null;
 let intelPanel = null;
 let intelSuggestions = [];
 const INTEL_ACCESS_CODE = 'bni-dutch';
+const API_KEY_STORAGE_KEY = 'bniLinkedApiKey';
+
+function getApiKey() {
+    const fromWindow = (typeof window !== 'undefined' && typeof window.BNI_LINKED_KEY === 'string')
+        ? window.BNI_LINKED_KEY.trim()
+        : '';
+    if (fromWindow) return fromWindow;
+
+    try {
+        const fromStorage = localStorage.getItem(API_KEY_STORAGE_KEY);
+        if (fromStorage && fromStorage.trim()) return fromStorage.trim();
+    } catch (e) {}
+
+    return '';
+}
+
+function withApiKey(headers = {}) {
+    const merged = { ...headers };
+    const apiKey = getApiKey();
+    if (apiKey) merged['x-api-key'] = apiKey;
+    return merged;
+}
 
 function updateIntelButtonLockVisual() {
     const btn = document.getElementById('btnIntel');
@@ -307,6 +329,18 @@ function generateExportData() {
     };
 }
 
+function normalizeLinkEndpoint(value) {
+    if (value && typeof value === 'object') return String(value.id ?? '');
+    return String(value ?? '');
+}
+
+function linkSignature(sourceId, targetId, kind) {
+    const a = String(sourceId);
+    const b = String(targetId);
+    const pair = (a < b) ? `${a}|${b}` : `${b}|${a}`;
+    return `${pair}|${String(kind || '')}`;
+}
+
 function downloadJSON() {
     const data = generateExportData();
     const fileName = "fichier_neural.json";
@@ -325,7 +359,7 @@ function downloadJSON() {
     
     fetch('/.netlify/functions/db-add', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: withApiKey({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
             page: 'point',
             action: `export-${cleanName}`,
@@ -364,16 +398,101 @@ function processData(d, mode) {
         restartSim(); refreshLists(); showCustomAlert('OUVERTURE RÉUSSIE.');
     } 
     else if (mode === 'merge') {
+        const incomingNodes = Array.isArray(d.nodes) ? d.nodes : [];
+        const incomingLinks = Array.isArray(d.links) ? d.links : [];
+
         let addedNodes = 0;
-        d.nodes.forEach(n => {
-            if(!state.nodes.find(x => x.name.toLowerCase() === n.name.toLowerCase())) {
-                const newId = state.nextId++;
-                n.id = newId; n.x = (Math.random()-0.5)*100; n.y = (Math.random()-0.5)*100;
-                state.nodes.push(n); addedNodes++;
+        let addedLinks = 0;
+
+        const idMap = new Map();
+        const nodesByName = new Map(
+            state.nodes
+                .filter(n => n && typeof n.name === 'string')
+                .map(n => [n.name.trim().toLowerCase(), n])
+        );
+
+        incomingNodes.forEach((rawNode) => {
+            if (!rawNode || typeof rawNode.name !== 'string') return;
+            const safeName = rawNode.name.trim();
+            if (!safeName) return;
+
+            const key = safeName.toLowerCase();
+            const existing = nodesByName.get(key);
+            const rawId = String(rawNode.id ?? '');
+
+            if (existing) {
+                if (rawId) idMap.set(rawId, existing.id);
+                return;
             }
+
+            const newId = state.nextId++;
+            const cloned = {
+                ...rawNode,
+                id: newId,
+                name: safeName,
+                x: (Math.random() - 0.5) * 100,
+                y: (Math.random() - 0.5) * 100
+            };
+
+            state.nodes.push(cloned);
+            nodesByName.set(key, cloned);
+            if (rawId) idMap.set(rawId, newId);
+            addedNodes++;
         });
+
+        const existingLinkSigs = new Set(
+            state.links.map(l => linkSignature(
+                normalizeLinkEndpoint(l.source),
+                normalizeLinkEndpoint(l.target),
+                l.kind
+            ))
+        );
+        const existingLinkIds = new Set(state.links.map(l => String(l.id)));
+
+        incomingLinks.forEach((rawLink) => {
+            if (!rawLink) return;
+
+            const sourceRaw = normalizeLinkEndpoint(rawLink.source ?? rawLink.from);
+            const targetRaw = normalizeLinkEndpoint(rawLink.target ?? rawLink.to);
+            if (!sourceRaw || !targetRaw) return;
+
+            const mappedSource = idMap.get(sourceRaw) ?? sourceRaw;
+            const mappedTarget = idMap.get(targetRaw) ?? targetRaw;
+            if (!mappedSource || !mappedTarget) return;
+            if (String(mappedSource) === String(mappedTarget)) return;
+
+            const sourceExists = state.nodes.some(n => String(n.id) === String(mappedSource));
+            const targetExists = state.nodes.some(n => String(n.id) === String(mappedTarget));
+            if (!sourceExists || !targetExists) return;
+
+            const kind = rawLink.kind || 'relation';
+            const sig = linkSignature(mappedSource, mappedTarget, kind);
+            if (existingLinkSigs.has(sig)) return;
+
+            let nextId = String(rawLink.id ?? '');
+            if (!nextId || existingLinkIds.has(nextId)) {
+                do {
+                    nextId = `link_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+                } while (existingLinkIds.has(nextId));
+            }
+
+            state.links.push({
+                id: nextId,
+                source: mappedSource,
+                target: mappedTarget,
+                kind
+            });
+
+            existingLinkIds.add(nextId);
+            existingLinkSigs.add(sig);
+            addedLinks++;
+        });
+
+        ensureLinkIds();
         updatePersonColors();
-        restartSim(); refreshLists(); showCustomAlert(`FUSION : ${addedNodes} NOUVEAUX ÉLÉMENTS.`);
+        restartSim();
+        refreshLists();
+        showCustomAlert(`FUSION : ${addedNodes} NOUVEAUX ÉLÉMENTS, ${addedLinks} NOUVEAUX LIENS.`);
     }
     saveState();
 }

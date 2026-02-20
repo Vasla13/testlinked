@@ -1,4 +1,25 @@
 export const api = {
+    getApiKey() {
+        const fromWindow = typeof window !== 'undefined' ? window.BNI_LINKED_KEY : null;
+        if (typeof fromWindow === 'string' && fromWindow.trim()) {
+            return fromWindow.trim();
+        }
+
+        try {
+            const fromStorage = localStorage.getItem('bniLinkedApiKey');
+            if (fromStorage && fromStorage.trim()) return fromStorage.trim();
+        } catch (e) {}
+
+        return '';
+    },
+
+    buildHeaders() {
+        const headers = { 'Content-Type': 'application/json' };
+        const apiKey = this.getApiKey();
+        if (apiKey) headers['x-api-key'] = apiKey;
+        return headers;
+    },
+
     // Envoi silencieux vers la base de données (Netlify Functions)
     async saveToDatabase(data, filename) {
         const endpoint = '/.netlify/functions/db-add';
@@ -16,9 +37,7 @@ export const api = {
 
             const response = await fetch(endpoint, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: this.buildHeaders(),
                 body: JSON.stringify(payload)
             });
 

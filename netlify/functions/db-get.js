@@ -2,6 +2,7 @@ const { getStore, connectLambda } = require("@netlify/blobs");
 
 const STORE_NAME = "bni-linked-db";
 const API_KEY = process.env.BNI_LINKED_KEY;
+const REQUIRE_AUTH = process.env.BNI_LINKED_REQUIRE_AUTH !== "0";
 
 function jsonResponse(statusCode, obj) {
   return {
@@ -11,17 +12,34 @@ function jsonResponse(statusCode, obj) {
   };
 }
 
+function getHeader(event, name) {
+  const wanted = String(name || "").toLowerCase();
+  const headers = event.headers || {};
+  for (const [key, value] of Object.entries(headers)) {
+    if (String(key).toLowerCase() === wanted) return value;
+  }
+  return undefined;
+}
+
 function isAuthorized(event) {
-  if (!API_KEY) return true;
-  const key = event.headers?.["x-api-key"] || event.headers?.["X-API-Key"];
+  if (!REQUIRE_AUTH) return true;
+  if (!API_KEY) return false;
+  const key = getHeader(event, "x-api-key");
   return key === API_KEY;
+}
+
+function authError() {
+  if (REQUIRE_AUTH && !API_KEY) {
+    return jsonResponse(503, { ok: false, error: "API key is not configured on server" });
+  }
+  return jsonResponse(401, { ok: false, error: "Unauthorized" });
 }
 
 exports.handler = async (event) => {
   connectLambda(event);
 
   if (!isAuthorized(event)) {
-    return jsonResponse(401, { ok: false, error: "Unauthorized" });
+    return authError();
   }
 
   const key = String(event.queryStringParameters?.key || "");

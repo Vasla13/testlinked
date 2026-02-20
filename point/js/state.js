@@ -13,8 +13,6 @@ export const state = {
     hvtTopN: 10,
     hvtTopIds: new Set(),
     pathfinding: { startId: null, active: false, pathNodes: new Set(), pathLinks: new Set() },
-    pathMode: false,
-    pathPath: new Set(),
     activeFilter: 'ALL',
     globeMode: true,
     physicsSettings: {

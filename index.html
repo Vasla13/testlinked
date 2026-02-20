@@ -13,8 +13,18 @@
 <body>
 
     <div id="boot-layer">
+        <div class="boot-head">
+            <div class="boot-brand">BNI-LINKED // TACTICAL TABLET 2035</div>
+            <div class="boot-phase" id="boot-phase">SECURE STARTUP PROTOCOL</div>
+        </div>
+        <div class="boot-progress-track" aria-hidden="true">
+            <div class="boot-progress-fill" id="boot-progress"></div>
+        </div>
         <div id="boot-text"></div>
-        <span class="boot-cursor"></span>
+        <div class="boot-footer">
+            <span id="boot-meter">SYS CHECK 0%</span>
+            <span class="boot-cursor"></span>
+        </div>
     </div>
 
     <div id="bio-layer">
@@ -38,29 +48,35 @@
 
     <div id="tablet-interface">
         
-        <div class="top-hud">
-            <div class="hud-group">
+        <div class="top-hud" id="hud">
+            <div class="hud-group hud-group-left">
                 <div>BNI-OS v3.5.0</div>
             </div>
-            <div class="hud-group">
+            <div class="hud-group hud-group-right">
                 <div id="realtime-clock">--:--</div>
                 <div style="display:flex; align-items:center; gap:5px;">
                     <span>100%</span>
                     <div class="batt-icon"><div class="batt-fill"></div></div>
                 </div>
+                <button id="btn-video-help" class="hud-video-btn" type="button" aria-label="Voir le tutoriel vidéo">
+                    <span class="hud-video-icon-wrap" aria-hidden="true">
+                        <img class="hud-video-icon" src="aide.png" alt="">
+                    </span>
+                    <span class="hud-video-label">Lancer le tutoriel</span>
+                </button>
             </div>
         </div>
 
         <div class="main-content">
             
-            <header class="header-hero">
+            <header class="header-hero" id="hero">
                 <img src="map/logo-bni-linked.png" alt="BNI Logo" class="main-logo">
                 <div class="welcome-msg">BIENVENUE SUR LA TABLETTE BNI-LINKED</div>
             </header>
 
-            <nav class="modules-grid">
+            <nav class="modules-grid" id="modules">
                 
-                <a href="./point/" class="module-card mod-net">
+                <a href="./point/" class="module-card mod-net" id="module-reticule">
                     <div class="corner top-left"></div>
                     <div class="corner btm-right"></div>
                     <div class="card-icon">
@@ -70,7 +86,7 @@
                     <div class="card-desc">DATABASE & RÉSEAU</div>
                 </a>
 
-                <a href="./map/" class="module-card mod-map">
+                <a href="./map/" class="module-card mod-map" id="module-tactique">
                     <div class="corner top-left"></div>
                     <div class="corner btm-right"></div>
                     <div class="card-icon">
@@ -84,7 +100,7 @@
 
         </div>
 
-        <div class="footer-info">
+        <div class="footer-info" id="footer">
             LOGICIEL DE LA BNI // DEV: DUTCH COLEMAN
         </div>
     </div>
@@ -92,14 +108,112 @@
     <div class="crt-overlay"></div>
     <div class="vignette"></div>
 
+    <div class="help-fab-wrap" id="help-fab-wrap">
+        <button class="help-fab" id="help-fab" type="button" aria-label="Aide guidée">
+            <span class="help-fab-icon" aria-hidden="true">
+                <img class="help-mascot" src="aide.png" alt="" aria-hidden="true">
+            </span>
+            <span class="help-fab-text">Aide</span>
+            <span class="help-resume-dot" id="help-resume-dot" aria-hidden="true"></span>
+        </button>
+        <div class="help-fab-controls" aria-label="Commandes aide">
+            <button class="help-fab-dismiss" id="help-fab-dismiss" type="button" aria-label="Masquer l'aide pour cette session">
+                <span class="help-fab-control-icon" aria-hidden="true">-</span>
+                <span class="help-fab-control-text">Masquer</span>
+            </button>
+            <button class="help-fab-settings" id="help-fab-settings" type="button" aria-label="Paramètres d'aide">
+                <span class="help-fab-control-icon" aria-hidden="true">⚙</span>
+                <span class="help-fab-control-text">Paramètres</span>
+            </button>
+        </div>
+    </div>
+    <div class="help-settings-popover" id="help-settings-popover" aria-hidden="true">
+        <div class="help-settings-title">Paramètres d'aide</div>
+        <label class="help-settings-row" for="help-enabled-toggle">
+            <span>Aide globale</span>
+            <input id="help-enabled-toggle" type="checkbox" checked>
+        </label>
+        <p class="help-settings-note">OFF: aide masquée sur toutes les pages, même après rechargement.</p>
+    </div>
+
+    <div class="help-nudge" id="help-nudge" role="dialog" aria-live="polite">
+        <div class="help-nudge-avatar" aria-hidden="true">
+            <img class="help-mascot" src="aide.png" alt="" aria-hidden="true">
+        </div>
+        <div class="help-nudge-text">
+            <div class="help-nudge-title">Besoin d'aide ?</div>
+            <div class="help-nudge-desc">Tour express : prise en main en 60 secondes.</div>
+        </div>
+        <button class="help-nudge-cta" id="help-nudge-start" type="button">Démarrer</button>
+        <button class="help-nudge-close" id="help-nudge-close" type="button" aria-label="Fermer">×</button>
+    </div>
+
+    <div class="help-overlay" id="help-overlay" aria-hidden="true">
+        <div class="help-panel" id="help-panel" role="dialog" aria-modal="true" aria-labelledby="help-title">
+            <div class="help-panel-header">
+                <div class="help-avatar" aria-hidden="true">
+                    <img class="help-mascot" src="aide.png" alt="" aria-hidden="true">
+                </div>
+                <div class="help-progress">Étape <span id="help-step-index">1</span>/<span id="help-step-total">4</span></div>
+                <button class="help-close-icon" id="help-close-icon" type="button" aria-label="Quitter">×</button>
+            </div>
+            <div class="help-panel-body">
+                <div class="help-panel-main">
+                    <h3 id="help-title">Bienvenue</h3>
+                    <p id="help-text">Présentation de la tablette.</p>
+                    <div class="help-actions">
+                        <button class="help-btn secondary" id="help-prev" type="button">Précédent</button>
+                        <button class="help-btn primary" id="help-next" type="button">Suivant</button>
+                    </div>
+                    <div class="help-actions-secondary">
+                        <button class="help-link" id="help-video" type="button">Voir vidéo</button>
+                        <button class="help-link" id="help-pause" type="button">Reprendre plus tard</button>
+                        <button class="help-link" id="help-exit" type="button">Quitter</button>
+                    </div>
+                </div>
+                <aside class="help-steps">
+                    <div class="help-steps-title">Étapes</div>
+                    <div class="help-steps-list" id="help-steps-list"></div>
+                    <select class="help-steps-select" id="help-steps-select" aria-label="Aller à une étape"></select>
+                </aside>
+            </div>
+        </div>
+    </div>
+
+    <div class="video-help-overlay" id="video-help-overlay" aria-hidden="true">
+        <div class="video-help-modal" role="dialog" aria-modal="true" aria-labelledby="video-help-title">
+            <div class="video-help-header">
+                <div>
+                    <h3 id="video-help-title">Tutoriel BNI-LINKED</h3>
+                    <p class="video-help-sub">Prise en main complète de la tablette</p>
+                </div>
+                <button id="video-help-close" class="video-help-close" type="button" aria-label="Fermer la vidéo">×</button>
+            </div>
+            <video id="video-help-player" class="video-help-player" controls preload="metadata" playsinline>
+                <source src="bni-tuto.mp4" type="video/mp4">
+                Votre navigateur ne supporte pas la lecture vidéo.
+            </video>
+            <p class="video-help-tip">Astuce: passe en plein écran dans le lecteur pour suivre le tuto confortablement.</p>
+        </div>
+    </div>
+
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const bootLayer = document.getElementById('boot-layer');
             const bootText = document.getElementById('boot-text');
+            const bootPhase = document.getElementById('boot-phase');
+            const bootProgress = document.getElementById('boot-progress');
+            const bootMeter = document.getElementById('boot-meter');
             const bioLayer = document.getElementById('bio-layer');
             const bioStatus = document.getElementById('bio-status');
             const fingerprintSvg = document.getElementById('fingerprint-svg');
             const tabletInterface = document.getElementById('tablet-interface');
+            const videoHelpOverlay = document.getElementById('video-help-overlay');
+            const videoHelpBtn = document.getElementById('btn-video-help');
+            const videoHelpClose = document.getElementById('video-help-close');
+            const videoHelpPlayer = document.getElementById('video-help-player');
+            const videoHelp = initVideoHelp();
+            const help = initHelpTour();
 
             // Horloge Temps Réel
             setInterval(() => {
@@ -107,77 +221,735 @@
                 document.getElementById('realtime-clock').innerText = now.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
             }, 1000);
 
-            // --- SEQUENCE DE BOOT (LENTE ET RÉALISTE) ---
+            // --- SEQUENCE DE BOOT (CINEMATIQUE TABLETTE 2035) ---
+            const bootConfig = {
+                startDelay: 320,
+                minLineDelay: 110,
+                maxLineDelay: 260,
+                pauseBeforeBio: 620,
+                bootFadeOut: 380,
+                bioStep1: 320,
+                bioStep2: 1200,
+                bioStep3: 2300,
+                bioStep4: 3250,
+                unlockAfterAuth: 780,
+                bioFadeOut: 380
+            };
+
             const lines = [
-                "INITIALIZING BOOT SEQUENCE...",
-                "LOADING KERNEL v5.14.2...",
-                "[OK] CPU CHECK: 128 CORES ACTIVE",
-                "[OK] MEMORY INTEGRITY: 100%",
-                "MOUNTING SECURE VOLUMES...",
-                "DECRYPTING USER PROFILE...",
-                "CONNECTING TO SATELLITE UPLINK...",
-                "...",
-                "HANDSHAKE SUCCESSFUL.",
-                "LOADING BIOMETRIC DRIVERS...",
-                "SYSTEM READY."
+                { text: "INITIALIZING TRUSTED STARTUP BUS...", phase: "SECURE BOOTSTRAP", progress: 6 },
+                { text: "NEGOTIATING ENCRYPTED BACKPLANE...", phase: "SECURE BOOTSTRAP", progress: 14, warn: true },
+                { text: "LOADING KERNEL v5.14.2 // TACTICAL BRANCH", phase: "CORE SYSTEM", progress: 24 },
+                { text: "[OK] CPU MATRIX ONLINE: 128 CORES", phase: "CORE SYSTEM", progress: 34, ok: true, major: true },
+                { text: "[OK] MEMORY INTEGRITY: 100%", phase: "CORE SYSTEM", progress: 42, ok: true },
+                { text: "SYNCING GEO-TIME SATELLITE GRID...", phase: "NETWORK HANDSHAKE", progress: 53, warn: true },
+                { text: "ESTABLISHING QUANTUM-LINK TUNNEL...", phase: "NETWORK HANDSHAKE", progress: 66, warn: true },
+                { text: "[OK] COMMAND RELAY AUTHENTICATED", phase: "NETWORK HANDSHAKE", progress: 76, ok: true },
+                { text: "MOUNTING FIELD MODULES: RETICULE / TACTIQUE", phase: "MISSION STACK", progress: 87 },
+                { text: "LOADING BIOMETRIC SENTINEL...", phase: "MISSION STACK", progress: 94 },
+                { text: "SYSTEM READY // WAITING FOR OPERATOR", phase: "MISSION STACK", progress: 100, major: true }
             ];
 
             let lineIndex = 0;
 
-            function typeNextLine() {
-                if (lineIndex < lines.length) {
-                    const div = document.createElement('div');
-                    div.className = 'boot-line';
-                    div.innerText = "> " + lines[lineIndex];
-                    bootText.appendChild(div);
-                    
-                    // Auto-scroll
-                    window.scrollTo(0, document.body.scrollHeight);
-                    
-                    lineIndex++;
-                    // Délai variable pour effet "calcul"
-                    setTimeout(typeNextLine, Math.random() * 600 + 150);
-                } else {
-                    setTimeout(startBioScan, 1500);
+            function randomBetween(min, max) {
+                return Math.floor(Math.random() * (max - min + 1)) + min;
+            }
+
+            function nowStamp() {
+                const now = new Date();
+                return now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            }
+
+            function updateBootHUD(phase, progress) {
+                if (bootPhase) bootPhase.innerText = phase;
+                if (bootProgress) bootProgress.style.width = `${progress}%`;
+                if (bootMeter) bootMeter.innerText = `SYS CHECK ${progress}%`;
+            }
+
+            function appendBootLine(entry) {
+                const div = document.createElement('div');
+                div.className = 'boot-line';
+                if (entry.ok) div.classList.add('ok');
+                if (entry.warn) div.classList.add('warn');
+                if (entry.major) div.classList.add('major');
+                div.innerText = `[${nowStamp()}] > ${entry.text}`;
+                bootText.appendChild(div);
+
+                const maxLines = 13;
+                while (bootText.children.length > maxLines) {
+                    bootText.removeChild(bootText.firstChild);
                 }
+                bootText.scrollTop = bootText.scrollHeight;
             }
 
-            // --- SCAN BIOMÉTRIQUE ---
+            function typeNextLine() {
+                if (lineIndex >= lines.length) {
+                    setTimeout(startBioScan, bootConfig.pauseBeforeBio);
+                    return;
+                }
+
+                const entry = lines[lineIndex];
+                updateBootHUD(entry.phase, entry.progress);
+                appendBootLine(entry);
+                lineIndex++;
+
+                let delay = randomBetween(bootConfig.minLineDelay, bootConfig.maxLineDelay);
+                if (entry.ok) delay -= 20;
+                if (entry.major) delay += 130;
+                setTimeout(typeNextLine, Math.max(70, delay));
+            }
+
+            function setBioStatus(text, color, glow = color) {
+                bioStatus.innerText = text;
+                bioStatus.style.color = color;
+                bioStatus.style.textShadow = `0 0 16px ${glow}`;
+            }
+
+            // --- SCAN BIOMETRIQUE ---
             function startBioScan() {
-                bootLayer.style.display = 'none';
-                bioLayer.style.display = 'flex';
-                
-                // 1. Attente initiale
-                setTimeout(() => {
-                    bioStatus.innerText = "LECTURE EN COURS...";
-                    bioStatus.style.color = "#ff922b"; // Orange
-                }, 1000);
+                updateBootHUD("BIOMETRIC VERIFICATION", 100);
+                if (bootMeter) bootMeter.innerText = "AUTH PIPELINE READY";
+                bootLayer.style.opacity = '0';
 
-                // 2. Activation visuelle
                 setTimeout(() => {
-                    bioStatus.innerText = "COMPARAISON BDD...";
-                    fingerprintSvg.classList.add('active'); // Deviens Cyan
-                }, 2500);
+                    bootLayer.style.display = 'none';
+                    bioLayer.style.display = 'flex';
+                    requestAnimationFrame(() => bioLayer.classList.add('active'));
 
-                // 3. Succès
-                setTimeout(() => {
-                    bioStatus.innerText = "ACCÈS AUTORISÉ.";
-                    bioStatus.style.color = "#73fbf7"; // Cyan
-                    bioStatus.style.textShadow = "0 0 20px #73fbf7";
-                    
-                    setTimeout(unlockTablet, 1200);
-                }, 4500);
+                    setBioStatus("SYNCHRONISATION CAPTEURS MULTI-SPECTRAUX...", "#ff922b", "#ff922b");
+
+                    setTimeout(() => {
+                        setBioStatus("LECTURE BIOMETRIQUE: EMPREINTE + CADENCE CARDIAQUE...", "#ffb86a", "#ffb86a");
+                    }, bootConfig.bioStep1);
+
+                    setTimeout(() => {
+                        setBioStatus("CROISEMENT IDENTITE / BASE NATIONALE...", "#ffd166", "#ffd166");
+                        fingerprintSvg.classList.add('active');
+                    }, bootConfig.bioStep2);
+
+                    setTimeout(() => {
+                        setBioStatus("MATCH CONFIRME: SCORE DE CONFIANCE 99.7%", "#73fbf7", "#73fbf7");
+                    }, bootConfig.bioStep3);
+
+                    setTimeout(() => {
+                        setBioStatus("ACCES TABLETTE 2035 AUTORISE.", "#73fbf7", "#73fbf7");
+                        setTimeout(unlockTablet, bootConfig.unlockAfterAuth);
+                    }, bootConfig.bioStep4);
+                }, bootConfig.bootFadeOut);
             }
 
-            // --- DÉVERROUILLAGE FINAL ---
+            // --- DEVERROUILLAGE FINAL ---
             function unlockTablet() {
-                bioLayer.style.display = 'none';
-                tabletInterface.style.opacity = '1';
+                bioLayer.classList.remove('active');
+                setTimeout(() => {
+                    bioLayer.style.display = 'none';
+                    tabletInterface.style.opacity = '1';
+                    help.onReady();
+                }, bootConfig.bioFadeOut);
+            }
+
+            function initVideoHelp() {
+                if (!videoHelpOverlay || !videoHelpBtn || !videoHelpClose || !videoHelpPlayer) {
+                    return {
+                        open: () => {},
+                        close: () => {},
+                        isOpen: () => false
+                    };
+                }
+
+                let lastFocused = null;
+
+                function isOpen() {
+                    return videoHelpOverlay.classList.contains('active');
+                }
+
+                function open() {
+                    lastFocused = (document.activeElement instanceof HTMLElement) ? document.activeElement : null;
+                    videoHelpOverlay.classList.add('active');
+                    videoHelpOverlay.setAttribute('aria-hidden', 'false');
+                    document.body.classList.add('video-help-active');
+
+                    if (videoHelpPlayer.paused) {
+                        const playPromise = videoHelpPlayer.play();
+                        if (playPromise && typeof playPromise.catch === 'function') {
+                            playPromise.catch(() => {});
+                        }
+                    }
+                    videoHelpClose.focus();
+                }
+
+                function close() {
+                    if (!isOpen()) return;
+                    videoHelpOverlay.classList.remove('active');
+                    videoHelpOverlay.setAttribute('aria-hidden', 'true');
+                    document.body.classList.remove('video-help-active');
+                    videoHelpPlayer.pause();
+                    if (lastFocused && typeof lastFocused.focus === 'function') {
+                        lastFocused.focus();
+                    }
+                }
+
+                videoHelpBtn.addEventListener('click', open);
+                videoHelpClose.addEventListener('click', close);
+                videoHelpOverlay.addEventListener('click', (event) => {
+                    if (event.target === videoHelpOverlay) {
+                        close();
+                    }
+                });
+
+                return { open, close, isOpen };
+            }
+
+            function initHelpTour() {
+                const helpFabWrap = document.getElementById('help-fab-wrap');
+                const helpFab = document.getElementById('help-fab');
+                const helpFabDismiss = document.getElementById('help-fab-dismiss');
+                const helpResumeDot = document.getElementById('help-resume-dot');
+                const helpOverlay = document.getElementById('help-overlay');
+                const helpPanel = document.getElementById('help-panel');
+                const helpTitle = document.getElementById('help-title');
+                const helpText = document.getElementById('help-text');
+                const helpStepIndex = document.getElementById('help-step-index');
+                const helpStepTotal = document.getElementById('help-step-total');
+                const helpPrev = document.getElementById('help-prev');
+                const helpNext = document.getElementById('help-next');
+                const helpExit = document.getElementById('help-exit');
+                const helpPause = document.getElementById('help-pause');
+                const helpStepsList = document.getElementById('help-steps-list');
+                const helpStepsSelect = document.getElementById('help-steps-select');
+                const helpCloseIcon = document.getElementById('help-close-icon');
+                const helpNudge = document.getElementById('help-nudge');
+                const helpNudgeStart = document.getElementById('help-nudge-start');
+                const helpNudgeClose = document.getElementById('help-nudge-close');
+                const helpVideo = document.getElementById('help-video');
+                const helpFabSettings = document.getElementById('help-fab-settings');
+                const helpSettingsPopover = document.getElementById('help-settings-popover');
+                const helpEnabledToggle = document.getElementById('help-enabled-toggle');
+
+                const steps = [
+                    {
+                        title: "Bienvenue",
+                        text: "Ecran de controle principal. Tu retrouves ici l'acces rapide aux modules.",
+                        target: "#hero"
+                    },
+                    {
+                        title: "Modules principaux",
+                        text: "Choisis un module pour continuer. Le suivi d'aide reste disponible ensuite.",
+                        target: "#modules"
+                    },
+                    {
+                        title: "Module Réticule",
+                        text: "Reticule : base entites, liens, import/export et analyse.",
+                        target: "#module-reticule"
+                    },
+                    {
+                        title: "Module Tactique",
+                        text: "Tactique : carte terrain, zones, points GPS et fusion des couches.",
+                        target: "#module-tactique"
+                    }
+                ];
+
+                let currentStep = 0;
+                let activeTarget = null;
+                let nudgeTimer = null;
+                let ready = false;
+                let dismissedForSession = false;
+                const storagePrefix = 'helpTour-index';
+                const stepStorageKey = `${storagePrefix}-step`;
+                const nudgeStorageKey = `${storagePrefix}-nudge`;
+                const hiddenStorageKey = `${storagePrefix}-hidden`;
+                const globalHelpStorageKey = 'bni-help-enabled';
+
+                const mobileQuery = window.matchMedia('(max-width: 768px)');
+
+                function clamp(value, min, max) {
+                    return Math.min(Math.max(value, min), max);
+                }
+
+                function getSavedStep() {
+                    const raw = localStorage.getItem(stepStorageKey);
+                    const parsed = Number.parseInt(raw, 10);
+                    return Number.isFinite(parsed) ? parsed : null;
+                }
+
+                function saveStep(stepIndex) {
+                    localStorage.setItem(stepStorageKey, String(stepIndex));
+                    updateResumeDot();
+                }
+
+                function clearSavedStep() {
+                    localStorage.removeItem(stepStorageKey);
+                    updateResumeDot();
+                }
+
+                function updateResumeDot() {
+                    const saved = getSavedStep();
+                    if (!helpResumeDot) return;
+                    helpResumeDot.classList.toggle('show', saved !== null && !isHelpHidden());
+                }
+
+                function updateMobileClass() {
+                    helpOverlay.classList.toggle('is-mobile', mobileQuery.matches);
+                }
+
+                function markNudgeSeen() {
+                    localStorage.setItem(nudgeStorageKey, '1');
+                }
+
+                function isHelpHidden() {
+                    return dismissedForSession || !isGlobalHelpEnabled();
+                }
+
+                function isGlobalHelpEnabled() {
+                    return localStorage.getItem(globalHelpStorageKey) !== '0';
+                }
+
+                function setGlobalHelpEnabled(value) {
+                    localStorage.setItem(globalHelpStorageKey, value ? '1' : '0');
+                }
+
+                function syncHelpSettingsUi() {
+                    if (!helpEnabledToggle) return;
+                    helpEnabledToggle.checked = isGlobalHelpEnabled();
+                }
+
+                function closeHelpSettings() {
+                    if (!helpSettingsPopover) return;
+                    helpSettingsPopover.classList.remove('show');
+                    helpSettingsPopover.setAttribute('aria-hidden', 'true');
+                }
+
+                function toggleHelpSettings() {
+                    if (!helpSettingsPopover) return;
+                    const shouldOpen = !helpSettingsPopover.classList.contains('show');
+                    if (!shouldOpen) {
+                        closeHelpSettings();
+                        return;
+                    }
+                    syncHelpSettingsUi();
+                    helpSettingsPopover.classList.add('show');
+                    helpSettingsPopover.setAttribute('aria-hidden', 'false');
+                }
+
+                function applyHelpVisibilityState() {
+                    const hiddenBySetting = !isGlobalHelpEnabled();
+                    const hiddenBySession = dismissedForSession;
+                    const hideWrap = hiddenBySession;
+                    if (helpFabWrap) {
+                        helpFabWrap.classList.toggle('hidden', hideWrap);
+                        helpFabWrap.classList.toggle('settings-only', hiddenBySetting && !hideWrap);
+                    }
+                    document.body.classList.toggle('help-ready', !hiddenBySetting && !hiddenBySession);
+                    if (hiddenBySetting || hiddenBySession) hideNudge(false);
+                    if (hiddenBySetting || hideWrap) closeHelpSettings();
+                    updateResumeDot();
+                }
+
+                function setHelpHidden(value) {
+                    dismissedForSession = Boolean(value);
+                    applyHelpVisibilityState();
+                    if (dismissedForSession) {
+                        hideNudge(true);
+                    }
+                }
+
+                function showNudge() {
+                    if (!helpNudge || localStorage.getItem(nudgeStorageKey) === '1' || isHelpHidden()) return;
+                    helpNudge.classList.add('show');
+                    nudgeTimer = setTimeout(() => {
+                        hideNudge(true);
+                    }, 10000);
+                }
+
+                function hideNudge(markSeen = false) {
+                    if (!helpNudge) return;
+                    helpNudge.classList.remove('show');
+                    if (nudgeTimer) {
+                        clearTimeout(nudgeTimer);
+                        nudgeTimer = null;
+                    }
+                    if (markSeen) {
+                        markNudgeSeen();
+                    }
+                }
+
+                function clearHighlight() {
+                    if (!activeTarget) return;
+                    activeTarget.classList.remove('help-highlight');
+                    activeTarget = null;
+                }
+
+                function applyHighlight(target) {
+                    clearHighlight();
+                    if (!target) return;
+                    target.classList.add('help-highlight');
+                    activeTarget = target;
+                }
+
+                function scrollToTarget(target) {
+                    if (!target) return;
+                    target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+                }
+
+                function getHelpBottomInset() {
+                    const ids = ['hud', 'hud-bottom'];
+                    let inset = 0;
+                    ids.forEach((id) => {
+                        const el = document.getElementById(id);
+                        if (!el) return;
+                        const style = window.getComputedStyle(el);
+                        if (style.display === 'none' || style.visibility === 'hidden') return;
+                        const rect = el.getBoundingClientRect();
+                        if (rect.height < 8) return;
+                        if (rect.bottom <= 0 || rect.top >= window.innerHeight) return;
+                        const overlap = Math.max(0, window.innerHeight - rect.top);
+                        inset = Math.max(inset, Math.min(window.innerHeight * 0.35, overlap + 12));
+                    });
+                    return inset;
+                }
+
+                function positionPanel(target) {
+                    if (mobileQuery.matches) return;
+                    const margin = 16;
+                    const bottomInset = getHelpBottomInset();
+                    const safeBottom = window.innerHeight - margin - bottomInset;
+                    if (!target) {
+                        helpPanel.dataset.position = 'center';
+                        helpPanel.style.left = '50%';
+                        helpPanel.style.top = `calc(50% - ${Math.round(bottomInset / 2)}px)`;
+                        helpPanel.style.transform = 'translate(-50%, -50%)';
+                        return;
+                    }
+
+                    helpPanel.style.transform = 'none';
+
+                    const rect = target.getBoundingClientRect();
+                    const panelRect = helpPanel.getBoundingClientRect();
+
+                    const candidates = [
+                        {
+                            key: 'right',
+                            left: rect.right + margin,
+                            top: rect.top + rect.height / 2 - panelRect.height / 2
+                        },
+                        {
+                            key: 'left',
+                            left: rect.left - panelRect.width - margin,
+                            top: rect.top + rect.height / 2 - panelRect.height / 2
+                        },
+                        {
+                            key: 'bottom',
+                            left: rect.left + rect.width / 2 - panelRect.width / 2,
+                            top: rect.bottom + margin
+                        },
+                        {
+                            key: 'top',
+                            left: rect.left + rect.width / 2 - panelRect.width / 2,
+                            top: rect.top - panelRect.height - margin
+                        }
+                    ];
+
+                    const fits = (pos) => {
+                        return (
+                            pos.left >= margin &&
+                            pos.top >= margin &&
+                            pos.left + panelRect.width <= window.innerWidth - margin &&
+                            pos.top + panelRect.height <= safeBottom
+                        );
+                    };
+
+                    const selected = candidates.find(fits) || candidates[2];
+                    const clampedLeft = clamp(selected.left, margin, window.innerWidth - panelRect.width - margin);
+                    const maxTop = Math.max(margin, safeBottom - panelRect.height);
+                    const clampedTop = clamp(selected.top, margin, maxTop);
+
+                    helpPanel.dataset.position = selected.key;
+                    helpPanel.style.left = `${clampedLeft}px`;
+                    helpPanel.style.top = `${clampedTop}px`;
+
+                    if (selected.key === 'left' || selected.key === 'right') {
+                        const offset = clamp(rect.top + rect.height / 2 - clampedTop, 24, panelRect.height - 24);
+                        helpPanel.style.setProperty('--arrow-offset', `${offset}px`);
+                    } else {
+                        const offset = clamp(rect.left + rect.width / 2 - clampedLeft, 24, panelRect.width - 24);
+                        helpPanel.style.setProperty('--arrow-offset', `${offset}px`);
+                    }
+                }
+
+                function renderStepsMenu() {
+                    if (helpStepTotal) {
+                        helpStepTotal.textContent = String(steps.length);
+                    }
+
+                    if (helpStepsList) {
+                        helpStepsList.innerHTML = '';
+                        steps.forEach((step, index) => {
+                            const btn = document.createElement('button');
+                            btn.type = 'button';
+                            btn.className = 'help-step-btn';
+                            btn.textContent = `${index + 1}. ${step.title}`;
+                            btn.addEventListener('click', () => goToStep(index));
+                            helpStepsList.appendChild(btn);
+                        });
+                    }
+
+                    if (helpStepsSelect) {
+                        helpStepsSelect.innerHTML = '';
+                        steps.forEach((step, index) => {
+                            const option = document.createElement('option');
+                            option.value = String(index);
+                            option.textContent = `${index + 1}. ${step.title}`;
+                            helpStepsSelect.appendChild(option);
+                        });
+                        helpStepsSelect.addEventListener('change', (event) => {
+                            const value = Number.parseInt(event.target.value, 10);
+                            if (Number.isFinite(value)) {
+                                goToStep(value);
+                            }
+                        });
+                    }
+                }
+
+                function updateControls() {
+                    if (helpPrev) helpPrev.disabled = currentStep === 0;
+                    if (helpNext) {
+                        helpNext.textContent = currentStep === steps.length - 1 ? 'Terminer' : 'Suivant';
+                    }
+
+                    if (helpStepIndex) {
+                        helpStepIndex.textContent = String(currentStep + 1);
+                    }
+
+                    if (helpStepsList) {
+                        Array.from(helpStepsList.children).forEach((node, index) => {
+                            node.classList.toggle('active', index === currentStep);
+                        });
+                    }
+
+                    if (helpStepsSelect) {
+                        helpStepsSelect.value = String(currentStep);
+                    }
+                }
+
+                function goToStep(index) {
+                    currentStep = clamp(index, 0, steps.length - 1);
+                    const step = steps[currentStep];
+                    const target = step.target ? document.querySelector(step.target) : null;
+
+                    helpTitle.textContent = step.title;
+                    helpText.textContent = step.text;
+                    updateControls();
+                    applyHighlight(target);
+                    scrollToTarget(target);
+
+                    requestAnimationFrame(() => {
+                        positionPanel(target);
+                    });
+                }
+
+                function openTour(startIndex = 0) {
+                    closeHelpSettings();
+                    hideNudge(true);
+                    helpOverlay.classList.add('active');
+                    helpOverlay.setAttribute('aria-hidden', 'false');
+                    document.body.classList.add('help-active');
+                    currentStep = clamp(startIndex, 0, steps.length - 1);
+                    updateControls();
+                    requestAnimationFrame(() => goToStep(currentStep));
+                    window.addEventListener('resize', handleLayoutChange);
+                    window.addEventListener('scroll', handleLayoutChange, true);
+                }
+
+                function closeTour({ keepProgress = false } = {}) {
+                    helpOverlay.classList.remove('active');
+                    helpOverlay.setAttribute('aria-hidden', 'true');
+                    document.body.classList.remove('help-active');
+                    clearHighlight();
+                    window.removeEventListener('resize', handleLayoutChange);
+                    window.removeEventListener('scroll', handleLayoutChange, true);
+                    if (!keepProgress) {
+                        clearSavedStep();
+                    }
+                }
+
+                function handleLayoutChange() {
+                    if (!helpOverlay.classList.contains('active')) return;
+                    positionPanel(activeTarget);
+                }
+
+                function onReady() {
+                    if (ready) return;
+                    ready = true;
+                    applyHelpVisibilityState();
+                    if (isHelpHidden()) return;
+                    setTimeout(showNudge, 1200);
+                }
+
+                localStorage.removeItem(hiddenStorageKey);
+                syncHelpSettingsUi();
+                renderStepsMenu();
+                updateMobileClass();
+                applyHelpVisibilityState();
+
+                if (mobileQuery.addEventListener) {
+                    mobileQuery.addEventListener('change', updateMobileClass);
+                } else if (mobileQuery.addListener) {
+                    mobileQuery.addListener(updateMobileClass);
+                }
+
+                if (helpFab) {
+                    helpFab.addEventListener('click', () => {
+                        const saved = getSavedStep();
+                        openTour(saved !== null ? saved : 0);
+                    });
+                }
+
+                if (helpFabDismiss) {
+                    helpFabDismiss.addEventListener('click', (event) => {
+                        event.stopPropagation();
+                        setHelpHidden(true);
+                        closeTour();
+                    });
+                }
+
+                if (helpFabSettings) {
+                    helpFabSettings.addEventListener('click', (event) => {
+                        event.stopPropagation();
+                        toggleHelpSettings();
+                    });
+                }
+
+                if (helpEnabledToggle) {
+                    helpEnabledToggle.addEventListener('change', () => {
+                        const enabled = Boolean(helpEnabledToggle.checked);
+                        setGlobalHelpEnabled(enabled);
+                        if (!enabled) {
+                            closeTour();
+                            hideNudge(true);
+                        } else {
+                            dismissedForSession = false;
+                        }
+                        applyHelpVisibilityState();
+                    });
+                }
+
+                if (helpPrev) {
+                    helpPrev.addEventListener('click', () => {
+                        goToStep(currentStep - 1);
+                    });
+                }
+
+                if (helpNext) {
+                    helpNext.addEventListener('click', () => {
+                        if (currentStep >= steps.length - 1) {
+                            closeTour();
+                        } else {
+                            goToStep(currentStep + 1);
+                        }
+                    });
+                }
+
+                if (helpExit) {
+                    helpExit.addEventListener('click', () => closeTour());
+                }
+
+                if (helpCloseIcon) {
+                    helpCloseIcon.addEventListener('click', () => closeTour());
+                }
+
+                if (helpPause) {
+                    helpPause.addEventListener('click', () => {
+                        saveStep(currentStep);
+                        closeTour({ keepProgress: true });
+                    });
+                }
+
+                if (helpVideo) {
+                    helpVideo.addEventListener('click', () => {
+                        videoHelp.open();
+                    });
+                }
+
+                if (helpNudgeStart) {
+                    helpNudgeStart.addEventListener('click', () => {
+                        openTour(getSavedStep() || 0);
+                    });
+                }
+
+                if (helpNudgeClose) {
+                    helpNudgeClose.addEventListener('click', () => hideNudge(true));
+                }
+
+                if (helpNudge) {
+                    helpNudge.addEventListener('click', (event) => {
+                        if (event.target.closest('.help-nudge-close')) return;
+                        if (event.target.closest('.help-nudge-cta')) return;
+                        openTour(getSavedStep() || 0);
+                    });
+                }
+
+                if (helpOverlay) {
+                    helpOverlay.addEventListener('click', (event) => {
+                        if (event.target === helpOverlay) {
+                            closeTour();
+                        }
+                    });
+                }
+
+                document.addEventListener('click', (event) => {
+                    if (!helpSettingsPopover || !helpSettingsPopover.classList.contains('show')) return;
+                    if (event.target.closest('#help-fab-settings')) return;
+                    if (event.target.closest('#help-settings-popover')) return;
+                    closeHelpSettings();
+                });
+
+                document.addEventListener('keydown', (event) => {
+                const key = event.key;
+                if (videoHelp.isOpen()) {
+                    if (key === 'Escape') {
+                        event.preventDefault();
+                        videoHelp.close();
+                    }
+                    return;
+                }
+                if (key === 'Escape' && helpSettingsPopover && helpSettingsPopover.classList.contains('show')) {
+                    closeHelpSettings();
+                    return;
+                }
+                const isHelpShortcut = ((key === '?' || (key === '/' && event.shiftKey)) && !event.ctrlKey && !event.metaKey && !event.altKey);
+                const tag = event.target && event.target.tagName ? event.target.tagName.toLowerCase() : '';
+                const isTyping = tag === 'input' || tag === 'textarea' || tag === 'select' || Boolean(event.target && event.target.isContentEditable);
+                if (isHelpShortcut && !isTyping && !isHelpHidden()) {
+                    event.preventDefault();
+                    const saved = getSavedStep();
+                    openTour(saved !== null ? saved : 0);
+                    return;
+                }
+                if (!helpOverlay.classList.contains('active')) return;
+                if (key === 'Escape') {
+                    closeTour();
+                }
+                if (key === 'ArrowRight') {
+                    if (currentStep < steps.length - 1) {
+                        goToStep(currentStep + 1);
+                    }
+                }
+                if (key === 'ArrowLeft') {
+                    if (currentStep > 0) {
+                        goToStep(currentStep - 1);
+                    }
+                }
+            });
+
+                return { onReady };
             }
 
             // Démarrage
-            setTimeout(typeNextLine, 800);
+            setTimeout(typeNextLine, bootConfig.startDelay);
         });
     </script>
 </body>
 </html>
+
+

@@ -1,7 +1,7 @@
-import { state, setGroups, exportToJSON, generateID, loadLocalState, saveLocalState, pushHistory, undo, getMapData } from './state.js';
-import { initEngine, centerMap, updateTransform } from './engine.js'; 
+import { state, setGroups, generateID, loadLocalState, saveLocalState, pushHistory, undo, getMapData } from './state.js';
+import { initEngine, updateTransform } from './engine.js'; 
 import { renderGroupsList, initUI, selectItem } from './ui.js';
-import { customAlert, customConfirm, customPrompt, openSaveOptionsModal } from './ui-modals.js';
+import { customAlert, customConfirm, openSaveOptionsModal } from './ui-modals.js';
 import { gpsToPercentage } from './utils.js';
 import { renderAll } from './render.js';
 import { ICONS } from './constants.js';
@@ -12,6 +12,221 @@ const DEFAULT_DATA = [
     { name: "Hostiles", color: "#ff6b81", visible: true, points: [], zones: [] },
     { name: "Neutres", color: "#ffd400", visible: true, points: [], zones: [] }
 ];
+
+function makePairKey(a, b) {
+    const x = String(a ?? '');
+    const y = String(b ?? '');
+    return x < y ? `${x}|${y}` : `${y}|${x}`;
+}
+
+function makeUniqueId(idSet) {
+    let next = '';
+    do {
+        next = generateID();
+    } while (idSet.has(String(next)));
+    return next;
+}
+
+function sanitizeZoneStyle(rawStyle) {
+    const styleValue = rawStyle && typeof rawStyle === 'object' ? rawStyle : {};
+    const width = Number(styleValue.width);
+    const style = ['solid', 'dashed', 'dotted'].includes(styleValue.style) ? styleValue.style : 'solid';
+    return {
+        width: Number.isFinite(width) ? width : 2,
+        style
+    };
+}
+
+function sanitizeIncomingGroup(rawGroup, pointIds, zoneIds, fallbackIndex) {
+    const palette = ['#73fbf7', '#ff6b81', '#ffd400', '#ff922b', '#a9e34b'];
+    const source = rawGroup && typeof rawGroup === 'object' ? rawGroup : {};
+    const safeGroup = {
+        name: String(source.name || `GROUPE ${fallbackIndex + 1}`),
+        color: String(source.color || palette[fallbackIndex % palette.length]),
+        visible: source.visible !== false,
+        points: [],
+        zones: []
+    };
+
+    const points = Array.isArray(source.points) ? source.points : [];
+    points.forEach((rawPoint, index) => {
+        if (!rawPoint || typeof rawPoint !== 'object') return;
+
+        let pointId = String(rawPoint.id || '');
+        if (!pointId || pointIds.has(pointId)) {
+            pointId = makeUniqueId(pointIds);
+        }
+        pointIds.add(pointId);
+
+        const x = Number(rawPoint.x);
+        const y = Number(rawPoint.y);
+
+        safeGroup.points.push({
+            id: pointId,
+            name: String(rawPoint.name || `Point ${index + 1}`),
+            x: Number.isFinite(x) ? x : 50,
+            y: Number.isFinite(y) ? y : 50,
+            type: String(rawPoint.type || ''),
+            iconType: String(rawPoint.iconType || 'DEFAULT'),
+            notes: String(rawPoint.notes || ''),
+            status: String(rawPoint.status || 'ACTIVE')
+        });
+    });
+
+    const zones = Array.isArray(source.zones) ? source.zones : [];
+    zones.forEach((rawZone, index) => {
+        if (!rawZone || typeof rawZone !== 'object') return;
+
+        let zoneId = String(rawZone.id || '');
+        if (!zoneId || zoneIds.has(zoneId)) {
+            zoneId = makeUniqueId(zoneIds);
+        }
+        zoneIds.add(zoneId);
+
+        const zoneType = rawZone.type === 'CIRCLE' ? 'CIRCLE' : 'POLYGON';
+        const zoneStyle = sanitizeZoneStyle(rawZone.style);
+
+        if (zoneType === 'CIRCLE') {
+            const cx = Number(rawZone.cx);
+            const cy = Number(rawZone.cy);
+            const r = Number(rawZone.r);
+            safeGroup.zones.push({
+                id: zoneId,
+                name: String(rawZone.name || `Zone ${index + 1}`),
+                type: 'CIRCLE',
+                cx: Number.isFinite(cx) ? cx : 50,
+                cy: Number.isFinite(cy) ? cy : 50,
+                r: Number.isFinite(r) && r > 0 ? r : 1,
+                style: zoneStyle
+            });
+            return;
+        }
+
+        const pointsRaw = Array.isArray(rawZone.points) ? rawZone.points : [];
+        const zonePoints = pointsRaw
+            .map(pt => {
+                const x = Number(pt?.x);
+                const y = Number(pt?.y);
+                if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+                return { x, y };
+            })
+            .filter(Boolean);
+
+        if (zonePoints.length < 3) return;
+
+        safeGroup.zones.push({
+            id: zoneId,
+            name: String(rawZone.name || `Zone ${index + 1}`),
+            type: 'POLYGON',
+            points: zonePoints,
+            style: zoneStyle
+        });
+    });
+
+    return safeGroup;
+}
+
+function mergeIncomingMapData(data) {
+    const stats = {
+        addedGroups: 0,
+        addedPoints: 0,
+        addedZones: 0,
+        addedLinks: 0,
+        skippedLinks: 0
+    };
+
+    const pointIds = new Set();
+    const zoneIds = new Set();
+    state.groups.forEach(group => {
+        (group.points || []).forEach(point => pointIds.add(String(point.id)));
+        (group.zones || []).forEach(zone => zoneIds.add(String(zone.id)));
+    });
+
+    const incomingGroups = Array.isArray(data?.groups) ? data.groups : [];
+    incomingGroups.forEach((group, index) => {
+        const safeGroup = sanitizeIncomingGroup(group, pointIds, zoneIds, state.groups.length + index);
+        state.groups.push(safeGroup);
+        stats.addedGroups += 1;
+        stats.addedPoints += safeGroup.points.length;
+        stats.addedZones += safeGroup.zones.length;
+    });
+
+    const existingLinkIds = new Set((state.tacticalLinks || []).map(link => String(link.id)));
+    const existingPairs = new Set((state.tacticalLinks || []).map(link => makePairKey(link.from, link.to)));
+    const incomingLinks = Array.isArray(data?.tacticalLinks) ? data.tacticalLinks : [];
+
+    incomingLinks.forEach(rawLink => {
+        if (!rawLink || typeof rawLink !== 'object') return;
+
+        const from = String(rawLink.from || rawLink.source || '');
+        const to = String(rawLink.to || rawLink.target || '');
+        if (!from || !to || from === to) {
+            stats.skippedLinks += 1;
+            return;
+        }
+        if (!pointIds.has(from) || !pointIds.has(to)) {
+            stats.skippedLinks += 1;
+            return;
+        }
+
+        const pairKey = makePairKey(from, to);
+        if (existingPairs.has(pairKey)) {
+            stats.skippedLinks += 1;
+            return;
+        }
+
+        let linkId = String(rawLink.id || '');
+        if (!linkId || existingLinkIds.has(linkId)) {
+            linkId = makeUniqueId(existingLinkIds);
+        }
+
+        state.tacticalLinks.push({
+            id: linkId,
+            from,
+            to,
+            color: rawLink.color || null,
+            type: String(rawLink.type || 'Standard')
+        });
+
+        existingLinkIds.add(linkId);
+        existingPairs.add(pairKey);
+        stats.addedLinks += 1;
+    });
+
+    return stats;
+}
+
+function focusPointById(targetId) {
+    const wantedId = String(targetId || '').trim();
+    if (!wantedId) return false;
+
+    for (let groupIndex = 0; groupIndex < state.groups.length; groupIndex++) {
+        const group = state.groups[groupIndex];
+        const points = Array.isArray(group?.points) ? group.points : [];
+        for (let pointIndex = 0; pointIndex < points.length; pointIndex++) {
+            const point = points[pointIndex];
+            if (String(point.id) !== wantedId) continue;
+
+            group.visible = true;
+
+            const viewport = document.getElementById('viewport');
+            const vw = viewport ? viewport.clientWidth : window.innerWidth;
+            const vh = viewport ? viewport.clientHeight : window.innerHeight;
+            const mapW = state.mapWidth || 2000;
+            const mapH = state.mapHeight || 2000;
+
+            state.view.scale = 2.5;
+            state.view.x = (vw / 2) - (point.x * mapW / 100) * state.view.scale;
+            state.view.y = (vh / 2) - (point.y * mapH / 100) * state.view.scale;
+
+            updateTransform();
+            selectItem('point', groupIndex, pointIndex);
+            return true;
+        }
+    }
+
+    return false;
+}
 
 document.addEventListener('DOMContentLoaded', async () => {
     const oldLayer = document.querySelector('#map-world #markers-layer');
@@ -33,6 +248,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         state.groups = DEFAULT_DATA;
         renderGroupsList();
         renderAll();
+    }
+
+    const focusId = new URLSearchParams(window.location.search).get('focus');
+    if (focusId) {
+        const focusedNow = focusPointById(focusId);
+        if (!focusedNow) {
+            setTimeout(() => {
+                if (!focusPointById(focusId)) {
+                    customAlert("INFO", "Point tactique introuvable.");
+                }
+            }, 600);
+        }
     }
 
     // Undo
@@ -106,12 +333,16 @@ document.addEventListener('DOMContentLoaded', async () => {
             reader.onload = (ev) => {
                 try {
                     const data = JSON.parse(ev.target.result);
-                    if (data.groups) {
+                    if (Array.isArray(data.groups)) {
                         pushHistory();
-                        data.groups.forEach(g => state.groups.push(g));
-                        if (data.tacticalLinks) data.tacticalLinks.forEach(l => state.tacticalLinks.push(l));
+                        const stats = mergeIncomingMapData(data);
                         renderGroupsList(); renderAll(); saveLocalState();
-                        customAlert("FUSION", `${data.groups.length} groupes ajoutés.`);
+                        customAlert(
+                            "FUSION",
+                            `${stats.addedGroups} groupes, ${stats.addedPoints} points, ${stats.addedZones} zones, ${stats.addedLinks} liens ajoutés.`
+                        );
+                    } else {
+                        customAlert("ERREUR", "Fichier de fusion invalide.");
                     }
                 } catch (err) { customAlert("ERREUR", "Impossible de fusionner."); }
             };

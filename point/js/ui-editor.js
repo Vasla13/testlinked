@@ -231,7 +231,7 @@ function renderActiveLinks(n) {
             html += `
             <div class="chip" data-link-id="${item.link.id}" style="border-left-color: ${linkColor};">
                 <div class="chip-content">
-                    <span class="chip-name" onclick="window.zoomToNode(${item.other.id})">${escapeHtml(item.other.name)}</span>
+                    <span class="chip-name" data-node-id="${escapeHtml(String(item.other.id))}">${escapeHtml(item.other.name)}</span>
                     <div class="chip-meta"><span class="chip-badge" data-link-id="${item.link.id}" style="color: ${linkColor};">${emoji} ${typeLabel}</span></div>
                 </div>
                 <div class="x" title="Supprimer le lien" data-id="${item.link.id}">×</div>
@@ -261,6 +261,13 @@ function renderActiveLinks(n) {
     };
 
     chipsContainer.onclick = (e) => {
+        const nodeName = e.target.closest('.chip-name[data-node-id]');
+        if (nodeName) {
+            const nodeId = nodeName.dataset.nodeId;
+            if (nodeId) window.zoomToNode(nodeId);
+            return;
+        }
+
         const delBtn = e.target.closest('.x');
         if(delBtn) {
             pushHistory();

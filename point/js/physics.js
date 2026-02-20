@@ -78,7 +78,7 @@ export function restartSim() {
         state.links.forEach(l => {
             if (l.kind !== KINDS.ENNEMI) return;
             const s = l.source; const t = l.target;
-            if (!s.x || !t.x) return;
+            if (!Number.isFinite(s?.x) || !Number.isFinite(s?.y) || !Number.isFinite(t?.x) || !Number.isFinite(t?.y)) return;
 
             const isBigS = (s.type === TYPES.COMPANY || s.type === TYPES.GROUP);
             const isBigT = (t.type === TYPES.COMPANY || t.type === TYPES.GROUP);

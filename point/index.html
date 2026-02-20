@@ -22,6 +22,12 @@
       --accent-orange: #ff922b;
       --text-muted: #8b9bb4;
       --text-light: #e6eefb;
+      --help-silver-1: #d4d9e0;
+      --help-silver-2: #9aa3ad;
+      --help-silver-3: #f5f7fa;
+      --help-ink: #0f141c;
+      --help-fab-right: 24px;
+      --help-fab-bottom: 24px;
     }
 
     * { box-sizing: border-box; }
@@ -255,6 +261,547 @@
       #hud { width: 90%; justify-content: space-around; bottom: 10px; padding: 5px 10px; }
       h2 { margin-top: 0; }
     }
+    /* --- HELP TOUR --- */
+@keyframes helpPulse {
+    0% { box-shadow: 0 12px 32px rgba(0,0,0,0.45), 0 0 0 rgba(115, 251, 247, 0); }
+    50% { box-shadow: 0 16px 42px rgba(0,0,0,0.6), 0 0 24px rgba(115, 251, 247, 0.2); }
+    100% { box-shadow: 0 12px 32px rgba(0,0,0,0.45), 0 0 0 rgba(115, 251, 247, 0); }
+}
+@keyframes helpTargetPulse {
+    0% { box-shadow: 0 0 0 0 rgba(115, 251, 247, 0.24), 0 0 24px rgba(115, 251, 247, 0.28); }
+    100% { box-shadow: 0 0 0 10px rgba(115, 251, 247, 0), 0 0 34px rgba(115, 251, 247, 0.4); }
+}
+.help-fab-wrap {
+    position: fixed;
+    right: var(--help-fab-right);
+    bottom: var(--help-fab-bottom);
+    z-index: 12600;
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(8px);
+    transition: opacity 0.35s ease, transform 0.35s ease;
+}
+.help-fab-wrap.hidden {
+    display: none;
+}
+.help-fab-wrap.settings-only {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+}
+.help-fab-wrap.settings-only .help-fab,
+.help-fab-wrap.settings-only .help-fab-dismiss {
+    display: none;
+}
+body.help-ready .help-fab-wrap {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+}
+.help-fab {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 18px 10px 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(115, 251, 247, 0.55);
+    background: linear-gradient(145deg, rgba(7, 14, 25, 0.98), rgba(15, 28, 40, 0.96));
+    color: var(--accent-cyan, var(--cyan));
+    font-family: var(--font-main, var(--font-ui));
+    font-weight: 800;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: transform 0.35s ease, box-shadow 0.35s ease, border-color 0.35s ease;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.45), 0 0 0 rgba(115, 251, 247, 0);
+    animation: helpPulse 3.5s ease-in-out infinite;
+    clip-path: none;
+}
+body.help-active .help-fab {
+    animation: none;
+}
+.help-fab:hover {
+    transform: translateY(-2px);
+    border-color: rgba(115, 251, 247, 0.9);
+    box-shadow: 0 18px 42px rgba(0,0,0,0.62), 0 0 20px rgba(115, 251, 247, 0.28);
+}
+.help-fab-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.help-fab-dismiss,
+.help-fab-settings {
+    min-height: 34px;
+    padding: 0 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(115, 251, 247, 0.45);
+    background: linear-gradient(140deg, rgba(8, 19, 30, 0.95), rgba(13, 27, 40, 0.92));
+    color: #dbeefc;
+    font-family: var(--font-main, var(--font-ui));
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.48);
+    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+    clip-path: none;
+}
+.help-fab-dismiss {
+    border-color: rgba(255, 118, 155, 0.45);
+    color: #ffd8e6;
+    background: linear-gradient(140deg, rgba(36, 9, 18, 0.9), rgba(28, 11, 18, 0.9));
+}
+.help-fab-settings {
+    color: var(--accent-cyan, var(--cyan));
+}
+.help-fab-dismiss:hover,
+.help-fab-settings:hover {
+    transform: translateY(-1px);
+    border-color: rgba(115, 251, 247, 0.78);
+    box-shadow: 0 11px 24px rgba(0,0,0,0.56);
+}
+.help-fab-control-icon {
+    font-size: 0.85rem;
+    line-height: 1;
+}
+.help-fab-control-text {
+    white-space: nowrap;
+}
+.help-settings-popover {
+    position: fixed;
+    right: var(--help-fab-right);
+    bottom: calc(var(--help-fab-bottom) + 98px);
+    z-index: 12620;
+    width: min(320px, calc(100vw - 32px));
+    border-radius: 14px;
+    border: 1px solid rgba(115, 251, 247, 0.28);
+    background:
+        linear-gradient(140deg, rgba(5, 12, 22, 0.98), rgba(10, 22, 34, 0.95)),
+        radial-gradient(circle at top right, rgba(115, 251, 247, 0.12), transparent 60%);
+    box-shadow: 0 14px 36px rgba(0,0,0,0.6);
+    padding: 12px 14px;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(8px);
+    transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.help-settings-popover.show {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+}
+.help-settings-title {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 800;
+    color: #d9f2ff;
+    margin-bottom: 10px;
+}
+.help-settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 0.76rem;
+    color: #e1ecf8;
+    margin: 0;
+}
+.help-settings-row input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--accent-cyan, var(--cyan));
+    cursor: pointer;
+}
+.help-settings-note {
+    margin: 10px 0 0;
+    font-size: 0.68rem;
+    line-height: 1.35;
+    color: #9db0c6;
+}
+.help-fab-icon {
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+}
+.help-fab-text {
+    font-size: 0.75rem;
+}
+.help-resume-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent-cyan, var(--cyan));
+    box-shadow: 0 0 10px var(--accent-cyan, var(--cyan));
+    opacity: 0;
+    transform: scale(0.6);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.help-resume-dot.show {
+    opacity: 1;
+    transform: scale(1);
+}
+.help-mascot {
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.34));
+    transition: transform 0.25s ease, filter 0.25s ease;
+}
+.help-fab:hover .help-mascot {
+    transform: rotate(-6deg) scale(1.05);
+    filter: drop-shadow(0 6px 12px rgba(0,0,0,0.44));
+}
+.help-nudge {
+    position: fixed;
+    right: var(--help-fab-right);
+    bottom: calc(var(--help-fab-bottom) + 68px);
+    z-index: 12600;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 16px;
+    border: 1px solid rgba(115, 251, 247, 0.22);
+    background:
+        linear-gradient(135deg, rgba(7, 14, 25, 0.97), rgba(9, 21, 34, 0.95)),
+        radial-gradient(circle at top right, rgba(115, 251, 247, 0.08), transparent 60%);
+    color: var(--text-main, #e0e6ed);
+    box-shadow: 0 14px 40px rgba(0,0,0,0.56);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(10px);
+    transition: opacity 0.35s ease, transform 0.35s ease;
+    cursor: pointer;
+}
+.help-nudge.show {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+}
+.help-nudge-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+    display: grid;
+    place-items: center;
+    background: linear-gradient(145deg, rgba(16, 31, 46, 0.95), rgba(8, 17, 28, 0.95));
+    border: 1px solid rgba(115, 251, 247, 0.25);
+    color: var(--accent-cyan, var(--cyan));
+}
+.help-nudge-avatar .help-mascot {
+    width: 26px;
+    height: 26px;
+}
+.help-nudge-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.help-nudge-title {
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: #f2f8ff;
+}
+.help-nudge-desc {
+    font-size: 0.75rem;
+    color: rgba(224, 230, 237, 0.78);
+}
+.help-nudge-cta {
+    border: 1px solid rgba(115, 251, 247, 0.72);
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 700;
+    background: rgba(115, 251, 247, 0.9);
+    color: #021018;
+    cursor: pointer;
+    clip-path: none;
+}
+.help-nudge-close {
+    background: transparent;
+    border: 0;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: grid;
+    place-items: center;
+    color: rgba(224, 230, 237, 0.65);
+    font-size: 1.1rem;
+    cursor: pointer;
+    line-height: 1;
+    clip-path: none;
+}
+.help-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 13000;
+    isolation: isolate;
+    background: rgba(4, 8, 14, 0.78);
+    backdrop-filter: blur(3px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+}
+.help-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+.help-panel {
+    --panel-bg: linear-gradient(155deg, rgba(8, 17, 29, 0.98), rgba(11, 28, 44, 0.95));
+    position: absolute;
+    z-index: 3;
+    min-width: 320px;
+    max-width: 560px;
+    border-radius: 18px;
+    background: var(--panel-bg);
+    color: var(--text-main, #e0e6ed);
+    border: 1px solid rgba(115, 251, 247, 0.26);
+    box-shadow: 0 24px 68px rgba(0,0,0,0.64), inset 0 1px 0 rgba(255,255,255,0.03);
+    padding: 18px 18px 16px;
+}
+.help-panel::after {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    background: var(--panel-bg);
+    border: 1px solid rgba(115, 251, 247, 0.26);
+    transform: rotate(45deg);
+}
+.help-panel[data-position='right']::after {
+    left: -8px;
+    top: var(--arrow-offset, 50%);
+    transform: translateY(-50%) rotate(45deg);
+}
+.help-panel[data-position='left']::after {
+    right: -8px;
+    top: var(--arrow-offset, 50%);
+    transform: translateY(-50%) rotate(45deg);
+}
+.help-panel[data-position='bottom']::after {
+    top: -8px;
+    left: var(--arrow-offset, 50%);
+    transform: translateX(-50%) rotate(45deg);
+}
+.help-panel[data-position='top']::after {
+    bottom: -8px;
+    left: var(--arrow-offset, 50%);
+    transform: translateX(-50%) rotate(45deg);
+}
+.help-panel[data-position='center']::after {
+    display: none;
+}
+.help-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+.help-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    background: linear-gradient(145deg, rgba(16, 31, 46, 0.95), rgba(8, 17, 28, 0.95));
+    border: 1px solid rgba(115, 251, 247, 0.26);
+    display: grid;
+    place-items: center;
+    color: var(--accent-cyan, var(--cyan));
+    box-shadow: inset 0 1px 4px rgba(0,0,0,0.38);
+}
+.help-avatar .help-mascot {
+    width: 36px;
+    height: 36px;
+}
+.help-progress {
+    font-family: var(--font-main, var(--font-code));
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: rgba(115, 251, 247, 0.92);
+}
+.help-close-icon {
+    background: transparent;
+    border: 0;
+    padding: 0;
+    width: 28px;
+    height: 28px;
+    display: grid;
+    place-items: center;
+    font-size: 1.2rem;
+    cursor: pointer;
+    color: rgba(224, 230, 237, 0.68);
+    clip-path: none;
+}
+.help-close-icon:hover {
+    color: rgba(115, 251, 247, 0.98);
+}
+.help-panel-body {
+    display: grid;
+    grid-template-columns: 1fr 170px;
+    gap: 16px;
+}
+.help-panel-main h3 {
+    font-size: 1.2rem;
+    margin-bottom: 8px;
+    color: #f5fbff;
+}
+.help-panel-main p {
+    font-size: 0.95rem;
+    line-height: 1.4;
+    margin-bottom: 16px;
+    color: rgba(224, 230, 237, 0.85);
+}
+.help-actions {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+.help-btn {
+    border-radius: 999px;
+    border: 1px solid rgba(115, 251, 247, 0.45);
+    padding: 8px 14px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    cursor: pointer;
+    clip-path: none;
+}
+.help-btn.primary {
+    background: rgba(115, 251, 247, 0.9);
+    color: #051018;
+}
+.help-btn.secondary {
+    background: rgba(6, 15, 24, 0.95);
+    color: rgba(224, 230, 237, 0.92);
+}
+.help-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+.help-actions-secondary {
+    display: flex;
+    gap: 12px;
+}
+.help-link {
+    border: 0;
+    background: transparent;
+    padding: 0;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: rgba(160, 177, 197, 0.82);
+    cursor: pointer;
+    clip-path: none;
+}
+.help-link:hover {
+    color: rgba(115, 251, 247, 0.95);
+}
+.help-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+    border-radius: 12px;
+    background: rgba(6, 14, 24, 0.9);
+    border: 1px solid rgba(115, 251, 247, 0.2);
+}
+.help-steps-title {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 700;
+    color: rgba(115, 251, 247, 0.8);
+}
+.help-steps-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 200px;
+    overflow: hidden;
+}
+.help-step-btn {
+    border: 0;
+    background: transparent;
+    text-align: left;
+    font-size: 0.75rem;
+    color: rgba(204, 216, 230, 0.78);
+    cursor: pointer;
+    padding: 2px 0;
+    clip-path: none;
+}
+.help-step-btn:hover {
+    color: rgba(115, 251, 247, 0.95);
+}
+.help-step-btn.active {
+    color: rgba(115, 251, 247, 1);
+    font-weight: 700;
+    text-shadow: 0 0 10px rgba(115, 251, 247, 0.38);
+}
+.help-steps-select {
+    display: none;
+    border-radius: 10px;
+    border: 1px solid rgba(115, 251, 247, 0.34);
+    padding: 6px 8px;
+    font-size: 0.8rem;
+    background: rgba(6, 14, 24, 0.95);
+    color: #deebf8;
+    clip-path: none;
+}
+.help-highlight {
+    position: relative;
+    z-index: 12900;
+    pointer-events: none;
+    outline: 3px solid rgba(115, 251, 247, 0.95);
+    outline-offset: 4px;
+    box-shadow: 0 0 0 6px rgba(115, 251, 247, 0.18), 0 0 34px rgba(115, 251, 247, 0.48);
+    border-radius: 12px;
+    animation: helpTargetPulse 1.4s ease-out infinite;
+}
+@media (max-width: 768px) {
+    .help-fab-wrap { right: 16px; bottom: 16px; gap: 8px; }
+    .help-fab-controls { gap: 6px; }
+    .help-fab-dismiss,
+    .help-fab-settings {
+        min-height: 32px;
+        padding: 0 10px;
+        font-size: 0.58rem;
+    }
+    .help-settings-popover {
+        right: 12px;
+        bottom: 94px;
+        width: min(320px, calc(100vw - 24px));
+    }
+    .help-nudge { right: 16px; bottom: 84px; max-width: 280px; }
+    .help-panel-body { grid-template-columns: 1fr; }
+    .help-steps-list { display: none; }
+    .help-steps-select { display: block; width: 100%; }
+    .help-overlay.is-mobile .help-panel {
+        left: 12px;
+        right: 12px;
+        bottom: 12px;
+        top: auto;
+        max-width: none;
+        width: auto;
+        transform: none;
+    }
+    .help-overlay.is-mobile .help-panel::after { display: none; }
+}
+
   </style>
 </head>
 
@@ -364,6 +911,65 @@
   <datalist id="datalist-groups"></datalist>
   <datalist id="datalist-companies"></datalist>
 
+  <div class="help-fab-wrap" id="help-fab-wrap">
+    <button class="help-fab" id="help-fab" type="button" aria-label="Aide guidée">
+      <span class="help-fab-icon" aria-hidden="true">
+        <img class="help-mascot" src="../aide.png" alt="" aria-hidden="true" />
+      </span>
+      <span class="help-fab-text">Aide</span>
+      <span class="help-resume-dot" id="help-resume-dot" aria-hidden="true"></span>
+    </button>
+    <div class="help-fab-controls" aria-label="Commandes aide">
+      <button class="help-fab-dismiss" id="help-fab-dismiss" type="button" aria-label="Masquer l'aide pour cette session">
+        <span class="help-fab-control-icon" aria-hidden="true">-</span>
+        <span class="help-fab-control-text">Masquer</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="help-nudge" id="help-nudge" role="dialog" aria-live="polite">
+    <div class="help-nudge-avatar" aria-hidden="true">
+      <img class="help-mascot" src="../aide.png" alt="" aria-hidden="true" />
+    </div>
+    <div class="help-nudge-text">
+      <div class="help-nudge-title">Besoin d'aide ?</div>
+      <div class="help-nudge-desc">Tour reseau en 4 etapes.</div>
+    </div>
+    <button class="help-nudge-cta" id="help-nudge-start" type="button">Démarrer</button>
+    <button class="help-nudge-close" id="help-nudge-close" type="button" aria-label="Fermer">×</button>
+  </div>
+
+  <div class="help-overlay" id="help-overlay" aria-hidden="true">
+    <div class="help-panel" id="help-panel" role="dialog" aria-modal="true" aria-labelledby="help-title">
+      <div class="help-panel-header">
+        <div class="help-avatar" aria-hidden="true">
+          <img class="help-mascot" src="../aide.png" alt="" aria-hidden="true" />
+        </div>
+        <div class="help-progress">Étape <span id="help-step-index">1</span>/<span id="help-step-total">4</span></div>
+        <button class="help-close-icon" id="help-close-icon" type="button" aria-label="Quitter">×</button>
+      </div>
+      <div class="help-panel-body">
+        <div class="help-panel-main">
+          <h3 id="help-title">Vue réseau</h3>
+          <p id="help-text">Présentation rapide du graphe.</p>
+          <div class="help-actions">
+            <button class="help-btn secondary" id="help-prev" type="button">Précédent</button>
+            <button class="help-btn primary" id="help-next" type="button">Suivant</button>
+          </div>
+          <div class="help-actions-secondary">
+            <button class="help-link" id="help-pause" type="button">Reprendre plus tard</button>
+            <button class="help-link" id="help-exit" type="button">Quitter</button>
+          </div>
+        </div>
+        <aside class="help-steps">
+          <div class="help-steps-title">Étapes</div>
+          <div class="help-steps-list" id="help-steps-list"></div>
+          <select class="help-steps-select" id="help-steps-select" aria-label="Aller à une étape"></select>
+        </aside>
+      </div>
+    </div>
+  </div>
+
   <script type="module" src="js/main.js"></script>
   
   <script>
@@ -374,5 +980,496 @@
       }, 600);
     });
   </script>
+  <script>
+    const help = initHelpTour();
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        help.onReady();
+      }, 800);
+    });
+
+    function initHelpTour() {
+      const helpFabWrap = document.getElementById('help-fab-wrap');
+      const helpFab = document.getElementById('help-fab');
+      const helpFabDismiss = document.getElementById('help-fab-dismiss');
+      const helpResumeDot = document.getElementById('help-resume-dot');
+      const helpOverlay = document.getElementById('help-overlay');
+      const helpPanel = document.getElementById('help-panel');
+      const helpTitle = document.getElementById('help-title');
+      const helpText = document.getElementById('help-text');
+      const helpStepIndex = document.getElementById('help-step-index');
+      const helpStepTotal = document.getElementById('help-step-total');
+      const helpPrev = document.getElementById('help-prev');
+      const helpNext = document.getElementById('help-next');
+      const helpExit = document.getElementById('help-exit');
+      const helpPause = document.getElementById('help-pause');
+      const helpStepsList = document.getElementById('help-steps-list');
+      const helpStepsSelect = document.getElementById('help-steps-select');
+      const helpCloseIcon = document.getElementById('help-close-icon');
+      const helpNudge = document.getElementById('help-nudge');
+      const helpNudgeStart = document.getElementById('help-nudge-start');
+      const helpNudgeClose = document.getElementById('help-nudge-close');
+
+      const steps = [
+        {
+          title: "Vue réseau",
+          text: "Navigue dans le graphe et lis les connexions actives.",
+          target: "#center"
+        },
+        {
+          title: "Menu gauche",
+          text: "Import, fusion, recherche et filtres se trouvent ici.",
+          target: "#left"
+        },
+        {
+          title: "Création & édition",
+          text: "Selectionne un noeud pour editer son profil et ses relations.",
+          target: "#right"
+        },
+        {
+          title: "Barre rapide",
+          text: "Actions de vue : recentrage, simulation et options d'affichage.",
+          target: "#hud"
+        }
+      ];
+
+      let currentStep = 0;
+      let activeTarget = null;
+      let nudgeTimer = null;
+      let ready = false;
+      let dismissedForSession = false;
+      const storagePrefix = 'helpTour-point';
+      const stepStorageKey = `${storagePrefix}-step`;
+      const nudgeStorageKey = `${storagePrefix}-nudge`;
+      const hiddenStorageKey = `${storagePrefix}-hidden`;
+      const globalHelpStorageKey = 'bni-help-enabled';
+
+      const mobileQuery = window.matchMedia('(max-width: 768px)');
+
+      function clamp(value, min, max) {
+        return Math.min(Math.max(value, min), max);
+      }
+
+      function getSavedStep() {
+        const raw = localStorage.getItem(stepStorageKey);
+        const parsed = Number.parseInt(raw, 10);
+        return Number.isFinite(parsed) ? parsed : null;
+      }
+
+      function saveStep(stepIndex) {
+        localStorage.setItem(stepStorageKey, String(stepIndex));
+        updateResumeDot();
+      }
+
+      function clearSavedStep() {
+        localStorage.removeItem(stepStorageKey);
+        updateResumeDot();
+      }
+
+      function updateResumeDot() {
+        const saved = getSavedStep();
+        if (!helpResumeDot) return;
+        helpResumeDot.classList.toggle('show', saved !== null && !isHelpHidden());
+      }
+
+      function updateMobileClass() {
+        helpOverlay.classList.toggle('is-mobile', mobileQuery.matches);
+      }
+
+      function markNudgeSeen() {
+        localStorage.setItem(nudgeStorageKey, '1');
+      }
+
+      function isHelpHidden() {
+        return dismissedForSession || !isGlobalHelpEnabled();
+      }
+
+      function isGlobalHelpEnabled() {
+        return localStorage.getItem(globalHelpStorageKey) !== '0';
+      }
+
+      function setGlobalHelpEnabled(value) {
+        localStorage.setItem(globalHelpStorageKey, value ? '1' : '0');
+      }
+
+      function applyHelpVisibilityState() {
+        const hiddenBySetting = !isGlobalHelpEnabled();
+        const hiddenBySession = dismissedForSession;
+        const hideWrap = hiddenBySession || hiddenBySetting;
+        if (helpFabWrap) {
+          helpFabWrap.classList.toggle('hidden', hideWrap);
+        }
+        document.body.classList.toggle('help-ready', !hideWrap);
+        if (hideWrap) hideNudge(false);
+        updateResumeDot();
+      }
+
+      function setHelpHidden(value) {
+        dismissedForSession = Boolean(value);
+        applyHelpVisibilityState();
+        if (dismissedForSession) {
+          hideNudge(true);
+        }
+      }
+
+      function showNudge() {
+        if (!helpNudge || localStorage.getItem(nudgeStorageKey) === '1' || isHelpHidden()) return;
+        helpNudge.classList.add('show');
+        nudgeTimer = setTimeout(() => {
+          hideNudge(true);
+        }, 10000);
+      }
+
+      function hideNudge(markSeen = false) {
+        if (!helpNudge) return;
+        helpNudge.classList.remove('show');
+        if (nudgeTimer) {
+          clearTimeout(nudgeTimer);
+          nudgeTimer = null;
+        }
+        if (markSeen) {
+          markNudgeSeen();
+        }
+      }
+
+      function clearHighlight() {
+        if (!activeTarget) return;
+        activeTarget.classList.remove('help-highlight');
+        activeTarget = null;
+      }
+
+      function applyHighlight(target) {
+        clearHighlight();
+        if (!target) return;
+        target.classList.add('help-highlight');
+        activeTarget = target;
+      }
+
+      function scrollToTarget(target) {
+        if (!target) return;
+        target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+      }
+
+      function getHelpBottomInset() {
+        const ids = ['hud', 'hud-bottom'];
+        let inset = 0;
+        ids.forEach((id) => {
+          const el = document.getElementById(id);
+          if (!el) return;
+          const style = window.getComputedStyle(el);
+          if (style.display === 'none' || style.visibility === 'hidden') return;
+          const rect = el.getBoundingClientRect();
+          if (rect.height < 8) return;
+          if (rect.bottom <= 0 || rect.top >= window.innerHeight) return;
+          const overlap = Math.max(0, window.innerHeight - rect.top);
+          inset = Math.max(inset, Math.min(window.innerHeight * 0.35, overlap + 12));
+        });
+        return inset;
+      }
+
+      function positionPanel(target) {
+        if (mobileQuery.matches) return;
+        const margin = 16;
+        const bottomInset = getHelpBottomInset();
+        const safeBottom = window.innerHeight - margin - bottomInset;
+        if (!target) {
+          helpPanel.dataset.position = 'center';
+          helpPanel.style.left = '50%';
+          helpPanel.style.top = `calc(50% - ${Math.round(bottomInset / 2)}px)`;
+          helpPanel.style.transform = 'translate(-50%, -50%)';
+          return;
+        }
+
+        helpPanel.style.transform = 'none';
+
+        const rect = target.getBoundingClientRect();
+        const panelRect = helpPanel.getBoundingClientRect();
+
+        const candidates = [
+          {
+            key: 'right',
+            left: rect.right + margin,
+            top: rect.top + rect.height / 2 - panelRect.height / 2
+          },
+          {
+            key: 'left',
+            left: rect.left - panelRect.width - margin,
+            top: rect.top + rect.height / 2 - panelRect.height / 2
+          },
+          {
+            key: 'bottom',
+            left: rect.left + rect.width / 2 - panelRect.width / 2,
+            top: rect.bottom + margin
+          },
+          {
+            key: 'top',
+            left: rect.left + rect.width / 2 - panelRect.width / 2,
+            top: rect.top - panelRect.height - margin
+          }
+        ];
+
+        const fits = (pos) => {
+          return (
+            pos.left >= margin &&
+            pos.top >= margin &&
+            pos.left + panelRect.width <= window.innerWidth - margin &&
+            pos.top + panelRect.height <= safeBottom
+          );
+        };
+
+        const selected = candidates.find(fits) || candidates[2];
+        const clampedLeft = clamp(selected.left, margin, window.innerWidth - panelRect.width - margin);
+        const maxTop = Math.max(margin, safeBottom - panelRect.height);
+        const clampedTop = clamp(selected.top, margin, maxTop);
+
+        helpPanel.dataset.position = selected.key;
+        helpPanel.style.left = `${clampedLeft}px`;
+        helpPanel.style.top = `${clampedTop}px`;
+
+        if (selected.key === 'left' || selected.key === 'right') {
+          const offset = clamp(rect.top + rect.height / 2 - clampedTop, 24, panelRect.height - 24);
+          helpPanel.style.setProperty('--arrow-offset', `${offset}px`);
+        } else {
+          const offset = clamp(rect.left + rect.width / 2 - clampedLeft, 24, panelRect.width - 24);
+          helpPanel.style.setProperty('--arrow-offset', `${offset}px`);
+        }
+      }
+
+      function renderStepsMenu() {
+        if (helpStepTotal) {
+          helpStepTotal.textContent = String(steps.length);
+        }
+
+        if (helpStepsList) {
+          helpStepsList.innerHTML = '';
+          steps.forEach((step, index) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'help-step-btn';
+            btn.textContent = `${index + 1}. ${step.title}`;
+            btn.addEventListener('click', () => goToStep(index));
+            helpStepsList.appendChild(btn);
+          });
+        }
+
+        if (helpStepsSelect) {
+          helpStepsSelect.innerHTML = '';
+          steps.forEach((step, index) => {
+            const option = document.createElement('option');
+            option.value = String(index);
+            option.textContent = `${index + 1}. ${step.title}`;
+            helpStepsSelect.appendChild(option);
+          });
+          helpStepsSelect.addEventListener('change', (event) => {
+            const value = Number.parseInt(event.target.value, 10);
+            if (Number.isFinite(value)) {
+              goToStep(value);
+            }
+          });
+        }
+      }
+
+      function updateControls() {
+        if (helpPrev) helpPrev.disabled = currentStep === 0;
+        if (helpNext) {
+          helpNext.textContent = currentStep === steps.length - 1 ? 'Terminer' : 'Suivant';
+        }
+
+        if (helpStepIndex) {
+          helpStepIndex.textContent = String(currentStep + 1);
+        }
+
+        if (helpStepsList) {
+          Array.from(helpStepsList.children).forEach((node, index) => {
+            node.classList.toggle('active', index === currentStep);
+          });
+        }
+
+        if (helpStepsSelect) {
+          helpStepsSelect.value = String(currentStep);
+        }
+      }
+
+      function goToStep(index) {
+        currentStep = clamp(index, 0, steps.length - 1);
+        const step = steps[currentStep];
+        const target = step.target ? document.querySelector(step.target) : null;
+
+        helpTitle.textContent = step.title;
+        helpText.textContent = step.text;
+        updateControls();
+        applyHighlight(target);
+        scrollToTarget(target);
+
+        requestAnimationFrame(() => {
+          positionPanel(target);
+        });
+      }
+
+      function openTour(startIndex = 0) {
+        hideNudge(true);
+        helpOverlay.classList.add('active');
+        helpOverlay.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('help-active');
+        currentStep = clamp(startIndex, 0, steps.length - 1);
+        updateControls();
+        requestAnimationFrame(() => goToStep(currentStep));
+        window.addEventListener('resize', handleLayoutChange);
+        window.addEventListener('scroll', handleLayoutChange, true);
+      }
+
+      function closeTour({ keepProgress = false } = {}) {
+        helpOverlay.classList.remove('active');
+        helpOverlay.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('help-active');
+        clearHighlight();
+        window.removeEventListener('resize', handleLayoutChange);
+        window.removeEventListener('scroll', handleLayoutChange, true);
+        if (!keepProgress) {
+          clearSavedStep();
+        }
+      }
+
+      function handleLayoutChange() {
+        if (!helpOverlay.classList.contains('active')) return;
+        positionPanel(activeTarget);
+      }
+
+      function onReady() {
+        if (ready) return;
+        ready = true;
+        applyHelpVisibilityState();
+        if (isHelpHidden()) return;
+        setTimeout(showNudge, 1200);
+      }
+
+      localStorage.removeItem(hiddenStorageKey);
+      renderStepsMenu();
+      updateMobileClass();
+      applyHelpVisibilityState();
+
+      if (mobileQuery.addEventListener) {
+        mobileQuery.addEventListener('change', updateMobileClass);
+      } else if (mobileQuery.addListener) {
+        mobileQuery.addListener(updateMobileClass);
+      }
+
+      if (helpFab) {
+        helpFab.addEventListener('click', () => {
+          const saved = getSavedStep();
+          openTour(saved !== null ? saved : 0);
+        });
+      }
+
+      if (helpFabDismiss) {
+        helpFabDismiss.addEventListener('click', (event) => {
+          event.stopPropagation();
+          setHelpHidden(true);
+          closeTour();
+        });
+      }
+
+      window.addEventListener('bni:help-setting-changed', (event) => {
+        const enabled = Boolean(event.detail && event.detail.enabled);
+        setGlobalHelpEnabled(enabled);
+        if (!enabled) {
+          closeTour();
+          hideNudge(true);
+        } else {
+          dismissedForSession = false;
+        }
+        applyHelpVisibilityState();
+      });
+
+      if (helpPrev) {
+        helpPrev.addEventListener('click', () => {
+          goToStep(currentStep - 1);
+        });
+      }
+
+      if (helpNext) {
+        helpNext.addEventListener('click', () => {
+          if (currentStep >= steps.length - 1) {
+            closeTour();
+          } else {
+            goToStep(currentStep + 1);
+          }
+        });
+      }
+
+      if (helpExit) {
+        helpExit.addEventListener('click', () => closeTour());
+      }
+
+      if (helpCloseIcon) {
+        helpCloseIcon.addEventListener('click', () => closeTour());
+      }
+
+      if (helpPause) {
+        helpPause.addEventListener('click', () => {
+          saveStep(currentStep);
+          closeTour({ keepProgress: true });
+        });
+      }
+
+      if (helpNudgeStart) {
+        helpNudgeStart.addEventListener('click', () => {
+          openTour(getSavedStep() || 0);
+        });
+      }
+
+      if (helpNudgeClose) {
+        helpNudgeClose.addEventListener('click', () => hideNudge(true));
+      }
+
+      if (helpNudge) {
+        helpNudge.addEventListener('click', (event) => {
+          if (event.target.closest('.help-nudge-close')) return;
+          if (event.target.closest('.help-nudge-cta')) return;
+          openTour(getSavedStep() || 0);
+        });
+      }
+
+      if (helpOverlay) {
+        helpOverlay.addEventListener('click', (event) => {
+          if (event.target === helpOverlay) {
+            closeTour();
+          }
+        });
+      }
+
+      document.addEventListener('keydown', (event) => {
+                const key = event.key;
+                const isHelpShortcut = ((key === '?' || (key === '/' && event.shiftKey)) && !event.ctrlKey && !event.metaKey && !event.altKey);
+                const tag = event.target && event.target.tagName ? event.target.tagName.toLowerCase() : '';
+                const isTyping = tag === 'input' || tag === 'textarea' || tag === 'select' || Boolean(event.target && event.target.isContentEditable);
+                if (isHelpShortcut && !isTyping && !isHelpHidden()) {
+                    event.preventDefault();
+                    const saved = getSavedStep();
+                    openTour(saved !== null ? saved : 0);
+                    return;
+                }
+                if (!helpOverlay.classList.contains('active')) return;
+                if (key === 'Escape') {
+                    closeTour();
+                }
+                if (key === 'ArrowRight') {
+                    if (currentStep < steps.length - 1) {
+                        goToStep(currentStep + 1);
+                    }
+                }
+                if (key === 'ArrowLeft') {
+                    if (currentStep > 0) {
+                        goToStep(currentStep - 1);
+                    }
+                }
+            });
+
+      return { onReady };
+    }
+  </script>
 </body>
 </html>
+
+
+
