@@ -1,6 +1,6 @@
 import { loadState, state, pushHistory } from './state.js';
 import { restartSim } from './physics.js';
-import { initUI, refreshLists, selectNode } from './ui.js'; 
+import { initUI, refreshLists, selectNode, initCloudCollab } from './ui.js'; 
 import { updatePersonColors } from './logic.js'; 
 import { resizeCanvas, draw } from './render.js';
 
@@ -19,6 +19,9 @@ window.addEventListener('load', () => {
     
     // 3. Physique
     restartSim();
+
+    // 3.1 Session cloud (optionnel, non bloquant)
+    initCloudCollab().catch(() => {});
 
     // 4. Correction affichage resize
     const centerDiv = document.getElementById('center');

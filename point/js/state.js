@@ -39,8 +39,24 @@ export const state = {
 
 const STORAGE_KEY = 'pointPageState_v13'; 
 let saveTimer = null;
+let localPersistenceEnabled = true;
+
+export function setLocalPersistenceEnabled(enabled, options = {}) {
+    localPersistenceEnabled = Boolean(enabled);
+    const shouldPurge = Boolean(options && options.purge);
+    if (!localPersistenceEnabled && shouldPurge) {
+        try {
+            localStorage.removeItem(STORAGE_KEY);
+        } catch (e) {}
+    }
+}
+
+export function isLocalPersistenceEnabled() {
+    return localPersistenceEnabled;
+}
 
 export function saveState() {
+    if (!localPersistenceEnabled) return;
     try {
         const payload = {
             meta: { projectName: state.projectName }, // SAUVEGARDE DU NOM
@@ -75,6 +91,7 @@ export function scheduleSave(delay = 400) {
 
 export function loadState() {
     try {
+        if (!localPersistenceEnabled) return false;
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) return false;
         const data = JSON.parse(raw);

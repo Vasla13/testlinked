@@ -39,9 +39,26 @@ export const state = {
     mapHeight: 0
 };
 
+const LOCAL_STORAGE_KEY = 'tacticalMapData';
+let localPersistenceEnabled = true;
+
 // --- HISTORIQUE ---
 const history = [];
 const MAX_HISTORY = 50; 
+
+export function setLocalPersistenceEnabled(enabled, options = {}) {
+    localPersistenceEnabled = Boolean(enabled);
+
+    if (!localPersistenceEnabled && options && options.purge) {
+        try {
+            localStorage.removeItem(LOCAL_STORAGE_KEY);
+        } catch (e) {}
+    }
+}
+
+export function isLocalPersistenceEnabled() {
+    return localPersistenceEnabled;
+}
 
 export function pushHistory() {
     const snapshot = JSON.stringify({
@@ -137,6 +154,8 @@ export function getMapData() {
 }
 
 export function exportToJSON(fileNameOverride) {
+    if (!localPersistenceEnabled) return false;
+
     const data = getMapData();
     
     let finalName = fileNameOverride;
@@ -160,21 +179,26 @@ export function exportToJSON(fileNameOverride) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(a.href);
+    return true;
 }
 
 export function saveLocalState() {
+    if (!localPersistenceEnabled) return;
+
     const data = {
         groups: state.groups,
         tacticalLinks: state.tacticalLinks,
         currentFileName: state.currentFileName,
         meta: { date: new Date().toISOString(), savedBy: "AutoSave" }
     };
-    try { localStorage.setItem('tacticalMapData', JSON.stringify(data)); } catch (e) {}
+    try { localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data)); } catch (e) {}
 }
 
 export function loadLocalState() {
+    if (!localPersistenceEnabled) return null;
+
     try {
-        const json = localStorage.getItem('tacticalMapData');
+        const json = localStorage.getItem(LOCAL_STORAGE_KEY);
         if (!json) return null;
         return JSON.parse(json);
     } catch (e) { return null; }

@@ -31,6 +31,7 @@ function createModalPromise(setupFn) {
 
         inputContainer.style.display = 'none';
         colorContainer.style.display = 'none';
+        actionsEl.classList.remove('cloud-actions');
         actionsEl.innerHTML = '';
         
         const close = (value) => {
@@ -204,7 +205,19 @@ export function openGroupEditor(groupIndex) {
 
 
 // --- MENU DE SAUVEGARDE (Inchangé mais inclus pour complétude) ---
-export function openSaveOptionsModal() {
+export function openSaveOptionsModal(options = {}) {
+    const cloudActive = Boolean(options && options.cloudActive);
+    const cloudEditable = Boolean(options && options.cloudEditable);
+    const localExportLocked = Boolean(options && options.localExportLocked);
+    const boardTitle = String(options?.boardTitle || '');
+    const safeBoardTitle = boardTitle
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    const onSaveCloud = typeof options?.onSaveCloud === 'function' ? options.onSaveCloud : null;
+
     const overlay = document.getElementById('modal-overlay');
     const title = document.getElementById('modal-title');
     const content = document.getElementById('modal-content');
@@ -219,19 +232,40 @@ export function openSaveOptionsModal() {
     title.innerText = "OPTIONS DE SAUVEGARDE";
     inputContainer.style.display = 'none';
     colorPicker.style.display = 'none';
-    
+
+    const exportWarning = localExportLocked ? `
+        <div style="margin-bottom:12px; padding:10px; border:1px solid rgba(255,153,102,0.45); background:rgba(255,153,102,0.08); color:#ffcc8a; font-size:0.85rem;">
+            Export local bloque sur ce board cloud.
+            Seul le lead peut dupliquer/sauver en local.
+        </div>
+    ` : '';
+
+    const cloudBlock = cloudActive ? `
+        <div style="text-align:center; font-size:0.8rem; color:#666;">- CLOUD -</div>
+        <button id="btnOptCloud" class="action-btn" style="padding:15px; font-size:1rem; border-color:${cloudEditable ? 'var(--accent-cyan)' : 'rgba(255,153,102,0.6)'}; color:${cloudEditable ? 'var(--accent-cyan)' : '#ffcc8a'}; justify-content:center; display:flex; align-items:center; gap:10px;" ${cloudEditable ? '' : 'disabled'}>
+            <span>☁️ ${cloudEditable ? 'SAUVER BOARD CLOUD' : 'LECTURE SEULE CLOUD'}</span>
+        </button>
+        ${safeBoardTitle ? `<div style="font-size:0.75rem; color:#9bb0c7; text-align:center;">Board actif: ${safeBoardTitle}</div>` : ''}
+    ` : '';
+
+    const localBlock = localExportLocked ? '' : `
+        <button id="btnOptFile" class="action-btn" style="padding:15px; font-size:1rem; border-color:var(--accent-cyan); justify-content:center; display:flex; align-items:center; gap:10px;">
+            💾 <span>TELECHARGER FICHIER JSON</span>
+        </button>
+        <div style="text-align:center; font-size:0.8rem; color:#666;">- OU -</div>
+        <button id="btnOptRaw" class="file-btn" style="padding:15px; justify-content:center; display:flex; align-items:center; gap:10px;">
+            📋 <span>COPIER LES DONNEES BRUTES</span>
+        </button>
+    `;
+
     content.innerHTML = `
         <div style="display:flex; flex-direction:column; gap:10px;">
             <p style="font-size:0.9rem; color:#8892b0; margin-bottom:10px;">
-                Choisissez une méthode de sauvegarde :
+                Choisissez une methode de sauvegarde :
             </p>
-            <button id="btnOptFile" class="action-btn" style="padding:15px; font-size:1rem; border-color:var(--accent-cyan); justify-content:center; display:flex; align-items:center; gap:10px;">
-                💾 <span>TÉLÉCHARGER FICHIER JSON</span>
-            </button>
-            <div style="text-align:center; font-size:0.8rem; color:#666;">- OU -</div>
-            <button id="btnOptRaw" class="file-btn" style="padding:15px; justify-content:center; display:flex; align-items:center; gap:10px;">
-                📋 <span>COPIER LES DONNÉES BRUTES</span>
-            </button>
+            ${exportWarning}
+            ${localBlock}
+            ${cloudBlock}
         </div>
 
         <div id="raw-data-area" style="display:none; margin-top:15px;">
@@ -248,48 +282,78 @@ export function openSaveOptionsModal() {
     btnClose.onclick = () => { overlay.classList.add('hidden'); };
     actions.appendChild(btnClose);
 
-    document.getElementById('btnOptFile').onclick = async () => {
-        overlay.classList.add('hidden');
-        setTimeout(async () => {
-            const defaultName = state.currentFileName || "mission_tactique";
-            const newName = await customPrompt(
-                "NOMMER LA SAUVEGARDE", 
-                "Entrez le nom du fichier (sans extension) :", 
-                defaultName
-            );
-            if(newName) {
-                state.currentFileName = newName;
-                exportToJSON(newName);
-            }
-        }, 300);
-    };
+    const btnOptFile = document.getElementById('btnOptFile');
+    if (btnOptFile) {
+        btnOptFile.onclick = async () => {
+            overlay.classList.add('hidden');
+            setTimeout(async () => {
+                const defaultName = state.currentFileName || "mission_tactique";
+                const newName = await customPrompt(
+                    "NOMMER LA SAUVEGARDE",
+                    "Entrez le nom du fichier (sans extension) :",
+                    defaultName
+                );
+                if (newName) {
+                    state.currentFileName = newName;
+                    const exported = exportToJSON(newName);
+                    if (!exported) {
+                        await customAlert("ACCES", "Export local bloque sur ce board cloud.");
+                    }
+                }
+            }, 300);
+        };
+    }
 
-    document.getElementById('btnOptRaw').onclick = () => {
-        const rawArea = document.getElementById('raw-data-area');
-        const txt = document.getElementById('rawJsonOutput');
-        const data = { meta: { date: new Date().toISOString(), version: "2.5" }, groups: state.groups, tacticalLinks: state.tacticalLinks };
-        txt.value = JSON.stringify(data, null, 2);
-        rawArea.style.display = 'block';
-        document.getElementById('btnOptFile').style.display = 'none';
-        document.getElementById('btnOptRaw').style.display = 'none';
-        txt.select();
-    };
-    
-    document.getElementById('btnCopyRaw').onclick = () => {
-        const txt = document.getElementById('rawJsonOutput');
-        txt.select();
-        navigator.clipboard.writeText(txt.value);
-        const btn = document.getElementById('btnCopyRaw');
-        const originalText = btn.innerText;
-        btn.innerText = "✅ COPIÉ !";
-        btn.style.background = "var(--accent-cyan)";
-        btn.style.color = "#000";
-        setTimeout(() => {
-            btn.innerText = originalText;
-            btn.style.background = "";
-            btn.style.color = "";
-        }, 2000);
-    };
+    const btnOptRaw = document.getElementById('btnOptRaw');
+    if (btnOptRaw) {
+        btnOptRaw.onclick = () => {
+            const rawArea = document.getElementById('raw-data-area');
+            const txt = document.getElementById('rawJsonOutput');
+            const data = { meta: { date: new Date().toISOString(), version: "2.5" }, groups: state.groups, tacticalLinks: state.tacticalLinks };
+            txt.value = JSON.stringify(data, null, 2);
+            rawArea.style.display = 'block';
+            if (btnOptFile) btnOptFile.style.display = 'none';
+            btnOptRaw.style.display = 'none';
+            txt.select();
+        };
+    }
+
+    const btnCopyRaw = document.getElementById('btnCopyRaw');
+    if (btnCopyRaw) {
+        btnCopyRaw.onclick = () => {
+            const txt = document.getElementById('rawJsonOutput');
+            txt.select();
+            navigator.clipboard.writeText(txt.value);
+            const originalText = btnCopyRaw.innerText;
+            btnCopyRaw.innerText = "✅ COPIE !";
+            btnCopyRaw.style.background = "var(--accent-cyan)";
+            btnCopyRaw.style.color = "#000";
+            setTimeout(() => {
+                btnCopyRaw.innerText = originalText;
+                btnCopyRaw.style.background = "";
+                btnCopyRaw.style.color = "";
+            }, 2000);
+        };
+    }
+
+    const btnOptCloud = document.getElementById('btnOptCloud');
+    if (btnOptCloud) {
+        btnOptCloud.onclick = async () => {
+            if (!onSaveCloud) {
+                await customAlert("CLOUD", "Board cloud non disponible.");
+                return;
+            }
+            btnOptCloud.setAttribute('disabled', 'true');
+            const previous = btnOptCloud.innerText;
+            btnOptCloud.innerText = "SAUVEGARDE...";
+            try {
+                await onSaveCloud();
+            } finally {
+                btnOptCloud.innerText = previous;
+                if (cloudEditable) btnOptCloud.removeAttribute('disabled');
+            }
+        };
+    }
 }
 
 // Fonction utilitaire pour le sélecteur de couleur simple (utilisé par openGroupEditor ou autre)

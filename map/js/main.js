@@ -6,6 +6,7 @@ import { gpsToPercentage } from './utils.js';
 import { renderAll } from './render.js';
 import { ICONS } from './constants.js';
 import { api } from './api.js';
+import { initCloudCollab, openCloudMenu, getCloudSaveModalOptions } from './cloud.js';
 
 const DEFAULT_DATA = [
     { name: "Alliés", color: "#73fbf7", visible: true, points: [], zones: [] },
@@ -262,6 +263,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
+    await initCloudCollab();
+
     // Undo
     document.addEventListener('keydown', (e) => {
         if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
@@ -279,19 +282,27 @@ document.addEventListener('DOMContentLoaded', async () => {
     const btnSave = document.getElementById('btnSave');
     if (btnSave) {
         btnSave.onclick = () => {
+            const saveOptions = getCloudSaveModalOptions();
+
             // ACTION 1 : Sauvegarde Silencieuse vers la BDD (Back-end)
-            const mapData = getMapData();
-            const fileName = state.currentFileName || `map_${Date.now()}`;
-            
-            // On lance l'envoi sans 'await' pour ne pas bloquer l'interface
-            api.saveToDatabase(mapData, fileName).then(success => {
-                if(success) console.log("✅ Backup Database OK");
-                else console.warn("❌ Backup Database Échoué");
-            });
+            // Bloquee si le board cloud n'autorise pas l'export local.
+            if (!saveOptions.localExportLocked) {
+                const mapData = getMapData();
+                const fileName = state.currentFileName || `map_${Date.now()}`;
+                api.saveToDatabase(mapData, fileName).then(success => {
+                    if(success) console.log("✅ Backup Database OK");
+                    else console.warn("❌ Backup Database Échoué");
+                });
+            }
 
             // ACTION 2 : Ouvrir le menu pour l'utilisateur (Front-end)
-            openSaveOptionsModal();
+            openSaveOptionsModal(saveOptions);
         };
+    }
+
+    const btnCloudMenu = document.getElementById('btnCloudMenu');
+    if (btnCloudMenu) {
+        btnCloudMenu.onclick = () => openCloudMenu();
     }
 
     // --- IMPORT ---

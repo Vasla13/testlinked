@@ -386,7 +386,21 @@ label { display: block; color: var(--text-dim); font-size: 0.8rem; margin-bottom
 #modal-title { background: rgba(115, 251, 247, 0.1); padding: 15px 20px; color: var(--accent-cyan); font-weight: 800; text-transform: uppercase; letter-spacing: 2px; border-bottom: 1px solid var(--border-color); }
 #modal-content { padding: 25px 20px; color: var(--text-main); font-size: 1rem; line-height: 1.5; }
 #modal-input-container { padding: 0 20px 20px 20px; }
-#modal-actions { padding: 15px 20px; display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--border-color); background: rgba(0,0,0,0.3); }
+#modal-actions { padding: 15px 20px; display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--border-color); background: rgba(0,0,0,0.3); flex-wrap: wrap; }
+#modal-actions > button { flex: 0 0 auto; min-height: 40px; white-space: nowrap; }
+#modal-actions.cloud-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 10px;
+    justify-content: stretch;
+}
+#modal-actions.cloud-actions > button {
+    width: 100%;
+    min-height: 44px;
+    white-space: normal;
+    line-height: 1.1;
+    padding: 9px 10px;
+}
 .btn-modal-confirm { background: var(--accent-cyan); color: #000; border: 1px solid var(--accent-cyan); padding: 10px 20px; font-weight: 800; cursor: pointer; border-radius: 0px; text-transform: uppercase; }
 .btn-modal-confirm:hover { box-shadow: 0 0 15px var(--accent-cyan); }
 .btn-modal-cancel { background: transparent; border: 1px solid var(--border-color); color: var(--text-dim); padding: 10px 20px; cursor: pointer; border-radius: 0px; text-transform: uppercase; font-weight: 700; }

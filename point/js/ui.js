@@ -1,4 +1,4 @@
-import { state, saveState, scheduleSave, ensureLinkIds, nodeById, isPerson, isCompany, isGroup, undo, pushHistory } from './state.js';
+import { state, saveState, scheduleSave, ensureLinkIds, nodeById, isPerson, isCompany, isGroup, undo, pushHistory, setLocalPersistenceEnabled, isLocalPersistenceEnabled } from './state.js';
 import { ensureNode, addLink as logicAddLink, calculatePath, clearPath, calculateHVT, updatePersonColors } from './logic.js';
 import { renderPathfindingSidebar } from './templates.js';
 import { restartSim } from './physics.js';
@@ -26,6 +26,22 @@ let intelPanel = null;
 let intelSuggestions = [];
 const INTEL_ACCESS_CODE = 'bni-dutch';
 const API_KEY_STORAGE_KEY = 'bniLinkedApiKey';
+const COLLAB_AUTH_ENDPOINT = '/.netlify/functions/collab-auth';
+const COLLAB_BOARD_ENDPOINT = '/.netlify/functions/collab-board';
+const COLLAB_SESSION_STORAGE_KEY = 'bniLinkedCollabSession_v1';
+const COLLAB_ACTIVE_BOARD_STORAGE_KEY = 'bniLinkedActiveBoard_v1';
+
+const collab = {
+    token: '',
+    user: null,
+    activeBoardId: '',
+    activeRole: '',
+    activeBoardTitle: '',
+    ownerId: '',
+    pendingBoardId: '',
+    autosaveTimer: null,
+    saveInFlight: false
+};
 
 function getApiKey() {
     const fromWindow = (typeof window !== 'undefined' && typeof window.BNI_LINKED_KEY === 'string')
@@ -46,6 +62,627 @@ function withApiKey(headers = {}) {
     const apiKey = getApiKey();
     if (apiKey) merged['x-api-key'] = apiKey;
     return merged;
+}
+
+function isCloudBoardActive() {
+    return Boolean(collab.activeBoardId);
+}
+
+function isCloudOwner() {
+    return isCloudBoardActive() && collab.activeRole === 'owner';
+}
+
+function isLocalSaveLocked() {
+    return isCloudBoardActive() && collab.activeRole !== 'owner';
+}
+
+function canEditCloudBoard() {
+    return isCloudBoardActive() && (collab.activeRole === 'owner' || collab.activeRole === 'editor');
+}
+
+function setBoardQueryParam(boardId) {
+    try {
+        const url = new URL(window.location.href);
+        if (boardId) url.searchParams.set('board', boardId);
+        else url.searchParams.delete('board');
+        window.history.replaceState({}, '', url.toString());
+    } catch (e) {}
+}
+
+function persistCollabState() {
+    try {
+        const sessionPayload = {
+            token: collab.token || '',
+            user: collab.user || null
+        };
+        localStorage.setItem(COLLAB_SESSION_STORAGE_KEY, JSON.stringify(sessionPayload));
+
+        if (collab.activeBoardId) {
+            const boardPayload = {
+                boardId: collab.activeBoardId,
+                role: collab.activeRole || '',
+                title: collab.activeBoardTitle || '',
+                ownerId: collab.ownerId || ''
+            };
+            localStorage.setItem(COLLAB_ACTIVE_BOARD_STORAGE_KEY, JSON.stringify(boardPayload));
+        } else {
+            localStorage.removeItem(COLLAB_ACTIVE_BOARD_STORAGE_KEY);
+        }
+    } catch (e) {}
+}
+
+function clearCollabStorage() {
+    try {
+        localStorage.removeItem(COLLAB_SESSION_STORAGE_KEY);
+        localStorage.removeItem(COLLAB_ACTIVE_BOARD_STORAGE_KEY);
+    } catch (e) {}
+}
+
+function hydrateCollabState() {
+    collab.pendingBoardId = '';
+    try {
+        const sessionRaw = localStorage.getItem(COLLAB_SESSION_STORAGE_KEY);
+        if (sessionRaw) {
+            const parsed = JSON.parse(sessionRaw);
+            collab.token = String(parsed.token || '');
+            collab.user = parsed.user && typeof parsed.user === 'object' ? parsed.user : null;
+        }
+    } catch (e) {
+        collab.token = '';
+        collab.user = null;
+    }
+
+    try {
+        const boardRaw = localStorage.getItem(COLLAB_ACTIVE_BOARD_STORAGE_KEY);
+        if (boardRaw) {
+            const parsedBoard = JSON.parse(boardRaw);
+            collab.activeBoardId = String(parsedBoard.boardId || '');
+            collab.activeRole = String(parsedBoard.role || '');
+            collab.activeBoardTitle = String(parsedBoard.title || '');
+            collab.ownerId = String(parsedBoard.ownerId || '');
+        }
+    } catch (e) {
+        collab.activeBoardId = '';
+        collab.activeRole = '';
+        collab.activeBoardTitle = '';
+        collab.ownerId = '';
+    }
+}
+
+function syncCloudStatus() {
+    const statusEl = document.getElementById('cloudStatus');
+    if (!statusEl) return;
+
+    if (!collab.user) {
+        statusEl.textContent = 'Local';
+        statusEl.style.color = 'var(--text-muted)';
+        statusEl.style.borderColor = 'var(--border-color)';
+        return;
+    }
+
+    if (collab.activeBoardId) {
+        const label = collab.activeRole ? `Cloud ${collab.activeRole}` : 'Cloud';
+        statusEl.textContent = label;
+        if (collab.activeRole === 'owner') {
+            statusEl.style.color = 'var(--accent-cyan)';
+            statusEl.style.borderColor = 'rgba(115, 251, 247, 0.5)';
+        } else {
+            statusEl.style.color = '#ffcc8a';
+            statusEl.style.borderColor = 'rgba(255, 153, 102, 0.5)';
+        }
+        return;
+    }
+
+    statusEl.textContent = `Connecte ${collab.user.username}`;
+    statusEl.style.color = 'var(--accent-cyan)';
+    statusEl.style.borderColor = 'rgba(115, 251, 247, 0.4)';
+}
+
+function applyLocalPersistencePolicy() {
+    if (isLocalSaveLocked()) {
+        setLocalPersistenceEnabled(false, { purge: true });
+    } else if (!isLocalPersistenceEnabled()) {
+        setLocalPersistenceEnabled(true);
+    }
+}
+
+function stopCollabAutosave() {
+    if (collab.autosaveTimer) {
+        clearInterval(collab.autosaveTimer);
+        collab.autosaveTimer = null;
+    }
+}
+
+function startCollabAutosave() {
+    stopCollabAutosave();
+    if (!canEditCloudBoard()) return;
+    collab.autosaveTimer = setInterval(() => {
+        saveActiveCloudBoard({ manual: false, quiet: true }).catch(() => {});
+    }, 45000);
+}
+
+async function collabAuthRequest(action, payload = {}) {
+    const response = await fetch(COLLAB_AUTH_ENDPOINT, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...(collab.token ? { 'x-collab-token': collab.token } : {})
+        },
+        body: JSON.stringify({ action, ...payload })
+    });
+    let data = {};
+    try { data = await response.json(); } catch (e) {}
+    if (!response.ok || !data.ok) {
+        throw new Error(data.error || `Erreur auth (${response.status})`);
+    }
+    return data;
+}
+
+async function collabBoardRequest(action, payload = {}) {
+    if (!collab.token) throw new Error('Session cloud manquante.');
+    const response = await fetch(COLLAB_BOARD_ENDPOINT, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'x-collab-token': collab.token
+        },
+        body: JSON.stringify({ action, ...payload })
+    });
+    let data = {};
+    try { data = await response.json(); } catch (e) {}
+    if (!response.ok || !data.ok) {
+        throw new Error(data.error || `Erreur cloud (${response.status})`);
+    }
+    return data;
+}
+
+function setActiveCloudBoardFromSummary(summary = null) {
+    if (!summary || !summary.id) {
+        collab.activeBoardId = '';
+        collab.activeRole = '';
+        collab.activeBoardTitle = '';
+        collab.ownerId = '';
+    } else {
+        collab.activeBoardId = String(summary.id || '');
+        collab.activeRole = String(summary.role || '');
+        collab.activeBoardTitle = String(summary.title || '');
+        collab.ownerId = String(summary.ownerId || '');
+    }
+    applyLocalPersistencePolicy();
+    syncCloudStatus();
+    persistCollabState();
+    if (isCloudBoardActive()) startCollabAutosave();
+    else stopCollabAutosave();
+}
+
+async function openCloudBoard(boardId, options = {}) {
+    const targetId = String(boardId || '').trim();
+    if (!targetId) throw new Error('Board cloud invalide.');
+
+    const result = await collabBoardRequest('get_board', { boardId: targetId });
+    if (!result.board || !result.board.data) throw new Error('Board cloud corrompu.');
+
+    const summary = {
+        id: result.board.id,
+        role: result.role || 'editor',
+        title: result.board.title || state.projectName || 'Tableau cloud',
+        ownerId: result.board.ownerId || ''
+    };
+
+    setActiveCloudBoardFromSummary(summary);
+    processData(result.board.data, 'load', { silent: true });
+    state.projectName = summary.title;
+    scheduleSave();
+    setBoardQueryParam(summary.id);
+
+    if (!options.quiet) {
+        showCustomAlert(`☁️ Board cloud ouvert : ${escapeHtml(summary.title)}`);
+    }
+}
+
+async function saveActiveCloudBoard(options = {}) {
+    const manual = Boolean(options.manual);
+    const quiet = Boolean(options.quiet);
+
+    if (!isCloudBoardActive()) {
+        if (manual && !quiet) showCustomAlert("Aucun board cloud actif.");
+        return false;
+    }
+    if (!canEditCloudBoard()) {
+        if (manual && !quiet) showCustomAlert("Tu n'as pas les droits d'edition cloud.");
+        return false;
+    }
+    if (collab.saveInFlight) return false;
+
+    collab.saveInFlight = true;
+    try {
+        const title = (state.projectName || collab.activeBoardTitle || 'Tableau cloud').trim();
+        const data = generateExportData();
+        const result = await collabBoardRequest('save_board', {
+            boardId: collab.activeBoardId,
+            title,
+            data
+        });
+        if (result && result.board) {
+            collab.activeBoardTitle = result.board.title || title;
+            state.projectName = collab.activeBoardTitle;
+            persistCollabState();
+        }
+        if (manual && !quiet) showCustomAlert("☁️ Board cloud sauvegarde.");
+        return true;
+    } catch (e) {
+        if (!quiet) showCustomAlert(`Erreur cloud: ${escapeHtml(e.message || 'inconnue')}`);
+        return false;
+    } finally {
+        collab.saveInFlight = false;
+    }
+}
+
+async function createCloudBoardFromCurrent() {
+    if (!collab.user) throw new Error('Connexion cloud requise.');
+    const defaultTitle = state.projectName || `reseau_${new Date().toISOString().slice(0, 10)}`;
+    const title = await new Promise((resolve) => {
+        showCustomPrompt(
+            'Nom du board cloud',
+            defaultTitle,
+            (value) => resolve(value),
+            () => resolve(null)
+        );
+    });
+    if (title === null) return;
+    const cleanTitle = String(title || '').trim() || defaultTitle;
+
+    const result = await collabBoardRequest('create_board', {
+        title: cleanTitle,
+        page: 'point',
+        data: generateExportData()
+    });
+
+    if (!result.board) throw new Error('Creation cloud echouee.');
+
+    setActiveCloudBoardFromSummary({
+        id: result.board.id,
+        role: result.board.role || 'owner',
+        title: result.board.title || cleanTitle,
+        ownerId: result.board.ownerId || collab.user.id
+    });
+    state.projectName = collab.activeBoardTitle;
+    setBoardQueryParam(result.board.id);
+}
+
+async function logoutCollab() {
+    try {
+        if (collab.token) await collabAuthRequest('logout');
+    } catch (e) {}
+
+    collab.token = '';
+    collab.user = null;
+    setActiveCloudBoardFromSummary(null);
+    clearCollabStorage();
+    stopCollabAutosave();
+    setLocalPersistenceEnabled(true);
+    setBoardQueryParam('');
+    syncCloudStatus();
+}
+
+async function renderCloudMembers(boardId) {
+    if (!modalOverlay) createModal();
+    const msgEl = document.getElementById('modal-msg');
+    const actEl = document.getElementById('modal-actions');
+    if (!msgEl || !actEl) return;
+
+    let result;
+    try {
+        result = await collabBoardRequest('get_board', { boardId });
+    } catch (e) {
+        showCustomAlert(`Erreur cloud: ${escapeHtml(e.message || 'inconnue')}`);
+        return;
+    }
+
+    if (!result || !result.board) return;
+    if (result.role !== 'owner') {
+        showCustomAlert('Seul le lead peut gerer les membres.');
+        return;
+    }
+
+    const board = result.board;
+    const members = Array.isArray(board.members) ? board.members : [];
+    const shareUrl = `${window.location.origin}${window.location.pathname}?board=${encodeURIComponent(board.id)}`;
+
+    const membersHtml = members.map((m) => {
+        const isOwner = m.role === 'owner';
+        return `
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin:6px 0; padding:8px; border:1px solid rgba(255,255,255,0.08); border-radius:6px; background:rgba(0,0,0,0.2);">
+                <div>
+                    <div style="font-size:0.95rem; color:#fff;">${escapeHtml(m.username)}</div>
+                    <div style="font-size:0.72rem; color:#8b9bb4; text-transform:uppercase;">${escapeHtml(m.role || 'editor')}</div>
+                </div>
+                <div style="display:flex; gap:6px;">
+                    ${isOwner ? '' : `<button type="button" class="mini-btn cloud-remove-member" data-user="${escapeHtml(m.userId)}">Retirer</button>`}
+                    ${isOwner ? '' : `<button type="button" class="mini-btn cloud-transfer-member" data-user="${escapeHtml(m.userId)}">Donner lead</button>`}
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    msgEl.innerHTML = `
+        <h3 style="margin-top:0; color:var(--accent-cyan); text-transform:uppercase;">Membres cloud</h3>
+        <div style="font-size:0.82rem; color:#9bb0c7; margin-bottom:8px;">Board: ${escapeHtml(board.title || 'Sans nom')}</div>
+        <div style="display:flex; gap:8px; margin-bottom:8px;">
+            <input id="cloud-share-username" type="text" placeholder="username" style="flex:1;" />
+            <select id="cloud-share-role" style="width:110px;">
+                <option value="editor">editor</option>
+                <option value="viewer">viewer</option>
+            </select>
+            <button type="button" id="cloud-share-add" class="mini-btn">Ajouter</button>
+        </div>
+        <div style="font-size:0.72rem; color:#8b9bb4; margin-bottom:8px;">Lien partage: <span id="cloud-share-link" style="color:var(--accent-cyan);">${escapeHtml(shareUrl)}</span></div>
+        <div style="max-height:260px; overflow:auto; padding-right:4px;">${membersHtml || '<div style="color:#777">Aucun membre.</div>'}</div>
+    `;
+
+    actEl.innerHTML = `
+        <button type="button" id="cloud-copy-link">Copier lien</button>
+        <button type="button" id="cloud-members-back">Retour</button>
+        <button type="button" id="cloud-members-close">Fermer</button>
+    `;
+
+    document.getElementById('cloud-share-add').onclick = async () => {
+        const usernameInput = document.getElementById('cloud-share-username');
+        const roleInput = document.getElementById('cloud-share-role');
+        const username = usernameInput ? usernameInput.value.trim() : '';
+        const role = roleInput ? roleInput.value : 'editor';
+        if (!username) {
+            showCustomAlert('Entre un username.');
+            return;
+        }
+        try {
+            await collabBoardRequest('share_board', { boardId, username, role });
+            await renderCloudMembers(boardId);
+        } catch (e) {
+            showCustomAlert(`Erreur partage: ${escapeHtml(e.message || 'inconnue')}`);
+        }
+    };
+
+    Array.from(document.querySelectorAll('.cloud-remove-member')).forEach((btn) => {
+        btn.onclick = async () => {
+            const userId = btn.getAttribute('data-user') || '';
+            if (!userId) return;
+            if (!window.confirm('Retirer ce membre ?')) return;
+            try {
+                await collabBoardRequest('remove_member', { boardId, userId });
+                await renderCloudMembers(boardId);
+            } catch (e) {
+                showCustomAlert(`Erreur retrait: ${escapeHtml(e.message || 'inconnue')}`);
+            }
+        };
+    });
+
+    Array.from(document.querySelectorAll('.cloud-transfer-member')).forEach((btn) => {
+        btn.onclick = async () => {
+            const userId = btn.getAttribute('data-user') || '';
+            if (!userId) return;
+            if (!window.confirm('Transferer le lead a ce membre ?')) return;
+            try {
+                await collabBoardRequest('transfer_board', { boardId, userId });
+                await openCloudBoard(boardId, { quiet: true });
+                await renderCloudHome();
+            } catch (e) {
+                showCustomAlert(`Erreur transfert: ${escapeHtml(e.message || 'inconnue')}`);
+            }
+        };
+    });
+
+    document.getElementById('cloud-copy-link').onclick = async () => {
+        try {
+            await navigator.clipboard.writeText(shareUrl);
+            showCustomAlert('Lien copie.');
+        } catch (e) {
+            showCustomAlert('Impossible de copier le lien.');
+        }
+    };
+    document.getElementById('cloud-members-back').onclick = () => renderCloudHome();
+    document.getElementById('cloud-members-close').onclick = () => { modalOverlay.style.display = 'none'; };
+}
+
+async function renderCloudHome() {
+    if (!modalOverlay) createModal();
+    const msgEl = document.getElementById('modal-msg');
+    const actEl = document.getElementById('modal-actions');
+    if (!msgEl || !actEl) return;
+
+    if (!collab.user) {
+        msgEl.innerHTML = `
+            <h3 style="margin-top:0; color:var(--accent-cyan); text-transform:uppercase;">Cloud collaboratif</h3>
+            <div style="font-size:0.82rem; color:#9bb0c7; margin-bottom:10px;">Crée un compte ou connecte-toi.</div>
+            <input id="cloud-auth-user" type="text" placeholder="username" style="margin-bottom:8px;" />
+            <input id="cloud-auth-pass" type="password" placeholder="mot de passe" />
+        `;
+        actEl.innerHTML = `
+            <button type="button" id="cloud-auth-register">Creer compte</button>
+            <button type="button" id="cloud-auth-login" class="primary">Connexion</button>
+            <button type="button" id="cloud-auth-close">Fermer</button>
+        `;
+
+        const runAuth = async (action) => {
+            const userInput = document.getElementById('cloud-auth-user');
+            const passInput = document.getElementById('cloud-auth-pass');
+            const username = userInput ? userInput.value.trim() : '';
+            const password = passInput ? passInput.value : '';
+            if (!username || !password) {
+                showCustomAlert('Renseigne username + mot de passe.');
+                return;
+            }
+            try {
+                const res = await collabAuthRequest(action, { username, password });
+                collab.token = String(res.token || '');
+                collab.user = res.user || null;
+                persistCollabState();
+                syncCloudStatus();
+                if (collab.pendingBoardId) {
+                    const targetBoard = collab.pendingBoardId;
+                    collab.pendingBoardId = '';
+                    await openCloudBoard(targetBoard, { quiet: true });
+                }
+                await renderCloudHome();
+            } catch (e) {
+                showCustomAlert(`Erreur: ${escapeHtml(e.message || 'inconnue')}`);
+            }
+        };
+
+        document.getElementById('cloud-auth-register').onclick = () => runAuth('register');
+        document.getElementById('cloud-auth-login').onclick = () => runAuth('login');
+        document.getElementById('cloud-auth-close').onclick = () => { modalOverlay.style.display = 'none'; };
+        return;
+    }
+
+    let boards = [];
+    try {
+        const res = await collabBoardRequest('list_boards', {});
+        boards = Array.isArray(res.boards) ? res.boards : [];
+    } catch (e) {
+        showCustomAlert(`Erreur cloud: ${escapeHtml(e.message || 'inconnue')}`);
+        return;
+    }
+
+    const boardRows = boards.map((b) => {
+        const active = b.id === collab.activeBoardId;
+        const role = b.role || '';
+        return `
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin:6px 0; padding:8px; border:1px solid ${active ? 'rgba(115,251,247,0.45)' : 'rgba(255,255,255,0.08)'}; border-radius:6px; background:${active ? 'rgba(115,251,247,0.08)' : 'rgba(0,0,0,0.2)'};">
+                <div style="min-width:0;">
+                    <div style="font-size:0.95rem; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(b.title || 'Sans nom')}</div>
+                    <div style="font-size:0.72rem; color:#8b9bb4; text-transform:uppercase;">${escapeHtml(role)} · ${escapeHtml(b.page || 'point')}</div>
+                </div>
+                <div style="display:flex; gap:6px; flex-shrink:0;">
+                    <button type="button" class="mini-btn cloud-open-board" data-board="${escapeHtml(b.id)}">Ouvrir</button>
+                    ${role === 'owner' ? `<button type="button" class="mini-btn cloud-manage-board" data-board="${escapeHtml(b.id)}">Membres</button>` : ''}
+                    ${role !== 'owner' ? `<button type="button" class="mini-btn cloud-leave-board" data-board="${escapeHtml(b.id)}">Quitter</button>` : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    msgEl.innerHTML = `
+        <h3 style="margin-top:0; color:var(--accent-cyan); text-transform:uppercase;">Cloud collaboratif</h3>
+        <div style="font-size:0.82rem; color:#9bb0c7; margin-bottom:8px;">Connecte: ${escapeHtml(collab.user.username)}</div>
+        <div style="font-size:0.75rem; color:${isCloudBoardActive() ? 'var(--accent-cyan)' : '#9bb0c7'}; margin-bottom:8px;">
+            ${isCloudBoardActive() ? `Board actif: ${escapeHtml(collab.activeBoardTitle || collab.activeBoardId)} (${escapeHtml(collab.activeRole || '')})` : 'Aucun board cloud actif'}
+        </div>
+        <div style="max-height:280px; overflow:auto; padding-right:4px;">${boardRows || '<div style="color:#777;">Aucun board cloud.</div>'}</div>
+    `;
+
+    actEl.innerHTML = `
+        <button type="button" id="cloud-create-board" class="primary">Nouveau board</button>
+        <button type="button" id="cloud-save-active">Sauver board actif</button>
+        <button type="button" id="cloud-refresh">Rafraichir</button>
+        <button type="button" id="cloud-logout">Deconnexion</button>
+        <button type="button" id="cloud-close">Fermer</button>
+    `;
+
+    document.getElementById('cloud-create-board').onclick = async () => {
+        try {
+            await createCloudBoardFromCurrent();
+            showCustomAlert(`☁️ Board cree: ${escapeHtml(collab.activeBoardTitle || '')}`);
+            await renderCloudHome();
+        } catch (e) {
+            showCustomAlert(`Erreur creation cloud: ${escapeHtml(e.message || 'inconnue')}`);
+        }
+    };
+
+    document.getElementById('cloud-save-active').onclick = async () => {
+        await saveActiveCloudBoard({ manual: true, quiet: false });
+        await renderCloudHome();
+    };
+    document.getElementById('cloud-refresh').onclick = () => renderCloudHome();
+    document.getElementById('cloud-logout').onclick = async () => {
+        await logoutCollab();
+        await renderCloudHome();
+    };
+    document.getElementById('cloud-close').onclick = () => { modalOverlay.style.display = 'none'; };
+
+    Array.from(document.querySelectorAll('.cloud-open-board')).forEach((btn) => {
+        btn.onclick = async () => {
+            const boardId = btn.getAttribute('data-board') || '';
+            if (!boardId) return;
+            try {
+                await openCloudBoard(boardId, { quiet: false });
+                await renderCloudHome();
+            } catch (e) {
+                showCustomAlert(`Erreur ouverture cloud: ${escapeHtml(e.message || 'inconnue')}`);
+            }
+        };
+    });
+
+    Array.from(document.querySelectorAll('.cloud-manage-board')).forEach((btn) => {
+        btn.onclick = async () => {
+            const boardId = btn.getAttribute('data-board') || '';
+            if (!boardId) return;
+            await renderCloudMembers(boardId);
+        };
+    });
+
+    Array.from(document.querySelectorAll('.cloud-leave-board')).forEach((btn) => {
+        btn.onclick = async () => {
+            const boardId = btn.getAttribute('data-board') || '';
+            if (!boardId) return;
+            if (!window.confirm('Quitter ce board partagé ?')) return;
+            try {
+                await collabBoardRequest('leave_board', { boardId });
+                if (boardId === collab.activeBoardId) {
+                    setActiveCloudBoardFromSummary(null);
+                    setBoardQueryParam('');
+                }
+                await renderCloudHome();
+            } catch (e) {
+                showCustomAlert(`Erreur: ${escapeHtml(e.message || 'inconnue')}`);
+            }
+        };
+    });
+}
+
+function showCloudMenu() {
+    if (!modalOverlay) createModal();
+    modalOverlay.style.display = 'flex';
+    renderCloudHome();
+}
+
+export async function initCloudCollab() {
+    hydrateCollabState();
+    syncCloudStatus();
+
+    try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const boardFromUrl = String(urlParams.get('board') || '').trim();
+        if (boardFromUrl) collab.pendingBoardId = boardFromUrl;
+    } catch (e) {}
+
+    if (!collab.token) {
+        setActiveCloudBoardFromSummary(null);
+        return;
+    }
+
+    try {
+        const me = await collabAuthRequest('me');
+        collab.user = me.user || collab.user;
+    } catch (e) {
+        await logoutCollab();
+        return;
+    }
+
+    const preferredBoard = collab.pendingBoardId || collab.activeBoardId;
+    if (preferredBoard) {
+        try {
+            await openCloudBoard(preferredBoard, { quiet: true });
+        } catch (e) {
+            setActiveCloudBoardFromSummary(null);
+            setBoardQueryParam('');
+        } finally {
+            collab.pendingBoardId = '';
+        }
+    }
+
+    syncCloudStatus();
+    persistCollabState();
 }
 
 function updateIntelButtonLockVisual() {
@@ -119,22 +756,26 @@ export function showCustomConfirm(msg, onYes) {
     }
 }
 
-export function showCustomPrompt(msg, defaultValue, onConfirm) {
+export function showCustomPrompt(msg, defaultValue, onConfirm, onCancel = null) {
     if(!modalOverlay) createModal();
     const msgEl = document.getElementById('modal-msg');
     const actEl = document.getElementById('modal-actions');
     
     if(msgEl && actEl) {
+        const safeDefault = escapeHtml(defaultValue || '');
         msgEl.innerHTML = `
             <div style="margin-bottom:15px; text-transform:uppercase; letter-spacing:1px; color:var(--accent-cyan);">${msg}</div>
-            <input type="text" id="modal-input-custom" value="${defaultValue}" 
+            <input type="text" id="modal-input-custom" value="${safeDefault}" 
             style="width:100%; background:rgba(0,0,0,0.5); border:1px solid var(--text-muted); color:white; padding:10px; border-radius:4px; text-align:center; font-family:'Rajdhani'; font-size:1.1rem; outline:none;">
         `;
         
         actEl.innerHTML = '';
         const btnCancel = document.createElement('button'); 
         btnCancel.innerText = 'ANNULER'; 
-        btnCancel.onclick = () => { modalOverlay.style.display='none'; };
+        btnCancel.onclick = () => {
+            modalOverlay.style.display='none';
+            if (typeof onCancel === 'function') onCancel();
+        };
         
         const btnConfirm = document.createElement('button'); 
         btnConfirm.innerText = 'VALIDER'; 
@@ -196,6 +837,8 @@ function setupTopButtons() {
     document.getElementById('btnSaveMenu').onclick = () => showDataMenu('save');
     document.getElementById('btnOpenMenu').onclick = () => showDataMenu('load');
     document.getElementById('btnMergeMenu').onclick = () => showDataMenu('merge');
+    const btnCloudMenu = document.getElementById('btnCloudMenu');
+    if (btnCloudMenu) btnCloudMenu.onclick = () => showCloudMenu();
     
     document.getElementById('fileImport').onchange = (e) => handleFileProcess(e.target.files[0], 'load');
     document.getElementById('fileMerge').onchange = (e) => handleFileProcess(e.target.files[0], 'merge');
@@ -207,6 +850,8 @@ function setupTopButtons() {
             restartSim(); refreshLists(); renderEditor(); saveState(); 
         });
     };
+
+    syncCloudStatus();
 }
 
 // --- SYSTÈME DE GESTION DES DONNÉES (MENU) ---
@@ -215,13 +860,17 @@ function showDataMenu(mode) {
     if(!modalOverlay) createModal();
     const msgEl = document.getElementById('modal-msg');
     const actEl = document.getElementById('modal-actions');
+    const localSaveLocked = mode === 'save' && isLocalSaveLocked();
     
     let title = "";
     if(mode === 'save') title = `SAUVEGARDER`; 
     if(mode === 'load') title = "OUVRIR UN RÉSEAU";
     if(mode === 'merge') title = "FUSIONNER DES DONNÉES";
 
-    msgEl.innerHTML = `<h3 style="margin-top:0; color:var(--accent-cyan); text-transform:uppercase;">${title}</h3>`;
+    msgEl.innerHTML = `
+        <h3 style="margin-top:0; color:var(--accent-cyan); text-transform:uppercase;">${title}</h3>
+        ${localSaveLocked ? '<div style="font-size:0.8rem; color:#ffcc8a; margin-top:4px;">Mode partage: export local bloque (owner only).</div>' : ''}
+    `;
 
     actEl.innerHTML = '';
 
@@ -230,6 +879,10 @@ function showDataMenu(mode) {
     btnFile.style.padding = '15px 20px';
     btnFile.className = 'primary';
     btnFile.onclick = () => {
+        if (localSaveLocked) {
+            showCustomAlert("Export local interdit pour les membres partages.");
+            return;
+        }
         modalOverlay.style.display = 'none';
         if(mode === 'save') downloadJSON();
         if(mode === 'load') document.getElementById('fileImport').click();
@@ -240,6 +893,10 @@ function showDataMenu(mode) {
     btnText.innerHTML = (mode === 'save') ? '📋 COPIER TEXTE' : '📝 COLLER TEXTE';
     btnText.style.padding = '15px 20px';
     btnText.onclick = () => {
+        if (localSaveLocked) {
+            showCustomAlert("Duplication locale interdite pour les membres partages.");
+            return;
+        }
         if (mode === 'save') {
             const data = generateExportData();
             navigator.clipboard.writeText(JSON.stringify(data, null, 2))
@@ -252,6 +909,20 @@ function showDataMenu(mode) {
             showRawDataInput(mode);
         }
     };
+    if (localSaveLocked) {
+        btnFile.style.opacity = '0.6';
+        btnText.style.opacity = '0.6';
+    }
+
+    let btnCloudSave = null;
+    if (mode === 'save' && isCloudBoardActive()) {
+        btnCloudSave = document.createElement('button');
+        btnCloudSave.innerHTML = '☁️ SAUVER CLOUD';
+        btnCloudSave.style.padding = '15px 20px';
+        btnCloudSave.onclick = async () => {
+            await saveActiveCloudBoard({ manual: true, quiet: false });
+        };
+    }
 
     const btnClose = document.createElement('button');
     btnClose.innerHTML = '✕';
@@ -261,6 +932,7 @@ function showDataMenu(mode) {
 
     actEl.appendChild(btnFile);
     actEl.appendChild(btnText);
+    if (btnCloudSave) actEl.appendChild(btnCloudSave);
     actEl.appendChild(btnClose); 
     
     modalOverlay.style.display = 'flex';
@@ -342,6 +1014,11 @@ function linkSignature(sourceId, targetId, kind) {
 }
 
 function downloadJSON() {
+    if (isLocalSaveLocked()) {
+        showCustomAlert("Export local bloque: seul le lead peut dupliquer/sauvegarder en local.");
+        return;
+    }
+
     const data = generateExportData();
     const fileName = "fichier_neural.json";
     
@@ -384,7 +1061,9 @@ function handleFileProcess(file, mode) {
     r.readAsText(file);
 }
 
-function processData(d, mode) {
+function processData(d, mode, options = {}) {
+    const silent = Boolean(options && options.silent);
+
     if (mode === 'load') {
         state.nodes = d.nodes; state.links = d.links;
         if(d.physicsSettings) state.physicsSettings = d.physicsSettings;
@@ -395,7 +1074,8 @@ function processData(d, mode) {
         if (numericIds.length) state.nextId = Math.max(...numericIds) + 1;
         ensureLinkIds();
         updatePersonColors();
-        restartSim(); refreshLists(); showCustomAlert('OUVERTURE RÉUSSIE.');
+        restartSim(); refreshLists();
+        if (!silent) showCustomAlert('OUVERTURE RÉUSSIE.');
     } 
     else if (mode === 'merge') {
         const incomingNodes = Array.isArray(d.nodes) ? d.nodes : [];
@@ -492,7 +1172,7 @@ function processData(d, mode) {
         updatePersonColors();
         restartSim();
         refreshLists();
-        showCustomAlert(`FUSION : ${addedNodes} NOUVEAUX ÉLÉMENTS, ${addedLinks} NOUVEAUX LIENS.`);
+        if (!silent) showCustomAlert(`FUSION : ${addedNodes} NOUVEAUX ÉLÉMENTS, ${addedLinks} NOUVEAUX LIENS.`);
     }
     saveState();
 }
