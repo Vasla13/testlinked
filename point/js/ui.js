@@ -833,6 +833,21 @@ function setupTopButtons() {
     document.getElementById('createPerson').onclick = () => createNode(TYPES.PERSON, 'Nouvelle personne');
     document.getElementById('createGroup').onclick = () => createNode(TYPES.GROUP, 'Nouveau groupe');
     document.getElementById('createCompany').onclick = () => createNode(TYPES.COMPANY, 'Nouvelle entreprise');
+
+    const btnDataFileToggle = document.getElementById('btnDataFileToggle');
+    const dataFileMenuPanel = document.getElementById('dataFileMenuPanel');
+    if (btnDataFileToggle && dataFileMenuPanel) {
+        const setOpen = (isOpen) => {
+            dataFileMenuPanel.style.display = isOpen ? 'flex' : 'none';
+            btnDataFileToggle.setAttribute('aria-expanded', String(isOpen));
+            btnDataFileToggle.textContent = isOpen ? 'Fichier ▴' : 'Fichier ▾';
+        };
+        setOpen(false);
+        btnDataFileToggle.onclick = () => {
+            const isOpen = dataFileMenuPanel.style.display !== 'none';
+            setOpen(!isOpen);
+        };
+    }
     
     document.getElementById('btnSaveMenu').onclick = () => showDataMenu('save');
     document.getElementById('btnOpenMenu').onclick = () => showDataMenu('load');

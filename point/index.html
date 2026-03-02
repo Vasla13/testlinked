@@ -849,17 +849,20 @@ body.help-active .help-fab {
 
       <div class="section">
         <h2>Données</h2>
-        <div style="display:flex; gap:5px;">
-          <button id="btnSaveMenu" type="button" class="grow">Sauvegarder</button>
-          <button id="btnOpenMenu" type="button" class="grow">Ouvrir</button>
-        </div>
-        <div style="display:flex; gap:5px;">
-          <button id="btnMergeMenu" type="button" class="grow">Fusionner</button>
-          <button id="btnClearAll" type="button" class="danger grow">Reset</button>
-        </div>
-        <div style="display:flex; gap:5px;">
-          <button id="btnCloudMenu" type="button" class="grow">Cloud</button>
-          <div id="cloudStatus" style="flex:1; display:flex; align-items:center; justify-content:center; border:1px solid var(--border-color); border-radius:4px; font-size:0.78rem; letter-spacing:0.5px; color:var(--text-muted); background:rgba(0,0,0,0.25); text-transform:uppercase;">Local</div>
+        <button id="btnDataFileToggle" type="button" style="width:100%;" aria-controls="dataFileMenuPanel" aria-expanded="false">Fichier ▾</button>
+        <div id="dataFileMenuPanel" style="display:flex; flex-direction:column; gap:5px;" hidden>
+          <div style="display:flex; gap:5px;">
+            <button id="btnSaveMenu" type="button" class="grow">Sauvegarder</button>
+            <button id="btnOpenMenu" type="button" class="grow">Ouvrir</button>
+          </div>
+          <div style="display:flex; gap:5px;">
+            <button id="btnMergeMenu" type="button" class="grow">Fusionner</button>
+            <button id="btnClearAll" type="button" class="danger grow">Reset</button>
+          </div>
+          <div style="display:flex; gap:5px;">
+            <button id="btnCloudMenu" type="button" class="grow">Cloud</button>
+            <div id="cloudStatus" style="flex:1; display:flex; align-items:center; justify-content:center; border:1px solid var(--border-color); border-radius:4px; font-size:0.78rem; letter-spacing:0.5px; color:var(--text-muted); background:rgba(0,0,0,0.25); text-transform:uppercase;">Local</div>
+          </div>
         </div>
         
         <input id="fileImport" type="file" accept=".json" class="hidden-input"/>

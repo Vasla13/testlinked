@@ -229,12 +229,31 @@ function focusPointById(targetId) {
     return false;
 }
 
+function setupDataFileMenuToggle() {
+    const toggleButton = document.getElementById('btnDataFileToggle');
+    const submenu = document.getElementById('dataFileMenuPanel');
+    if (!toggleButton || !submenu) return;
+
+    const setOpen = (isOpen) => {
+        submenu.style.display = isOpen ? 'flex' : 'none';
+        toggleButton.setAttribute('aria-expanded', String(isOpen));
+        toggleButton.textContent = isOpen ? 'FICHIER ▴' : 'FICHIER ▾';
+    };
+
+    setOpen(false);
+    toggleButton.onclick = () => {
+        const isOpen = submenu.style.display !== 'none';
+        setOpen(!isOpen);
+    };
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     const oldLayer = document.querySelector('#map-world #markers-layer');
     if(oldLayer) oldLayer.remove(); // Nettoyage si doublon
 
     // Initialisation
     initUI();
+    setupDataFileMenuToggle();
     initEngine();
     
     // Chargement
