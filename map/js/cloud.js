@@ -24,6 +24,7 @@ const collab = {
     activeRole: '',
     activeBoardTitle: '',
     ownerId: '',
+    activeBoardUpdatedAt: '',
     pendingBoardId: '',
     autosaveTimer: null,
     saveInFlight: false
@@ -90,7 +91,8 @@ function persistCollabState() {
                 boardId: collab.activeBoardId,
                 role: collab.activeRole || '',
                 title: collab.activeBoardTitle || '',
-                ownerId: collab.ownerId || ''
+                ownerId: collab.ownerId || '',
+                updatedAt: collab.activeBoardUpdatedAt || ''
             };
             localStorage.setItem(COLLAB_ACTIVE_BOARD_STORAGE_KEY, JSON.stringify(boardPayload));
         } else {
@@ -126,11 +128,13 @@ function hydrateCollabState() {
         collab.activeRole = String(parsed?.role || '');
         collab.activeBoardTitle = String(parsed?.title || '');
         collab.ownerId = String(parsed?.ownerId || '');
+        collab.activeBoardUpdatedAt = String(parsed?.updatedAt || '');
     } catch (e) {
         collab.activeBoardId = '';
         collab.activeRole = '';
         collab.activeBoardTitle = '';
         collab.ownerId = '';
+        collab.activeBoardUpdatedAt = '';
     }
 }
 
@@ -239,11 +243,13 @@ function setActiveCloudBoardFromSummary(summary = null) {
         collab.activeRole = '';
         collab.activeBoardTitle = '';
         collab.ownerId = '';
+        collab.activeBoardUpdatedAt = '';
     } else {
         collab.activeBoardId = String(summary.id || '');
         collab.activeRole = String(summary.role || '');
         collab.activeBoardTitle = String(summary.title || '');
         collab.ownerId = String(summary.ownerId || '');
+        collab.activeBoardUpdatedAt = String(summary.updatedAt || '');
     }
 
     applyLocalPersistencePolicy();
@@ -313,7 +319,8 @@ async function openCloudBoard(boardId, options = {}) {
         id: result.board.id,
         role: result.role || 'editor',
         title: result.board.title || state.currentFileName || 'Carte cloud',
-        ownerId: result.board.ownerId || ''
+        ownerId: result.board.ownerId || '',
+        updatedAt: result.board.updatedAt || ''
     };
 
     setActiveCloudBoardFromSummary(summary);
@@ -348,11 +355,13 @@ export async function saveActiveCloudBoard(options = {}) {
         const result = await collabBoardRequest('save_board', {
             boardId: collab.activeBoardId,
             title,
-            data: getMapData()
+            data: getMapData(),
+            ...(collab.activeBoardUpdatedAt ? { expectedUpdatedAt: collab.activeBoardUpdatedAt } : {})
         });
 
         if (result?.board) {
             collab.activeBoardTitle = String(result.board.title || title);
+            collab.activeBoardUpdatedAt = String(result.board.updatedAt || collab.activeBoardUpdatedAt || '');
             state.currentFileName = collab.activeBoardTitle;
             persistCollabState();
             syncCloudStatus();
@@ -392,7 +401,8 @@ async function createCloudBoardFromCurrent() {
         id: result.board.id,
         role: result.board.role || 'owner',
         title: result.board.title || title,
-        ownerId: result.board.ownerId || collab.user.id
+        ownerId: result.board.ownerId || collab.user.id,
+        updatedAt: result.board.updatedAt || ''
     });
 
     state.currentFileName = collab.activeBoardTitle;

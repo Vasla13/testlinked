@@ -53,6 +53,14 @@ function validateBoardData(data, page) {
   return validatePointBoardData(data);
 }
 
+function isSameBoardPayload(a, b) {
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch (e) {
+    return false;
+  }
+}
+
 exports.handler = async (event) => {
   connectLambda(event);
 
@@ -173,9 +181,28 @@ exports.handler = async (event) => {
       return errorResponse(400, "Donnees du tableau invalides.");
     }
 
+    const expectedUpdatedAt = String(body.expectedUpdatedAt || "").trim();
+    if (expectedUpdatedAt && String(board.updatedAt || "") !== expectedUpdatedAt) {
+      return errorResponse(409, "Conflit de version: le board a ete modifie ailleurs. Recharge puis reapplique tes changements.", {
+        currentUpdatedAt: board.updatedAt || "",
+        lastEditedBy: board.lastEditedBy || null,
+      });
+    }
+
+    const nextTitle = normalizeTitle(body.title || board.title);
+    const sameData = isSameBoardPayload(board.data, data);
+    const sameTitle = String(nextTitle) === String(board.title || "");
+    if (sameData && sameTitle) {
+      return jsonResponse(200, {
+        ok: true,
+        board: boardSummary(board, role),
+        unchanged: true,
+      });
+    }
+
     const now = nowIso();
     board.data = data;
-    board.title = normalizeTitle(body.title || board.title);
+    board.title = nextTitle;
     board.updatedAt = now;
     board.lastEditedBy = {
       userId: user.id,
