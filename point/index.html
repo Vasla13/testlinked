@@ -423,15 +423,272 @@
     .chip .x { cursor: pointer; color: var(--accent-pink); font-weight: bold; }
     .chip .x:hover { color: #fff; }
 
-    /* --- LOADER --- */
+    /* --- BOOT SEQUENCE --- */
     #app-loader {
-      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-      background: #050611; z-index: 9999;
-      display: flex; flex-direction: column; justify-content: center; align-items: center;
-      color: var(--accent-cyan); transition: opacity 0.5s ease;
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 18% 20%, rgba(102, 243, 255, 0.1), transparent 28%),
+        radial-gradient(circle at 82% 18%, rgba(255, 204, 138, 0.08), transparent 26%),
+        linear-gradient(180deg, #020611 0%, #030919 100%);
+      color: var(--text-light);
+      opacity: 1;
+      transition: opacity 360ms ease, visibility 360ms ease;
     }
-    .loader-text { font-size: 1.5rem; letter-spacing: 4px; animation: pulse 1.5s infinite; text-transform: uppercase; }
-    @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; text-shadow: 0 0 15px var(--accent-cyan); } 100% { opacity: 0.5; } }
+    #app-loader::before,
+    #app-loader::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+    #app-loader::before {
+      background-image:
+        linear-gradient(rgba(102, 243, 255, 0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(102, 243, 255, 0.04) 1px, transparent 1px);
+      background-size: 44px 44px;
+      opacity: 0.55;
+    }
+    #app-loader::after {
+      background:
+        linear-gradient(180deg, rgba(102, 243, 255, 0.08), transparent 18%, transparent 82%, rgba(102, 243, 255, 0.05)),
+        radial-gradient(circle at center, transparent 36%, rgba(1, 4, 12, 0.54) 100%);
+    }
+    #app-loader.is-exiting {
+      opacity: 0;
+      visibility: hidden;
+    }
+    .loader-shell {
+      position: relative;
+      z-index: 1;
+      width: min(720px, calc(100vw - 34px));
+      padding: 28px 26px 24px;
+      border: 1px solid rgba(102, 243, 255, 0.24);
+      border-radius: 22px;
+      background:
+        linear-gradient(180deg, rgba(7, 16, 38, 0.94), rgba(4, 10, 22, 0.9)),
+        radial-gradient(circle at top right, rgba(102, 243, 255, 0.08), transparent 46%);
+      box-shadow:
+        inset 0 0 0 1px rgba(102, 243, 255, 0.05),
+        0 28px 80px rgba(0, 0, 0, 0.62);
+      clip-path: polygon(0 0, calc(100% - 22px) 0, 100% 22px, 100% 100%, 22px 100%, 0 calc(100% - 22px));
+    }
+    .loader-topline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+      color: #89a4c2;
+      font-size: 0.72rem;
+      letter-spacing: 2.2px;
+      text-transform: uppercase;
+    }
+    .loader-topline strong {
+      color: var(--accent-cyan);
+      font-weight: 700;
+    }
+    .loader-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(220px, 0.8fr);
+      gap: 18px;
+      align-items: stretch;
+    }
+    .loader-main {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .loader-wordmark {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .loader-kicker {
+      color: #89a4c2;
+      font-size: 0.74rem;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+    .loader-brand {
+      font-family: var(--font-main);
+      font-size: clamp(2.6rem, 7vw, 4.6rem);
+      line-height: 0.88;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-light);
+      text-shadow: 0 0 26px rgba(102, 243, 255, 0.08);
+    }
+    .loader-brand-accent {
+      color: var(--accent-cyan);
+    }
+    .loader-phase {
+      min-height: 28px;
+      color: #ffcc8a;
+      font-size: 0.86rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    .loader-progress {
+      position: relative;
+      height: 12px;
+      overflow: hidden;
+      border-radius: 999px;
+      border: 1px solid rgba(102, 243, 255, 0.16);
+      background: rgba(2, 8, 20, 0.86);
+      box-shadow: inset 0 0 0 1px rgba(102, 243, 255, 0.04);
+    }
+    .loader-progress-bar {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 0%;
+      border-radius: inherit;
+      background:
+        linear-gradient(90deg, rgba(102, 243, 255, 0.88), rgba(255, 204, 138, 0.9));
+      box-shadow: 0 0 24px rgba(102, 243, 255, 0.2);
+      transition: width 120ms linear;
+    }
+    .loader-stats {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: #93acc6;
+      font-size: 0.76rem;
+      letter-spacing: 1.8px;
+      text-transform: uppercase;
+    }
+    .loader-feed {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-height: 108px;
+      padding: 12px 14px;
+      border: 1px dashed rgba(102, 243, 255, 0.16);
+      border-radius: 14px;
+      background: rgba(2, 8, 18, 0.72);
+    }
+    .loader-line {
+      color: #8ca7c5;
+      font-size: 0.78rem;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      opacity: 0;
+      transform: translateY(6px);
+      animation: loaderLineIn 240ms ease forwards;
+    }
+    .loader-line strong {
+      color: var(--accent-cyan);
+      font-weight: 600;
+    }
+    .loader-side {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      justify-content: space-between;
+    }
+    .loader-radar {
+      position: relative;
+      min-height: 220px;
+      border: 1px solid rgba(102, 243, 255, 0.16);
+      border-radius: 18px;
+      background:
+        radial-gradient(circle at center, rgba(102, 243, 255, 0.08), transparent 52%),
+        linear-gradient(180deg, rgba(4, 12, 28, 0.86), rgba(2, 8, 18, 0.88));
+      overflow: hidden;
+    }
+    .loader-radar::before,
+    .loader-radar::after {
+      content: "";
+      position: absolute;
+      inset: 12%;
+      border-radius: 999px;
+      border: 1px solid rgba(102, 243, 255, 0.14);
+    }
+    .loader-radar::after {
+      inset: 28%;
+      border-color: rgba(255, 204, 138, 0.2);
+    }
+    .loader-sweep {
+      position: absolute;
+      inset: 8%;
+      border-radius: 999px;
+      background: conic-gradient(from 0deg, transparent 0deg 300deg, rgba(102, 243, 255, 0.22) 332deg, rgba(102, 243, 255, 0.55) 360deg);
+      filter: blur(1px);
+      animation: loaderSweep 1.8s linear infinite;
+    }
+    .loader-dot {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: rgba(255, 204, 138, 0.96);
+      box-shadow: 0 0 14px rgba(255, 204, 138, 0.5);
+    }
+    .loader-dot-a { top: 26%; left: 64%; }
+    .loader-dot-b { top: 58%; left: 30%; background: rgba(102, 243, 255, 0.96); box-shadow: 0 0 14px rgba(102, 243, 255, 0.42); }
+    .loader-dot-c { top: 68%; left: 72%; width: 8px; height: 8px; }
+    .loader-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .loader-step {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 42px;
+      padding: 10px 12px;
+      border: 1px solid rgba(102, 243, 255, 0.1);
+      border-radius: 12px;
+      background: rgba(2, 8, 18, 0.8);
+      color: #7f97b4;
+      font-size: 0.76rem;
+      letter-spacing: 1.3px;
+      text-transform: uppercase;
+      transition: border-color 180ms ease, background 180ms ease, color 180ms ease, transform 180ms ease;
+    }
+    .loader-step::before {
+      content: "";
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+      background: rgba(123, 144, 171, 0.5);
+      box-shadow: 0 0 0 1px rgba(102, 243, 255, 0.08);
+      flex: 0 0 auto;
+    }
+    .loader-step.is-active {
+      border-color: rgba(102, 243, 255, 0.36);
+      background: rgba(102, 243, 255, 0.08);
+      color: var(--text-light);
+      transform: translateX(3px);
+    }
+    .loader-step.is-active::before {
+      background: rgba(102, 243, 255, 0.96);
+      box-shadow: 0 0 12px rgba(102, 243, 255, 0.42);
+    }
+    .loader-step.is-done {
+      color: #9df5b8;
+      border-color: rgba(157, 245, 184, 0.24);
+      background: rgba(20, 54, 32, 0.28);
+    }
+    .loader-step.is-done::before {
+      background: #9df5b8;
+      box-shadow: 0 0 10px rgba(157, 245, 184, 0.36);
+    }
+    @keyframes loaderLineIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes loaderSweep {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
 
     /* --- HELPER CLASSES --- */
     .row { margin-bottom: 10px; display: flex; flex-direction: column; gap: 4px; }
@@ -1054,12 +1311,8 @@
       background: rgba(102, 243, 255, 0.18);
     }
 
-    #app-loader {
-      background: linear-gradient(180deg, #020612 0%, #03091a 100%);
-    }
-
-    .loader-text {
-      font-weight: 700;
+    body.app-loading {
+      overflow: hidden;
     }
 
     @media (max-width: 900px) {
@@ -1107,6 +1360,24 @@
         width: calc(100vw - 16px);
         margin: 0 auto 10px;
       }
+      .loader-shell {
+        width: calc(100vw - 18px);
+        padding: 22px 18px 18px;
+        clip-path: none;
+        border-radius: 18px;
+      }
+      .loader-grid {
+        grid-template-columns: 1fr;
+      }
+      .loader-radar {
+        min-height: 148px;
+      }
+      .loader-topline,
+      .loader-stats,
+      .data-hub-status {
+        flex-direction: column;
+        align-items: flex-start;
+      }
     }
   </style>
 </head>
@@ -1114,7 +1385,43 @@
 <body class="app-loading point-skin">
 
   <div id="app-loader">
-    <div class="loader-text">Initialisation Reticule...</div>
+    <div class="loader-shell">
+      <div class="loader-topline">
+        <span><strong>BNI Linked</strong> // Tactical Point</span>
+        <span id="loaderPercent">0%</span>
+      </div>
+      <div class="loader-grid">
+        <div class="loader-main">
+          <div class="loader-wordmark">
+            <div class="loader-kicker">Boot Sequence</div>
+            <div class="loader-brand">Reti<span class="loader-brand-accent">cule</span></div>
+          </div>
+          <div id="loaderPhase" class="loader-phase">Initialisation du noyau tactique</div>
+          <div class="loader-progress" aria-hidden="true">
+            <div id="loaderProgressBar" class="loader-progress-bar"></div>
+          </div>
+          <div class="loader-stats">
+            <span id="loaderMeter">Handshake local</span>
+            <span id="loaderClock">00.0s</span>
+          </div>
+          <div id="loaderFeed" class="loader-feed"></div>
+        </div>
+        <div class="loader-side">
+          <div class="loader-radar" aria-hidden="true">
+            <div class="loader-sweep"></div>
+            <div class="loader-dot loader-dot-a"></div>
+            <div class="loader-dot loader-dot-b"></div>
+            <div class="loader-dot loader-dot-c"></div>
+          </div>
+          <div class="loader-steps">
+            <div class="loader-step" data-step-index="0">Noyau local</div>
+            <div class="loader-step" data-step-index="1">Graph cache</div>
+            <div class="loader-step" data-step-index="2">Sync cloud</div>
+            <div class="loader-step" data-step-index="3">Interface live</div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div id="app">
@@ -1215,26 +1522,113 @@
   <script type="module" src="js/main.js"></script>
 
   <script>
-    window.addEventListener('load', () => {
-      setTimeout(() => {
-        const l = document.getElementById('app-loader');
-        if(l) { l.style.opacity = '0'; setTimeout(() => l.remove(), 500); }
-      }, 600);
-    });
-  </script>
-  <script>
-    const bootAppUi = () => {
-      document.body.classList.remove('app-loading');
-      window.dispatchEvent(new Event('resize'));
-    };
+    (() => {
+      const loader = document.getElementById('app-loader');
+      if (!loader) return;
 
-    window.addEventListener('load', () => {
-      setTimeout(bootAppUi, 250);
-    });
+      const phaseEl = document.getElementById('loaderPhase');
+      const meterEl = document.getElementById('loaderMeter');
+      const percentEl = document.getElementById('loaderPercent');
+      const progressEl = document.getElementById('loaderProgressBar');
+      const clockEl = document.getElementById('loaderClock');
+      const feedEl = document.getElementById('loaderFeed');
+      const stepEls = Array.from(document.querySelectorAll('.loader-step'));
 
-    window.addEventListener('pageshow', () => {
-      setTimeout(bootAppUi, 0);
-    });
+      const phases = [
+        { at: 0.00, phase: 'Initialisation du noyau tactique', meter: 'Handshake local' },
+        { at: 0.22, phase: 'Projection du cache relationnel', meter: 'Cache graphe' },
+        { at: 0.52, phase: 'Alignement des liaisons cloud', meter: 'Bus cloud' },
+        { at: 0.78, phase: 'Injection de l interface live', meter: 'Interface active' }
+      ];
+
+      const feedSteps = [
+        { at: 0.06, text: '<strong>LOCAL</strong> noyau tactique online' },
+        { at: 0.28, text: '<strong>GRAPH</strong> index relationnel monte' },
+        { at: 0.56, text: '<strong>CLOUD</strong> session passive prete' },
+        { at: 0.84, text: '<strong>UI</strong> reticule verrouille' }
+      ];
+
+      const stepThresholds = [0.14, 0.38, 0.66, 0.9];
+      const state = {
+        start: performance.now(),
+        ready: document.readyState === 'complete',
+        done: false,
+        feedIndex: 0
+      };
+
+      const minDurationMs = 1650;
+      const targetDurationMs = 2350;
+      const maxDurationMs = 2950;
+      const fadeMs = 360;
+
+      const addFeedLine = (html) => {
+        if (!feedEl) return;
+        const row = document.createElement('div');
+        row.className = 'loader-line';
+        row.innerHTML = html;
+        feedEl.appendChild(row);
+        while (feedEl.children.length > 4) {
+          feedEl.removeChild(feedEl.firstChild);
+        }
+      };
+
+      const finishBoot = () => {
+        if (state.done) return;
+        state.done = true;
+        loader.classList.add('is-exiting');
+        document.body.classList.remove('app-loading');
+        window.dispatchEvent(new Event('resize'));
+        setTimeout(() => loader.remove(), fadeMs);
+      };
+
+      const renderFrame = (now) => {
+        if (state.done) return;
+
+        const elapsed = now - state.start;
+        const ratio = Math.max(0, Math.min(1, elapsed / targetDurationMs));
+        const progress = Math.round(ratio * 100);
+        const phaseIndex = phases.reduce((best, item, index) => (ratio >= item.at ? index : best), 0);
+        const phase = phases[phaseIndex];
+
+        if (phaseEl) phaseEl.textContent = phase.phase;
+        if (meterEl) meterEl.textContent = phase.meter;
+        if (percentEl) percentEl.textContent = `${String(progress).padStart(2, '0')}%`;
+        if (progressEl) progressEl.style.width = `${progress}%`;
+        if (clockEl) clockEl.textContent = `${(Math.min(elapsed, maxDurationMs) / 1000).toFixed(1)}s`;
+
+        while (state.feedIndex < feedSteps.length && ratio >= feedSteps[state.feedIndex].at) {
+          addFeedLine(feedSteps[state.feedIndex].text);
+          state.feedIndex += 1;
+        }
+
+        stepEls.forEach((stepEl, index) => {
+          const threshold = stepThresholds[index] || 1;
+          stepEl.classList.toggle('is-active', ratio >= threshold && ratio < threshold + 0.18);
+          stepEl.classList.toggle('is-done', ratio >= threshold + 0.18);
+        });
+
+        if ((state.ready && elapsed >= minDurationMs) || elapsed >= maxDurationMs) {
+          finishBoot();
+          return;
+        }
+
+        requestAnimationFrame(renderFrame);
+      };
+
+      addFeedLine('<strong>BOOT</strong> sequence engagee');
+
+      window.addEventListener('load', () => {
+        state.ready = true;
+      }, { once: true });
+
+      window.addEventListener('pageshow', (event) => {
+        if (event.persisted) {
+          finishBoot();
+        }
+      });
+
+      requestAnimationFrame(renderFrame);
+    })();
   </script>
 </body>
 </html>
