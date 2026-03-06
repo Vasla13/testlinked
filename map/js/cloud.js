@@ -153,31 +153,33 @@ function hydrateCollabState() {
 
 function syncCloudStatus() {
     const statusEl = document.getElementById('cloudStatus');
+    const metaEl = document.getElementById('cloudStatusMeta');
     if (!statusEl) return;
 
+    const setStatus = (label, stateKey, meta) => {
+        statusEl.textContent = label;
+        statusEl.dataset.state = stateKey;
+        if (metaEl) {
+            metaEl.textContent = meta;
+            metaEl.dataset.state = stateKey;
+        }
+    };
+
     if (!collab.user) {
-        statusEl.textContent = 'Local';
-        statusEl.style.color = 'var(--text-dim)';
-        statusEl.style.borderColor = 'var(--border-color)';
+        setStatus('Local', 'local', 'Hors ligne');
         return;
     }
 
     if (collab.activeBoardId) {
         const role = collab.activeRole || 'editor';
-        statusEl.textContent = `Cloud ${role}`;
-        if (role === 'owner') {
-            statusEl.style.color = 'var(--accent-cyan)';
-            statusEl.style.borderColor = 'rgba(115, 251, 247, 0.5)';
-        } else {
-            statusEl.style.color = '#ffcc8a';
-            statusEl.style.borderColor = 'rgba(255, 153, 102, 0.5)';
-        }
+        const stateKey = role === 'owner' ? 'cloud-lead' : 'cloud-member';
+        const label = role === 'owner' ? 'Cloud lead' : 'Cloud membre';
+        const meta = collab.activeBoardTitle || collab.activeBoardId || 'Board actif';
+        setStatus(label, stateKey, meta);
         return;
     }
 
-    statusEl.textContent = `Connecte ${collab.user.username}`;
-    statusEl.style.color = 'var(--accent-cyan)';
-    statusEl.style.borderColor = 'rgba(115, 251, 247, 0.4)';
+    setStatus('Session cloud', 'session', collab.user.username || 'Connecte');
 }
 
 function applyLocalPersistencePolicy() {

@@ -10,6 +10,15 @@ const TACTICAL_COLORS = [
 
 let activeTimeout = null;
 
+function escapeMarkup(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
 function createModalPromise(setupFn) {
     return new Promise((resolve) => {
         const overlay = document.getElementById('modal-overlay');
@@ -119,7 +128,7 @@ export function openGroupEditor(groupIndex) {
     const inputName = document.getElementById('modal-input');
     inputName.value = group.name;
 
-    content.innerHTML = `<p style="font-size:0.9rem; color:#8892b0;">Modifier les propriétés du calque :</p>`;
+    content.innerHTML = `<p class="map-form-note">Modifier les propriétés du calque.</p>`;
 
     // --- SETUP COULEURS ---
     const swatchesDiv = document.getElementById('color-swatches');
@@ -203,6 +212,107 @@ export function openGroupEditor(groupIndex) {
     actions.append(btnDelete, btnCancel, btnSave);
 }
 
+export function openMapDataHubModal(options = {}) {
+    const localSummary = String(options?.localSummary || 'Local actif');
+    const cloudSummary = String(options?.cloudSummary || 'Cloud hors ligne');
+    const syncSummary = String(options?.syncSummary || 'Map tactique');
+    const canOpenCloud = typeof options?.onCloud === 'function';
+
+    return createModalPromise(({ titleEl, contentEl, actionsEl, close }) => {
+        titleEl.innerText = 'CENTRE FICHIER';
+
+        contentEl.innerHTML = `
+            <div class="data-hub">
+                <div class="data-hub-head">
+                    <h3 class="modal-tool-title">Centre Fichier</h3>
+                </div>
+
+                <div class="data-hub-section data-hub-section-local">
+                    <div class="data-hub-kicker">Local</div>
+                    <div class="data-hub-grid">
+                        <button type="button" class="data-hub-card data-hub-card-local" data-action="save">
+                            <span class="data-hub-card-title">Sauvegarder</span>
+                        </button>
+                        <button type="button" class="data-hub-card data-hub-card-local" data-action="open">
+                            <span class="data-hub-card-title">Ouvrir</span>
+                        </button>
+                        <button type="button" class="data-hub-card data-hub-card-local" data-action="merge">
+                            <span class="data-hub-card-title">Fusionner</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="data-hub-section data-hub-section-cloud">
+                    <div class="data-hub-kicker">Cloud</div>
+                    <div class="data-hub-grid">
+                        <button
+                            type="button"
+                            class="data-hub-card data-hub-card-cloud ${canOpenCloud ? '' : 'is-disabled-visual'}"
+                            data-action="cloud"
+                            ${canOpenCloud ? '' : 'disabled'}
+                        >
+                            <span class="data-hub-card-title">Cloud</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="data-hub-section data-hub-section-danger">
+                    <div class="data-hub-kicker">Danger</div>
+                    <div class="data-hub-grid">
+                        <button type="button" class="data-hub-card data-hub-card-danger" data-action="reset">
+                            <span class="data-hub-card-title">Reset</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="data-hub-status">
+                    <span class="data-hub-status-pill data-hub-status-pill-local">${escapeMarkup(localSummary)}</span>
+                    <span class="data-hub-status-pill data-hub-status-pill-cloud">${escapeMarkup(cloudSummary)}</span>
+                    <span class="data-hub-status-pill data-hub-status-pill-sync">${escapeMarkup(syncSummary)}</span>
+                </div>
+            </div>
+        `;
+
+        actionsEl.innerHTML = '';
+        const btnClose = document.createElement('button');
+        btnClose.className = 'btn-modal-cancel';
+        btnClose.innerText = 'Fermer';
+        btnClose.onclick = () => close(false);
+        actionsEl.appendChild(btnClose);
+
+        const runAction = (handler) => {
+            if (typeof handler !== 'function') return;
+            close(true);
+            window.setTimeout(() => handler(), 40);
+        };
+
+        Array.from(contentEl.querySelectorAll('[data-action]')).forEach((button) => {
+            button.onclick = () => {
+                const action = button.getAttribute('data-action');
+                if (action === 'save') {
+                    runAction(options.onSave);
+                    return;
+                }
+                if (action === 'open') {
+                    runAction(options.onOpen);
+                    return;
+                }
+                if (action === 'merge') {
+                    runAction(options.onMerge);
+                    return;
+                }
+                if (action === 'cloud') {
+                    runAction(options.onCloud);
+                    return;
+                }
+                if (action === 'reset') {
+                    runAction(options.onReset);
+                }
+            };
+        });
+    });
+}
+
 
 // --- MENU DE SAUVEGARDE (Inchangé mais inclus pour complétude) ---
 export function openSaveOptionsModal(options = {}) {
@@ -210,12 +320,7 @@ export function openSaveOptionsModal(options = {}) {
     const cloudEditable = Boolean(options && options.cloudEditable);
     const localExportLocked = Boolean(options && options.localExportLocked);
     const boardTitle = String(options?.boardTitle || '');
-    const safeBoardTitle = boardTitle
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
+    const safeBoardTitle = escapeMarkup(boardTitle);
     const onSaveCloud = typeof options?.onSaveCloud === 'function' ? options.onSaveCloud : null;
 
     const overlay = document.getElementById('modal-overlay');
@@ -234,48 +339,59 @@ export function openSaveOptionsModal(options = {}) {
     colorPicker.style.display = 'none';
 
     const exportWarning = localExportLocked ? `
-        <div style="margin-bottom:12px; padding:10px; border:1px solid rgba(255,153,102,0.45); background:rgba(255,153,102,0.08); color:#ffcc8a; font-size:0.85rem;">
+        <div class="map-save-warning">
             Export local bloque sur ce board cloud.
             Seul le lead peut dupliquer/sauver en local.
         </div>
     ` : '';
 
     const cloudBlock = cloudActive ? `
-        <div style="text-align:center; font-size:0.8rem; color:#666;">- CLOUD -</div>
-        <button id="btnOptCloud" class="action-btn" style="padding:15px; font-size:1rem; border-color:${cloudEditable ? 'var(--accent-cyan)' : 'rgba(255,153,102,0.6)'}; color:${cloudEditable ? 'var(--accent-cyan)' : '#ffcc8a'}; justify-content:center; display:flex; align-items:center; gap:10px;" ${cloudEditable ? '' : 'disabled'}>
-            <span>☁️ ${cloudEditable ? 'SAUVER BOARD CLOUD' : 'LECTURE SEULE CLOUD'}</span>
-        </button>
-        ${safeBoardTitle ? `<div style="font-size:0.75rem; color:#9bb0c7; text-align:center;">Board actif: ${safeBoardTitle}</div>` : ''}
+        <div class="data-hub-section data-hub-section-cloud">
+            <div class="data-hub-kicker">Cloud</div>
+            <div class="data-hub-grid">
+                <button
+                    id="btnOptCloud"
+                    class="data-hub-card data-hub-card-cloud ${cloudEditable ? '' : 'is-disabled-visual'}"
+                    ${cloudEditable ? '' : 'disabled'}
+                >
+                    <span class="data-hub-card-title">${cloudEditable ? 'Sauver Board' : 'Lecture seule'}</span>
+                </button>
+            </div>
+            ${safeBoardTitle ? `<div class="map-form-note">Board actif: ${safeBoardTitle}</div>` : ''}
+        </div>
     ` : '';
 
     const localBlock = localExportLocked ? '' : `
-        <div style="font-size:0.8rem; color:#9bb0c7; margin-bottom:4px;">
-            Les fichiers doivent etre partages via Discord.<br>
-            Impossible de sauvegarder en ville depuis la tablette, copiez et transpetez le texte brute.
+        <div class="data-hub-section data-hub-section-local">
+            <div class="data-hub-kicker">Local</div>
+            <div class="map-form-note">
+                Sauvegarde fichier ou copie brute pour partager rapidement.
+            </div>
+            <div class="data-hub-grid">
+                <button id="btnOptFile" class="data-hub-card data-hub-card-local">
+                    <span class="data-hub-card-title">Fichier JSON</span>
+                </button>
+                <button id="btnOptRaw" class="data-hub-card data-hub-card-local">
+                    <span class="data-hub-card-title">Copier JSON</span>
+                </button>
+            </div>
         </div>
-        <button id="btnOptFile" class="action-btn" style="padding:15px; font-size:1rem; border-color:var(--accent-cyan); justify-content:center; display:flex; align-items:center; gap:10px;">
-            💾 <span>TELECHARGER FICHIER JSON</span>
-        </button>
-        <div style="text-align:center; font-size:0.8rem; color:#666;">- OU -</div>
-        <button id="btnOptRaw" class="file-btn" style="padding:15px; justify-content:center; display:flex; align-items:center; gap:10px;">
-            📋 <span>COPIER LES DONNEES BRUTES</span>
-        </button>
     `;
 
     content.innerHTML = `
-        <div style="display:flex; flex-direction:column; gap:10px;">
-            <p style="font-size:0.9rem; color:#8892b0; margin-bottom:10px;">
-                Choisissez une methode de sauvegarde :
-            </p>
+        <div class="data-hub">
+            <div class="data-hub-head">
+                <h3 class="modal-tool-title">Sauvegarde</h3>
+            </div>
             ${exportWarning}
             ${localBlock}
             ${cloudBlock}
         </div>
 
-        <div id="raw-data-area" style="display:none; margin-top:15px;">
-            <label style="color:var(--accent-orange)">JSON BRUT</label>
-            <textarea id="rawJsonOutput" class="cyber-input" style="height:150px; font-size:0.7rem; color:var(--accent-orange); border-color:var(--accent-orange);"></textarea>
-            <button id="btnCopyRaw" class="mini-btn" style="width:100%; margin-top:5px; padding:10px;">COPIER DANS LE PRESSE-PAPIER</button>
+        <div id="raw-data-area" class="map-raw-data-area">
+            <label class="map-form-note" for="rawJsonOutput">JSON brut</label>
+            <textarea id="rawJsonOutput" class="cyber-input"></textarea>
+            <button id="btnCopyRaw" class="mini-btn" style="width:100%; margin-top:8px;" type="button">Copier</button>
         </div>
     `;
 
@@ -315,7 +431,7 @@ export function openSaveOptionsModal(options = {}) {
             const txt = document.getElementById('rawJsonOutput');
             const data = { meta: { date: new Date().toISOString(), version: "2.5" }, groups: state.groups, tacticalLinks: state.tacticalLinks };
             txt.value = JSON.stringify(data, null, 2);
-            rawArea.style.display = 'block';
+            rawArea.classList.add('is-visible');
             if (btnOptFile) btnOptFile.style.display = 'none';
             btnOptRaw.style.display = 'none';
             txt.select();
@@ -329,13 +445,11 @@ export function openSaveOptionsModal(options = {}) {
             txt.select();
             navigator.clipboard.writeText(txt.value);
             const originalText = btnCopyRaw.innerText;
-            btnCopyRaw.innerText = "✅ COPIE !";
-            btnCopyRaw.style.background = "var(--accent-cyan)";
-            btnCopyRaw.style.color = "#000";
+            btnCopyRaw.innerText = "Copie OK";
+            btnCopyRaw.classList.add('active');
             setTimeout(() => {
                 btnCopyRaw.innerText = originalText;
-                btnCopyRaw.style.background = "";
-                btnCopyRaw.style.color = "";
+                btnCopyRaw.classList.remove('active');
             }, 2000);
         };
     }

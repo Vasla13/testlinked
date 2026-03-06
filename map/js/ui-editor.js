@@ -1,13 +1,26 @@
 import { state, saveLocalState, pruneTacticalLinks } from './state.js';
 import { ICONS } from './constants.js';
 import { customConfirm, customAlert } from './ui-modals.js';
-import { percentageToGps, gpsToPercentage } from './utils.js';
+import { percentageToGps, gpsToPercentage, escapeHtml } from './utils.js';
 import { renderAll } from './render.js';
 import { renderGroupsList } from './ui-list.js';
 import { deselect } from './ui.js';
 
 const sidebarRight = document.getElementById('sidebar-right');
 const editorContent = document.getElementById('editor-content');
+
+function escapeAttr(value) {
+    return escapeHtml(value).replace(/\n/g, '&#10;');
+}
+
+function renderEmptyEditor() {
+    editorContent.innerHTML = `
+        <div class="empty-state">
+            <span class="empty-state-kicker">Aucune cible</span>
+            <strong>Sélectionnez un point ou une zone.</strong>
+        </div>
+    `;
+}
 
 export function renderEditor() {
     if (state.selectedPoint) {
@@ -18,6 +31,7 @@ export function renderEditor() {
         renderZoneEditor();
         return;
     }
+    renderEmptyEditor();
     closeEditor();
 }
 
@@ -25,95 +39,136 @@ function renderZoneEditor() {
     sidebarRight.classList.add('active');
     const { groupIndex, zoneIndex } = state.selectedZone;
     const group = state.groups[groupIndex];
-    if (!group || !group.zones[zoneIndex]) { deselect(); return; }
-    
+    if (!group || !group.zones[zoneIndex]) {
+        deselect();
+        return;
+    }
+
     const zone = group.zones[zoneIndex];
-    const isCircle = (zone.type === 'CIRCLE');
+    const isCircle = zone.type === 'CIRCLE';
     const gpsCoords = percentageToGps(zone.cx || 0, zone.cy || 0);
 
-    const groupOptions = state.groups.map((g, i) => 
-        `<option value="${i}" ${i===groupIndex ? 'selected':''}>${g.name}</option>`
+    const groupOptions = state.groups.map((entry, index) =>
+        `<option value="${index}" ${index === groupIndex ? 'selected' : ''}>${escapeHtml(entry.name)}</option>`
     ).join('');
 
-    editorContent.innerHTML = `
-        <div class="editor-section" style="border-left-color: ${group.color};">
-            <div class="editor-section-title">ZONE TACTIQUE (${isCircle ? 'CERCLE' : 'POLYGONE'})</div>
-            <div style="margin-bottom:10px;">
-                <input type="text" id="ezName" value="${zone.name}" class="cyber-input" style="font-weight:bold; color:${group.color};">
+    const geometryBlock = isCircle ? `
+        <div class="editor-section" style="--editor-accent:#dff7ff;">
+            <div class="editor-section-title">
+                <span>Géométrie GPS</span>
             </div>
-        </div>
-
-        ${isCircle ? `
-        <div class="editor-section" style="border-left-color: #fff;">
-            <div class="editor-section-title">GÉOMÉTRIE (GPS)</div>
             <div class="editor-row">
-                <div class="editor-col"><label>Rayon (Visuel)</label><input type="number" id="ezR" value="${(zone.r||0).toFixed(2)}" step="0.1" class="cyber-input"></div>
+                <div class="editor-col">
+                    <label>Rayon</label>
+                    <input type="number" id="ezR" value="${Number(zone.r || 0).toFixed(2)}" step="0.1" class="cyber-input">
+                </div>
             </div>
-            <div class="editor-row" style="margin-top:5px;">
-                <div class="editor-col"><label>X</label><input type="number" id="ezX" value="${gpsCoords.x.toFixed(2)}" step="1" class="cyber-input"></div>
-                <div class="editor-col"><label>Y</label><input type="number" id="ezY" value="${gpsCoords.y.toFixed(2)}" step="1" class="cyber-input"></div>
+            <div class="editor-row">
+                <div class="editor-col">
+                    <label>X</label>
+                    <input type="number" id="ezX" value="${gpsCoords.x.toFixed(2)}" step="1" class="cyber-input">
+                </div>
+                <div class="editor-col">
+                    <label>Y</label>
+                    <input type="number" id="ezY" value="${gpsCoords.y.toFixed(2)}" step="1" class="cyber-input">
+                </div>
             </div>
         </div>
-        ` : `
-        <div class="editor-section">
-            <div class="editor-section-title">GÉOMÉTRIE</div>
-            <p style="font-size:0.8rem; color:#888;">Forme libre (${zone.points.length} points).<br>Déplacez la zone à la souris.</p>
-        </div>
-        `}
-
-        <div class="editor-section" style="border-left-color: var(--accent-orange);">
-            <div class="editor-section-title">GROUPE</div>
-            <select id="ezGroup" class="cyber-input">${groupOptions}</select>
-        </div>
-
-        <div style="margin-top:20px;">
-            <button id="btnDeleteZone" class="btn-delete-zone">SUPPRIMER ZONE</button>
-            <button id="btnClose" class="btn-close-editor">FERMER</button>
+    ` : `
+        <div class="editor-section" style="--editor-accent:#dff7ff;">
+            <div class="editor-section-title">
+                <span>Géométrie</span>
+            </div>
+            <p class="editor-caption">
+                Forme libre avec ${zone.points.length} points.
+                Déplacez la zone directement sur la carte.
+            </p>
         </div>
     `;
 
-    document.getElementById('ezName').oninput = (e) => { 
-        zone.name = e.target.value; 
-        renderAll(); 
-        saveLocalState(); 
-    };
-    
-    document.getElementById('ezGroup').onchange = (e) => {
-        const newG = parseInt(e.target.value);
-        group.zones.splice(zoneIndex, 1);
-        state.groups[newG].zones.push(zone);
-        state.selectedZone = { groupIndex: newG, zoneIndex: state.groups[newG].zones.length - 1 };
-        renderGroupsList(); renderAll(); renderEditor(); 
+    editorContent.innerHTML = `
+        <div class="editor-shell">
+            <div class="editor-section" style="--editor-accent:${escapeAttr(group.color)};">
+                <div class="editor-section-title">
+                    <span>Zone tactique</span>
+                    <span class="editor-pill">${isCircle ? 'Cercle' : 'Polygone'}</span>
+                </div>
+                <input
+                    type="text"
+                    id="ezName"
+                    value="${escapeAttr(zone.name || '')}"
+                    class="cyber-input"
+                >
+            </div>
+
+            ${geometryBlock}
+
+            <div class="editor-section" style="--editor-accent:#ffcc8a;">
+                <div class="editor-section-title">
+                    <span>Calque</span>
+                </div>
+                <select id="ezGroup" class="cyber-input">${groupOptions}</select>
+            </div>
+
+            <div class="editor-actions-row">
+                <button id="btnDeleteZone" class="btn-delete-zone">Supprimer</button>
+                <button id="btnClose" class="btn-close-editor">Fermer</button>
+            </div>
+        </div>
+    `;
+
+    document.getElementById('ezName').oninput = (event) => {
+        zone.name = event.target.value;
+        renderAll();
+        renderGroupsList();
         saveLocalState();
     };
 
-    if(isCircle) {
+    document.getElementById('ezGroup').onchange = (event) => {
+        const nextGroupIndex = parseInt(event.target.value, 10);
+        group.zones.splice(zoneIndex, 1);
+        state.groups[nextGroupIndex].zones.push(zone);
+        state.selectedZone = {
+            groupIndex: nextGroupIndex,
+            zoneIndex: state.groups[nextGroupIndex].zones.length - 1
+        };
+        renderGroupsList();
+        renderAll();
+        renderEditor();
+        saveLocalState();
+    };
+
+    if (isCircle) {
         const inpR = document.getElementById('ezR');
         const inpX = document.getElementById('ezX');
         const inpY = document.getElementById('ezY');
-        
-        const update = () => {
+
+        const updateGeometry = () => {
             zone.r = parseFloat(inpR.value) || 0;
-            const valX = parseFloat(inpX.value) || 0;
-            const valY = parseFloat(inpY.value) || 0;
-            const percentCoords = gpsToPercentage(valX, valY);
+            const percentCoords = gpsToPercentage(
+                parseFloat(inpX.value) || 0,
+                parseFloat(inpY.value) || 0
+            );
             zone.cx = percentCoords.x;
             zone.cy = percentCoords.y;
             renderAll();
             saveLocalState();
         };
-        inpR.oninput = update;
-        inpX.oninput = update;
-        inpY.oninput = update;
+
+        inpR.oninput = updateGeometry;
+        inpX.oninput = updateGeometry;
+        inpY.oninput = updateGeometry;
     }
 
     document.getElementById('btnDeleteZone').onclick = async () => {
-        if(await customConfirm("SUPPRESSION", "Supprimer cette zone ?")) {
+        if (await customConfirm('SUPPRESSION', 'Supprimer cette zone ?')) {
             group.zones.splice(zoneIndex, 1);
+            renderGroupsList();
             deselect();
             saveLocalState();
         }
     };
+
     document.getElementById('btnClose').onclick = deselect;
 }
 
@@ -121,141 +176,183 @@ function renderPointEditor() {
     sidebarRight.classList.add('active');
     const { groupIndex, pointIndex } = state.selectedPoint;
     const group = state.groups[groupIndex];
-    if (!group || !group.points[pointIndex]) { deselect(); return; }
-    const point = group.points[pointIndex];
+    if (!group || !group.points[pointIndex]) {
+        deselect();
+        return;
+    }
 
+    const point = group.points[pointIndex];
     const gpsCoords = percentageToGps(point.x, point.y);
 
-    let iconOptions = '';
-    for (const [key, val] of Object.entries(ICONS)) {
-        const isSelected = (point.iconType === key) ? 'selected' : '';
-        iconOptions += `<option value="${key}" ${isSelected}>${key}</option>`;
-    }
-    const groupOptions = state.groups.map((g, i) => 
-        `<option value="${i}" ${i===groupIndex ? 'selected':''}>${g.name}</option>`
+    const iconOptions = Object.keys(ICONS).map((key) =>
+        `<option value="${escapeAttr(key)}" ${point.iconType === key ? 'selected' : ''}>${escapeHtml(key)}</option>`
+    ).join('');
+
+    const groupOptions = state.groups.map((entry, index) =>
+        `<option value="${index}" ${index === groupIndex ? 'selected' : ''}>${escapeHtml(entry.name)}</option>`
     ).join('');
 
     editorContent.innerHTML = `
-        <div class="editor-section">
-            <div class="editor-section-title" style="display:flex; justify-content:space-between; align-items:center;">
-                <span>IDENTIFICATION</span>
-                <button id="btnCopyId" class="mini-btn" style="font-size:0.7rem; padding: 2px 6px;">ID</button>
+        <div class="editor-shell">
+            <div class="editor-section" style="--editor-accent:${escapeAttr(group.color)};">
+                <div class="editor-section-title">
+                    <span>Identification</span>
+                    <button id="btnCopyId" class="mini-btn" type="button">ID</button>
+                </div>
+                <div class="editor-meta-grid">
+                    <input
+                        type="text"
+                        id="edName"
+                        value="${escapeAttr(point.name || '')}"
+                        class="cyber-input"
+                    >
+                    <input
+                        type="text"
+                        id="edType"
+                        value="${escapeAttr(point.type || '')}"
+                        placeholder="Type / affiliation"
+                        class="cyber-input"
+                    >
+                </div>
+                <button id="btnOpenInPoint" class="action-btn full-width editor-open-network" type="button">
+                    Ouvrir dans Reseau
+                </button>
             </div>
-            <div style="margin-bottom:10px;">
-                <input type="text" id="edName" value="${point.name}" class="cyber-input" style="font-weight:bold; font-size:1.1rem; color:var(--accent-cyan);">
-            </div>
-            <div class="editor-row">
-                <div class="editor-col"><input type="text" id="edType" value="${point.type || ''}" placeholder="Affiliation" class="cyber-input"></div>
-            </div>
-            <button id="btnOpenInPoint" class="action-btn full-width" style="margin-top:5px; border-color:#c79af7; color:#c79af7; background:rgba(199, 154, 247, 0.1);">
-                🧠 PROFIL RÉSEAU (POINT)
-            </button>
-        </div>
-        
-        <div class="editor-section" style="border-left-color: #fff;">
-            <div class="editor-section-title">ACTIONS TACTIQUES</div>
-            <button id="btnLinkPoint" class="mini-btn" style="width:100%; padding:10px; margin-bottom:5px; background:rgba(255,255,255,0.1); border:1px dashed #fff;">
-                🔗 CRÉER UNE LIAISON
-            </button>
-        </div>
 
-        <div class="editor-section" style="border-left-color: var(--accent-orange);">
-            <div class="editor-section-title">CLASSIFICATION</div>
-            <div class="editor-row">
-                <div class="editor-col"><select id="edIcon" class="cyber-input">${iconOptions}</select></div>
+            <div class="editor-section" style="--editor-accent:#dff7ff;">
+                <div class="editor-section-title">
+                    <span>Actions tactiques</span>
+                </div>
+                <div class="editor-actions-grid">
+                    <button id="btnLinkPoint" class="mini-btn editor-link-btn" type="button">Nouvelle liaison</button>
+                </div>
             </div>
-            <div style="margin-top:10px;">
-                <label style="font-size:0.8rem; color:#888;">Groupe</label>
-                <select id="edGroup" class="cyber-input">${groupOptions}</select>
+
+            <div class="editor-section" style="--editor-accent:#ffcc8a;">
+                <div class="editor-section-title">
+                    <span>Classification</span>
+                </div>
+                <div class="editor-meta-grid">
+                    <select id="edIcon" class="cyber-input">${iconOptions}</select>
+                    <div class="editor-col">
+                        <label>Calque</label>
+                        <select id="edGroup" class="cyber-input">${groupOptions}</select>
+                    </div>
+                </div>
             </div>
-        </div>
 
-        <div class="editor-section" style="border-left-color: #fff;">
-            <div class="editor-section-title">POSITION (GPS)</div>
-            <div class="editor-row">
-                <div class="editor-col"><label>X</label><input type="number" id="edX" value="${gpsCoords.x.toFixed(2)}" step="1" class="cyber-input"></div>
-                <div class="editor-col"><label>Y</label><input type="number" id="edY" value="${gpsCoords.y.toFixed(2)}" step="1" class="cyber-input"></div>
+            <div class="editor-section" style="--editor-accent:#dff7ff;">
+                <div class="editor-section-title">
+                    <span>Position GPS</span>
+                </div>
+                <div class="editor-row">
+                    <div class="editor-col">
+                        <label>X</label>
+                        <input type="number" id="edX" value="${gpsCoords.x.toFixed(2)}" step="1" class="cyber-input">
+                    </div>
+                    <div class="editor-col">
+                        <label>Y</label>
+                        <input type="number" id="edY" value="${gpsCoords.y.toFixed(2)}" step="1" class="cyber-input">
+                    </div>
+                </div>
+                <button id="btnCopyCoords" class="btn-close-editor" type="button">Copier coordonnees</button>
             </div>
-            <button id="btnCopyCoords" class="btn-close-editor" style="margin-top:5px;">COPIER CORDS</button>
-        </div>
 
-        <div class="editor-section" style="border-left-color: var(--accent-pink);">
-            <div class="editor-section-title">INTEL</div>
-            <textarea id="edNotes" class="cyber-input" placeholder="Notes...">${point.notes || ''}</textarea>
-        </div>
+            <div class="editor-section" style="--editor-accent:#ff738d;">
+                <div class="editor-section-title">
+                    <span>Intel</span>
+                </div>
+                <textarea id="edNotes" class="cyber-input" placeholder="Notes...">${escapeHtml(point.notes || '')}</textarea>
+            </div>
 
-        <div style="margin-top:10px;">
-            <button id="btnDelete" class="btn-delete-zone">SUPPRIMER POINT</button>
-            <button id="btnClose" class="btn-close-editor">FERMER</button>
+            <div class="editor-actions-row">
+                <button id="btnDelete" class="btn-delete-zone" type="button">Supprimer</button>
+                <button id="btnClose" class="btn-close-editor" type="button">Fermer</button>
+            </div>
         </div>
     `;
 
-    document.getElementById('edName').oninput = (e) => { 
-        point.name = e.target.value; 
-        renderAll(); 
-        saveLocalState(); 
-    };
-    
-    document.getElementById('edIcon').onchange = (e) => { 
-        point.iconType = e.target.value; 
-        renderAll(); 
-        saveLocalState(); 
-    };
-    
-    document.getElementById('edType').oninput = (e) => { 
-        point.type = e.target.value; 
-        saveLocalState(); 
-    };
-    
-    document.getElementById('edNotes').oninput = (e) => { 
-        point.notes = e.target.value; 
-        saveLocalState(); 
-    };
-
-    const updateCoords = () => { 
-        const valX = parseFloat(document.getElementById('edX').value) || 0; 
-        const valY = parseFloat(document.getElementById('edY').value) || 0; 
-        const percent = gpsToPercentage(valX, valY);
-        point.x = percent.x;
-        point.y = percent.y;
-        renderAll(); 
+    document.getElementById('edName').oninput = (event) => {
+        point.name = event.target.value;
+        renderAll();
+        renderGroupsList();
         saveLocalState();
     };
+
+    document.getElementById('edIcon').onchange = (event) => {
+        point.iconType = event.target.value;
+        renderAll();
+        saveLocalState();
+    };
+
+    document.getElementById('edType').oninput = (event) => {
+        point.type = event.target.value;
+        renderGroupsList();
+        saveLocalState();
+    };
+
+    document.getElementById('edNotes').oninput = (event) => {
+        point.notes = event.target.value;
+        saveLocalState();
+    };
+
+    const updateCoords = () => {
+        const percent = gpsToPercentage(
+            parseFloat(document.getElementById('edX').value) || 0,
+            parseFloat(document.getElementById('edY').value) || 0
+        );
+        point.x = percent.x;
+        point.y = percent.y;
+        renderAll();
+        saveLocalState();
+    };
+
     document.getElementById('edX').oninput = updateCoords;
     document.getElementById('edY').oninput = updateCoords;
 
-    document.getElementById('edGroup').onchange = (e) => {
-        const newGIndex = parseInt(e.target.value);
+    document.getElementById('edGroup').onchange = (event) => {
+        const nextGroupIndex = parseInt(event.target.value, 10);
         group.points.splice(pointIndex, 1);
-        state.groups[newGIndex].points.push(point);
-        state.selectedPoint = { groupIndex: newGIndex, pointIndex: state.groups[newGIndex].points.length - 1 };
-        renderGroupsList(); renderAll(); renderEditor(); 
+        state.groups[nextGroupIndex].points.push(point);
+        state.selectedPoint = {
+            groupIndex: nextGroupIndex,
+            pointIndex: state.groups[nextGroupIndex].points.length - 1
+        };
+        renderGroupsList();
+        renderAll();
+        renderEditor();
         saveLocalState();
     };
 
-    // LOGIQUE DE NAVIGATION CROSS-MODULE
     document.getElementById('btnOpenInPoint').onclick = () => {
-        // Redirection vers le module Point avec l'ID du point actuel
         window.location.href = `../point/index.html?focus=${encodeURIComponent(point.id)}`;
     };
 
     document.getElementById('btnLinkPoint').onclick = () => {
-        state.linkingMode = true; state.linkStartId = point.id; closeEditor();
-        customAlert("MODE LIAISON", "Cliquez sur un second point."); document.body.style.cursor = 'crosshair';
+        state.linkingMode = true;
+        state.linkStartId = point.id;
+        closeEditor();
+        customAlert('MODE LIAISON', 'Cliquez sur un second point.');
+        document.body.style.cursor = 'crosshair';
     };
+
     document.getElementById('btnCopyId').onclick = () => navigator.clipboard.writeText(point.id);
     document.getElementById('btnCopyCoords').onclick = () => navigator.clipboard.writeText(`${gpsCoords.x.toFixed(2)}, ${gpsCoords.y.toFixed(2)}`);
-    document.getElementById('btnDelete').onclick = async () => { 
-        if(await customConfirm("SUPPRESSION", "Supprimer ?")) { 
+
+    document.getElementById('btnDelete').onclick = async () => {
+        if (await customConfirm('SUPPRESSION', 'Supprimer ce point ?')) {
             const removedId = point.id;
-            group.points.splice(pointIndex, 1); 
+            group.points.splice(pointIndex, 1);
             pruneTacticalLinks([removedId]);
-            deselect(); 
-            renderGroupsList(); 
+            deselect();
+            renderGroupsList();
             saveLocalState();
-        } 
+        }
     };
+
     document.getElementById('btnClose').onclick = deselect;
 }
 
-export function closeEditor() { sidebarRight.classList.remove('active'); }
+export function closeEditor() {
+    sidebarRight.classList.remove('active');
+}

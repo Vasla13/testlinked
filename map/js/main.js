@@ -1,7 +1,7 @@
 import { state, setGroups, generateID, loadLocalState, saveLocalState, pushHistory, undo, getMapData } from './state.js';
 import { initEngine, updateTransform } from './engine.js'; 
 import { renderGroupsList, initUI, selectItem } from './ui.js';
-import { customAlert, customConfirm, openSaveOptionsModal } from './ui-modals.js';
+import { customAlert, customConfirm, openSaveOptionsModal, openMapDataHubModal } from './ui-modals.js';
 import { gpsToPercentage } from './utils.js';
 import { renderAll } from './render.js';
 import { ICONS } from './constants.js';
@@ -229,31 +229,12 @@ function focusPointById(targetId) {
     return false;
 }
 
-function setupDataFileMenuToggle() {
-    const toggleButton = document.getElementById('btnDataFileToggle');
-    const submenu = document.getElementById('dataFileMenuPanel');
-    if (!toggleButton || !submenu) return;
-
-    const setOpen = (isOpen) => {
-        submenu.style.display = isOpen ? 'flex' : 'none';
-        toggleButton.setAttribute('aria-expanded', String(isOpen));
-        toggleButton.textContent = isOpen ? 'FICHIER ▴' : 'FICHIER ▾';
-    };
-
-    setOpen(false);
-    toggleButton.onclick = () => {
-        const isOpen = submenu.style.display !== 'none';
-        setOpen(!isOpen);
-    };
-}
-
 document.addEventListener('DOMContentLoaded', async () => {
     const oldLayer = document.querySelector('#map-world #markers-layer');
     if(oldLayer) oldLayer.remove(); // Nettoyage si doublon
 
     // Initialisation
     initUI();
-    setupDataFileMenuToggle();
     initEngine();
     
     // Chargement
@@ -297,26 +278,27 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    // --- BOUTON SAUVEGARDER (Double Action) ---
     const btnSave = document.getElementById('btnSave');
+    const fileImport = document.getElementById('fileImport');
+    const fileMerge = document.getElementById('fileMerge');
+
+    const openSaveHub = () => {
+        const saveOptions = getCloudSaveModalOptions();
+
+        if (!saveOptions.localExportLocked) {
+            const mapData = getMapData();
+            const fileName = state.currentFileName || `map_${Date.now()}`;
+            api.saveToDatabase(mapData, fileName).then(success => {
+                if(success) console.log("✅ Backup Database OK");
+                else console.warn("❌ Backup Database Échoué");
+            });
+        }
+
+        openSaveOptionsModal(saveOptions);
+    };
+
     if (btnSave) {
-        btnSave.onclick = () => {
-            const saveOptions = getCloudSaveModalOptions();
-
-            // ACTION 1 : Sauvegarde Silencieuse vers la BDD (Back-end)
-            // Bloquee si le board cloud n'autorise pas l'export local.
-            if (!saveOptions.localExportLocked) {
-                const mapData = getMapData();
-                const fileName = state.currentFileName || `map_${Date.now()}`;
-                api.saveToDatabase(mapData, fileName).then(success => {
-                    if(success) console.log("✅ Backup Database OK");
-                    else console.warn("❌ Backup Database Échoué");
-                });
-            }
-
-            // ACTION 2 : Ouvrir le menu pour l'utilisateur (Front-end)
-            openSaveOptionsModal(saveOptions);
-        };
+        btnSave.onclick = openSaveHub;
     }
 
     const btnCloudMenu = document.getElementById('btnCloudMenu');
@@ -324,9 +306,30 @@ document.addEventListener('DOMContentLoaded', async () => {
         btnCloudMenu.onclick = () => openCloudMenu();
     }
 
+    const btnDataFileToggle = document.getElementById('btnDataFileToggle');
+    if (btnDataFileToggle) {
+        btnDataFileToggle.onclick = () => {
+            const saveOptions = getCloudSaveModalOptions();
+            const localSummary = saveOptions.localExportLocked ? 'Local verrouille' : 'Local actif';
+            const cloudSummary = saveOptions.cloudActive
+                ? `${saveOptions.boardTitle || 'Board actif'} · ${saveOptions.cloudEditable ? 'edition' : 'lecture'}`
+                : 'Cloud hors ligne';
+
+            openMapDataHubModal({
+                localSummary,
+                cloudSummary,
+                syncSummary: 'Map tactique',
+                onSave: openSaveHub,
+                onOpen: () => fileImport?.click(),
+                onMerge: () => fileMerge?.click(),
+                onCloud: () => openCloudMenu(),
+                onReset: () => document.getElementById('btnResetMap')?.click()
+            });
+        };
+    }
+
     // --- IMPORT ---
     const btnTriggerImport = document.getElementById('btnTriggerImport');
-    const fileImport = document.getElementById('fileImport');
     if (btnTriggerImport && fileImport) {
         btnTriggerImport.onclick = () => fileImport.click();
         fileImport.onchange = (e) => {
@@ -353,7 +356,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // --- FUSION ---
     const btnTriggerMerge = document.getElementById('btnTriggerMerge');
-    const fileMerge = document.getElementById('fileMerge');
     if (btnTriggerMerge && fileMerge) {
         btnTriggerMerge.onclick = () => fileMerge.click();
         fileMerge.onchange = (e) => {

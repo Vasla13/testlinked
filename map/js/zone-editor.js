@@ -41,7 +41,14 @@ function showNotification(msg) {
     if(!notif) {
         notif = document.createElement('div');
         notif.id = 'drawing-notif';
-        notif.style.cssText = "position:fixed; top:90px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.8); color:#0f0; padding:10px 20px; border-radius:5px; pointer-events:none; z-index:4000; font-weight:bold; border:1px solid #0f0; font-family:'Rajdhani'; text-transform:uppercase;";
+        notif.style.position = 'fixed';
+        notif.style.top = '90px';
+        notif.style.left = '50%';
+        notif.style.transform = 'translateX(-50%)';
+        notif.style.pointerEvents = 'none';
+        notif.style.zIndex = '4000';
+        notif.style.fontWeight = '700';
+        notif.style.textTransform = 'uppercase';
         document.body.appendChild(notif);
     }
     notif.innerHTML = msg;

@@ -4,68 +4,51 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>BNI LINKED // MAP TACTIQUE</title>
-    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700;800&family=VT323&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
-
-    <style>
-        body { overflow: hidden; background: #05070a; }
-        
-        @media (min-width: 769px) {
-            #top-bar { display: none !important; }
-            #app-container { top: 0 !important; height: 100vh !important; }
-            #sidebar-left { padding-top: 10px; }
-        }
-
-        .panel-section {
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 15px;
-            margin-bottom: 15px;
-            display: flex; flex-direction: column; gap: 10px;
-        }
-        
-        .section-title {
-            font-size: 0.9rem; text-transform: uppercase; letter-spacing: 2px;
-            color: var(--text-dim); margin-bottom: 5px; display: block; font-weight: 700;
-        }
-
-        .file-btn { 
-            font-size: 0.85rem; color: var(--text-dim); cursor: pointer; 
-            border: 1px dashed var(--border-color); padding: 8px; 
-            text-align: center; border-radius: 0px; transition: 0.2s;
-            background: rgba(0,0,0,0.2); display: block; width: 100%;
-            font-weight: 700; text-transform: uppercase;
-        }
-        .file-btn:hover { border-color: var(--accent-cyan); color: var(--accent-cyan); background: rgba(115, 251, 247, 0.05); }
-
-        .btn-row { display: flex; gap: 5px; }
-        .btn-row > * { flex: 1; }
-
-        .btn-switch {
-            width: 100%; font-size: 0.8rem; padding: 8px;
-            background: rgba(115, 251, 247, 0.1); border: 1px solid var(--accent-cyan);
-            color: var(--accent-cyan); text-transform: uppercase; letter-spacing: 1px;
-            cursor: pointer; margin-top: 10px; font-weight: 700;
-            clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
-        }
-        .btn-switch:hover { background: var(--accent-cyan); color: #000; }
-
-        #app-loader {
-            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            background: #05070a; z-index: 9999;
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
-            color: #73fbf7; transition: opacity 0.5s ease;
-        }
-        .loader-text { 
-            font-family: 'Rajdhani', sans-serif; font-size: 1.5rem; letter-spacing: 4px; 
-            animation: pulse 1.5s infinite; text-transform: uppercase; font-weight: 800;
-        }
-        @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; text-shadow: 0 0 15px #73fbf7; } 100% { opacity: 0.5; } }
-    </style>
 </head>
-<body class="labels-auto app-loading">
+<body class="labels-auto app-loading map-shell">
 
     <div id="app-loader">
-        <div class="loader-text">Initialisation Tactical Map...</div>
+        <div class="loader-shell">
+            <div class="loader-topline">
+                <span>BNI LINKED <strong>MAP</strong></span>
+                <span id="loaderTimer">0%</span>
+            </div>
+            <div class="loader-grid">
+                <div class="loader-main">
+                    <div class="loader-wordmark">
+                        <div class="loader-kicker">Chargement tactique</div>
+                        <div class="loader-brand">Map <span class="loader-brand-accent">Linked</span></div>
+                    </div>
+                    <div id="loaderPhase" class="loader-phase">Initialisation de la carte...</div>
+                    <div class="loader-progress">
+                        <div id="loaderProgressBar" class="loader-progress-bar"></div>
+                    </div>
+                    <div class="loader-stats">
+                        <span id="loaderStatLeft">acces shell</span>
+                        <span id="loaderStatRight">boot sequence</span>
+                    </div>
+                    <div id="loaderFeed" class="loader-feed"></div>
+                </div>
+                <div class="loader-side">
+                    <div class="loader-radar">
+                        <div class="loader-sweep"></div>
+                        <div class="loader-dot loader-dot-a"></div>
+                        <div class="loader-dot loader-dot-b"></div>
+                        <div class="loader-dot loader-dot-c"></div>
+                    </div>
+                    <div class="loader-steps">
+                        <div class="loader-step is-active">Shell interface</div>
+                        <div class="loader-step">Calques tactiques</div>
+                        <div class="loader-step">Liaisons et zones</div>
+                        <div class="loader-step">Console operateur</div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div id="modal-overlay" class="hidden">
@@ -92,11 +75,11 @@
     </div>
 
     <div id="context-menu" class="context-menu">
-        <button id="ctx-new-point">📍 NOUVEAU POINT ICI</button>
-        <button id="ctx-new-zone">⭕ NOUVELLE ZONE</button>
-        <button id="ctx-new-free-zone" style="color:#73fbf7">✏️ DESSIN LIBRE</button>
+        <button id="ctx-new-point">Nouveau point</button>
+        <button id="ctx-new-zone">Nouvelle zone</button>
+        <button id="ctx-new-free-zone">Dessin libre</button>
         <div class="separator-h"></div>
-        <button id="ctx-cancel" style="color:var(--text-dim)">❌ ANNULER</button>
+        <button id="ctx-cancel">Fermer</button>
     </div>
 
     <div id="top-bar">
@@ -110,49 +93,53 @@
     <div id="app-container">
         
         <div id="sidebar-left">
-            <div class="panel-section" style="text-align:center; align-items: center;">
-                <img src="logo-bni-linked.png" alt="BNI LINKED" style="width:80%; max-height:80px; object-fit:contain; filter: drop-shadow(0 0 5px rgba(115,251,247,0.3));">
+            <div class="panel-section shell-section shell-section-brand">
+                <img src="logo-bni-linked.png" alt="BNI LINKED" class="shell-logo">
                 
-                <button class="btn-switch" onclick="window.location.href='../point/index.html';">
-                    🕸️ Mode Réseau
+                <button class="btn-switch shell-mode-btn" onclick="window.location.href='../point/index.html';">
+                    Basculer vers mode réseau
                 </button>
             </div>
 
-            <div class="panel-section">
-                <span class="section-title">DONNÉES TACTIQUES</span>
+            <div class="panel-section shell-section">
+                <span class="section-title shell-title">Données tactiques</span>
                 <input type="file" id="fileImport" accept=".json" style="display:none">
                 <input type="file" id="fileMerge" accept=".json" style="display:none">
 
-                <button id="btnDataFileToggle" class="action-btn" type="button" style="width:100%;" aria-controls="dataFileMenuPanel" aria-expanded="false">FICHIER ▾</button>
-                <div id="dataFileMenuPanel" style="display:flex; flex-direction:column; gap:5px;" hidden>
-                    <div class="btn-row">
-                        <button id="btnSave" class="action-btn" style="flex:1;">💾 SAUVEGARDER</button>
-                        <button id="btnTriggerImport" class="action-btn" style="flex:1;">📂 OUVRIR</button>
-                    </div>
+                <button id="btnDataFileToggle" class="action-btn shell-primary-btn" type="button">Fichier</button>
 
-                    <div class="btn-row">
-                        <button id="btnTriggerMerge" class="file-btn" style="flex:1;">🧩 FUSIONNER</button>
-                        <button id="btnResetMap" class="file-btn" style="flex:1; border-color:var(--danger); color:var(--danger); background:rgba(255,68,68,0.05);">⚠️ RESET</button>
+                <div class="data-shell-status">
+                    <div class="data-shell-card">
+                        <span class="data-shell-label">Statut</span>
+                        <strong id="cloudStatus" data-state="local">Local</strong>
                     </div>
+                    <div class="data-shell-card">
+                        <span class="data-shell-label">Board</span>
+                        <strong id="cloudStatusMeta" data-state="local">Hors ligne</strong>
+                    </div>
+                </div>
 
-                    <div class="btn-row">
-                        <button id="btnCloudMenu" class="action-btn" style="flex:1;">☁️ CLOUD</button>
-                        <div id="cloudStatus" style="flex:1; display:flex; align-items:center; justify-content:center; border:1px solid var(--border-color); font-size:0.78rem; letter-spacing:0.5px; color:var(--text-dim); background:rgba(0,0,0,0.25); text-transform:uppercase; padding:8px 6px;">Local</div>
-                    </div>
+                <div id="dataActionLaunchers" hidden>
+                    <button id="btnSave" type="button">Sauvegarder</button>
+                    <button id="btnTriggerImport" type="button">Ouvrir</button>
+                    <button id="btnTriggerMerge" type="button">Fusionner</button>
+                    <button id="btnResetMap" type="button">Reset</button>
+                    <button id="btnCloudMenu" type="button">Cloud</button>
                 </div>
             </div>
 
-            <div class="panel-section">
-                <button id="btnToggleGpsPanel" class="action-btn full-width">📡 SAISIE COORDONNÉES</button>
+            <div class="panel-section shell-section">
+                <span class="section-title shell-title">Outils</span>
+                <button id="btnToggleGpsPanel" class="action-btn full-width shell-secondary-btn">Saisie coordonnées</button>
             </div>
 
-            <div class="panel-header" style="flex-direction:column; align-items:stretch; gap:10px;">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div class="panel-header panel-header-groups">
+                <div class="panel-header-row">
                     <span>CALQUES OPÉRATIONNELS</span>
-                    <button id="btnAddGroup" class="mini-btn" title="Nouveau Groupe">＋</button>
+                    <button id="btnAddGroup" class="mini-btn mini-btn-plus" title="Nouveau Groupe">＋</button>
                 </div>
                 <div class="compact-search">
-                    <span style="font-size:0.8rem;">🔍</span>
+                    <span class="compact-search-icon">⌕</span>
                     <input type="text" id="searchInput" placeholder="Filtrer cibles..." autocomplete="off">
                 </div>
             </div>
@@ -187,18 +174,18 @@
             </div>
 
             <div id="gps-panel" class="floating-panel" style="display:none;">
-                <div class="panel-header">
+                <div class="panel-header panel-header-floating">
                     <span>POINT GPS</span>
                     <button class="mini-btn close-gps">×</button>
                 </div>
-                <div style="padding:15px;">
+                <div class="gps-panel-body">
                     <div class="gps-row">
                         <input type="text" id="gpsInputX" placeholder="X" class="gps-input">
                         <input type="text" id="gpsInputY" placeholder="Y" class="gps-input">
                     </div>
-                    <div style="margin-bottom:10px;">
-                        <label style="font-size:0.7rem; color:var(--text-dim);">CALQUE CIBLE</label>
-                        <select id="gpsGroupSelect" style="width:100%; background:rgba(0,0,0,0.5); color:white; border:1px solid #333; padding:5px; border-radius:0;"></select>
+                    <div class="gps-field-block">
+                        <label class="gps-label" for="gpsGroupSelect">CALQUE CIBLE</label>
+                        <select id="gpsGroupSelect" class="gps-input"></select>
                     </div>
                     <input type="text" id="gpsName" placeholder="Nom du point">
                     <div class="gps-row">
@@ -206,8 +193,8 @@
                         <div style="flex:1"><input type="text" id="gpsAffiliation" placeholder="Type"></div>
                     </div>
                     <textarea id="gpsNotes" placeholder="Notes..."></textarea>
-                    <button id="btnAddGpsPoint" class="action-btn full-width" style="margin-top:10px; width:100%; justify-content:center;">
-                        📍 PLACER
+                    <button id="btnAddGpsPoint" class="action-btn full-width gps-submit">
+                        Placer
                     </button>
                 </div>
             </div>
@@ -220,7 +207,7 @@
                     <div class="tool-row">
                         <label>ÉPAISSEUR</label>
                         <input type="range" id="drawWidth" min="1" max="10" value="2" step="1">
-                        <span id="drawWidthVal" style="width:30px; text-align:right; font-family:monospace;">2px</span>
+                        <span id="drawWidthVal" class="draw-width-value">2px</span>
                     </div>
                     <div class="tool-row">
                         <label>STYLE</label>
@@ -232,10 +219,10 @@
                     </div>
                     
                     <div class="tool-actions">
-                        <button id="btnDrawSmooth" class="action-btn" title="Lisser la forme" style="flex:1;">〰️ LISSER</button>
+                        <button id="btnDrawSmooth" class="action-btn" title="Lisser la forme" style="flex:1;">Lisser</button>
                         <div class="separator"></div>
-                        <button id="btnDrawCancel" class="action-btn btn-red" title="Annuler">❌</button>
-                        <button id="btnDrawConfirm" class="action-btn btn-green" title="Valider">✅</button>
+                        <button id="btnDrawCancel" class="action-btn btn-red" title="Annuler">Annuler</button>
+                        <button id="btnDrawConfirm" class="action-btn btn-green" title="Valider">Valider</button>
                     </div>
                 </div>
             </div>
@@ -243,9 +230,12 @@
         </div>
 
         <div id="sidebar-right">
-            <div class="panel-header">DONNÉES CIBLE</div>
+            <div class="panel-header panel-header-editor">DOSSIER TACTIQUE</div>
             <div id="editor-content">
-                <div class="empty-state">Sélectionnez un point</div>
+                <div class="empty-state">
+                    <span class="empty-state-kicker">Aucune cible</span>
+                    <strong>Sélectionnez un point ou une zone.</strong>
+                </div>
             </div>
         </div>
     </div>
@@ -256,30 +246,107 @@
         window.state = state;
     </script>
     <script>
-        window.addEventListener('load', () => {
-          setTimeout(() => {
-            const l = document.getElementById('app-loader');
-            if(l) { l.style.opacity = '0'; setTimeout(() => l.remove(), 500); }
-          }, 600);
-        });
         const btnLight = document.getElementById('btnToggleLight');
-        if(btnLight) {
+        if (btnLight) {
             btnLight.addEventListener('click', () => {
                 document.body.classList.toggle('high-light-mode');
-                if(document.body.classList.contains('high-light-mode')) {
-                    btnLight.classList.add('active');
-                } else {
-                    btnLight.classList.remove('active');
-                }
+                btnLight.classList.toggle('active', document.body.classList.contains('high-light-mode'));
             });
         }
-    </script>
-    <script>
-        window.addEventListener('load', () => {
-            setTimeout(() => {
+
+        (() => {
+            const loader = document.getElementById('app-loader');
+            if (!loader) return;
+
+            const progressBar = document.getElementById('loaderProgressBar');
+            const phaseEl = document.getElementById('loaderPhase');
+            const feedEl = document.getElementById('loaderFeed');
+            const timerEl = document.getElementById('loaderTimer');
+            const statLeftEl = document.getElementById('loaderStatLeft');
+            const statRightEl = document.getElementById('loaderStatRight');
+            const steps = Array.from(loader.querySelectorAll('.loader-step'));
+
+            const phases = [
+                { at: 0.12, label: 'Montage du shell opérateur...', left: 'interface', right: 'online', step: 0, feed: '<strong>MAP</strong> shell prêt' },
+                { at: 0.38, label: 'Lecture des calques et points...', left: 'calques', right: 'sync local', step: 1, feed: '<strong>DATA</strong> groups indexes chargés' },
+                { at: 0.66, label: 'Activation des zones et liaisons...', left: 'links', right: 'render graph', step: 2, feed: '<strong>LINK</strong> tactical overlay actif' },
+                { at: 0.88, label: 'Ouverture de la console tactique...', left: 'editor', right: 'operator ready', step: 3, feed: '<strong>READY</strong> console engagée' }
+            ];
+
+            let ready = document.readyState === 'complete';
+            let feedIndex = -1;
+            let lastPhase = -1;
+            const minDuration = 1400;
+            const maxDuration = 2400;
+            const start = performance.now();
+
+            const addFeedLine = (html) => {
+                if (!feedEl) return;
+                const line = document.createElement('div');
+                line.className = 'loader-line';
+                line.innerHTML = html;
+                feedEl.appendChild(line);
+                while (feedEl.children.length > 4) {
+                    feedEl.removeChild(feedEl.firstChild);
+                }
+            };
+
+            const finishBoot = () => {
+                if (loader.dataset.done === '1') return;
+                loader.dataset.done = '1';
                 document.body.classList.remove('app-loading');
-            }, 120);
-        });
+                loader.classList.add('is-exiting');
+                window.setTimeout(() => loader.remove(), 380);
+            };
+
+            const renderFrame = (now) => {
+                const elapsed = now - start;
+                const progress = Math.min(elapsed / maxDuration, 1);
+                if (progressBar) progressBar.style.width = `${Math.max(progress * 100, 6)}%`;
+                if (timerEl) timerEl.textContent = `${Math.round(progress * 100)}%`;
+
+                const phaseIndex = phases.findIndex((phase, index) => {
+                    const next = phases[index + 1];
+                    return progress >= phase.at && (!next || progress < next.at);
+                });
+
+                if (phaseIndex !== -1 && phaseIndex !== lastPhase) {
+                    lastPhase = phaseIndex;
+                    const current = phases[phaseIndex];
+                    if (phaseEl) phaseEl.textContent = current.label;
+                    if (statLeftEl) statLeftEl.textContent = current.left;
+                    if (statRightEl) statRightEl.textContent = current.right;
+                    steps.forEach((stepEl, index) => {
+                        stepEl.classList.toggle('is-active', index === current.step);
+                        stepEl.classList.toggle('is-complete', index < current.step);
+                    });
+                }
+
+                if (lastPhase > feedIndex) {
+                    feedIndex = lastPhase;
+                    addFeedLine(phases[lastPhase].feed);
+                }
+
+                if ((ready && elapsed >= minDuration) || elapsed >= maxDuration) {
+                    finishBoot();
+                    return;
+                }
+
+                requestAnimationFrame(renderFrame);
+            };
+
+            addFeedLine('<strong>BOOT</strong> séquence engagée');
+
+            window.addEventListener('load', () => {
+                ready = true;
+            }, { once: true });
+
+            window.addEventListener('pageshow', (event) => {
+                if (event.persisted) finishBoot();
+            });
+
+            requestAnimationFrame(renderFrame);
+        })();
     </script>
 </body>
 </html>

@@ -33,40 +33,34 @@ export function renderGroupsList() {
 
         const groupEl = document.createElement('div');
         groupEl.className = 'group-item';
-        groupEl.style.borderLeft = `3px solid ${group.color}`;
+        groupEl.style.setProperty('--group-color', group.color);
         
         // HEADER
         const header = document.createElement('div');
         header.className = 'group-header';
-        header.style.cursor = 'pointer';
-        header.style.display = 'flex';
-        header.style.justifyContent = 'space-between';
-        header.style.alignItems = 'center';
-        header.style.padding = '10px';
-        header.style.background = 'rgba(255,255,255,0.02)';
 
-        const eyeOpacity = group.visible ? '1' : '0.3';
-        const eyeColor = group.visible ? '#fff' : 'var(--text-dim)';
+        const eyeOpacity = group.visible ? '1' : '0.45';
+        const groupSummary = `${pointCount} point${pointCount > 1 ? 's' : ''} · ${zoneCount} zone${zoneCount > 1 ? 's' : ''}`;
 
         header.innerHTML = `
-            <div style="display:flex; align-items:center; gap:10px;">
-                <span class="color-dot" style="background:${group.color}; box-shadow:0 0 5px ${group.color}"></span>
-                <span style="font-weight:700; font-size:0.9rem;">${escapeHtml(group.name)}</span>
+            <div class="group-header-main">
+                <span class="color-dot"></span>
+                <div class="group-header-copy">
+                    <span class="group-title">${escapeHtml(group.name)}</span>
+                    <span class="group-sub">${escapeHtml(groupSummary)}</span>
+                </div>
             </div>
-            <div style="display:flex; align-items:center; gap:5px;">
-                <span style="font-size:0.75rem; color:#666; background:rgba(0,0,0,0.3); padding:2px 6px; border-radius:4px; margin-right:5px;">
-                    ${totalCount}
-                </span>
-                
-                <button class="mini-btn btn-settings" title="Modifier/Supprimer" style="padding:4px 8px; color:var(--accent-cyan);">
+            <div class="group-actions">
+                <span class="group-count">${totalCount}</span>
+                <button class="mini-btn btn-settings" title="Modifier/Supprimer">
                     ⚙️
                 </button>
 
-                <button class="mini-btn btn-focus" title="Centrer la vue" style="padding:4px 8px;">
+                <button class="mini-btn btn-focus" title="Centrer la vue">
                     🎯
                 </button>
                 
-                <button class="mini-btn btn-visibility" title="Afficher/Masquer" style="opacity:${eyeOpacity}; color:${eyeColor}; padding:4px 8px;">
+                <button class="mini-btn btn-visibility" title="Afficher/Masquer" style="opacity:${eyeOpacity};">
                     👁️
                 </button>
             </div>
@@ -75,21 +69,21 @@ export function renderGroupsList() {
         // LISTE CONTENU
         const contentList = document.createElement('div');
         contentList.className = 'group-content';
-        contentList.style.display = term ? 'block' : 'none'; 
-        contentList.style.padding = '0 0 10px 25px';
-        contentList.style.fontSize = '0.8rem';
+        if (term) {
+            contentList.classList.add('is-open');
+            groupEl.classList.add('is-open');
+        }
 
         // Points
         if(filteredPoints.length > 0) {
             filteredPoints.forEach((p) => {
                 const originalPIndex = group.points.indexOf(p);
                 const pRow = document.createElement('div');
-                pRow.style.padding = '4px 0';
-                pRow.style.color = '#8892b0';
-                pRow.style.cursor = 'pointer';
-                pRow.innerHTML = `📍 ${escapeHtml(p.name)}`;
-                pRow.onmouseover = () => pRow.style.color = '#fff';
-                pRow.onmouseout = () => pRow.style.color = '#8892b0';
+                pRow.className = 'group-entry';
+                pRow.innerHTML = `
+                    <span class="group-entry-icon">●</span>
+                    <span class="group-entry-text">${escapeHtml(p.name)}</span>
+                `;
                 pRow.onclick = (e) => {
                     e.stopPropagation();
                     selectItem('point', gIndex, originalPIndex);
@@ -103,13 +97,12 @@ export function renderGroupsList() {
         if(group.zones && group.zones.length > 0) {
             group.zones.forEach((z, zIndex) => {
                 const zRow = document.createElement('div');
-                zRow.style.padding = '4px 0';
-                zRow.style.color = '#8892b0';
-                zRow.style.cursor = 'pointer';
-                const icon = z.type === 'CIRCLE' ? '⭕' : '📐';
-                zRow.innerHTML = `${icon} ${escapeHtml(z.name || 'Zone sans nom')}`;
-                zRow.onmouseover = () => zRow.style.color = '#fff';
-                zRow.onmouseout = () => zRow.style.color = '#8892b0';
+                zRow.className = 'group-entry group-entry-zone';
+                const icon = z.type === 'CIRCLE' ? '◌' : '△';
+                zRow.innerHTML = `
+                    <span class="group-entry-icon">${icon}</span>
+                    <span class="group-entry-text">${escapeHtml(z.name || 'Zone sans nom')}</span>
+                `;
                 zRow.onclick = (e) => {
                     e.stopPropagation();
                     selectItem('zone', gIndex, zIndex);
@@ -130,9 +123,9 @@ export function renderGroupsList() {
         // EVENTS HEADER
         header.onclick = (e) => {
             if(e.target.closest('button')) return;
-            const isClosed = contentList.style.display === 'none';
-            contentList.style.display = isClosed ? 'block' : 'none';
-            header.style.background = isClosed ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.02)';
+            const isOpen = contentList.classList.contains('is-open');
+            contentList.classList.toggle('is-open', !isOpen);
+            groupEl.classList.toggle('is-open', !isOpen);
         };
 
         const btnVis = header.querySelector('.btn-visibility');
