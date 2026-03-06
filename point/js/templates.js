@@ -19,6 +19,17 @@ function getLinkOptions(allowedKinds) {
         .join('');
 }
 
+function splitIdentityName(name) {
+    const raw = String(name || '').trim().replace(/\s+/g, ' ');
+    if (!raw) return { first: '', last: '' };
+    const parts = raw.split(' ');
+    if (parts.length === 1) return { first: parts[0], last: '' };
+    return {
+        first: parts.slice(0, -1).join(' '),
+        last: parts.slice(-1).join('')
+    };
+}
+
 // =============================================================================
 // --- 1. BARRE LATÉRALE GAUCHE (PATHFINDING / IA) ---
 // =============================================================================
@@ -108,6 +119,28 @@ export function renderEditorHTML(n, state) {
     const valueA = (n.description || 'Valeur description').slice(0, 40);
     const valueB = n.num || 'Valeur point social';
     const valueC = n.type === TYPES.COMPANY ? 'Valeur metier' : 'Valeur metier';
+    const identity = splitIdentityName(n.name);
+    const quickIdentityHtml = n.type === TYPES.PERSON
+        ? `
+        <div class="editor-quick-identity">
+            <div class="editor-quick-field">
+                <label>Prénom</label>
+                <input id="edFirstName" type="text" value="${escapeHtml(identity.first)}" placeholder="Prénom">
+            </div>
+            <div class="editor-quick-field">
+                <label>Nom</label>
+                <input id="edLastName" type="text" value="${escapeHtml(identity.last)}" placeholder="Nom">
+            </div>
+        </div>
+        `
+        : `
+        <div class="editor-quick-identity editor-quick-identity-single">
+            <div class="editor-quick-field">
+                <label>Nom</label>
+                <input id="edQuickName" type="text" value="${escapeHtml(n.name)}" placeholder="Nom de la fiche">
+            </div>
+        </div>
+        `;
 
     return `
     <div class="editor-sheet">
@@ -126,6 +159,8 @@ export function renderEditorHTML(n, state) {
         <div class="editor-sheet-note">
             <textarea id="edDescription" rows="2" placeholder="Note sur la personne (si il y en a)">${escapeHtml(n.description || n.notes || '')}</textarea>
         </div>
+
+        ${quickIdentityHtml}
 
         <div class="editor-links-head">
             <span>LIENS ACTIFS</span>

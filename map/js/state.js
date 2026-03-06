@@ -32,6 +32,7 @@ export const state = {
     statusFilter: 'ALL',
     searchTerm: '',
     labelMode: 'auto',
+    activeAlert: null,
 
     currentFileName: null,
 

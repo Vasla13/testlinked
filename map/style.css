@@ -154,16 +154,18 @@ a, button, .nav-btn, .action-btn, .file-btn, label, select, input, .marker, .gro
         linear-gradient(90deg, rgba(115, 251, 247, 0.03) 1px, transparent 1px);
     background-size: 50px 50px; overflow: hidden;
     box-shadow: inset 0 0 100px rgba(0,0,0,0.8);
-    perspective: 1000px;
+    contain: layout paint;
 }
 
 #map-world { 
     position: absolute; top: 0; left: 0; 
-    transform-origin: 0 0; will-change: transform; transform-style: preserve-3d;
+    transform-origin: 0 0;
+    backface-visibility: hidden;
 }
 
 #map-image { 
-    display: block; pointer-events: none; 
+    display: block; width: 100%; height: 100%; pointer-events: none;
+    backface-visibility: hidden;
     filter: brightness(0.6) contrast(1.2) grayscale(0.2);
     transition: filter 0.5s ease, mix-blend-mode 0.5s ease, opacity 0.5s ease;
 }
@@ -173,7 +175,7 @@ body.high-light-mode #map-image {
     mix-blend-mode: screen; opacity: 0.9;
 }
 
-#zones-layer, #links-layer, #markers-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+#zones-layer, #alert-layer, #links-layer, #markers-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
 
 
 /* --- 4. MARQUEURS TACTIQUES & CORRECTIFS COULEURS --- */
@@ -2568,4 +2570,180 @@ body.map-shell .loader-step.is-complete {
     body.map-shell .loader-shell {
         padding: 22px 18px 18px;
     }
+}
+
+body.map-shell .map-alert-ring,
+body.map-shell .map-alert-pulse {
+    animation: none;
+}
+
+body.map-shell .map-alert-ring,
+body.map-shell .map-alert-zone {
+    filter: drop-shadow(0 0 10px rgba(255, 77, 103, 0.22));
+}
+
+body.map-shell .map-alert-pin {
+    position: absolute;
+    width: var(--alert-size, 56px);
+    height: var(--alert-size, 56px);
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 180;
+}
+
+body.map-shell .map-alert-pin-ring,
+body.map-shell .map-alert-pin-halo,
+body.map-shell .map-alert-pin-core,
+body.map-shell .map-alert-pin-cross {
+    position: absolute;
+    display: block;
+}
+
+body.map-shell .map-alert-pin-ring {
+    inset: 0;
+    border: 2px solid rgba(255, 86, 110, 0.92);
+    border-radius: 999px;
+    box-shadow: 0 0 0 8px rgba(255, 86, 110, 0.12), 0 0 24px rgba(255, 86, 110, 0.24);
+}
+
+body.map-shell .map-alert-pin-halo {
+    inset: 15%;
+    border: 1px dashed rgba(255, 184, 196, 0.95);
+    border-radius: 999px;
+    background: rgba(255, 86, 110, 0.08);
+}
+
+body.map-shell .map-alert-pin-core {
+    left: 50%;
+    top: 50%;
+    width: 12px;
+    height: 12px;
+    transform: translate(-50%, -50%);
+    border-radius: 999px;
+    background: #ffe4e9;
+    border: 2px solid #ff566e;
+    box-shadow: 0 0 12px rgba(255, 86, 110, 0.56);
+}
+
+body.map-shell .map-alert-pin-cross {
+    left: 50%;
+    top: 50%;
+    background: rgba(255, 208, 217, 0.92);
+    transform: translate(-50%, -50%);
+}
+
+body.map-shell .map-alert-pin-cross-h {
+    width: 66%;
+    height: 1px;
+}
+
+body.map-shell .map-alert-pin-cross-v {
+    width: 1px;
+    height: 66%;
+}
+
+body.map-shell #map-alert-banner {
+    position: absolute;
+    top: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 220;
+    width: min(460px, calc(100vw - 40px));
+    padding: 14px 16px;
+    border: 1px solid rgba(255, 77, 103, 0.34);
+    background:
+        linear-gradient(180deg, rgba(36, 8, 18, 0.94), rgba(18, 7, 14, 0.9)),
+        radial-gradient(circle at top right, rgba(255, 204, 138, 0.08), transparent 50%);
+    box-shadow: 0 22px 44px rgba(0, 0, 0, 0.4), 0 0 20px rgba(255, 77, 103, 0.12);
+    clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px));
+}
+
+body.map-shell .map-alert-kicker {
+    color: #ffb8c6;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+}
+
+body.map-shell .map-alert-title {
+    color: #fff0f3;
+    font-size: 1rem;
+    font-weight: 800;
+    letter-spacing: 0.6px;
+    margin-bottom: 8px;
+}
+
+body.map-shell .map-alert-desc {
+    color: rgba(255, 234, 239, 0.86);
+    font-size: 0.84rem;
+    line-height: 1.45;
+    margin-bottom: 10px;
+}
+
+body.map-shell .map-alert-meta {
+    color: #ffcf96;
+    font-size: 0.72rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+body.map-shell #map-alert-dismiss {
+    margin-top: 10px;
+}
+
+body.map-shell #alert-picker-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 260;
+    display: grid;
+    place-items: center;
+    background: rgba(1, 4, 12, 0.34);
+    cursor: crosshair;
+}
+
+body.map-shell #alert-picker-overlay[hidden] {
+    display: none !important;
+}
+
+body.map-shell .alert-picker-card {
+    width: min(420px, calc(100vw - 40px));
+    padding: 16px;
+    border: 1px solid rgba(102, 243, 255, 0.28);
+    background: rgba(5, 12, 27, 0.9);
+    color: #e4f9ff;
+    text-align: center;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.34);
+    clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px));
+}
+
+body.map-shell .alert-picker-card strong {
+    display: block;
+    font-size: 0.94rem;
+    letter-spacing: 0.8px;
+}
+
+body.map-shell .alert-picker-card-done {
+    border-color: rgba(102, 243, 255, 0.42);
+}
+
+body.map-shell .alert-picker-kicker {
+    display: block;
+    margin-bottom: 8px;
+    color: #94eff8;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+@keyframes mapAlertPulse {
+    0%, 100% { opacity: 0.72; }
+    50% { opacity: 1; }
+}
+
+@keyframes mapAlertCore {
+    0%, 100% { opacity: 0.74; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.08); }
 }

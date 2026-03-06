@@ -7,6 +7,7 @@ import { escapeHtml } from './utils.js';
 
 const markersLayer = document.getElementById('markers-layer');
 const zonesLayer = document.getElementById('zones-layer');
+const alertLayer = document.getElementById('alert-layer');
 const linksLayer = document.getElementById('links-layer'); 
 
 document.addEventListener('mousemove', moveTooltip);
@@ -54,6 +55,11 @@ function configureSVG(layer) {
     if (layer) {
         layer.setAttribute("viewBox", "0 0 100 100");
         layer.setAttribute("preserveAspectRatio", "none");
+        layer.style.position = 'absolute';
+        layer.style.top = '0';
+        layer.style.left = '0';
+        layer.style.display = 'block';
+        layer.style.overflow = 'visible';
         layer.style.pointerEvents = 'none'; 
         layer.style.width = '100%';
         layer.style.height = '100%';
@@ -70,9 +76,11 @@ function getTacticalLinkWidths() {
 
 export function renderAll() {
     configureSVG(zonesLayer);
+    configureSVG(alertLayer);
     configureSVG(linksLayer);
 
     renderZones();
+    renderAlertOverlay();
     renderTacticalLinks(); 
     renderMarkersAndClusters(); 
     renderMeasureTool(); 
@@ -307,6 +315,46 @@ function renderTacticalLinks() {
     }
 }
 
+function renderAlertOverlay() {
+    if (!alertLayer) return;
+    alertLayer.innerHTML = '';
+
+    const alert = state.activeAlert;
+    if (!alert || !alert.active) return;
+
+    if (alert.shapeType === 'zone' && Array.isArray(alert.zonePoints) && alert.zonePoints.length >= 3) {
+        const zone = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+        zone.setAttribute("points", alert.zonePoints.map((point) => `${point.x},${point.y}`).join(" "));
+        zone.setAttribute("fill", "#ff4d67");
+        zone.setAttribute("fill-opacity", "0.16");
+        zone.setAttribute("stroke", "#ff4d67");
+        zone.setAttribute("stroke-width", "0.18");
+        zone.setAttribute("class", "map-alert-zone");
+        alertLayer.appendChild(zone);
+        return;
+    }
+
+    const x = Number(alert.xPercent);
+    const y = Number(alert.yPercent);
+    const radius = Math.max(0.5, Number(alert.radius || 2.6));
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+
+    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    circle.setAttribute("cx", x);
+    circle.setAttribute("cy", y);
+    circle.setAttribute("r", radius.toFixed(2));
+    circle.setAttribute("fill", "#ff4d67");
+    circle.setAttribute("fill-opacity", "0.14");
+    circle.setAttribute("stroke", "#ff4d67");
+    circle.setAttribute("stroke-width", "0.18");
+    circle.setAttribute("class", "map-alert-ring");
+    alertLayer.appendChild(circle);
+}
+
+function renderAlertMarker() {
+    return;
+}
+
 function renderMarkersAndClusters() {
     markersLayer.innerHTML = '';
 
@@ -396,6 +444,8 @@ function renderMarkersAndClusters() {
             markersLayer.appendChild(el);
         });
     });
+
+    renderAlertMarker();
 }
 
 function renderMeasureTool() {

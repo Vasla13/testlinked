@@ -9,7 +9,27 @@ const mapImage = document.getElementById('map-image');
 const hudCoords = document.getElementById('coords-display');
 const markersLayer = document.getElementById('markers-layer');
 
+function syncMapFrame() {
+    if (!state.mapWidth || !state.mapHeight) return;
+
+    if (mapWorld) {
+        mapWorld.style.width = `${state.mapWidth}px`;
+        mapWorld.style.height = `${state.mapHeight}px`;
+    }
+
+    if (mapImage) {
+        mapImage.style.width = '100%';
+        mapImage.style.height = '100%';
+    }
+
+    if (markersLayer) {
+        markersLayer.style.transformOrigin = '0 0';
+    }
+}
+
 export function updateTransform() {
+    syncMapFrame();
+
     // 1. On applique le zoom UNIQUEMENT sur la carte (l'image de fond)
     mapWorld.style.transform = `translate(${state.view.x}px, ${state.view.y}px) scale(${state.view.scale})`;
 
@@ -52,11 +72,13 @@ export function initEngine() {
     if(mapImage.complete) {
         state.mapWidth = mapImage.naturalWidth;
         state.mapHeight = mapImage.naturalHeight;
+        syncMapFrame();
         centerMap();
     } else {
         mapImage.onload = () => {
             state.mapWidth = mapImage.naturalWidth;
             state.mapHeight = mapImage.naturalHeight;
+            syncMapFrame();
             centerMap();
         };
         // Sécurité si l'image plante

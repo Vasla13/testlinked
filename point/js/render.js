@@ -9,6 +9,31 @@ const container = document.getElementById('center');
 const degreeCache = new Map();
 const NODE_ICONS = { [TYPES.PERSON]: '👤', [TYPES.COMPANY]: '🏢', [TYPES.GROUP]: '👥' };
 
+function splitDisplayName(name) {
+    const raw = String(name || '').trim().replace(/\s+/g, ' ');
+    if (!raw) return [];
+    return raw.split(' ');
+}
+
+function compactNodeLabel(node, scale) {
+    const rawName = String(node?.name || '').trim().replace(/\s+/g, ' ');
+    if (!rawName) return 'Sans nom';
+    if (scale >= 0.62) return rawName;
+
+    const parts = splitDisplayName(rawName);
+    if (node?.type === TYPES.PERSON && parts.length >= 2) {
+        const first = parts.slice(0, -1).join(' ');
+        const last = parts.slice(-1).join('');
+        if (scale < 0.34) {
+            return `${first.charAt(0).toUpperCase()}. ${last}`.trim();
+        }
+        return `${first} ${last.charAt(0).toUpperCase()}.`;
+    }
+
+    const maxLength = scale < 0.34 ? 12 : 18;
+    return rawName.length > maxLength ? `${rawName.slice(0, maxLength - 1)}…` : rawName;
+}
+
 function pairKey(a, b) {
     const s = String(a);
     const t = String(b);
@@ -455,7 +480,7 @@ export function draw() {
             if (labelMode === 2) showName = true;
             else if (labelMode === 1) {
                 showName = isSelected || isHover || isPathfindingNode || isPathStart;
-                if (!showName) showName = (hvtScore > 0.55) || (degree > 6) || (isImportant && p.scale > 0.45) || (p.scale > 0.7);
+                if (!showName) showName = (hvtScore > 0.55) || (degree > 4) || (isImportant && p.scale > 0.28) || (p.scale > 0.55);
             }
             
             if (isHVT && topSet && topSet.has(n.id)) showName = true;
@@ -463,22 +488,21 @@ export function draw() {
 
             if (!showName) continue;
 
-            const baseFontSize = (isPathfindingNode || isPathStart || (isHVT && hvtScore > 0.6) ? 16 : 13);
-            let fontSize = baseFontSize / Math.sqrt(p.scale);
-            if (n.type === TYPES.PERSON && p.scale < 1) {
-                const boost = Math.min(0.5, (1 - p.scale) * 0.6);
-                fontSize *= (1 + boost);
-            }
+            const baseScreenFont = (isPathfindingNode || isPathStart || (isHVT && hvtScore > 0.6)) ? 15 : 12.5;
+            const zoomBoost = p.scale < 0.62 ? (0.62 - p.scale) * 7 : 0;
+            const targetScreenFont = Math.min(18, baseScreenFont + zoomBoost + (isImportant ? 0.8 : 0));
+            let fontSize = targetScreenFont / Math.max(p.scale, 0.18);
+            fontSize = Math.min(fontSize, 84);
             ctx.font = `600 ${fontSize}px "Rajdhani", sans-serif`;
-            const label = n.name;
+            const label = compactNodeLabel(n, p.scale);
             const metrics = ctx.measureText(label);
             const textW = metrics.width;
-            const textH = fontSize * 1.4;
-            const padding = 6 / Math.sqrt(p.scale);
+            const textH = fontSize * 1.18;
+            const padding = Math.max(8, targetScreenFont * 0.72) / Math.max(p.scale, 0.22);
             const boxX = n.x - textW / 2 - padding;
             const boxY = n.y + rad + 6 / Math.sqrt(p.scale);
             const boxW = textW + padding * 2;
-            const boxH = textH + padding;
+            const boxH = textH + padding * 0.9;
 
             let priority = 0;
             if (isSelected) priority += 100;
@@ -512,7 +536,7 @@ export function draw() {
             if (collide) continue;
             drawnBoxes.push(rect);
 
-            ctx.globalAlpha = 0.9; ctx.fillStyle = '#0a0c16'; 
+            ctx.globalAlpha = 0.95; ctx.fillStyle = 'rgba(3, 8, 18, 0.96)';
             ctx.beginPath();
             if(ctx.roundRect) ctx.roundRect(c.boxX, c.boxY, c.boxW, c.boxH, 6);
             else ctx.rect(c.boxX, c.boxY, c.boxW, c.boxH);
@@ -523,10 +547,13 @@ export function draw() {
             if (c.isPathStart) strokeColor = '#ffff00';
             
             ctx.strokeStyle = strokeColor;
-            ctx.lineWidth = ((c.isPathfindingNode || c.isPathStart || (isHVT && (c.n.hvtScore || 0) > 0.6)) ? 2 : 1) / Math.sqrt(p.scale);
+            ctx.lineWidth = ((c.isPathfindingNode || c.isPathStart || (isHVT && (c.n.hvtScore || 0) > 0.6)) ? 2.4 : 1.3) / Math.sqrt(p.scale);
             ctx.stroke();
             ctx.globalAlpha = 1.0; ctx.fillStyle = '#ffffff';
             ctx.font = `600 ${c.fontSize}px "Rajdhani", sans-serif`;
+            ctx.lineWidth = Math.max(2.4, c.fontSize * 0.14);
+            ctx.strokeStyle = 'rgba(2, 6, 14, 0.92)';
+            ctx.strokeText(c.label, c.n.x, c.boxY + (c.boxH / 2));
             ctx.fillText(c.label, c.n.x, c.boxY + (c.boxH / 2));
         }
     }

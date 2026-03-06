@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>BNI LINKED // STAFF ALERTES</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700;800&family=VT323&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../map/style.css">
+    <link rel="stylesheet" href="./style.css">
+</head>
+<body class="map-shell staff-shell">
+    <div id="staff-access-overlay">
+        <div class="staff-access-card">
+            <div class="staff-access-kicker">Acces staff</div>
+            <div class="staff-access-title">Console alertes BNI</div>
+            <p class="staff-access-copy">Entre le code staff pour acceder au panneau d’alerte.</p>
+            <input id="staff-access-input" type="password" class="staff-access-input" placeholder="Code d'acces">
+            <div id="staff-access-error" class="staff-access-error"></div>
+            <button id="staff-access-submit" type="button" class="staff-access-btn">Entrer</button>
+        </div>
+    </div>
+
+    <div id="app-container">
+        <div id="sidebar-left">
+            <div class="panel-section shell-section shell-section-brand">
+                <img src="../map/logo-bni-linked.png" alt="BNI LINKED" class="shell-logo">
+                <button id="btnStaffHome" class="btn-switch shell-mode-btn" type="button">Retour accueil</button>
+            </div>
+
+            <div class="panel-section shell-section">
+                <span class="section-title shell-title">Alerte</span>
+                <div class="staff-status-grid">
+                    <div class="data-shell-card">
+                        <span class="data-shell-label">Etat</span>
+                        <strong id="staffAlertState">Verrouille</strong>
+                    </div>
+                    <div class="data-shell-card">
+                        <span class="data-shell-label">Position</span>
+                        <strong id="staffAlertCoords">--</strong>
+                    </div>
+                </div>
+                <div id="staffStatusMessage" class="staff-status-message">Console verrouillee.</div>
+                <div class="staff-action-grid">
+                    <button id="btnPublishAlert" class="action-btn" type="button">Enregistrer</button>
+                    <button id="btnDeleteAlert" class="action-btn btn-delete-zone" type="button">Supprimer</button>
+                </div>
+            </div>
+
+            <div class="panel-section shell-section">
+                <div class="staff-panel-head">
+                    <span class="section-title shell-title">Audience</span>
+                    <span id="staffAudienceMode" class="editor-pill staff-mini-pill">Tous</span>
+                </div>
+                <div class="staff-audience-value" id="staffAlertAudience">Tous</div>
+                <div class="staff-action-grid staff-action-grid-compact">
+                    <button id="btnAudienceAll" class="action-btn" type="button">Tous</button>
+                    <button id="btnAudienceWhitelist" class="action-btn" type="button">Whitelist</button>
+                </div>
+                <div id="staffWhitelistPanel" class="staff-whitelist-panel" hidden>
+                    <div class="staff-whitelist-row">
+                        <input id="staffWhitelistInput" class="cyber-input" type="text" placeholder="username cloud">
+                        <button id="btnAddWhitelistUser" class="action-btn" type="button">Ajouter</button>
+                    </div>
+                    <div id="staffWhitelistSuggestions" class="staff-whitelist-suggestions"></div>
+                    <div id="staffWhitelistList" class="staff-whitelist-list"></div>
+                </div>
+            </div>
+
+            <div class="panel-section shell-section">
+                <span class="section-title shell-title">Carte</span>
+                <div class="staff-status-grid">
+                    <div class="data-shell-card">
+                        <span class="data-shell-label">GPS</span>
+                        <strong id="staffGpsPreview">--</strong>
+                    </div>
+                    <div class="data-shell-card">
+                        <span class="data-shell-label">Carte</span>
+                        <strong id="staffPercentPreview">--</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="viewport">
+            <div id="map-world">
+                <img id="map-image" src="../map/carte.jpg" alt="Carte Staff BNI">
+                <svg id="staff-alert-layer" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+            </div>
+
+            <div id="staff-map-banner" hidden></div>
+
+            <div id="hud-bottom">
+                <div id="coords-display" class="desktop-only">GPS: -- | --</div>
+                <div class="separator desktop-only"></div>
+                <button id="btnResetView" class="hud-btn" type="button">Recentrer</button>
+                <button id="btnToggleSelection" class="hud-btn active" type="button">Selection carte</button>
+            </div>
+        </div>
+
+        <div id="sidebar-right" class="active">
+            <div class="panel-header panel-header-editor">ALERTE BNI</div>
+            <div id="editor-content">
+                <div class="editor-shell">
+                    <div class="editor-section" style="--editor-accent:var(--accent-cyan);">
+                        <div class="editor-section-title">
+                            <span>Diffusion</span>
+                            <span class="editor-pill" id="staffAlertMode">Brouillon</span>
+                        </div>
+                        <div class="editor-meta-grid">
+                            <div class="editor-col">
+                                <label for="alertTitle">Titre</label>
+                                <input id="alertTitle" class="cyber-input" type="text" maxlength="120" placeholder="Titre de l'alerte">
+                            </div>
+                            <div class="editor-col">
+                                <label for="alertDescription">Description</label>
+                                <textarea id="alertDescription" class="cyber-input" rows="4" placeholder="Description visible sur la home"></textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="editor-section" style="--editor-accent:#dff7ff;">
+                        <div class="editor-section-title">
+                            <span>Position</span>
+                            <span class="editor-pill" id="staffSelectionMode">Carte</span>
+                        </div>
+                        <div class="editor-actions-row">
+                            <button id="btnUseMapSelection" class="action-btn" type="button">Cercle</button>
+                            <button id="btnStartZoneDraw" class="action-btn" type="button">Dessiner zone</button>
+                        </div>
+                        <div class="editor-row">
+                            <div class="editor-col">
+                                <label for="alertGpsX">GPS X</label>
+                                <input id="alertGpsX" class="cyber-input" type="number" step="0.01" placeholder="-1234.56">
+                            </div>
+                            <div class="editor-col">
+                                <label for="alertGpsY">GPS Y</label>
+                                <input id="alertGpsY" class="cyber-input" type="number" step="0.01" placeholder="789.12">
+                            </div>
+                        </div>
+                        <div class="staff-radius-block">
+                            <label for="alertRadius">Taille cercle</label>
+                            <div class="staff-radius-row">
+                                <input id="alertRadius" type="range" min="0.8" max="12" step="0.2" value="2.6">
+                                <strong id="alertRadiusValue">2.6</strong>
+                            </div>
+                        </div>
+                        <div id="staffDrawStatus" class="staff-draw-status">Mode cercle. Clique sur la carte pour placer l’alerte.</div>
+                        <div class="editor-actions-row">
+                            <button id="btnFinishZoneDraw" class="action-btn" type="button">Valider zone</button>
+                            <button id="btnCancelZoneDraw" class="btn-close-editor" type="button">Annuler zone</button>
+                        </div>
+                    </div>
+
+                    <div class="editor-section" style="--editor-accent:#ffcc8a;">
+                        <div class="editor-section-title">
+                            <span>Activation</span>
+                        </div>
+                        <label class="staff-toggle-row" for="alertActive">
+                            <input id="alertActive" type="checkbox" checked>
+                            <span>Rendre l’alerte visible maintenant</span>
+                        </label>
+                    </div>
+
+                    <div class="editor-actions-row">
+                        <button id="btnClearDraft" class="btn-close-editor" type="button">Vider brouillon</button>
+                        <button id="btnLockStaff" class="btn-close-editor" type="button">Verrouiller</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="./main.js"></script>
+</body>
+</html>

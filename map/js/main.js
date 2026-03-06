@@ -7,6 +7,7 @@ import { renderAll } from './render.js';
 import { ICONS } from './constants.js';
 import { api } from './api.js';
 import { initCloudCollab, openCloudMenu, getCloudSaveModalOptions } from './cloud.js';
+import { initAlertPickerMode, loadAlertFromUrl } from './alerts.js';
 
 const DEFAULT_DATA = [
     { name: "Alliés", color: "#73fbf7", visible: true, points: [], zones: [] },
@@ -236,6 +237,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Initialisation
     initUI();
     initEngine();
+    initAlertPickerMode();
     
     // Chargement
     const localData = loadLocalState();
@@ -264,6 +266,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     await initCloudCollab();
+    await loadAlertFromUrl();
 
     // Undo
     document.addEventListener('keydown', (e) => {

@@ -870,6 +870,26 @@ function stopCollabAutosave() {
     }
 }
 
+async function flushPendingCloudAutosave(boardId = collab.activeBoardId) {
+    const targetBoardId = String(boardId || '').trim();
+    if (!targetBoardId) return false;
+    if (String(collab.activeBoardId || '') !== targetBoardId) return false;
+    if (!canEditCloudBoard()) return false;
+
+    let waitCount = 0;
+    while (collab.saveInFlight && waitCount < 20) {
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        waitCount += 1;
+    }
+
+    const hadDebounce = Boolean(collab.autosaveDebounceTimer);
+    const hasChanges = hasLocalCloudChanges();
+    if (!hadDebounce && !hasChanges) return false;
+
+    stopCollabAutosave();
+    return saveActiveCloudBoard({ manual: false, quiet: true, force: true });
+}
+
 function queueCloudAutosave(delayMs = COLLAB_AUTOSAVE_DEBOUNCE_MS) {
     if (!isCloudBoardActive() || !canEditCloudBoard()) return;
     stopCollabAutosave();
@@ -1379,6 +1399,8 @@ async function renderCloudMembers(boardId) {
     const actEl = document.getElementById('modal-actions');
     if (!msgEl || !actEl) return;
 
+    await flushPendingCloudAutosave(boardId).catch(() => {});
+
     let result;
     try {
         result = await collabBoardRequest('get_board', { boardId });
@@ -1521,6 +1543,8 @@ async function renderCloudHome() {
     const msgEl = document.getElementById('modal-msg');
     const actEl = document.getElementById('modal-actions');
     if (!msgEl || !actEl) return;
+
+    await flushPendingCloudAutosave(collab.activeBoardId).catch(() => {});
 
     if (!collab.user) {
         msgEl.innerHTML = `
@@ -2077,20 +2101,46 @@ function openDataHubModal() {
     msgEl.innerHTML = `
         <div class="modal-tool data-hub">
             <div class="data-hub-head">
-                <h3 class="modal-tool-title">Centre Fichier</h3>
+                <h3 class="modal-tool-title">Fichier</h3>
             </div>
 
-            <div class="data-hub-section data-hub-section-local">
-                <div class="data-hub-kicker">Local</div>
-                <div class="data-hub-grid">
-                    <button type="button" class="data-hub-card data-hub-card-local ${localSaveLocked ? 'is-disabled-visual' : ''}" data-action="save-file">
-                        <span class="data-hub-card-title">Sauvegarder</span>
-                    </button>
+            <div class="data-hub-panels">
+                <div class="data-hub-section data-hub-section-local">
+                    <div class="data-hub-kicker">Local</div>
+                    <div class="data-hub-grid">
+                        <button type="button" class="data-hub-card data-hub-card-local" data-action="open-file">
+                            <span class="data-hub-card-title">Ouvrir</span>
+                            <span class="data-hub-card-meta">JSON</span>
+                        </button>
+                        <button type="button" class="data-hub-card data-hub-card-local ${localSaveLocked ? 'is-disabled-visual' : ''}" data-action="save-file">
+                            <span class="data-hub-card-title">Sauvegarder</span>
+                            <span class="data-hub-card-meta">JSON</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="data-hub-section data-hub-section-cloud">
+                    <div class="data-hub-kicker">Cloud</div>
+                    <div class="data-hub-grid ${isCloudBoardActive() ? '' : 'data-hub-grid-single'}">
+                        <button type="button" class="data-hub-card data-hub-card-cloud" data-action="cloud-open">
+                            <span class="data-hub-card-title">${collab.user ? 'Boards' : 'Se connecter'}</span>
+                            <span class="data-hub-card-meta">${isCloudBoardActive() ? escapeHtml(collab.activeRole || 'actif') : 'cloud'}</span>
+                        </button>
+                        ${isCloudBoardActive() ? `
+                            <button type="button" class="data-hub-card data-hub-card-cloud" data-action="cloud-save">
+                                <span class="data-hub-card-title">Synchroniser</span>
+                                <span class="data-hub-card-meta">board</span>
+                            </button>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>
+
+            <details class="data-hub-advanced">
+                <summary class="data-hub-summary">Options avancees</summary>
+                <div class="data-hub-advanced-grid">
                     <button type="button" class="data-hub-card data-hub-card-local ${localSaveLocked ? 'is-disabled-visual' : ''}" data-action="save-text">
                         <span class="data-hub-card-title">Copier JSON</span>
-                    </button>
-                    <button type="button" class="data-hub-card data-hub-card-local" data-action="open-file">
-                        <span class="data-hub-card-title">Ouvrir</span>
                     </button>
                     <button type="button" class="data-hub-card data-hub-card-local" data-action="open-text">
                         <span class="data-hub-card-title">Coller JSON</span>
@@ -2099,31 +2149,13 @@ function openDataHubModal() {
                         <span class="data-hub-card-title">Fusionner</span>
                     </button>
                     <button type="button" class="data-hub-card data-hub-card-local" data-action="merge-text">
-                        <span class="data-hub-card-title">Fusion Texte</span>
+                        <span class="data-hub-card-title">Fusion texte</span>
                     </button>
-                </div>
-            </div>
-
-            <div class="data-hub-section data-hub-section-cloud">
-                <div class="data-hub-kicker">Cloud</div>
-                <div class="data-hub-grid">
-                    <button type="button" class="data-hub-card data-hub-card-cloud" data-action="cloud-open">
-                        <span class="data-hub-card-title">Cloud</span>
-                    </button>
-                    <button type="button" class="data-hub-card data-hub-card-cloud ${!isCloudBoardActive() ? 'is-disabled-visual' : ''}" data-action="cloud-save">
-                        <span class="data-hub-card-title">Sauver Board</span>
-                    </button>
-                </div>
-            </div>
-
-            <div class="data-hub-section data-hub-section-danger">
-                <div class="data-hub-kicker">Danger</div>
-                <div class="data-hub-grid">
                     <button type="button" class="data-hub-card data-hub-card-danger" data-action="reset-all">
                         <span class="data-hub-card-title">Reset</span>
                     </button>
                 </div>
-            </div>
+            </details>
 
             <div class="data-hub-status">
                 <span class="data-hub-status-pill data-hub-status-pill-local"><strong>${escapeHtml(localSummary)}</strong></span>
@@ -2287,193 +2319,320 @@ function openQuickCreateModal() {
     const actEl = document.getElementById('modal-actions');
     if (!msgEl || !actEl) return;
 
-    const sourceNode = nodeById(state.selection);
-    const allNames = state.nodes
-        .map((node) => String(node.name || '').trim())
-        .filter(Boolean)
-        .sort((a, b) => a.localeCompare(b));
+    const prefilledSourceNode = nodeById(state.selection);
+    const searchableNodes = state.nodes
+        .filter((node) => String(node.name || '').trim())
+        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
 
     msgEl.innerHTML = `
         <div class="quick-create-shell">
-            <h3 class="quick-create-title">creation</h3>
-            <div class="quick-create-block">
-                <div class="quick-create-block-head">Nouvelle fiche</div>
-                <div class="quick-create-node-row">
-                    <button type="button" class="mini-btn quick-create-node-btn" data-create-type="${TYPES.PERSON}">Personne</button>
-                    <button type="button" class="mini-btn quick-create-node-btn" data-create-type="${TYPES.GROUP}">Groupe</button>
-                    <button type="button" class="mini-btn quick-create-node-btn" data-create-type="${TYPES.COMPANY}">Entreprise</button>
+            <h3 class="quick-create-title">Creer</h3>
+            <div class="quick-create-columns">
+                <div class="quick-create-block quick-create-block-create">
+                    <div class="quick-create-block-head">Nouvelle fiche</div>
+                    <div class="quick-create-node-row">
+                        <button type="button" class="mini-btn quick-create-node-btn active" data-create-type="${TYPES.PERSON}">Personne</button>
+                        <button type="button" class="mini-btn quick-create-node-btn" data-create-type="${TYPES.GROUP}">Groupe</button>
+                        <button type="button" class="mini-btn quick-create-node-btn" data-create-type="${TYPES.COMPANY}">Entreprise</button>
+                    </div>
+                    <input id="quick-create-node-name" type="text" placeholder="Nom de la fiche" class="quick-create-target-input" />
+                    <div id="quick-create-node-context" class="quick-create-context"></div>
+                    <button type="button" id="quick-create-node-apply" class="mini-btn primary quick-create-panel-action">Creer</button>
                 </div>
-            </div>
-            <div class="quick-create-block">
-                <div class="quick-create-block-head">Lien rapide</div>
-                ${sourceNode ? `
-                    <div class="quick-create-source-pill">Depuis ${escapeHtml(sourceNode.name)}</div>
-                    <input id="quick-create-target" type="text" placeholder="Nom de la cible" class="quick-create-target-input" />
-                    <div id="quick-create-context" class="quick-create-context">Selectionne une cible existante ou cree-la a la volee.</div>
-                    <div id="quick-create-suggestions" class="quick-create-suggestions"></div>
-                    <div class="quick-create-type-row">
-                        <button type="button" class="mini-btn quick-create-type-btn" data-type="${TYPES.PERSON}">Nouvelle personne</button>
-                        <button type="button" class="mini-btn quick-create-type-btn" data-type="${TYPES.GROUP}">Nouveau groupe</button>
-                        <button type="button" class="mini-btn quick-create-type-btn" data-type="${TYPES.COMPANY}">Nouvelle entreprise</button>
+
+                <div class="quick-create-block quick-create-block-link">
+                    <div class="quick-create-block-head">Nouvelle liaison</div>
+                    <div class="quick-create-field-stack">
+                        <label class="quick-create-field-label" for="quick-link-source">Source</label>
+                        <input id="quick-link-source" type="text" value="${escapeHtml(prefilledSourceNode?.name || '')}" placeholder="Choisir une fiche existante" class="quick-create-target-input" />
+                        <div id="quick-link-source-suggestions" class="quick-create-suggestions"></div>
+                    </div>
+                    <div class="quick-create-field-stack">
+                        <label class="quick-create-field-label" for="quick-link-target">Cible</label>
+                        <input id="quick-link-target" type="text" placeholder="Choisir une fiche existante" class="quick-create-target-input" />
+                        <div id="quick-link-target-suggestions" class="quick-create-suggestions"></div>
                     </div>
                     <div class="flex-row-force quick-create-kind-row">
                         <label class="quick-create-kind-label">Lien</label>
-                        <select id="quick-create-kind" class="flex-grow-input"></select>
+                        <select id="quick-link-kind" class="flex-grow-input"></select>
                     </div>
-                ` : `
-                    <div class="quick-create-empty-state">
-                        Selectionne d'abord une fiche pour activer le lien rapide.
-                    </div>
-                `}
+                    <div id="quick-link-context" class="quick-create-context"></div>
+                    <button type="button" id="quick-link-apply" class="mini-btn primary quick-create-panel-action">Lier</button>
+                </div>
             </div>
         </div>
     `;
 
-    actEl.innerHTML = `
-        <button type="button" id="quick-create-close">Fermer</button>
-        ${sourceNode ? '<button type="button" id="quick-create-apply" class="primary">Connecter</button>' : ''}
-    `;
+    actEl.innerHTML = '<button type="button" id="quick-create-close">Fermer</button>';
 
-    const actorName = collab.user?.username || sourceNode?.name || '';
-    const createButtons = Array.from(document.querySelectorAll('.quick-create-node-btn'));
-    createButtons.forEach((btn) => {
+    const actorName = collab.user?.username || '';
+    let draftTargetType = TYPES.PERSON;
+    const nodeContextEl = document.getElementById('quick-create-node-context');
+    const nodeInput = document.getElementById('quick-create-node-name');
+    const nodeApplyBtn = document.getElementById('quick-create-node-apply');
+    const linkSourceInput = document.getElementById('quick-link-source');
+    const linkContextEl = document.getElementById('quick-link-context');
+    const linkTargetInput = document.getElementById('quick-link-target');
+    const linkSourceSuggestionsEl = document.getElementById('quick-link-source-suggestions');
+    const linkTargetSuggestionsEl = document.getElementById('quick-link-target-suggestions');
+    const linkKindSelect = document.getElementById('quick-link-kind');
+    const linkApplyBtn = document.getElementById('quick-link-apply');
+
+    const defaultBaseName = () => (
+        draftTargetType === TYPES.COMPANY
+            ? 'Nouvelle entreprise'
+            : (draftTargetType === TYPES.GROUP ? 'Nouveau groupe' : 'Nouvelle personne')
+    );
+
+    const findNodeByName = (value) => {
+        const targetName = String(value || '').trim().toLowerCase();
+        if (!targetName) return null;
+        return state.nodes.find((node) => String(node.name || '').trim().toLowerCase() === targetName) || null;
+    };
+
+    const resolveLinkSource = () => findNodeByName(linkSourceInput?.value);
+    const resolveLinkTarget = () => findNodeByName(linkTargetInput?.value);
+
+    const setLinkKindPlaceholder = (label = 'Choisir source et cible') => {
+        if (!linkKindSelect) return;
+        linkKindSelect.innerHTML = `<option value="">${escapeHtml(label)}</option>`;
+        linkKindSelect.disabled = true;
+    };
+
+    const updateKindOptions = () => {
+        if (!linkKindSelect) return;
+        const source = resolveLinkSource();
+        const target = resolveLinkTarget();
+        if (!source || !target) {
+            setLinkKindPlaceholder();
+            return;
+        }
+        if (String(source.id) === String(target.id)) {
+            setLinkKindPlaceholder('Source et cible identiques');
+            return;
+        }
+        const allowedKinds = getAllowedKinds(source.type, target.type);
+        linkKindSelect.innerHTML = Array.from(allowedKinds).map((kind) => `
+            <option value="${kind}">${linkKindEmoji(kind)} ${kindToLabel(kind)}</option>
+        `).join('');
+        linkKindSelect.disabled = false;
+    };
+
+    const renderSuggestions = (inputEl, suggestionsEl, options = {}) => {
+        if (!inputEl || !suggestionsEl) return;
+        const query = String(inputEl.value || '').trim().toLowerCase();
+        const excludeId = options.excludeId ? String(options.excludeId) : '';
+        const visible = searchableNodes
+            .filter((node) => !query || String(node.name || '').toLowerCase().includes(query))
+            .filter((node) => !excludeId || String(node.id) !== excludeId)
+            .slice(0, 10);
+
+        suggestionsEl.innerHTML = visible.map((node) => `
+            <button type="button" class="quick-create-suggestion" data-name="${escapeHtml(String(node.name || ''))}">
+                <span>${escapeHtml(String(node.name || ''))}</span>
+                <span class="quick-create-suggestion-type">${escapeHtml(TYPE_LABEL[node.type] || node.type)}</span>
+            </button>
+        `).join('') || '<span class="quick-create-empty">Aucune proposition</span>';
+
+        Array.from(suggestionsEl.querySelectorAll('.quick-create-suggestion')).forEach((btn) => {
+            btn.onclick = () => {
+                const targetName = btn.getAttribute('data-name') || '';
+                inputEl.value = targetName;
+                if (typeof options.onPick === 'function') options.onPick();
+            };
+        });
+    };
+
+    const updateNodeState = () => {
+        const typedName = String(nodeInput?.value || '').trim();
+        const existingNode = typedName
+            ? state.nodes.find((node) => String(node.name || '').trim().toLowerCase() === typedName.toLowerCase())
+            : null;
+        Array.from(document.querySelectorAll('.quick-create-node-btn')).forEach((btn) => {
+            const isActive = btn.getAttribute('data-create-type') === draftTargetType;
+            btn.classList.toggle('active', isActive);
+        });
+
+        if (nodeContextEl) {
+            if (existingNode) {
+                nodeContextEl.textContent = 'Cette fiche existe deja. Le bouton ouvrira directement cette fiche.';
+            } else {
+                nodeContextEl.textContent = `Creer une nouvelle ${TYPE_LABEL[draftTargetType] || 'fiche'}.`;
+            }
+        }
+
+        if (nodeApplyBtn) {
+            nodeApplyBtn.textContent = existingNode ? 'Ouvrir la fiche' : 'Creer';
+        }
+    };
+
+    const updateLinkState = () => {
+        const source = resolveLinkSource();
+        const target = resolveLinkTarget();
+
+        if (linkContextEl) {
+            if (source && target && String(source.id) !== String(target.id)) {
+                linkContextEl.textContent = `Relier ${source.name} avec ${target.name}.`;
+            } else if (source && target) {
+                linkContextEl.textContent = 'Choisis deux fiches differentes.';
+            } else if (source) {
+                linkContextEl.textContent = 'Choisis maintenant la cible.';
+            } else if (target) {
+                linkContextEl.textContent = 'Choisis maintenant la source.';
+            } else {
+                linkContextEl.textContent = 'Choisis la source puis la cible.';
+            }
+        }
+
+        if (linkApplyBtn) {
+            const ready = source && target && String(source.id) !== String(target.id);
+            linkApplyBtn.textContent = ready ? 'Lier' : 'Choisir source et cible';
+            linkApplyBtn.disabled = !ready;
+        }
+
+        updateKindOptions();
+    };
+
+    Array.from(document.querySelectorAll('.quick-create-node-btn')).forEach((btn) => {
         btn.onclick = () => {
-            const type = btn.getAttribute('data-create-type') || TYPES.PERSON;
-            const defaultName = type === TYPES.COMPANY
-                ? 'Nouvelle entreprise'
-                : (type === TYPES.GROUP ? 'Nouveau groupe' : 'Nouvelle personne');
-            createNode(type, defaultName, { actor: actorName });
-            modalOverlay.style.display = 'none';
+            draftTargetType = btn.getAttribute('data-create-type') || TYPES.PERSON;
+            updateNodeState();
         };
     });
 
-    if (sourceNode) {
-        let draftTargetType = TYPES.PERSON;
-        const contextEl = document.getElementById('quick-create-context');
-        const targetInput = document.getElementById('quick-create-target');
-        const kindSelect = document.getElementById('quick-create-kind');
-        const suggestionsEl = document.getElementById('quick-create-suggestions');
-
-        const resolveTarget = () => {
-            const targetName = String(targetInput?.value || '').trim().toLowerCase();
-            if (!targetName) return null;
-            return state.nodes.find((node) => String(node.name || '').trim().toLowerCase() === targetName) || null;
-        };
-
-        const updateKindOptions = () => {
-            if (!kindSelect) return;
-            const target = resolveTarget();
-            const targetType = target ? target.type : draftTargetType;
-            const allowedKinds = getAllowedKinds(sourceNode.type, targetType);
-            kindSelect.innerHTML = Array.from(allowedKinds).map((kind) => `
-                <option value="${kind}">${linkKindEmoji(kind)} ${kindToLabel(kind)}</option>
-            `).join('');
-        };
-
-        const updateContext = () => {
-            const target = resolveTarget();
-            const currentType = target ? target.type : draftTargetType;
-            if (contextEl) {
-                contextEl.textContent = target
-                    ? `Connexion vers ${target.name}`
-                    : `Si la cible n'existe pas, elle sera creee comme ${TYPE_LABEL[currentType] || 'personne'}.`;
+    if (nodeInput) {
+        nodeInput.oninput = () => updateNodeState();
+        nodeInput.onkeydown = (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                nodeApplyBtn?.click();
             }
-            Array.from(document.querySelectorAll('.quick-create-type-btn')).forEach((btn) => {
-                const isActive = btn.getAttribute('data-type') === currentType;
-                btn.classList.toggle('active', isActive);
-            });
-            updateKindOptions();
         };
-
-        const renderSuggestions = () => {
-            if (!suggestionsEl) return;
-            const query = String(targetInput?.value || '').trim().toLowerCase();
-            const visible = allNames
-                .filter((name) => !query || name.toLowerCase().includes(query))
-                .filter((name) => name.toLowerCase() !== String(sourceNode.name || '').trim().toLowerCase())
-                .slice(0, 16);
-            suggestionsEl.innerHTML = visible.map((name) => `
-                <button type="button" class="quick-create-suggestion" data-name="${escapeHtml(name)}">
-                    ${escapeHtml(name)}
-                </button>
-            `).join('<span class="quick-create-sep">·</span>') || '<span class="quick-create-empty">Aucune proposition</span>';
-
-            Array.from(suggestionsEl.querySelectorAll('.quick-create-suggestion')).forEach((btn) => {
-                btn.onclick = () => {
-                    const targetName = btn.getAttribute('data-name') || '';
-                    if (targetInput) targetInput.value = targetName;
-                    updateContext();
-                };
-            });
-        };
-
-        if (targetInput) {
-            targetInput.oninput = () => {
-                renderSuggestions();
-                updateContext();
-            };
-            targetInput.onkeydown = (event) => {
-                if (event.key === 'Enter') {
-                    event.preventDefault();
-                    document.getElementById('quick-create-apply')?.click();
-                }
-            };
-        }
-
-        Array.from(document.querySelectorAll('.quick-create-type-btn')).forEach((btn) => {
-            btn.onclick = () => {
-                draftTargetType = btn.getAttribute('data-type') || TYPES.PERSON;
-                updateContext();
-            };
-        });
-
-        renderSuggestions();
-        updateContext();
-
-        const applyBtn = document.getElementById('quick-create-apply');
-        if (applyBtn) {
-            applyBtn.onclick = () => {
-                const targetName = String(targetInput?.value || '').trim();
-                const chosenKind = String(kindSelect?.value || '').trim();
-
-                if (!targetName) {
-                    showCustomAlert('Renseigne la cible.');
-                    return;
-                }
-
-                const existingTarget = state.nodes.find((node) => String(node.name || '').trim().toLowerCase() === targetName.toLowerCase()) || null;
-                let targetNode = existingTarget;
-                if (!targetNode) {
-                    targetNode = ensureNode(draftTargetType, targetName);
-                    logNodeAdded(targetNode.name, actorName);
-                }
-
-                if (String(sourceNode.id) === String(targetNode.id)) {
-                    showCustomAlert('Source et cible identiques.');
-                    return;
-                }
-
-                const created = addLink(sourceNode.id, targetNode.id, chosenKind || null, { actor: sourceNode.name });
-                if (!created) {
-                    showCustomAlert('Lien deja existant ou invalide.');
-                    return;
-                }
-
-                modalOverlay.style.display = 'none';
-                zoomToNode(sourceNode.id);
-            };
-        }
     }
+
+    if (linkSourceInput) {
+        linkSourceInput.oninput = () => {
+            renderSuggestions(linkSourceInput, linkSourceSuggestionsEl, {
+                excludeId: resolveLinkTarget()?.id,
+                onPick: () => {
+                    renderSuggestions(linkTargetInput, linkTargetSuggestionsEl, {
+                        excludeId: resolveLinkSource()?.id,
+                        onPick: () => updateLinkState()
+                    });
+                    updateLinkState();
+                }
+            });
+            renderSuggestions(linkTargetInput, linkTargetSuggestionsEl, {
+                excludeId: resolveLinkSource()?.id,
+                onPick: () => updateLinkState()
+            });
+            updateLinkState();
+        };
+        linkSourceInput.onkeydown = (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                if (resolveLinkSource()) linkTargetInput?.focus();
+            }
+        };
+    }
+
+    if (linkTargetInput) {
+        linkTargetInput.oninput = () => {
+            renderSuggestions(linkTargetInput, linkTargetSuggestionsEl, {
+                excludeId: resolveLinkSource()?.id,
+                onPick: () => updateLinkState()
+            });
+            renderSuggestions(linkSourceInput, linkSourceSuggestionsEl, {
+                excludeId: resolveLinkTarget()?.id,
+                onPick: () => {
+                    renderSuggestions(linkTargetInput, linkTargetSuggestionsEl, {
+                        excludeId: resolveLinkSource()?.id,
+                        onPick: () => updateLinkState()
+                    });
+                    updateLinkState();
+                }
+            });
+            updateLinkState();
+        };
+        linkTargetInput.onkeydown = (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                linkApplyBtn?.click();
+            }
+        };
+    }
+
+    if (nodeApplyBtn) {
+        nodeApplyBtn.onclick = () => {
+            const typedName = String(nodeInput?.value || '').trim();
+            const finalName = typedName || defaultBaseName();
+            const existingTarget = state.nodes.find((node) => String(node.name || '').trim().toLowerCase() === finalName.toLowerCase()) || null;
+
+            if (existingTarget) {
+                modalOverlay.style.display = 'none';
+                zoomToNode(existingTarget.id);
+                return;
+            }
+
+            const targetNode = ensureNode(draftTargetType, finalName);
+            logNodeAdded(targetNode.name, actorName);
+            refreshLists();
+            restartSim();
+            scheduleSave();
+
+            modalOverlay.style.display = 'none';
+            zoomToNode(targetNode.id);
+        };
+    }
+
+    if (linkApplyBtn) {
+        linkApplyBtn.onclick = () => {
+            const sourceNode = resolveLinkSource();
+            const targetNode = resolveLinkTarget();
+
+            if (!sourceNode || !targetNode) {
+                showCustomAlert('Choisis une source et une cible existantes.');
+                return;
+            }
+
+            if (String(sourceNode.id) === String(targetNode.id)) {
+                showCustomAlert('Source et cible identiques.');
+                return;
+            }
+
+            const created = addLink(sourceNode.id, targetNode.id, String(linkKindSelect?.value || '').trim() || null, { actor: actorName });
+            if (!created) {
+                showCustomAlert('Lien deja existant ou invalide.');
+                return;
+            }
+
+            modalOverlay.style.display = 'none';
+            zoomToNode(sourceNode.id);
+        };
+    }
+
+    renderSuggestions(linkSourceInput, linkSourceSuggestionsEl, {
+        excludeId: resolveLinkTarget()?.id,
+        onPick: () => {
+            renderSuggestions(linkTargetInput, linkTargetSuggestionsEl, {
+                excludeId: resolveLinkSource()?.id,
+                onPick: () => updateLinkState()
+            });
+            updateLinkState();
+        }
+    });
+    renderSuggestions(linkTargetInput, linkTargetSuggestionsEl, {
+        excludeId: resolveLinkSource()?.id,
+        onPick: () => updateLinkState()
+    });
+    updateNodeState();
+    updateLinkState();
 
     const closeBtn = document.getElementById('quick-create-close');
     if (closeBtn) closeBtn.onclick = () => { modalOverlay.style.display = 'none'; };
 
     modalOverlay.style.display = 'flex';
-    if (sourceNode) {
-        document.getElementById('quick-create-target')?.focus();
-    } else {
-        document.querySelector('.quick-create-node-btn')?.focus();
-    }
+    nodeInput?.focus();
 }
 
 function openHvtAssistant() {
@@ -2507,29 +2666,27 @@ function openOperatorIAMode() {
 
     const selectedNode = nodeById(state.selection);
     const hasSelection = !!selectedNode;
-    const selectedLabel = hasSelection ? escapeHtml(selectedNode.name || 'Cible active') : 'Aucune cible active';
+    const selectedLabel = hasSelection ? escapeHtml(selectedNode.name || 'Cible active') : 'tout le reseau';
+    const primaryAction = hasSelection ? 'intel-selection' : 'intel-global';
+    const primaryTitle = hasSelection ? 'Trouver des liens autour de cette fiche' : 'Trouver des liens dans le reseau';
+    const primaryScope = hasSelection ? `Sur ${selectedLabel}` : 'Sans selection';
 
     msgEl.innerHTML = `
         <div class="ai-hub">
             <div class="ai-hub-kicker">Operateur IA</div>
-            <div class="ai-hub-title">Choisis un assistant</div>
-            <div class="ai-hub-sub">${hasSelection ? `Cible active: ${selectedLabel}` : 'Aucune fiche selectionnee. Le scan reseau est recommande.'}</div>
-            <div class="ai-hub-grid">
-                <button type="button" class="ai-hub-card ai-hub-card-primary" data-ai-open="intel-selection" ${hasSelection ? '' : 'disabled'}>
-                    <span class="ai-hub-card-title">Scanner la fiche</span>
-                    <span class="ai-hub-card-text">Ouvre Link Intel sur la fiche active pour proposer des liens autour d'elle.</span>
+            <div class="ai-hub-title">Que veux-tu ouvrir ?</div>
+            <div class="ai-hub-sub">Simple et direct.</div>
+            <button type="button" class="ai-hub-hero" data-ai-open="${primaryAction}">
+                <span class="ai-hub-hero-kicker">Recommande</span>
+                <span class="ai-hub-hero-title">${primaryTitle}</span>
+                <span class="ai-hub-hero-sub">${primaryScope}</span>
+            </button>
+            <div class="ai-hub-mini-grid">
+                <button type="button" class="ai-hub-mini-btn" data-ai-open="hvt">
+                    <span class="ai-hub-mini-title">Top cibles</span>
                 </button>
-                <button type="button" class="ai-hub-card" data-ai-open="intel-global">
-                    <span class="ai-hub-card-title">Scanner le reseau</span>
-                    <span class="ai-hub-card-text">Cherche des liaisons utiles sur l'ensemble du graphe.</span>
-                </button>
-                <button type="button" class="ai-hub-card" data-ai-open="hvt">
-                    <span class="ai-hub-card-title">Top cibles</span>
-                    <span class="ai-hub-card-text">Affiche directement le classement HVT.</span>
-                </button>
-                <button type="button" class="ai-hub-card" data-ai-open="combo">
-                    <span class="ai-hub-card-title">Mode complet</span>
-                    <span class="ai-hub-card-text">Ouvre HVT et Link Intel en une action.</span>
+                <button type="button" class="ai-hub-mini-btn" data-ai-open="${hasSelection ? 'intel-global' : 'combo'}">
+                    <span class="ai-hub-mini-title">${hasSelection ? 'Tout le reseau' : 'Tout ouvrir'}</span>
                 </button>
             </div>
         </div>

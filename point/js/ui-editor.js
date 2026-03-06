@@ -259,7 +259,63 @@ function setupEditorListeners(n) {
         });
     };
 
-    document.getElementById('edName').oninput = (e) => { queueHistory(); n.name = e.target.value; refreshLists(); draw(); scheduleSave(); };
+    const syncEditorNameDisplays = (nextName) => {
+        const safeName = String(nextName || '').trim();
+        const headName = document.querySelector('.editor-sheet-name');
+        if (headName) headName.textContent = safeName || 'Sans nom';
+        const quickName = document.getElementById('edQuickName');
+        if (quickName && quickName.value !== safeName) quickName.value = safeName;
+        const fullName = document.getElementById('edName');
+        if (fullName && fullName.value !== safeName) fullName.value = safeName;
+    };
+
+    const applyNodeName = (nextName) => {
+        queueHistory();
+        n.name = String(nextName || '').replace(/\s+/g, ' ').trim();
+        syncEditorNameDisplays(n.name);
+        refreshLists();
+        draw();
+        scheduleSave();
+    };
+
+    const splitIdentity = (name) => {
+        const raw = String(name || '').trim().replace(/\s+/g, ' ');
+        if (!raw) return { first: '', last: '' };
+        const parts = raw.split(' ');
+        if (parts.length === 1) return { first: parts[0], last: '' };
+        return {
+            first: parts.slice(0, -1).join(' '),
+            last: parts.slice(-1).join('')
+        };
+    };
+
+    const edFirstName = document.getElementById('edFirstName');
+    const edLastName = document.getElementById('edLastName');
+    const edQuickName = document.getElementById('edQuickName');
+    const syncIdentityInputs = (nameValue) => {
+        const parts = splitIdentity(nameValue);
+        if (edFirstName && edFirstName.value !== parts.first) edFirstName.value = parts.first;
+        if (edLastName && edLastName.value !== parts.last) edLastName.value = parts.last;
+    };
+
+    document.getElementById('edName').oninput = (e) => {
+        applyNodeName(e.target.value);
+        syncIdentityInputs(e.target.value);
+    };
+    if (edQuickName) {
+        edQuickName.oninput = (e) => {
+            applyNodeName(e.target.value);
+        };
+    }
+    if (edFirstName || edLastName) {
+        const updateIdentityName = () => {
+            const first = String(edFirstName?.value || '').trim();
+            const last = String(edLastName?.value || '').trim();
+            applyNodeName([first, last].filter(Boolean).join(' '));
+        };
+        if (edFirstName) edFirstName.oninput = updateIdentityName;
+        if (edLastName) edLastName.oninput = updateIdentityName;
+    }
     document.getElementById('edType').onchange = (e) => { queueHistory(); n.type = e.target.value; updatePersonColors(); restartSim(); draw(); refreshLists(); renderEditor(); scheduleSave(); };
     const inpColor = document.getElementById('edColor');
     if(inpColor) inpColor.oninput = (e) => { queueHistory(); n.color = e.target.value; updatePersonColors(); draw(); scheduleSave(); };

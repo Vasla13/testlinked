@@ -252,6 +252,7 @@ export function injectStyles() {
             clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
         }
         .mini-btn:hover { background: rgba(115, 251, 247, 0.16); color:#fff; border-color: rgba(115, 251, 247, 0.45); }
+        .mini-btn:disabled { opacity: 0.45; cursor: not-allowed; background: rgba(6, 14, 28, 0.74); color:#6d819a; border-color: rgba(115, 251, 247, 0.12); }
         .mini-btn.active { background: var(--accent-cyan); color:#000; border-color:var(--accent-cyan); }
         .mini-btn.primary { background: rgba(115, 251, 247, 0.2); border-color: var(--accent-cyan); color: var(--accent-cyan); }
 
@@ -614,61 +615,83 @@ export function injectStyles() {
         .ai-hub-title {
             color: var(--text-light);
             font-family: var(--font-main);
-            font-size: clamp(1.8rem, 3vw, 2.8rem);
+            font-size: clamp(1.8rem, 3vw, 2.7rem);
             line-height: 0.9;
             letter-spacing: 0.06em;
             text-transform: uppercase;
         }
         .ai-hub-sub {
             color: var(--text-muted);
-            font-size: 0.88rem;
-            line-height: 1.45;
-        }
-        .ai-hub-grid {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 12px;
-        }
-        .ai-hub-card {
-            min-height: 132px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            align-items: flex-start;
-            justify-content: space-between;
-            padding: 16px;
-            border: 1px solid rgba(102, 243, 255, 0.22);
-            border-radius: 14px;
-            background: linear-gradient(180deg, rgba(4, 11, 26, 0.9), rgba(3, 8, 20, 0.78));
-            color: var(--text-light);
-            text-align: left;
-            clip-path: none;
-        }
-        .ai-hub-card:hover {
-            color: var(--text-light);
-            background: linear-gradient(180deg, rgba(12, 28, 49, 0.94), rgba(4, 11, 26, 0.9));
-            border-color: rgba(102, 243, 255, 0.42);
-            box-shadow: 0 16px 34px rgba(0, 0, 0, 0.38);
-        }
-        .ai-hub-card[disabled] {
-            opacity: 0.4;
-            cursor: not-allowed;
-            box-shadow: none;
-        }
-        .ai-hub-card-primary {
-            border-color: rgba(102, 243, 255, 0.5);
-            background: linear-gradient(180deg, rgba(18, 46, 67, 0.92), rgba(5, 14, 28, 0.9));
-        }
-        .ai-hub-card-title {
-            color: var(--accent-cyan);
-            font-size: 0.94rem;
-            letter-spacing: 1.8px;
+            font-size: 0.84rem;
+            line-height: 1.4;
+            letter-spacing: 0.04em;
             text-transform: uppercase;
         }
-        .ai-hub-card-text {
-            color: var(--text-muted);
+        .ai-hub-hero {
+            width: 100%;
+            min-height: 140px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            justify-content: center;
+            gap: 8px;
+            padding: 18px;
+            border: 1px solid rgba(102, 243, 255, 0.34);
+            border-radius: 16px;
+            background:
+                linear-gradient(180deg, rgba(18, 46, 67, 0.92), rgba(5, 14, 28, 0.9)),
+                radial-gradient(circle at top right, rgba(102, 243, 255, 0.12), transparent 55%);
+            text-align: left;
+            box-shadow: inset 0 0 0 1px rgba(102, 243, 255, 0.04);
+        }
+        .ai-hub-hero:hover {
+            border-color: rgba(102, 243, 255, 0.54);
+            box-shadow: 0 16px 34px rgba(0, 0, 0, 0.34);
+        }
+        .ai-hub-hero-kicker {
+            color: #d8fcff;
+            font-size: 0.72rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+        .ai-hub-hero-title {
+            color: var(--text-light);
+            font-size: 1.05rem;
+            line-height: 1.25;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+        .ai-hub-hero-sub {
+            color: #8fcbd4;
+            font-size: 0.82rem;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+        .ai-hub-mini-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+        .ai-hub-mini-btn {
+            min-height: 78px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 12px 14px;
+            border: 1px solid rgba(102, 243, 255, 0.18);
+            border-radius: 12px;
+            background: linear-gradient(180deg, rgba(5, 12, 26, 0.9), rgba(3, 8, 20, 0.78));
+            text-align: center;
+        }
+        .ai-hub-mini-btn:hover {
+            border-color: rgba(102, 243, 255, 0.42);
+            background: linear-gradient(180deg, rgba(11, 24, 42, 0.94), rgba(4, 11, 26, 0.82));
+        }
+        .ai-hub-mini-title {
+            color: var(--text-light);
             font-size: 0.84rem;
-            line-height: 1.45;
+            letter-spacing: 1.6px;
+            text-transform: uppercase;
         }
 
         .quick-create-shell {
@@ -683,6 +706,12 @@ export function injectStyles() {
                 radial-gradient(circle at top right, rgba(102, 243, 255, 0.08), transparent 52%);
             box-shadow: inset 0 0 0 1px rgba(102, 243, 255, 0.04);
         }
+        .quick-create-columns {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+            align-items: start;
+        }
         .quick-create-title {
             margin: 0;
             color: var(--accent-cyan);
@@ -696,6 +725,7 @@ export function injectStyles() {
             display: flex;
             flex-direction: column;
             gap: 10px;
+            min-height: 100%;
             padding: 14px;
             border: 1px solid rgba(102, 243, 255, 0.14);
             border-radius: 12px;
@@ -713,24 +743,36 @@ export function injectStyles() {
             gap: 8px;
         }
         .quick-create-target-input {
-            min-height: 56px;
+            min-height: 54px;
             padding: 10px 12px;
             border: 1px solid rgba(102, 243, 255, 0.26);
             border-radius: 10px;
             background: rgba(2, 8, 20, 0.92);
             color: var(--text-light);
             font-family: var(--font-main);
-            font-size: clamp(1.5rem, 3vw, 2.35rem);
-            line-height: 0.92;
-            letter-spacing: 0.05em;
+            font-size: clamp(1.1rem, 2.4vw, 1.55rem);
+            line-height: 1.1;
+            letter-spacing: 0.04em;
         }
         .quick-create-target-input::placeholder {
             color: #5b7291;
         }
+        .quick-create-field-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .quick-create-field-label {
+            color: #9bb0c7;
+            font-size: 0.72rem;
+            letter-spacing: 1.8px;
+            text-transform: uppercase;
+        }
         .quick-create-context {
             color: #7aa6b9;
-            font-size: 0.78rem;
-            letter-spacing: 1.5px;
+            font-size: 0.76rem;
+            line-height: 1.45;
+            letter-spacing: 1.2px;
             text-transform: uppercase;
         }
         .quick-create-source-pill {
@@ -758,12 +800,12 @@ export function injectStyles() {
             text-align: center;
         }
         .quick-create-suggestions {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px 10px;
-            max-height: 94px;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 8px;
+            max-height: 176px;
             overflow: auto;
-            padding: 10px 12px;
+            padding: 10px;
             border: 1px dashed rgba(102, 243, 255, 0.22);
             border-radius: 10px;
             background: rgba(3, 10, 24, 0.7);
@@ -785,22 +827,39 @@ export function injectStyles() {
             white-space: nowrap;
         }
         .quick-create-suggestion {
-            background: none;
-            border: none;
-            clip-path: none;
-            padding: 0;
-            color: var(--accent-cyan);
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 10px 12px;
+            border: 1px solid rgba(102, 243, 255, 0.12);
+            border-radius: 10px;
+            background: rgba(5, 12, 26, 0.82);
+            color: var(--text-light);
             font-family: var(--font-main);
-            font-size: 0.96rem;
+            font-size: 0.92rem;
             line-height: 1.2;
             text-transform: none;
             text-decoration: none;
             box-shadow: none;
         }
         .quick-create-suggestion:hover {
-            background: none;
+            background: rgba(10, 23, 42, 0.92);
+            border-color: rgba(102, 243, 255, 0.34);
             color: #d5fcff;
             box-shadow: none;
+        }
+        .quick-create-suggestion-type {
+            color: #89a6c5;
+            font-size: 0.68rem;
+            letter-spacing: 1.4px;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+        .quick-create-panel-action {
+            width: 100%;
+            margin-top: auto;
         }
         .quick-create-sep {
             color: #3a6f7e;
@@ -1037,6 +1096,11 @@ export function injectStyles() {
             flex-direction: column;
             gap: 4px;
         }
+        .data-hub-panels {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 12px;
+        }
         .data-hub-section {
             display: flex;
             flex-direction: column;
@@ -1086,13 +1150,17 @@ export function injectStyles() {
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 10px;
         }
+        .data-hub-grid-single {
+            grid-template-columns: 1fr;
+        }
         .data-hub-card {
             width: 100%;
-            min-height: 68px;
+            min-height: 72px;
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
-            gap: 0;
+            gap: 4px;
             padding: 12px 14px;
             text-align: center;
             border-radius: 12px;
@@ -1146,11 +1214,35 @@ export function injectStyles() {
         .data-hub-card-danger .data-hub-card-title {
             color: #ffb1bb;
         }
-        .data-hub-card-sub {
-            color: #8aa0bb;
+        .data-hub-card-meta {
+            color: #89a0bb;
+            font-size: 0.68rem;
+            letter-spacing: 1.4px;
+            text-transform: uppercase;
+        }
+        .data-hub-advanced {
+            border: 1px solid rgba(102, 243, 255, 0.12);
+            border-radius: 12px;
+            background: rgba(3, 10, 24, 0.54);
+            overflow: hidden;
+        }
+        .data-hub-summary {
+            cursor: pointer;
+            padding: 12px 14px;
+            color: #93aac6;
             font-size: 0.76rem;
-            line-height: 1.45;
-            display: none;
+            letter-spacing: 1.8px;
+            text-transform: uppercase;
+            user-select: none;
+        }
+        .data-hub-advanced[open] .data-hub-summary {
+            border-bottom: 1px solid rgba(102, 243, 255, 0.08);
+        }
+        .data-hub-advanced-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+            padding: 12px;
         }
         .data-hub-status {
             display: flex;
@@ -1587,6 +1679,45 @@ export function injectStyles() {
             color: #637996;
             font-family: var(--font-main);
         }
+        .editor-quick-identity {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+        .editor-quick-identity-single {
+            grid-template-columns: minmax(0, 1fr);
+        }
+        .editor-quick-field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding: 10px 12px;
+            border: 1px solid rgba(102, 243, 255, 0.12);
+            border-radius: 10px;
+            background: rgba(4, 11, 27, 0.72);
+        }
+        .editor-quick-field label {
+            color: #8ba4c0;
+            letter-spacing: 1.6px;
+            font-size: 0.68rem;
+            text-transform: uppercase;
+        }
+        .editor-quick-field input {
+            min-height: 42px;
+            border: 1px solid rgba(102, 243, 255, 0.16);
+            border-radius: 8px;
+            padding: 10px 12px;
+            background: rgba(2, 8, 20, 0.92);
+            color: var(--text-main);
+            font-family: var(--font-main);
+            font-size: 0.98rem;
+            line-height: 1.2;
+        }
+        .editor-quick-field input:focus {
+            outline: none;
+            border-color: rgba(102, 243, 255, 0.38);
+            box-shadow: 0 0 0 3px rgba(102, 243, 255, 0.08);
+        }
         .editor-links-head {
             margin: 0;
             padding-top: 2px;
@@ -1888,10 +2019,12 @@ export function injectStyles() {
             .modal-segment {
                 grid-template-columns: 1fr;
             }
-            .data-hub-grid {
+            .data-hub-grid,
+            .data-hub-advanced-grid,
+            .ai-hub-mini-grid {
                 grid-template-columns: 1fr;
             }
-            .ai-hub-grid,
+            .quick-create-columns,
             .quick-create-node-row {
                 grid-template-columns: 1fr;
             }
@@ -1899,6 +2032,9 @@ export function injectStyles() {
             .quick-create-source-row,
             .quick-create-kind-row {
                 flex-direction: column;
+            }
+            .editor-quick-identity {
+                grid-template-columns: 1fr;
             }
             .editor-link-composer {
                 flex-direction: column;
