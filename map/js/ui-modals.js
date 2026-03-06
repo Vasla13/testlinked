@@ -249,6 +249,10 @@ export function openSaveOptionsModal(options = {}) {
     ` : '';
 
     const localBlock = localExportLocked ? '' : `
+        <div style="font-size:0.8rem; color:#9bb0c7; margin-bottom:4px;">
+            Les fichiers doivent etre partages via Discord.<br>
+            Impossible de sauvegarder en ville depuis la tablette, copiez et transpetez le texte brute.
+        </div>
         <button id="btnOptFile" class="action-btn" style="padding:15px; font-size:1rem; border-color:var(--accent-cyan); justify-content:center; display:flex; align-items:center; gap:10px;">
             💾 <span>TELECHARGER FICHIER JSON</span>
         </button>

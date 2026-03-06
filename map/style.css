@@ -287,16 +287,42 @@ body.labels-never .marker-label::before { display: none !important; }
 .marker.selected .marker-icon-mono { opacity: 0.8; }
 .marker.selected .marker-icon-tint { opacity: 0.5; }
 
-/* Zoomed out view */
-body.view-zoomed-out .marker-icon-box { width: 12px; height: 12px; background: var(--marker-color); border-radius: 50%; box-shadow: 0 0 5px var(--marker-color); padding: 0; border: none; }
+/* Zoomed out view: garder la lisibilite des labels */
+body.view-zoomed-out .marker-icon-box {
+    width: 14px;
+    height: 14px;
+    background: var(--marker-color);
+    border-radius: 50%;
+    box-shadow: 0 0 7px var(--marker-color);
+    padding: 0;
+    border: none;
+}
 body.view-zoomed-out .marker-icon-box::after { display: none; }
 body.view-zoomed-out .marker-icon-box::before { display: none; }
 body.view-zoomed-out .marker svg { display: none; }
 body.view-zoomed-out .marker-icon-img { display: none; }
-body.view-zoomed-out .marker-label { display: none; }
-body.view-zoomed-out .marker-label::before { display: none; }
-/* En zoomed out, on réactive au hover si pas en mode 'never' */
-body.view-zoomed-out:not(.labels-never) .marker:hover .marker-label { display: block !important; left: 20px; opacity: 1; z-index: 2000; transform: translateY(-50%); }
+body.view-zoomed-out .marker-label {
+    display: block !important;
+    left: 22px;
+    opacity: 0.64;
+    z-index: 1600;
+    transform: translateY(-50%);
+    font-size: 12px;
+    padding: 5px 9px;
+}
+body.view-zoomed-out .marker-label::before {
+    display: block;
+    left: -14px;
+    width: 10px;
+}
+body.view-zoomed-out.labels-auto .marker-label {
+    opacity: 0.45;
+}
+body.view-zoomed-out:not(.labels-never) .marker:hover .marker-label {
+    opacity: 1;
+    z-index: 2000;
+}
+body.view-zoomed-out.labels-never .marker-label { display: none !important; }
 
 
 /* --- 5. UI FORMULAIRES & INPUTS --- */

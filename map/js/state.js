@@ -40,7 +40,20 @@ export const state = {
 };
 
 const LOCAL_STORAGE_KEY = 'tacticalMapData';
+const LOCAL_CHANGE_EVENT = 'bni:map-local-change';
 let localPersistenceEnabled = true;
+
+function emitLocalChange(detail = {}) {
+    try {
+        if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
+        window.dispatchEvent(new CustomEvent(LOCAL_CHANGE_EVENT, {
+            detail: {
+                at: Date.now(),
+                ...detail
+            }
+        }));
+    } catch (e) {}
+}
 
 // --- HISTORIQUE ---
 const history = [];
@@ -183,7 +196,10 @@ export function exportToJSON(fileNameOverride) {
 }
 
 export function saveLocalState() {
-    if (!localPersistenceEnabled) return;
+    if (!localPersistenceEnabled) {
+        emitLocalChange({ source: 'saveLocalState', persisted: false });
+        return;
+    }
 
     const data = {
         groups: state.groups,
@@ -191,7 +207,12 @@ export function saveLocalState() {
         currentFileName: state.currentFileName,
         meta: { date: new Date().toISOString(), savedBy: "AutoSave" }
     };
-    try { localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data)); } catch (e) {}
+    try {
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
+        emitLocalChange({ source: 'saveLocalState', persisted: true });
+    } catch (e) {
+        emitLocalChange({ source: 'saveLocalState', persisted: false });
+    }
 }
 
 export function loadLocalState() {

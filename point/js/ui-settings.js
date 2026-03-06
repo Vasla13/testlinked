@@ -7,29 +7,6 @@ import { selectNode, renderEditor, updatePathfindingPanel, refreshLists, showCus
 
 let settingsPanel = null;
 let contextMenu = null;
-const HELP_ENABLED_STORAGE_KEY = 'bni-help-enabled';
-const HELP_SETTING_EVENT = 'bni:help-setting-changed';
-
-function isHelpEnabled() {
-    try {
-        const stored = localStorage.getItem(HELP_ENABLED_STORAGE_KEY);
-        if (stored === null) {
-            localStorage.setItem(HELP_ENABLED_STORAGE_KEY, '1');
-            return true;
-        }
-        return stored !== '0';
-    } catch (e) {
-        return true;
-    }
-}
-
-function setHelpEnabled(value) {
-    const enabled = Boolean(value);
-    try {
-        localStorage.setItem(HELP_ENABLED_STORAGE_KEY, enabled ? '1' : '0');
-    } catch (e) {}
-    window.dispatchEvent(new CustomEvent(HELP_SETTING_EVENT, { detail: { enabled } }));
-}
 
 // --- GESTION DU PANNEAU REGLAGES ---
 export function showSettings() {
@@ -47,7 +24,7 @@ function createSettingsPanel() {
     settingsPanel.id = 'settings-panel';
     settingsPanel.style.display = 'none';
     
-    const ICON_GLOBE = `<svg style="width:24px;height:24px;fill:currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>`;
+    const ICON_GLOBE = `<svg class="settings-mode-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>`;
 
     settingsPanel.innerHTML = `
         <div class="settings-header">
@@ -55,22 +32,12 @@ function createSettingsPanel() {
             <div class="settings-close" id="btnCloseSettings">✕</div>
         </div>
         
-        <div style="background:rgba(255,255,255,0.05); padding:10px; border-radius:6px; margin-bottom:15px; display:flex; align-items:center; justify-content:space-between;">
-            <div style="display:flex; align-items:center; gap:10px; color:#fff; font-weight:bold;">
+        <div class="settings-mode-card">
+            <div class="settings-mode-label">
                 ${ICON_GLOBE} <span>Mode Planète (Globe)</span>
             </div>
             <label class="hud-toggle">
                 <input type="checkbox" id="chkGlobeInner"/>
-                <div class="toggle-track"><div class="toggle-thumb"></div></div>
-            </label>
-        </div>
-
-        <div style="background:rgba(255,255,255,0.05); padding:10px; border-radius:6px; margin-bottom:15px; display:flex; align-items:center; justify-content:space-between;">
-            <div style="display:flex; align-items:center; gap:10px; color:#fff; font-weight:bold;">
-                <span style="font-size:1.1rem;">🧭</span> <span>Aide guidée globale</span>
-            </div>
-            <label class="hud-toggle">
-                <input type="checkbox" id="chkHelpEnabled" checked/>
                 <div class="toggle-track"><div class="toggle-thumb"></div></div>
             </label>
         </div>
@@ -84,13 +51,13 @@ function createSettingsPanel() {
         <div class="setting-row"><label>Friction <span id="val-friction" class="setting-val"></span></label><input type="range" id="sl-friction" min="0.1" max="0.9" step="0.05"></div>
         <div class="setting-row"><label>Courbure Liens <span id="val-curveStrength" class="setting-val"></span></label><input type="range" id="sl-curveStrength" min="0" max="3" step="0.1"></div>
         
-        <div class="setting-row" style="margin-top:20px; border-top:1px solid rgba(255,255,255,0.1); padding-top:12px;">
+        <div class="setting-row settings-section-break">
             <label>Top HVT <span id="val-hvtTop" class="setting-val"></span></label>
             <input type="range" id="sl-hvtTop" min="0" max="30" step="1">
         </div>
         
         <div class="settings-actions">
-            <button class="primary" style="width:100%;" id="btnResetPhysics">Rétablir défaut</button>
+            <button class="primary settings-reset-btn" id="btnResetPhysics">Rétablir défaut</button>
         </div>
     `;
     document.body.appendChild(settingsPanel);
@@ -98,7 +65,6 @@ function createSettingsPanel() {
     // Listeners
     document.getElementById('btnCloseSettings').onclick = () => { settingsPanel.style.display = 'none'; };
     document.getElementById('chkGlobeInner').onchange = (e) => { state.globeMode = e.target.checked; restartSim(); scheduleSave(); };
-    document.getElementById('chkHelpEnabled').onchange = (e) => { setHelpEnabled(e.target.checked); };
     document.getElementById('btnResetPhysics').onclick = resetPhysicsDefaults;
 
     bindSlider('sl-repulsion', 'repulsion');
@@ -147,9 +113,6 @@ function updateSettingsUI() {
     
     const globe = document.getElementById('chkGlobeInner');
     if(globe) globe.checked = state.globeMode;
-
-    const helpEnabled = document.getElementById('chkHelpEnabled');
-    if (helpEnabled) helpEnabled.checked = isHelpEnabled();
 
     const hvtSl = document.getElementById('sl-hvtTop');
     const hvtVal = document.getElementById('val-hvtTop');

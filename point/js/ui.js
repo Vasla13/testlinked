@@ -9,7 +9,7 @@ import { injectStyles } from './styles.js';
 import { setupCanvasEvents } from './interaction.js';
 import { showSettings, showContextMenu, hideContextMenu } from './ui-settings.js';
 import { renderEditor } from './ui-editor.js';
-import { computeLinkSuggestions, getAllowedKinds, recordFeedback } from './intel.js';
+import { computeLinkSuggestions, getAllowedKinds } from './intel.js';
 
 const ui = {
     listCompanies: document.getElementById('listCompanies'),
@@ -30,6 +30,15 @@ const COLLAB_AUTH_ENDPOINT = '/.netlify/functions/collab-auth';
 const COLLAB_BOARD_ENDPOINT = '/.netlify/functions/collab-board';
 const COLLAB_SESSION_STORAGE_KEY = 'bniLinkedCollabSession_v1';
 const COLLAB_ACTIVE_BOARD_STORAGE_KEY = 'bniLinkedActiveBoard_v1';
+const POINT_LOCAL_CHANGE_EVENT = 'bni:point-local-change';
+const ACTION_LOG_STORAGE_KEY = 'bniLinkedActionLog_v1';
+const ACTION_LOG_MAX = 80;
+const COLLAB_NODE_FIELDS = ['name', 'type', 'color', 'num', 'accountNumber', 'citizenNumber', 'description', 'notes', 'x', 'y', 'fixed', 'linkedMapPointId'];
+const COLLAB_LINK_FIELDS = ['source', 'target', 'kind'];
+const COLLAB_PRESENCE_HEARTBEAT_MS = 4200;
+const COLLAB_PRESENCE_RETRY_MS = 2200;
+const COLLAB_SESSION_HEARTBEAT_MS = 12000;
+const COLLAB_SESSION_RETRY_MS = 5000;
 
 const collab = {
     token: '',
@@ -40,9 +49,171 @@ const collab = {
     ownerId: '',
     activeBoardUpdatedAt: '',
     pendingBoardId: '',
-    autosaveTimer: null,
-    saveInFlight: false
+    autosaveDebounceTimer: null,
+    syncTimer: null,
+    syncLoopToken: 0,
+    syncRetryMs: 0,
+    syncLoopRunning: false,
+    autosaveListenerBound: false,
+    syncInFlight: false,
+    saveInFlight: false,
+    lastSavedFingerprint: '',
+    shadowData: null,
+    suppressAutosave: 0,
+    presence: [],
+    presenceTimer: null,
+    presenceLoopToken: 0,
+    presenceInFlight: false,
+    syncState: 'idle',
+    syncLabel: 'Local',
+    sessionTimer: null,
+    sessionLoopToken: 0,
+    sessionInFlight: false
 };
+
+const COLLAB_AUTOSAVE_DEBOUNCE_MS = 380;
+const COLLAB_AUTOSAVE_RETRY_MS = 250;
+const COLLAB_WATCH_TIMEOUT_MS = 3600;
+const COLLAB_WATCH_RETRY_MIN_MS = 300;
+const COLLAB_WATCH_RETRY_MAX_MS = 4000;
+
+let actionLogs = [];
+const INTEL_PRESETS = {
+    quick: {
+        mode: 'serieux',
+        minScore: 0.5,
+        noveltyRatio: 0.12,
+        limit: 8,
+        sources: { graph: true, text: true, tags: true, profile: true, bridge: false, lex: false, geo: false }
+    },
+    balanced: {
+        mode: 'decouverte',
+        minScore: 0.35,
+        noveltyRatio: 0.25,
+        limit: 12,
+        sources: { graph: true, text: true, tags: true, profile: true, bridge: true, lex: true, geo: true }
+    },
+    wide: {
+        mode: 'creatif',
+        minScore: 0.24,
+        noveltyRatio: 0.45,
+        limit: 20,
+        sources: { graph: true, text: true, tags: true, profile: true, bridge: true, lex: true, geo: true }
+    }
+};
+
+function sanitizeLogText(value, fallback = '') {
+    const compact = String(value || '').replace(/\s+/g, ' ').trim();
+    if (!compact) return fallback;
+    if (compact.length > 120) return `${compact.slice(0, 117)}...`;
+    return compact;
+}
+
+function nodeTypeLabel(type) {
+    if (type === TYPES.PERSON) return 'Personne';
+    if (type === TYPES.GROUP) return 'Groupe';
+    if (type === TYPES.COMPANY) return 'Entreprise';
+    return 'Point';
+}
+
+function formatLogTime(ts) {
+    const date = new Date(Number(ts) || Date.now());
+    const hh = String(date.getHours()).padStart(2, '0');
+    const mm = String(date.getMinutes()).padStart(2, '0');
+    return `${hh}:${mm}`;
+}
+
+function hydrateActionLogs() {
+    try {
+        const raw = localStorage.getItem(ACTION_LOG_STORAGE_KEY);
+        if (!raw) {
+            actionLogs = [];
+            return;
+        }
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) {
+            actionLogs = [];
+            return;
+        }
+        actionLogs = parsed
+            .map((item) => ({
+                text: sanitizeLogText(item?.text || ''),
+                at: Number(item?.at) || Date.now()
+            }))
+            .filter((item) => Boolean(item.text))
+            .slice(0, ACTION_LOG_MAX);
+    } catch (e) {
+        actionLogs = [];
+    }
+}
+
+function persistActionLogs() {
+    try {
+        localStorage.setItem(ACTION_LOG_STORAGE_KEY, JSON.stringify(actionLogs.slice(0, ACTION_LOG_MAX)));
+    } catch (e) {}
+}
+
+function renderActionLogs() {
+    const list = document.getElementById('action-log-list');
+    if (!list) return;
+
+    if (!actionLogs.length) {
+        list.innerHTML = '<div class="action-log-empty">En attente d\'actions...</div>';
+        return;
+    }
+
+    list.innerHTML = actionLogs.slice(0, 10).map((entry) => `
+        <div class="action-log-row">
+            <span class="action-log-time">${escapeHtml(formatLogTime(entry.at))}</span>
+            <span class="action-log-text">${escapeHtml(entry.text)}</span>
+        </div>
+    `).join('');
+}
+
+function resolveActionActor(preferred = '') {
+    const preferredName = sanitizeLogText(preferred, '');
+    if (preferredName) return preferredName;
+    const collabName = sanitizeLogText(collab.user?.username || '', '');
+    if (collabName) return collabName;
+    const selected = nodeById(state.selection);
+    const selectedName = sanitizeLogText(selected?.name || '', '');
+    if (selectedName) return selectedName;
+    return 'Operateur';
+}
+
+export function appendActionLog(message, options = {}) {
+    const text = sanitizeLogText(message, '');
+    if (!text) return false;
+
+    const now = Date.now();
+    const latest = actionLogs[0];
+    const dedupeWindowMs = Math.max(400, Number(options?.dedupeWindowMs) || 1300);
+    if (latest && latest.text === text && (now - Number(latest.at || 0)) < dedupeWindowMs) {
+        return false;
+    }
+
+    actionLogs.unshift({ text, at: now });
+    if (actionLogs.length > ACTION_LOG_MAX) actionLogs = actionLogs.slice(0, ACTION_LOG_MAX);
+    persistActionLogs();
+    renderActionLogs();
+    return true;
+}
+
+export function logNodeAdded(nodeName, actor = '') {
+    const cleanNode = sanitizeLogText(nodeName, 'Point');
+    const cleanActor = resolveActionActor(actor);
+    return appendActionLog(`${cleanActor} a ajouté "${cleanNode}"`);
+}
+
+function logNodesConnected(sourceNode, targetNode, actor = '') {
+    if (!sourceNode || !targetNode) return false;
+    const cleanActor = resolveActionActor(actor);
+    const order = { Entreprise: 1, Groupe: 2, Personne: 3, Point: 4 };
+    const sourceType = nodeTypeLabel(sourceNode.type);
+    const targetType = nodeTypeLabel(targetNode.type);
+    const pair = [sourceType, targetType].sort((a, b) => (order[a] || 99) - (order[b] || 99));
+    return appendActionLog(`${cleanActor} a connecté "${pair[0]}" avec "${pair[1]}"`);
+}
 
 function getApiKey() {
     const fromWindow = (typeof window !== 'undefined' && typeof window.BNI_LINKED_KEY === 'string')
@@ -155,31 +326,43 @@ function hydrateCollabState() {
 
 function syncCloudStatus() {
     const statusEl = document.getElementById('cloudStatus');
-    if (!statusEl) return;
+    const currentSyncState = collab.syncState || (collab.user ? (isCloudBoardActive() ? 'live' : 'session') : 'local');
+    if (!statusEl) {
+        syncCloudLivePanels();
+        return;
+    }
+
+    const renderStatus = (stateName, label, value = '') => {
+        statusEl.dataset.state = stateName;
+        if (!value) {
+            statusEl.innerHTML = `<span class="cloud-status-solo">${escapeHtml(label)}</span>`;
+            return;
+        }
+        statusEl.innerHTML = `
+            <span class="cloud-status-label">${escapeHtml(label)}</span>
+            <span class="cloud-status-value">${escapeHtml(String(value || '').toUpperCase())}</span>
+        `;
+    };
 
     if (!collab.user) {
-        statusEl.textContent = 'Local';
-        statusEl.style.color = 'var(--text-muted)';
-        statusEl.style.borderColor = 'var(--border-color)';
+        statusEl.dataset.syncState = 'local';
+        renderStatus('local', 'Local');
+        syncCloudLivePanels();
         return;
     }
 
     if (collab.activeBoardId) {
-        const label = collab.activeRole ? `Cloud ${collab.activeRole}` : 'Cloud';
-        statusEl.textContent = label;
-        if (collab.activeRole === 'owner') {
-            statusEl.style.color = 'var(--accent-cyan)';
-            statusEl.style.borderColor = 'rgba(115, 251, 247, 0.5)';
-        } else {
-            statusEl.style.color = '#ffcc8a';
-            statusEl.style.borderColor = 'rgba(255, 153, 102, 0.5)';
-        }
+        const label = collab.activeRole === 'owner' ? 'Lead' : 'Board';
+        const value = collab.activeBoardTitle || collab.activeRole || 'Cloud';
+        statusEl.dataset.syncState = currentSyncState;
+        renderStatus('board', label, value);
+        syncCloudLivePanels();
         return;
     }
 
-    statusEl.textContent = `Connecte ${collab.user.username}`;
-    statusEl.style.color = 'var(--accent-cyan)';
-    statusEl.style.borderColor = 'rgba(115, 251, 247, 0.4)';
+    statusEl.dataset.syncState = 'session';
+    renderStatus('session', 'Session', collab.user.username);
+    syncCloudLivePanels();
 }
 
 function applyLocalPersistencePolicy() {
@@ -190,19 +373,776 @@ function applyLocalPersistencePolicy() {
     }
 }
 
-function stopCollabAutosave() {
-    if (collab.autosaveTimer) {
-        clearInterval(collab.autosaveTimer);
-        collab.autosaveTimer = null;
+function updateActiveBoardSummary(summary = null) {
+    if (!summary || !summary.id) return;
+    collab.activeBoardId = String(summary.id || collab.activeBoardId || '');
+    collab.activeRole = String(summary.role || collab.activeRole || '');
+    collab.activeBoardTitle = String(summary.title || collab.activeBoardTitle || '');
+    collab.ownerId = String(summary.ownerId || collab.ownerId || '');
+    collab.activeBoardUpdatedAt = String(summary.updatedAt || collab.activeBoardUpdatedAt || '');
+    syncCloudStatus();
+    persistCollabState();
+}
+
+function collabTimeValue(value) {
+    const parsed = Date.parse(String(value || ''));
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function cloneJson(value, fallback = null) {
+    try {
+        return JSON.parse(JSON.stringify(value));
+    } catch (e) {
+        return fallback;
     }
 }
 
-function startCollabAutosave() {
+function normalizeCloudNode(rawNode) {
+    if (!rawNode || typeof rawNode !== 'object') return null;
+    const id = rawNode.id ?? '';
+    if (id === '') return null;
+    return {
+        id,
+        name: String(rawNode.name || '').trim(),
+        type: String(rawNode.type || TYPES.PERSON),
+        color: String(rawNode.color || ''),
+        num: String(rawNode.num || ''),
+        accountNumber: String(rawNode.accountNumber || ''),
+        citizenNumber: String(rawNode.citizenNumber || ''),
+        description: String(rawNode.description || rawNode.notes || ''),
+        notes: String(rawNode.notes || rawNode.description || ''),
+        x: Number(rawNode.x) || 0,
+        y: Number(rawNode.y) || 0,
+        fixed: Boolean(rawNode.fixed),
+        linkedMapPointId: String(rawNode.linkedMapPointId || '')
+    };
+}
+
+function normalizeCloudLink(rawLink) {
+    if (!rawLink || typeof rawLink !== 'object') return null;
+    const id = rawLink.id ?? '';
+    if (id === '') return null;
+    const source = rawLink.source && typeof rawLink.source === 'object' ? rawLink.source.id : rawLink.source;
+    const target = rawLink.target && typeof rawLink.target === 'object' ? rawLink.target.id : rawLink.target;
+    const sourceId = String(source ?? '');
+    const targetId = String(target ?? '');
+    if (!sourceId || !targetId || sourceId === targetId) return null;
+    return {
+        id,
+        source: sourceId,
+        target: targetId,
+        kind: String(rawLink.kind || 'relation')
+    };
+}
+
+function normalizeCloudEntityMeta(rawMeta, fields, fallbackUpdatedAt = '', fallbackUser = '') {
+    const meta = rawMeta && typeof rawMeta === 'object' ? rawMeta : {};
+    const fieldTimes = {};
+    fields.forEach((field) => {
+        fieldTimes[field] = String(meta.fieldTimes?.[field] || meta[field] || fallbackUpdatedAt || '');
+    });
+    return {
+        updatedAt: String(meta.updatedAt || fallbackUpdatedAt || ''),
+        updatedBy: String(meta.updatedBy || fallbackUser || ''),
+        fieldTimes
+    };
+}
+
+function normalizeCloudDeletedEntries(list, fallbackUpdatedAt = '', fallbackUser = '') {
+    const latest = new Map();
+    const source = Array.isArray(list) ? list : [];
+    source.forEach((row) => {
+        const id = String(row?.id ?? '').trim();
+        if (!id) return;
+        const next = {
+            id,
+            deletedAt: String(row?.deletedAt || fallbackUpdatedAt || ''),
+            deletedBy: String(row?.deletedBy || fallbackUser || '')
+        };
+        const prev = latest.get(id);
+        if (!prev || collabTimeValue(next.deletedAt) >= collabTimeValue(prev.deletedAt)) {
+            latest.set(id, next);
+        }
+    });
+    return [...latest.values()].sort((a, b) => String(a.id).localeCompare(String(b.id)));
+}
+
+function normalizeCloudBoardData(rawData, options = {}) {
+    const fallbackUpdatedAt = String(options.fallbackUpdatedAt || collab.activeBoardUpdatedAt || '');
+    const fallbackUser = String(options.fallbackUser || collab.user?.username || '');
+    const raw = rawData && typeof rawData === 'object' ? rawData : {};
+    const nodes = (Array.isArray(raw.nodes) ? raw.nodes : [])
+        .map((node) => {
+            const normalized = normalizeCloudNode(node);
+            if (!normalized) return null;
+            return {
+                ...normalized,
+                _collab: normalizeCloudEntityMeta(node?._collab, COLLAB_NODE_FIELDS, fallbackUpdatedAt, fallbackUser)
+            };
+        })
+        .filter(Boolean)
+        .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    const links = (Array.isArray(raw.links) ? raw.links : [])
+        .map((link) => {
+            const normalized = normalizeCloudLink(link);
+            if (!normalized) return null;
+            return {
+                ...normalized,
+                _collab: normalizeCloudEntityMeta(link?._collab, COLLAB_LINK_FIELDS, fallbackUpdatedAt, fallbackUser)
+            };
+        })
+        .filter(Boolean)
+        .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    return {
+        meta: raw.meta && typeof raw.meta === 'object' ? { ...raw.meta } : {},
+        physicsSettings: raw.physicsSettings && typeof raw.physicsSettings === 'object'
+            ? cloneJson(raw.physicsSettings, {})
+            : {},
+        nodes,
+        links,
+        deletedNodes: normalizeCloudDeletedEntries(raw.deletedNodes, fallbackUpdatedAt, fallbackUser),
+        deletedLinks: normalizeCloudDeletedEntries(raw.deletedLinks, fallbackUpdatedAt, fallbackUser),
+        _collab: normalizeCloudEntityMeta(raw._collab, ['physicsSettings'], fallbackUpdatedAt, fallbackUser)
+    };
+}
+
+function buildCloudEntityMeta(currentEntity, shadowEntity, fields, nowIso, actor) {
+    const shadowMeta = normalizeCloudEntityMeta(shadowEntity?._collab, fields, shadowEntity?._collab?.updatedAt || '', shadowEntity?._collab?.updatedBy || actor);
+    const fieldTimes = {};
+    let changed = !shadowEntity;
+
+    fields.forEach((field) => {
+        const nextValue = currentEntity ? currentEntity[field] : undefined;
+        const prevValue = shadowEntity ? shadowEntity[field] : undefined;
+        const sameValue = JSON.stringify(nextValue) === JSON.stringify(prevValue);
+        if (!shadowEntity || !sameValue) {
+            fieldTimes[field] = nowIso;
+            changed = true;
+        } else {
+            fieldTimes[field] = String(shadowMeta.fieldTimes[field] || shadowMeta.updatedAt || nowIso);
+        }
+    });
+
+    return {
+        updatedAt: changed ? nowIso : String(shadowMeta.updatedAt || nowIso),
+        updatedBy: changed ? actor : String(shadowMeta.updatedBy || actor),
+        fieldTimes
+    };
+}
+
+function buildCloudBoardPayload() {
+    const plain = generateExportData();
+    const shadow = normalizeCloudBoardData(collab.shadowData, {
+        fallbackUpdatedAt: collab.activeBoardUpdatedAt || '',
+        fallbackUser: collab.user?.username || ''
+    });
+    const nowIso = new Date().toISOString();
+    const actor = sanitizeLogText(collab.user?.username || '', 'operateur');
+    const shadowNodeMap = new Map(shadow.nodes.map((node) => [String(node.id), node]));
+    const shadowLinkMap = new Map(shadow.links.map((link) => [String(link.id), link]));
+    const currentNodes = plain.nodes.map((node) => normalizeCloudNode(node)).filter(Boolean);
+    const currentLinks = plain.links.map((link) => normalizeCloudLink(link)).filter(Boolean);
+    const currentNodeIds = new Set(currentNodes.map((node) => String(node.id)));
+    const currentLinkIds = new Set(currentLinks.map((link) => String(link.id)));
+    const deletedNodeMap = new Map((shadow.deletedNodes || []).map((entry) => [String(entry.id), entry]));
+    const deletedLinkMap = new Map((shadow.deletedLinks || []).map((entry) => [String(entry.id), entry]));
+
+    const nodes = currentNodes.map((node) => {
+        deletedNodeMap.delete(String(node.id));
+        return {
+            ...node,
+            _collab: buildCloudEntityMeta(node, shadowNodeMap.get(String(node.id)), COLLAB_NODE_FIELDS, nowIso, actor)
+        };
+    });
+
+    shadow.nodes.forEach((node) => {
+        const key = String(node.id);
+        if (currentNodeIds.has(key)) return;
+        deletedNodeMap.set(key, {
+            id: node.id,
+            deletedAt: nowIso,
+            deletedBy: actor
+        });
+    });
+
+    const links = currentLinks.map((link) => {
+        deletedLinkMap.delete(String(link.id));
+        return {
+            ...link,
+            _collab: buildCloudEntityMeta(link, shadowLinkMap.get(String(link.id)), COLLAB_LINK_FIELDS, nowIso, actor)
+        };
+    });
+
+    shadow.links.forEach((link) => {
+        const key = String(link.id);
+        if (currentLinkIds.has(key)) return;
+        deletedLinkMap.set(key, {
+            id: link.id,
+            deletedAt: nowIso,
+            deletedBy: actor
+        });
+    });
+
+    const currentPhysics = plain.physicsSettings && typeof plain.physicsSettings === 'object'
+        ? cloneJson(plain.physicsSettings, {})
+        : {};
+    const shadowPhysics = shadow.physicsSettings && typeof shadow.physicsSettings === 'object'
+        ? shadow.physicsSettings
+        : {};
+    const samePhysics = JSON.stringify(currentPhysics) === JSON.stringify(shadowPhysics);
+    const shadowBoardMeta = normalizeCloudEntityMeta(shadow._collab, ['physicsSettings'], collab.activeBoardUpdatedAt || '', actor);
+
+    return {
+        meta: {
+            ...(plain.meta || {}),
+            projectName: state.projectName || plain.meta?.projectName || shadow.meta?.projectName || ''
+        },
+        physicsSettings: currentPhysics,
+        nodes,
+        links,
+        deletedNodes: [...deletedNodeMap.values()].sort((a, b) => String(a.id).localeCompare(String(b.id))),
+        deletedLinks: [...deletedLinkMap.values()].sort((a, b) => String(a.id).localeCompare(String(b.id))),
+        _collab: {
+            updatedAt: samePhysics ? String(shadowBoardMeta.updatedAt || nowIso) : nowIso,
+            updatedBy: samePhysics ? String(shadowBoardMeta.updatedBy || actor) : actor,
+            fieldTimes: {
+                physicsSettings: samePhysics
+                    ? String(shadowBoardMeta.fieldTimes.physicsSettings || shadowBoardMeta.updatedAt || nowIso)
+                    : nowIso
+            }
+        }
+    };
+}
+
+function extractPlainPointPayloadFromCloud(rawData) {
+    const normalized = normalizeCloudBoardData(rawData, {
+        fallbackUpdatedAt: collab.activeBoardUpdatedAt || '',
+        fallbackUser: collab.user?.username || ''
+    });
+    const deletedNodeMap = new Map(normalized.deletedNodes.map((entry) => [String(entry.id), entry]));
+    const nodes = normalized.nodes
+        .filter((node) => {
+            const tombstone = deletedNodeMap.get(String(node.id));
+            if (!tombstone) return true;
+            return collabTimeValue(node?._collab?.updatedAt) > collabTimeValue(tombstone.deletedAt);
+        })
+        .map((node) => ({
+            id: node.id,
+            name: node.name,
+            type: node.type,
+            color: node.color,
+            num: node.num,
+            accountNumber: node.accountNumber,
+            citizenNumber: node.citizenNumber,
+            description: node.description,
+            notes: node.notes,
+            x: node.x,
+            y: node.y,
+            fixed: node.fixed,
+            linkedMapPointId: node.linkedMapPointId
+        }));
+    const nodeIds = new Set(nodes.map((node) => String(node.id)));
+    const deletedLinkMap = new Map(normalized.deletedLinks.map((entry) => [String(entry.id), entry]));
+    const linkSigs = new Set();
+    const links = normalized.links
+        .filter((link) => {
+            const tombstone = deletedLinkMap.get(String(link.id));
+            if (tombstone && collabTimeValue(link?._collab?.updatedAt) <= collabTimeValue(tombstone.deletedAt)) return false;
+            return nodeIds.has(String(link.source)) && nodeIds.has(String(link.target));
+        })
+        .filter((link) => {
+            const a = String(link.source);
+            const b = String(link.target);
+            const pair = a < b ? `${a}|${b}` : `${b}|${a}`;
+            const sig = `${pair}|${String(link.kind || '')}`;
+            if (linkSigs.has(sig)) return false;
+            linkSigs.add(sig);
+            return true;
+        })
+        .map((link) => ({
+            id: link.id,
+            source: link.source,
+            target: link.target,
+            kind: link.kind
+        }));
+    return {
+        meta: normalized.meta && typeof normalized.meta === 'object' ? { ...normalized.meta } : {},
+        physicsSettings: normalized.physicsSettings && typeof normalized.physicsSettings === 'object'
+            ? cloneJson(normalized.physicsSettings, {})
+            : {},
+        nodes,
+        links
+    };
+}
+
+function setCloudShadowData(rawData) {
+    collab.shadowData = normalizeCloudBoardData(rawData, {
+        fallbackUpdatedAt: collab.activeBoardUpdatedAt || '',
+        fallbackUser: collab.user?.username || ''
+    });
+}
+
+function withoutCloudAutosave(fn) {
+    collab.suppressAutosave += 1;
+    try {
+        return fn();
+    } finally {
+        collab.suppressAutosave = Math.max(0, collab.suppressAutosave - 1);
+    }
+}
+
+function setCloudSyncState(nextState, label = '') {
+    collab.syncState = nextState;
+    collab.syncLabel = label || ({
+        local: 'Local',
+        session: 'Session cloud',
+        live: 'Synchro live active',
+        pending: 'Modifs locales en attente',
+        saving: 'Enregistrement cloud...',
+        syncing: 'Mise a jour distante...',
+        merged: 'Fusion auto appliquee',
+        error: 'Sync en attente'
+    }[nextState] || 'Cloud');
+    syncCloudStatus();
+}
+
+function updateCollabPresence(rawPresence = []) {
+    const deduped = new Map();
+    (Array.isArray(rawPresence) ? rawPresence : []).forEach((row) => {
+        const userId = String(row?.userId || '').trim();
+        if (!userId) return;
+        deduped.set(userId, {
+            userId,
+            username: String(row?.username || 'operateur'),
+            role: String(row?.role || ''),
+            activeNodeId: String(row?.activeNodeId || ''),
+            activeNodeName: String(row?.activeNodeName || ''),
+            mode: String(row?.mode || 'editing'),
+            lastAt: String(row?.lastAt || ''),
+            isSelf: userId === String(collab.user?.id || '')
+        });
+    });
+    collab.presence = [...deduped.values()].sort((a, b) => {
+        if (a.isSelf && !b.isSelf) return -1;
+        if (!a.isSelf && b.isSelf) return 1;
+        return String(a.username || '').localeCompare(String(b.username || ''));
+    });
+    syncCloudStatus();
+}
+
+function renderCloudPresenceChips(entries = [], options = {}) {
+    const includeSelf = Boolean(options.includeSelf);
+    const visible = entries.filter((entry) => includeSelf || !entry.isSelf).slice(0, 4);
+    if (!visible.length) return '';
+    return visible.map((entry) => {
+        const initials = String(entry.username || '?').slice(0, 2).toUpperCase();
+        const label = entry.isSelf ? 'toi' : entry.username;
+        const detail = entry.activeNodeName ? `Fiche ${entry.activeNodeName}` : (entry.mode === 'viewing' ? 'Lecture' : 'Edition');
+        return `
+            <div class="cloud-presence-pill${entry.isSelf ? ' is-self' : ''}">
+                <span class="cloud-presence-avatar">${escapeHtml(initials)}</span>
+                <span class="cloud-presence-copy">
+                    <span class="cloud-presence-name">${escapeHtml(label)}</span>
+                    <span class="cloud-presence-detail">${escapeHtml(detail)}</span>
+                </span>
+            </div>
+        `;
+    }).join('');
+}
+
+function formatBoardActivityTime(value) {
+    const ts = Date.parse(String(value || ''));
+    if (!Number.isFinite(ts)) return '--:--';
+    const deltaSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+    if (deltaSec < 60) return `${deltaSec}s`;
+    if (deltaSec < 3600) return `${Math.floor(deltaSec / 60)}m`;
+    if (deltaSec < 86400) return `${Math.floor(deltaSec / 3600)}h`;
+    return `${Math.floor(deltaSec / 86400)}j`;
+}
+
+function renderBoardActivityRows(activity = [], options = {}) {
+    const emptyLabel = options.emptyLabel || 'Aucune activite recente.';
+    const rows = Array.isArray(activity) ? activity.slice(0, Number(options.limit) || 8) : [];
+    if (!rows.length) {
+        return `<div class="cloud-board-log-empty">${escapeHtml(emptyLabel)}</div>`;
+    }
+    return rows.map((entry) => `
+        <div class="cloud-board-log-row">
+            <div class="cloud-board-log-meta">
+                <span class="cloud-board-log-actor">${escapeHtml(entry.actorName || 'systeme')}</span>
+                <span class="cloud-board-log-time">${escapeHtml(formatBoardActivityTime(entry.at))}</span>
+            </div>
+            <div class="cloud-board-log-text">${escapeHtml(entry.text || '')}</div>
+        </div>
+    `).join('');
+}
+
+function syncCloudLivePanels() {
+    const liveInfoEl = document.getElementById('cloudLiveInfo');
+    const syncInfoEl = document.getElementById('cloudSyncInfo');
+    const presenceEl = document.getElementById('cloudPresence');
+    const modalSyncEl = document.getElementById('cloudModalSyncInfo');
+    const modalPresenceEl = document.getElementById('cloudModalPresence');
+    const otherUsers = collab.presence.filter((entry) => !entry.isSelf);
+    const presenceLabel = otherUsers.length
+        ? `${otherUsers.length} operateur${otherUsers.length > 1 ? 's' : ''} actif${otherUsers.length > 1 ? 's' : ''}`
+        : (isCloudBoardActive() ? 'Aucun autre operateur detecte' : '');
+
+    if (liveInfoEl) {
+        liveInfoEl.hidden = !collab.user;
+    }
+    if (syncInfoEl) {
+        syncInfoEl.textContent = collab.syncLabel || 'Cloud';
+        syncInfoEl.dataset.state = collab.syncState || 'idle';
+    }
+    if (presenceEl) {
+        presenceEl.innerHTML = isCloudBoardActive()
+            ? (renderCloudPresenceChips(collab.presence, { includeSelf: false }) || `<div class="cloud-presence-empty">${escapeHtml(presenceLabel || 'Board prive')}</div>`)
+            : '';
+    }
+    if (modalSyncEl) {
+        modalSyncEl.textContent = collab.syncLabel || 'Cloud';
+        modalSyncEl.className = isCloudBoardActive() ? 'cloud-status-active' : '';
+        modalSyncEl.dataset.state = collab.syncState || 'idle';
+    }
+    if (modalPresenceEl) {
+        modalPresenceEl.innerHTML = isCloudBoardActive()
+            ? (renderCloudPresenceChips(collab.presence, { includeSelf: true }) || `<div class="cloud-presence-empty">${escapeHtml(presenceLabel || 'Board prive')}</div>`)
+            : `<div class="cloud-presence-empty">Session cloud ouverte</div>`;
+    }
+}
+
+function applyCloudBoardData(rawData, options = {}) {
+    const quiet = Boolean(options.quiet);
+    const plain = extractPlainPointPayloadFromCloud(rawData);
+    withoutCloudAutosave(() => processData(plain, 'load', { silent: true }));
+    setCloudShadowData(rawData);
+    if (typeof options.projectName === 'string') {
+        state.projectName = options.projectName;
+    }
+    captureCloudSavedFingerprint();
+    if (state.selection && !nodeById(state.selection)) state.selection = null;
+    renderEditor();
+    updatePathfindingPanel();
+    refreshHvt();
+    draw();
+    if (!quiet) {
+        appendActionLog('sync live: board mis a jour');
+    }
+}
+
+function fingerprintFromPointPayload(payload) {
+    const normalizedMeta = payload?.meta && typeof payload.meta === 'object'
+        ? { ...payload.meta, date: '' }
+        : { date: '' };
+    return JSON.stringify({
+        ...payload,
+        meta: normalizedMeta
+    });
+}
+
+function computeCloudFingerprint() {
+    try {
+        if (!isCloudBoardActive()) return '';
+        const payload = generateExportData();
+        return fingerprintFromPointPayload(payload);
+    } catch (e) {
+        return '';
+    }
+}
+
+function captureCloudSavedFingerprint() {
+    const fp = computeCloudFingerprint();
+    collab.lastSavedFingerprint = fp;
+    return fp;
+}
+
+function hasLocalCloudChanges() {
+    if (!isCloudBoardActive()) return false;
+    const current = computeCloudFingerprint();
+    return Boolean(current) && current !== String(collab.lastSavedFingerprint || '');
+}
+
+function stopCollabAutosave() {
+    if (collab.autosaveDebounceTimer) {
+        clearTimeout(collab.autosaveDebounceTimer);
+        collab.autosaveDebounceTimer = null;
+    }
+}
+
+function queueCloudAutosave(delayMs = COLLAB_AUTOSAVE_DEBOUNCE_MS) {
+    if (!isCloudBoardActive() || !canEditCloudBoard()) return;
     stopCollabAutosave();
-    if (!canEditCloudBoard()) return;
-    collab.autosaveTimer = setInterval(() => {
+    setCloudSyncState('pending');
+    collab.autosaveDebounceTimer = setTimeout(() => {
+        collab.autosaveDebounceTimer = null;
         saveActiveCloudBoard({ manual: false, quiet: true }).catch(() => {});
-    }, 45000);
+    }, Math.max(0, Number(delayMs) || 0));
+}
+
+function onPointLocalChange() {
+    if (collab.suppressAutosave > 0) return;
+    queueCloudAutosave();
+}
+
+function ensureCollabAutosaveListener() {
+    if (collab.autosaveListenerBound) return;
+    collab.autosaveListenerBound = true;
+    window.addEventListener(POINT_LOCAL_CHANGE_EVENT, onPointLocalChange);
+}
+
+function startCollabAutosave() {
+    ensureCollabAutosaveListener();
+    if (!isCloudBoardActive() || !canEditCloudBoard()) {
+        stopCollabAutosave();
+        return;
+    }
+    queueCloudAutosave(COLLAB_AUTOSAVE_RETRY_MS);
+}
+
+function stopCollabLiveSync() {
+    collab.syncLoopToken += 1;
+    collab.syncLoopRunning = false;
+    collab.syncRetryMs = 0;
+    if (collab.syncTimer) {
+        clearTimeout(collab.syncTimer);
+        collab.syncTimer = null;
+    }
+}
+
+function stopCollabPresence() {
+    collab.presenceLoopToken += 1;
+    collab.presenceInFlight = false;
+    if (collab.presenceTimer) {
+        clearTimeout(collab.presenceTimer);
+        collab.presenceTimer = null;
+    }
+}
+
+function stopCollabSessionHeartbeat() {
+    collab.sessionLoopToken += 1;
+    collab.sessionInFlight = false;
+    if (collab.sessionTimer) {
+        clearTimeout(collab.sessionTimer);
+        collab.sessionTimer = null;
+    }
+}
+
+function scheduleNextSessionHeartbeat(loopToken, delayMs = COLLAB_SESSION_HEARTBEAT_MS) {
+    if (collab.sessionLoopToken !== loopToken) return;
+    if (collab.sessionTimer) clearTimeout(collab.sessionTimer);
+    collab.sessionTimer = setTimeout(() => {
+        collab.sessionTimer = null;
+        runCollabSessionHeartbeat(loopToken).catch(() => {});
+    }, Math.max(0, Number(delayMs) || 0));
+}
+
+async function runCollabSessionHeartbeat(loopToken = collab.sessionLoopToken) {
+    if (collab.sessionLoopToken !== loopToken) return;
+    if (!collab.token || !collab.user) return;
+    if (collab.sessionInFlight) return;
+
+    collab.sessionInFlight = true;
+    try {
+        const res = await collabAuthRequest('me');
+        collab.user = res.user || collab.user;
+        persistCollabState();
+        syncCloudStatus();
+        scheduleNextSessionHeartbeat(loopToken, COLLAB_SESSION_HEARTBEAT_MS);
+    } catch (e) {
+        if (collab.sessionLoopToken !== loopToken) return;
+        const status = Number(e?.status || 0);
+        if (status === 401 || status === 403) {
+            await logoutCollab();
+            return;
+        }
+        scheduleNextSessionHeartbeat(loopToken, COLLAB_SESSION_RETRY_MS);
+    } finally {
+        collab.sessionInFlight = false;
+    }
+}
+
+function startCollabSessionHeartbeat() {
+    stopCollabSessionHeartbeat();
+    if (!collab.token || !collab.user) return;
+    const loopToken = collab.sessionLoopToken + 1;
+    collab.sessionLoopToken = loopToken;
+    scheduleNextSessionHeartbeat(loopToken, 0);
+}
+
+function scheduleNextPresenceTick(loopToken, delayMs = COLLAB_PRESENCE_HEARTBEAT_MS) {
+    if (collab.presenceLoopToken !== loopToken) return;
+    if (collab.presenceTimer) clearTimeout(collab.presenceTimer);
+    collab.presenceTimer = setTimeout(() => {
+        collab.presenceTimer = null;
+        touchCollabPresence(loopToken).catch(() => {});
+    }, Math.max(0, Number(delayMs) || 0));
+}
+
+async function clearCollabPresence(boardId = collab.activeBoardId) {
+    const targetBoardId = String(boardId || '').trim();
+    if (!targetBoardId || !collab.token) return;
+    try {
+        await collabBoardRequest('clear_presence', { boardId: targetBoardId });
+    } catch (e) {}
+}
+
+async function touchCollabPresence(loopToken = collab.presenceLoopToken, options = {}) {
+    if (collab.presenceLoopToken !== loopToken && !options.force) return;
+    if (!isCloudBoardActive() || !collab.user || !collab.token) return;
+    if (collab.presenceInFlight && !options.force) return;
+
+    collab.presenceInFlight = true;
+    try {
+        const selected = nodeById(state.selection);
+        const response = await collabBoardRequest('touch_presence', {
+            boardId: collab.activeBoardId,
+            activeNodeId: state.selection || '',
+            activeNodeName: selected?.name || '',
+            mode: canEditCloudBoard() ? 'editing' : 'viewing'
+        });
+        updateCollabPresence(response?.presence || []);
+        scheduleNextPresenceTick(loopToken, COLLAB_PRESENCE_HEARTBEAT_MS);
+    } catch (e) {
+        scheduleNextPresenceTick(loopToken, COLLAB_PRESENCE_RETRY_MS);
+    } finally {
+        collab.presenceInFlight = false;
+    }
+}
+
+function startCollabPresence() {
+    stopCollabPresence();
+    if (!isCloudBoardActive() || !collab.user || !collab.token) {
+        updateCollabPresence([]);
+        return;
+    }
+    const loopToken = collab.presenceLoopToken + 1;
+    collab.presenceLoopToken = loopToken;
+    scheduleNextPresenceTick(loopToken, 0);
+}
+
+function scheduleNextWatchTick(loopToken, delayMs = 0) {
+    if (collab.syncLoopToken !== loopToken) return;
+    if (collab.syncTimer) clearTimeout(collab.syncTimer);
+    collab.syncTimer = setTimeout(() => {
+        collab.syncTimer = null;
+        runCollabWatchLoop(loopToken).catch(() => {});
+    }, Math.max(0, Number(delayMs) || 0));
+}
+
+async function runCollabWatchLoop(loopToken) {
+    if (collab.syncLoopToken !== loopToken) return;
+    if (!isCloudBoardActive() || !collab.user || !collab.token) {
+        collab.syncLoopRunning = false;
+        return;
+    }
+
+    try {
+        const watch = await collabBoardRequest('watch_board', {
+            boardId: collab.activeBoardId,
+            sinceUpdatedAt: String(collab.activeBoardUpdatedAt || ''),
+            timeoutMs: COLLAB_WATCH_TIMEOUT_MS
+        });
+
+        if (collab.syncLoopToken !== loopToken) return;
+        collab.syncRetryMs = COLLAB_WATCH_RETRY_MIN_MS;
+        updateCollabPresence(watch?.presence || []);
+        if (!collab.saveInFlight && !hasLocalCloudChanges()) {
+            setCloudSyncState(canEditCloudBoard() ? 'live' : 'session', canEditCloudBoard() ? 'Synchro live active' : 'Lecture live active');
+        }
+
+        if (watch?.deleted || watch?.revoked) {
+            setActiveCloudBoardFromSummary(null);
+            setBoardQueryParam('');
+            appendActionLog('cloud: board indisponible');
+            collab.syncLoopRunning = false;
+            return;
+        }
+
+        if (watch?.changed) {
+            const watchedUpdatedAt = String(watch.updatedAt || '');
+            if (!watchedUpdatedAt || watchedUpdatedAt !== String(collab.activeBoardUpdatedAt || '')) {
+                setCloudSyncState('syncing');
+                await syncActiveCloudBoard({ quiet: true });
+            }
+        }
+
+        scheduleNextWatchTick(loopToken, 0);
+    } catch (e) {
+        if (collab.syncLoopToken !== loopToken) return;
+        const status = Number(e?.status || 0);
+        if (status === 401 || status === 403 || status === 404) {
+            collab.syncLoopRunning = false;
+            stopCollabLiveSync();
+            setCloudSyncState('error', 'Connexion live coupee');
+            return;
+        }
+
+        collab.syncRetryMs = collab.syncRetryMs
+            ? Math.min(COLLAB_WATCH_RETRY_MAX_MS, collab.syncRetryMs * 2)
+            : COLLAB_WATCH_RETRY_MIN_MS;
+        setCloudSyncState('error');
+        scheduleNextWatchTick(loopToken, collab.syncRetryMs);
+    }
+}
+
+async function syncActiveCloudBoard(options = {}) {
+    const quiet = Boolean(options.quiet);
+    if (!isCloudBoardActive() || !collab.user || !collab.token) return false;
+    if (collab.syncInFlight) return false;
+    if (collab.saveInFlight) return false;
+
+    collab.syncInFlight = true;
+    try {
+        const result = await collabBoardRequest('get_board', { boardId: collab.activeBoardId });
+        if (!result || !result.board || !result.board.data) return false;
+
+        const remoteSummary = {
+            id: result.board.id || collab.activeBoardId,
+            role: result.role || collab.activeRole,
+            title: result.board.title || collab.activeBoardTitle || state.projectName || 'Tableau cloud',
+            ownerId: result.board.ownerId || collab.ownerId || '',
+            updatedAt: result.board.updatedAt || collab.activeBoardUpdatedAt || ''
+        };
+
+        const remoteUpdatedAt = String(remoteSummary.updatedAt || '');
+        const localUpdatedAt = String(collab.activeBoardUpdatedAt || '');
+        if (!remoteUpdatedAt || remoteUpdatedAt === localUpdatedAt) return false;
+
+        const localChanged = hasLocalCloudChanges();
+        updateActiveBoardSummary(remoteSummary);
+        updateCollabPresence(result?.presence || []);
+
+        if (localChanged && canEditCloudBoard()) {
+            const mergedSaved = await saveActiveCloudBoard({ manual: false, quiet: true, force: true });
+            if (mergedSaved) setCloudSyncState('merged');
+            return Boolean(mergedSaved);
+        }
+
+        applyCloudBoardData(result.board.data, { quiet, projectName: remoteSummary.title });
+        setCloudSyncState('live');
+        if (!quiet) {
+            appendActionLog('sync live: board mis a jour');
+        }
+        return true;
+    } catch (e) {
+        setCloudSyncState('error');
+        if (!quiet) showCustomAlert(`Erreur sync live: ${escapeHtml(e.message || 'inconnue')}`);
+        return false;
+    } finally {
+        collab.syncInFlight = false;
+    }
+}
+
+function startCollabLiveSync() {
+    stopCollabLiveSync();
+    if (!isCloudBoardActive() || !collab.user || !collab.token) return;
+    const loopToken = collab.syncLoopToken + 1;
+    collab.syncLoopToken = loopToken;
+    collab.syncLoopRunning = true;
+    collab.syncRetryMs = COLLAB_WATCH_RETRY_MIN_MS;
+    setCloudSyncState(canEditCloudBoard() ? 'live' : 'session', canEditCloudBoard() ? 'Synchro live active' : 'Lecture live active');
+    scheduleNextWatchTick(loopToken, 0);
 }
 
 async function collabAuthRequest(action, payload = {}) {
@@ -217,7 +1157,10 @@ async function collabAuthRequest(action, payload = {}) {
     let data = {};
     try { data = await response.json(); } catch (e) {}
     if (!response.ok || !data.ok) {
-        throw new Error(data.error || `Erreur auth (${response.status})`);
+        const err = new Error(data.error || `Erreur auth (${response.status})`);
+        err.status = response.status;
+        err.payload = data || {};
+        throw err;
     }
     return data;
 }
@@ -235,18 +1178,25 @@ async function collabBoardRequest(action, payload = {}) {
     let data = {};
     try { data = await response.json(); } catch (e) {}
     if (!response.ok || !data.ok) {
-        throw new Error(data.error || `Erreur cloud (${response.status})`);
+        const err = new Error(data.error || `Erreur cloud (${response.status})`);
+        err.status = response.status;
+        err.payload = data || {};
+        throw err;
     }
     return data;
 }
 
 function setActiveCloudBoardFromSummary(summary = null) {
+    const previousBoardId = String(collab.activeBoardId || '');
     if (!summary || !summary.id) {
         collab.activeBoardId = '';
         collab.activeRole = '';
         collab.activeBoardTitle = '';
         collab.ownerId = '';
         collab.activeBoardUpdatedAt = '';
+        collab.lastSavedFingerprint = '';
+        collab.shadowData = null;
+        updateCollabPresence([]);
     } else {
         collab.activeBoardId = String(summary.id || '');
         collab.activeRole = String(summary.role || '');
@@ -254,11 +1204,22 @@ function setActiveCloudBoardFromSummary(summary = null) {
         collab.ownerId = String(summary.ownerId || '');
         collab.activeBoardUpdatedAt = String(summary.updatedAt || '');
     }
+    if (previousBoardId && previousBoardId !== collab.activeBoardId) {
+        clearCollabPresence(previousBoardId).catch(() => {});
+    }
     applyLocalPersistencePolicy();
     syncCloudStatus();
     persistCollabState();
-    if (isCloudBoardActive()) startCollabAutosave();
-    else stopCollabAutosave();
+    if (isCloudBoardActive()) {
+        startCollabAutosave();
+        startCollabLiveSync();
+        startCollabPresence();
+    } else {
+        stopCollabAutosave();
+        stopCollabLiveSync();
+        stopCollabPresence();
+        setCloudSyncState(collab.user ? 'session' : 'local');
+    }
 }
 
 async function openCloudBoard(boardId, options = {}) {
@@ -277,10 +1238,10 @@ async function openCloudBoard(boardId, options = {}) {
     };
 
     setActiveCloudBoardFromSummary(summary);
-    processData(result.board.data, 'load', { silent: true });
-    state.projectName = summary.title;
-    scheduleSave();
+    updateCollabPresence(result?.presence || []);
+    applyCloudBoardData(result.board.data, { quiet: true, projectName: summary.title });
     setBoardQueryParam(summary.id);
+    setCloudSyncState(canEditCloudBoard() ? 'live' : 'session', canEditCloudBoard() ? 'Synchro live active' : 'Lecture live active');
 
     if (!options.quiet) {
         showCustomAlert(`☁️ Board cloud ouvert : ${escapeHtml(summary.title)}`);
@@ -290,6 +1251,7 @@ async function openCloudBoard(boardId, options = {}) {
 async function saveActiveCloudBoard(options = {}) {
     const manual = Boolean(options.manual);
     const quiet = Boolean(options.quiet);
+    const force = Boolean(options.force);
 
     if (!isCloudBoardActive()) {
         if (manual && !quiet) showCustomAlert("Aucun board cloud actif.");
@@ -299,12 +1261,22 @@ async function saveActiveCloudBoard(options = {}) {
         if (manual && !quiet) showCustomAlert("Tu n'as pas les droits d'edition cloud.");
         return false;
     }
-    if (collab.saveInFlight) return false;
+    if (collab.saveInFlight) {
+        if (!manual) queueCloudAutosave(COLLAB_AUTOSAVE_RETRY_MS);
+        return false;
+    }
+    if (!force && !manual && !hasLocalCloudChanges()) {
+        setCloudSyncState(canEditCloudBoard() ? 'live' : 'session', canEditCloudBoard() ? 'Synchronise' : 'Lecture live active');
+        return true;
+    }
 
     collab.saveInFlight = true;
+    setCloudSyncState('saving');
     try {
         const title = (state.projectName || collab.activeBoardTitle || 'Tableau cloud').trim();
-        const data = generateExportData();
+        const plainData = generateExportData();
+        const data = buildCloudBoardPayload();
+        const localFingerprint = fingerprintFromPointPayload(plainData);
         const result = await collabBoardRequest('save_board', {
             boardId: collab.activeBoardId,
             title,
@@ -316,14 +1288,32 @@ async function saveActiveCloudBoard(options = {}) {
             collab.activeBoardUpdatedAt = String(result.board.updatedAt || collab.activeBoardUpdatedAt || '');
             state.projectName = collab.activeBoardTitle;
             persistCollabState();
+            updateCollabPresence(result?.presence || []);
+            if (result.board.data) {
+                setCloudShadowData(result.board.data);
+                const serverPlain = extractPlainPointPayloadFromCloud(result.board.data);
+                const shouldApplyServerData = fingerprintFromPointPayload(serverPlain) !== fingerprintFromPointPayload(plainData);
+                if (shouldApplyServerData) {
+                    applyCloudBoardData(result.board.data, { quiet: true, projectName: collab.activeBoardTitle });
+                } else {
+                    collab.lastSavedFingerprint = fingerprintFromPointPayload(serverPlain);
+                }
+            } else {
+                collab.lastSavedFingerprint = localFingerprint;
+            }
         }
+        setCloudSyncState(result?.mergedConflict ? 'merged' : 'live', result?.mergedConflict ? 'Fusion auto appliquee' : 'Synchronise');
         if (manual && !quiet) showCustomAlert("☁️ Board cloud sauvegarde.");
         return true;
     } catch (e) {
+        setCloudSyncState('error');
         if (!quiet) showCustomAlert(`Erreur cloud: ${escapeHtml(e.message || 'inconnue')}`);
         return false;
     } finally {
         collab.saveInFlight = false;
+        if (!manual && hasLocalCloudChanges()) {
+            queueCloudAutosave(COLLAB_AUTOSAVE_RETRY_MS);
+        }
     }
 }
 
@@ -344,7 +1334,7 @@ async function createCloudBoardFromCurrent() {
     const result = await collabBoardRequest('create_board', {
         title: cleanTitle,
         page: 'point',
-        data: generateExportData()
+        data: buildCloudBoardPayload()
     });
 
     if (!result.board) throw new Error('Creation cloud echouee.');
@@ -357,11 +1347,16 @@ async function createCloudBoardFromCurrent() {
         updatedAt: result.board.updatedAt || ''
     });
     state.projectName = collab.activeBoardTitle;
+    updateCollabPresence(result?.presence || []);
+    if (result.board.data) setCloudShadowData(result.board.data);
+    captureCloudSavedFingerprint();
     setBoardQueryParam(result.board.id);
+    setCloudSyncState('live', 'Synchro live active');
 }
 
 async function logoutCollab() {
     try {
+        await clearCollabPresence(collab.activeBoardId);
         if (collab.token) await collabAuthRequest('logout');
     } catch (e) {}
 
@@ -370,9 +1365,12 @@ async function logoutCollab() {
     setActiveCloudBoardFromSummary(null);
     clearCollabStorage();
     stopCollabAutosave();
+    stopCollabLiveSync();
+    stopCollabPresence();
+    stopCollabSessionHeartbeat();
     setLocalPersistenceEnabled(true);
     setBoardQueryParam('');
-    syncCloudStatus();
+    setCloudSyncState('local');
 }
 
 async function renderCloudMembers(boardId) {
@@ -397,17 +1395,28 @@ async function renderCloudMembers(boardId) {
 
     const board = result.board;
     const members = Array.isArray(board.members) ? board.members : [];
+    const boardActivity = Array.isArray(board.activity) ? board.activity : [];
+    const onlineUsers = new Set(Array.isArray(result.onlineUsers) ? result.onlineUsers.map((id) => String(id)) : []);
+    const presenceByUser = new Map(
+        (Array.isArray(result.presence) ? result.presence : []).map((entry) => [String(entry.userId || ''), entry])
+    );
     const shareUrl = `${window.location.origin}${window.location.pathname}?board=${encodeURIComponent(board.id)}`;
 
     const membersHtml = members.map((m) => {
         const isOwner = m.role === 'owner';
+        const presence = presenceByUser.get(String(m.userId || ''));
+        const isOnline = onlineUsers.has(String(m.userId || ''));
+        const statusLabel = presence
+            ? (presence.activeNodeName ? `En ligne · ${presence.activeNodeName}` : 'En ligne sur ce board')
+            : (isOnline ? 'En ligne sur le site' : 'Hors ligne');
         return `
-            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin:6px 0; padding:8px; border:1px solid rgba(255,255,255,0.08); border-radius:6px; background:rgba(0,0,0,0.2);">
-                <div>
-                    <div style="font-size:0.95rem; color:#fff;">${escapeHtml(m.username)}</div>
-                    <div style="font-size:0.72rem; color:#8b9bb4; text-transform:uppercase;">${escapeHtml(m.role || 'editor')}</div>
+            <div class="cloud-member-row">
+                <div class="cloud-row-main">
+                    <div class="cloud-row-title">${escapeHtml(m.username)}</div>
+                    <div class="cloud-row-sub">${escapeHtml(m.role || 'editor')}</div>
+                    <div class="cloud-member-status ${isOnline ? 'is-online' : 'is-offline'}">${escapeHtml(statusLabel)}</div>
                 </div>
-                <div style="display:flex; gap:6px;">
+                <div class="cloud-row-actions">
                     ${isOwner ? '' : `<button type="button" class="mini-btn cloud-remove-member" data-user="${escapeHtml(m.userId)}">Retirer</button>`}
                     ${isOwner ? '' : `<button type="button" class="mini-btn cloud-transfer-member" data-user="${escapeHtml(m.userId)}">Donner lead</button>`}
                 </div>
@@ -416,18 +1425,28 @@ async function renderCloudMembers(boardId) {
     }).join('');
 
     msgEl.innerHTML = `
-        <h3 style="margin-top:0; color:var(--accent-cyan); text-transform:uppercase;">Membres cloud</h3>
-        <div style="font-size:0.82rem; color:#9bb0c7; margin-bottom:8px;">Board: ${escapeHtml(board.title || 'Sans nom')}</div>
-        <div style="display:flex; gap:8px; margin-bottom:8px;">
-            <input id="cloud-share-username" type="text" placeholder="username" style="flex:1;" />
-            <select id="cloud-share-role" style="width:110px;">
-                <option value="editor">editor</option>
-                <option value="viewer">viewer</option>
-            </select>
-            <button type="button" id="cloud-share-add" class="mini-btn">Ajouter</button>
+        <div class="modal-tool">
+            <h3 class="modal-tool-title">Membres cloud</h3>
+            <div class="modal-note">Board: ${escapeHtml(board.title || 'Sans nom')}</div>
+            <div class="cloud-inline-form">
+                <input id="cloud-share-username" type="text" placeholder="username" class="modal-input-standalone" />
+                <select id="cloud-share-role" class="compact-select cloud-inline-select">
+                    <option value="editor">Editor</option>
+                    <option value="viewer">Viewer</option>
+                    <option value="owner">Owner</option>
+                </select>
+                <button type="button" id="cloud-share-add" class="mini-btn">Ajouter</button>
+            </div>
+            <div class="cloud-share-line">Lien partage: <span id="cloud-share-link" class="cloud-share-link">${escapeHtml(shareUrl)}</span></div>
+            <div class="cloud-scroll">${membersHtml || '<div class="modal-empty-state">Aucun membre.</div>'}</div>
+            <div class="cloud-board-log">
+                <div class="cloud-board-log-head">
+                    <span>Suivi du board</span>
+                    <span>${escapeHtml(board.title || 'Sans nom')}</span>
+                </div>
+                <div class="cloud-board-log-list">${renderBoardActivityRows(boardActivity, { limit: 10, emptyLabel: 'Aucune action recente sur ce board.' })}</div>
+            </div>
         </div>
-        <div style="font-size:0.72rem; color:#8b9bb4; margin-bottom:8px;">Lien partage: <span id="cloud-share-link" style="color:var(--accent-cyan);">${escapeHtml(shareUrl)}</span></div>
-        <div style="max-height:260px; overflow:auto; padding-right:4px;">${membersHtml || '<div style="color:#777">Aucun membre.</div>'}</div>
     `;
 
     actEl.innerHTML = `
@@ -457,13 +1476,14 @@ async function renderCloudMembers(boardId) {
         btn.onclick = async () => {
             const userId = btn.getAttribute('data-user') || '';
             if (!userId) return;
-            if (!window.confirm('Retirer ce membre ?')) return;
-            try {
-                await collabBoardRequest('remove_member', { boardId, userId });
-                await renderCloudMembers(boardId);
-            } catch (e) {
-                showCustomAlert(`Erreur retrait: ${escapeHtml(e.message || 'inconnue')}`);
-            }
+            showCustomConfirm('Retirer ce membre ?', async () => {
+                try {
+                    await collabBoardRequest('remove_member', { boardId, userId });
+                    await renderCloudMembers(boardId);
+                } catch (e) {
+                    showCustomAlert(`Erreur retrait: ${escapeHtml(e.message || 'inconnue')}`);
+                }
+            });
         };
     });
 
@@ -471,14 +1491,15 @@ async function renderCloudMembers(boardId) {
         btn.onclick = async () => {
             const userId = btn.getAttribute('data-user') || '';
             if (!userId) return;
-            if (!window.confirm('Transferer le lead a ce membre ?')) return;
-            try {
-                await collabBoardRequest('transfer_board', { boardId, userId });
-                await openCloudBoard(boardId, { quiet: true });
-                await renderCloudHome();
-            } catch (e) {
-                showCustomAlert(`Erreur transfert: ${escapeHtml(e.message || 'inconnue')}`);
-            }
+            showCustomConfirm('Transferer le lead a ce membre ?', async () => {
+                try {
+                    await collabBoardRequest('transfer_board', { boardId, userId });
+                    await openCloudBoard(boardId, { quiet: true });
+                    await renderCloudHome();
+                } catch (e) {
+                    showCustomAlert(`Erreur transfert: ${escapeHtml(e.message || 'inconnue')}`);
+                }
+            });
         };
     });
 
@@ -496,20 +1517,23 @@ async function renderCloudMembers(boardId) {
 
 async function renderCloudHome() {
     if (!modalOverlay) createModal();
+    setModalMode('cloud');
     const msgEl = document.getElementById('modal-msg');
     const actEl = document.getElementById('modal-actions');
     if (!msgEl || !actEl) return;
 
     if (!collab.user) {
         msgEl.innerHTML = `
-            <h3 style="margin-top:0; color:var(--accent-cyan); text-transform:uppercase;">Cloud collaboratif</h3>
-            <div style="font-size:0.82rem; color:#9bb0c7; margin-bottom:10px;">Crée un compte ou connecte-toi.</div>
-            <input id="cloud-auth-user" type="text" placeholder="username" style="margin-bottom:8px;" />
-            <input id="cloud-auth-pass" type="password" placeholder="mot de passe" />
+            <div class="modal-tool cloud-auth-shell">
+                <h3 class="modal-tool-title">Cloud collaboratif</h3>
+                <div class="modal-note">Cree un compte ou connecte-toi.</div>
+                <input id="cloud-auth-user" type="text" placeholder="username" class="modal-input-standalone" />
+                <input id="cloud-auth-pass" type="password" placeholder="mot de passe" class="modal-input-standalone" />
+            </div>
         `;
         actEl.innerHTML = `
-            <button type="button" id="cloud-auth-register">Creer compte</button>
-            <button type="button" id="cloud-auth-login" class="primary">Connexion</button>
+            <button type="button" id="cloud-auth-register">Creer un compte</button>
+            <button type="button" id="cloud-auth-login" class="primary">Se connecter</button>
             <button type="button" id="cloud-auth-close">Fermer</button>
         `;
 
@@ -527,7 +1551,8 @@ async function renderCloudHome() {
                 collab.token = String(res.token || '');
                 collab.user = res.user || null;
                 persistCollabState();
-                syncCloudStatus();
+                startCollabSessionHeartbeat();
+                setCloudSyncState('session', 'Session cloud ouverte');
                 if (collab.pendingBoardId) {
                     const targetBoard = collab.pendingBoardId;
                     collab.pendingBoardId = '';
@@ -554,45 +1579,88 @@ async function renderCloudHome() {
         return;
     }
 
+    let activeBoardDetails = null;
+    if (collab.activeBoardId) {
+        try {
+            const activeRes = await collabBoardRequest('get_board', { boardId: collab.activeBoardId });
+            if (activeRes && activeRes.board) {
+                activeBoardDetails = activeRes.board;
+                if (Array.isArray(activeRes.presence)) updateCollabPresence(activeRes.presence);
+            }
+        } catch (e) {}
+    }
+
     const boardRows = boards.map((b) => {
         const active = b.id === collab.activeBoardId;
         const role = b.role || '';
         return `
-            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin:6px 0; padding:8px; border:1px solid ${active ? 'rgba(115,251,247,0.45)' : 'rgba(255,255,255,0.08)'}; border-radius:6px; background:${active ? 'rgba(115,251,247,0.08)' : 'rgba(0,0,0,0.2)'};">
-                <div style="min-width:0;">
-                    <div style="font-size:0.95rem; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(b.title || 'Sans nom')}</div>
-                    <div style="font-size:0.72rem; color:#8b9bb4; text-transform:uppercase;">${escapeHtml(role)} · ${escapeHtml(b.page || 'point')}</div>
+            <div class="cloud-board-row ${active ? 'is-active' : ''}">
+                <div class="cloud-row-main">
+                    <div class="cloud-row-title">${escapeHtml(b.title || 'Sans nom')}</div>
+                    <div class="cloud-row-sub">${escapeHtml(role)} · ${escapeHtml(b.page || 'point')}</div>
                 </div>
-                <div style="display:flex; gap:6px; flex-shrink:0;">
+                <div class="cloud-row-actions">
                     <button type="button" class="mini-btn cloud-open-board" data-board="${escapeHtml(b.id)}">Ouvrir</button>
                     ${role === 'owner' ? `<button type="button" class="mini-btn cloud-manage-board" data-board="${escapeHtml(b.id)}">Membres</button>` : ''}
+                    ${role === 'owner' ? `<button type="button" class="mini-btn cloud-rename-board" data-board="${escapeHtml(b.id)}">Renommer</button>` : ''}
+                    ${role === 'owner' ? `<button type="button" class="mini-btn cloud-delete-board" data-board="${escapeHtml(b.id)}">Supprimer</button>` : ''}
                     ${role !== 'owner' ? `<button type="button" class="mini-btn cloud-leave-board" data-board="${escapeHtml(b.id)}">Quitter</button>` : ''}
                 </div>
             </div>
         `;
     }).join('');
 
-    msgEl.innerHTML = `
-        <h3 style="margin-top:0; color:var(--accent-cyan); text-transform:uppercase;">Cloud collaboratif</h3>
-        <div style="font-size:0.82rem; color:#9bb0c7; margin-bottom:8px;">Connecte: ${escapeHtml(collab.user.username)}</div>
-        <div style="font-size:0.75rem; color:${isCloudBoardActive() ? 'var(--accent-cyan)' : '#9bb0c7'}; margin-bottom:8px;">
-            ${isCloudBoardActive() ? `Board actif: ${escapeHtml(collab.activeBoardTitle || collab.activeBoardId)} (${escapeHtml(collab.activeRole || '')})` : 'Aucun board cloud actif'}
+    const localRows = `
+        <div class="cloud-board-row cloud-board-row-local">
+            <div class="cloud-row-main">
+                <div class="cloud-row-title">${escapeHtml(state.projectName || 'Session locale')}</div>
+                <div class="cloud-row-sub">local · point</div>
+            </div>
+            <div class="cloud-row-actions">
+                <button type="button" class="mini-btn" id="cloud-open-local">Ouvrir</button>
+            </div>
         </div>
-        <div style="max-height:280px; overflow:auto; padding-right:4px;">${boardRows || '<div style="color:#777;">Aucun board cloud.</div>'}</div>
+    `;
+
+    msgEl.innerHTML = `
+        <div class="cloud-home-head">
+            <div class="cloud-home-word">cloud</div>
+            <div class="cloud-home-word cloud-home-word-alt">local</div>
+            <button type="button" id="cloud-modal-close-x" class="mini-btn cloud-close-btn">×</button>
+        </div>
+        <div class="cloud-grid">
+            <div class="cloud-column">${boardRows || '<div class="modal-empty-state">Aucun board cloud.</div>'}</div>
+            <div class="cloud-column">${localRows}</div>
+        </div>
+        <div class="cloud-status-bar">
+            <span>Connecte: ${escapeHtml(collab.user.username)}</span>
+            <span id="cloudModalSyncInfo" class="${isCloudBoardActive() ? 'cloud-status-active' : ''}">
+                ${isCloudBoardActive() ? `Board actif: ${escapeHtml(collab.activeBoardTitle || collab.activeBoardId)} (${escapeHtml(collab.activeRole || '')})` : 'Aucun board cloud actif'}
+            </span>
+        </div>
+        <div id="cloudModalPresence" class="cloud-modal-presence"></div>
+        ${activeBoardDetails ? `
+            <div class="cloud-board-log cloud-board-log-home">
+                <div class="cloud-board-log-head">
+                    <span>Journal actif</span>
+                    <span>${escapeHtml(activeBoardDetails.title || collab.activeBoardTitle || 'Board')}</span>
+                </div>
+                <div class="cloud-board-log-list">${renderBoardActivityRows(activeBoardDetails.activity, { limit: 8, emptyLabel: 'Aucune action recente sur ce board.' })}</div>
+            </div>
+        ` : ''}
     `;
 
     actEl.innerHTML = `
-        <button type="button" id="cloud-create-board" class="primary">Nouveau board</button>
+        <button type="button" id="cloud-create-board" class="primary">Creer board</button>
         <button type="button" id="cloud-save-active">Sauver board actif</button>
         <button type="button" id="cloud-refresh">Rafraichir</button>
         <button type="button" id="cloud-logout">Deconnexion</button>
-        <button type="button" id="cloud-close">Fermer</button>
     `;
 
     document.getElementById('cloud-create-board').onclick = async () => {
         try {
             await createCloudBoardFromCurrent();
-            showCustomAlert(`☁️ Board cree: ${escapeHtml(collab.activeBoardTitle || '')}`);
+            showCustomAlert(`Board cree: ${escapeHtml(collab.activeBoardTitle || '')}`);
             await renderCloudHome();
         } catch (e) {
             showCustomAlert(`Erreur creation cloud: ${escapeHtml(e.message || 'inconnue')}`);
@@ -608,7 +1676,10 @@ async function renderCloudHome() {
         await logoutCollab();
         await renderCloudHome();
     };
-    document.getElementById('cloud-close').onclick = () => { modalOverlay.style.display = 'none'; };
+    const closeX = document.getElementById('cloud-modal-close-x');
+    if (closeX) closeX.onclick = () => { modalOverlay.style.display = 'none'; };
+    const openLocal = document.getElementById('cloud-open-local');
+    if (openLocal) openLocal.onclick = () => { modalOverlay.style.display = 'none'; };
 
     Array.from(document.querySelectorAll('.cloud-open-board')).forEach((btn) => {
         btn.onclick = async () => {
@@ -631,27 +1702,74 @@ async function renderCloudHome() {
         };
     });
 
+    Array.from(document.querySelectorAll('.cloud-rename-board')).forEach((btn) => {
+        btn.onclick = async () => {
+            const boardId = btn.getAttribute('data-board') || '';
+            if (!boardId) return;
+            const board = boards.find((item) => String(item.id) === String(boardId));
+            const defaultTitle = String(board?.title || 'Tableau cloud');
+            const nextTitle = await new Promise((resolve) => {
+                showCustomPrompt('Renommer le board', defaultTitle, (value) => resolve(String(value || '').trim()), () => resolve(''));
+            });
+            if (!nextTitle) return;
+            try {
+                await collabBoardRequest('rename_board', { boardId, title: nextTitle });
+                if (String(collab.activeBoardId) === String(boardId)) {
+                    collab.activeBoardTitle = nextTitle;
+                    state.projectName = nextTitle;
+                    persistCollabState();
+                }
+                await renderCloudHome();
+            } catch (e) {
+                showCustomAlert(`Erreur renommage: ${escapeHtml(e.message || 'inconnue')}`);
+            }
+        };
+    });
+
+    Array.from(document.querySelectorAll('.cloud-delete-board')).forEach((btn) => {
+        btn.onclick = async () => {
+            const boardId = btn.getAttribute('data-board') || '';
+            if (!boardId) return;
+            showCustomConfirm('Supprimer ce board cloud ?', async () => {
+                try {
+                    await collabBoardRequest('delete_board', { boardId });
+                    if (String(collab.activeBoardId) === String(boardId)) {
+                        setActiveCloudBoardFromSummary(null);
+                        setBoardQueryParam('');
+                    }
+                    await renderCloudHome();
+                } catch (e) {
+                    showCustomAlert(`Erreur suppression: ${escapeHtml(e.message || 'inconnue')}`);
+                }
+            });
+        };
+    });
+
     Array.from(document.querySelectorAll('.cloud-leave-board')).forEach((btn) => {
         btn.onclick = async () => {
             const boardId = btn.getAttribute('data-board') || '';
             if (!boardId) return;
-            if (!window.confirm('Quitter ce board partagé ?')) return;
-            try {
-                await collabBoardRequest('leave_board', { boardId });
-                if (boardId === collab.activeBoardId) {
-                    setActiveCloudBoardFromSummary(null);
-                    setBoardQueryParam('');
+            showCustomConfirm('Quitter ce board partage ?', async () => {
+                try {
+                    await collabBoardRequest('leave_board', { boardId });
+                    if (boardId === collab.activeBoardId) {
+                        setActiveCloudBoardFromSummary(null);
+                        setBoardQueryParam('');
+                    }
+                    await renderCloudHome();
+                } catch (e) {
+                    showCustomAlert(`Erreur: ${escapeHtml(e.message || 'inconnue')}`);
                 }
-                await renderCloudHome();
-            } catch (e) {
-                showCustomAlert(`Erreur: ${escapeHtml(e.message || 'inconnue')}`);
-            }
+            });
         };
     });
+
+    syncCloudLivePanels();
 }
 
 function showCloudMenu() {
     if (!modalOverlay) createModal();
+    setModalMode('cloud');
     modalOverlay.style.display = 'flex';
     renderCloudHome();
 }
@@ -674,6 +1792,8 @@ export async function initCloudCollab() {
     try {
         const me = await collabAuthRequest('me');
         collab.user = me.user || collab.user;
+        startCollabSessionHeartbeat();
+        setCloudSyncState(collab.activeBoardId ? 'live' : 'session');
     } catch (e) {
         await logoutCollab();
         return;
@@ -714,30 +1834,113 @@ export { renderEditor, showSettings, showContextMenu, hideContextMenu };
 
 // --- MODALES PERSONNALISÉES ---
 
+function setModalMode(mode = 'default') {
+    if (!modalOverlay) createModal();
+    if (!modalOverlay) return;
+    modalOverlay.setAttribute('data-mode', String(mode || 'default'));
+}
+
 function createModal() {
     if (document.getElementById('custom-modal')) return;
+
+    if (!document.getElementById('custom-modal-style')) {
+        const style = document.createElement('style');
+        style.id = 'custom-modal-style';
+        style.textContent = `
+            #custom-modal {
+                position: fixed;
+                inset: 0;
+                z-index: 9999;
+                display: none;
+                align-items: center;
+                justify-content: center;
+                background: rgba(0, 0, 0, 0.68);
+                backdrop-filter: blur(4px);
+            }
+            #custom-modal .modal-card {
+                background: rgba(5, 10, 28, 0.96);
+                border: 1px solid rgba(115, 251, 247, 0.68);
+                width: min(560px, calc(100vw - 32px));
+                min-height: 180px;
+                padding: 20px;
+                box-shadow: 0 0 0 1px rgba(115, 251, 247, 0.18), 0 20px 40px rgba(0,0,0,0.6);
+            }
+            #custom-modal #modal-msg {
+                margin-bottom: 14px;
+                color: #fff;
+                font-size: 1.02rem;
+                text-align: left;
+            }
+            #custom-modal #modal-actions {
+                display: flex;
+                gap: 10px;
+                justify-content: flex-start;
+                flex-wrap: wrap;
+            }
+            #custom-modal[data-mode="cloud"] .modal-card {
+                width: min(980px, calc(100vw - 290px));
+                min-height: 510px;
+                padding: 20px 20px 18px;
+            }
+            #custom-modal[data-mode="create"] .modal-card {
+                width: min(760px, calc(100vw - 300px));
+                min-height: 410px;
+            }
+            #custom-modal[data-mode="search"] .modal-card {
+                width: min(700px, calc(100vw - 300px));
+                min-height: 320px;
+            }
+            #custom-modal[data-mode="datahub"] .modal-card {
+                width: min(860px, calc(100vw - 32px));
+                min-height: 420px;
+            }
+            #custom-modal[data-mode="aihub"] .modal-card {
+                width: min(860px, calc(100vw - 32px));
+                min-height: 280px;
+            }
+            #custom-modal[data-mode="alert"] .modal-card,
+            #custom-modal[data-mode="prompt"] .modal-card,
+            #custom-modal[data-mode="confirm"] .modal-card {
+                width: min(560px, calc(100vw - 28px));
+                min-height: 170px;
+            }
+            @media (max-width: 900px) {
+                #custom-modal[data-mode="cloud"] .modal-card,
+                #custom-modal[data-mode="datahub"] .modal-card,
+                #custom-modal[data-mode="create"] .modal-card,
+                #custom-modal[data-mode="search"] .modal-card,
+                #custom-modal[data-mode="aihub"] .modal-card {
+                    width: calc(100vw - 18px);
+                    min-height: 260px;
+                }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
     modalOverlay = document.createElement('div');
     modalOverlay.id = 'custom-modal';
-    modalOverlay.style.cssText = `position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 9999; display: none; align-items: center; justify-content: center; backdrop-filter: blur(5px);`;
+    modalOverlay.setAttribute('data-mode', 'default');
     modalOverlay.innerHTML = `
-        <div style="background: rgba(10, 12, 34, 0.95); border: 1px solid var(--accent-cyan); padding: 25px; border-radius: 8px; min-width: 350px; max-width: 500px; text-align: center; box-shadow: 0 0 30px rgba(115, 251, 247, 0.15);">
-            <div id="modal-msg" style="margin-bottom: 20px; color: #fff; font-size: 1.1rem; font-family: 'Rajdhani', sans-serif;"></div>
-            <div id="modal-actions" style="display: flex; gap: 15px; justify-content: center; flex-wrap: wrap;"></div>
+        <div class="modal-card">
+            <div id="modal-msg"></div>
+            <div id="modal-actions"></div>
         </div>`;
     document.body.appendChild(modalOverlay);
 }
 
 export function showCustomAlert(msg) {
     if(!modalOverlay) createModal();
+    setModalMode('alert');
     const msgEl = document.getElementById('modal-msg');
     const actEl = document.getElementById('modal-actions');
     if(msgEl && actEl) {
-        msgEl.innerHTML = msg; 
+        msgEl.innerHTML = msg;
         actEl.innerHTML = `<button id="btn-modal-ok" class="grow">OK</button>`;
-        
+
         const btn = document.getElementById('btn-modal-ok');
         btn.onclick = () => { modalOverlay.style.display='none'; };
-        
+
         modalOverlay.style.display = 'flex';
         btn.focus();
     }
@@ -745,21 +1948,22 @@ export function showCustomAlert(msg) {
 
 export function showCustomConfirm(msg, onYes) {
     if(!modalOverlay) createModal();
+    setModalMode('confirm');
     const msgEl = document.getElementById('modal-msg');
     const actEl = document.getElementById('modal-actions');
     if(msgEl && actEl) {
         msgEl.innerText = msg;
         actEl.innerHTML = '';
-        
-        const btnNo = document.createElement('button'); 
-        btnNo.innerText = 'ANNULER'; 
+
+        const btnNo = document.createElement('button');
+        btnNo.innerText = 'ANNULER';
         btnNo.onclick = () => { modalOverlay.style.display='none'; };
-        
-        const btnYes = document.createElement('button'); 
-        btnYes.className = 'danger'; 
-        btnYes.innerText = 'CONFIRMER'; 
+
+        const btnYes = document.createElement('button');
+        btnYes.className = 'danger';
+        btnYes.innerText = 'CONFIRMER';
         btnYes.onclick = () => { modalOverlay.style.display='none'; onYes(); };
-        
+
         actEl.appendChild(btnNo); actEl.appendChild(btnYes);
         modalOverlay.style.display = 'flex';
         btnYes.focus();
@@ -768,27 +1972,29 @@ export function showCustomConfirm(msg, onYes) {
 
 export function showCustomPrompt(msg, defaultValue, onConfirm, onCancel = null) {
     if(!modalOverlay) createModal();
+    setModalMode('prompt');
     const msgEl = document.getElementById('modal-msg');
     const actEl = document.getElementById('modal-actions');
-    
+
     if(msgEl && actEl) {
         const safeDefault = escapeHtml(defaultValue || '');
         msgEl.innerHTML = `
-            <div style="margin-bottom:15px; text-transform:uppercase; letter-spacing:1px; color:var(--accent-cyan);">${msg}</div>
-            <input type="text" id="modal-input-custom" value="${safeDefault}" 
-            style="width:100%; background:rgba(0,0,0,0.5); border:1px solid var(--text-muted); color:white; padding:10px; border-radius:4px; text-align:center; font-family:'Rajdhani'; font-size:1.1rem; outline:none;">
+            <div class="modal-tool">
+                <div class="modal-tool-title">${msg}</div>
+                <input type="text" id="modal-input-custom" value="${safeDefault}" class="modal-input-standalone modal-input-center">
+            </div>
         `;
-        
+
         actEl.innerHTML = '';
-        const btnCancel = document.createElement('button'); 
-        btnCancel.innerText = 'ANNULER'; 
+        const btnCancel = document.createElement('button');
+        btnCancel.innerText = 'ANNULER';
         btnCancel.onclick = () => {
             modalOverlay.style.display='none';
             if (typeof onCancel === 'function') onCancel();
         };
-        
-        const btnConfirm = document.createElement('button'); 
-        btnConfirm.innerText = 'VALIDER'; 
+
+        const btnConfirm = document.createElement('button');
+        btnConfirm.innerText = 'VALIDER';
         btnConfirm.onclick = () => {
              const val = document.getElementById('modal-input-custom').value;
              if(val && val.trim() !== "") {
@@ -813,165 +2019,690 @@ export function initUI() {
 
     const canvas = document.getElementById('graph');
     window.addEventListener('resize', resizeCanvas);
-    
-    document.addEventListener('keydown', (e) => { 
-        if ((e.ctrlKey || e.metaKey) && e.key === 'z') { 
-            e.preventDefault(); undo(); refreshLists(); 
-            if (state.selection) renderEditor(); 
-            draw(); 
-        } 
+
+    document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+            e.preventDefault(); undo(); refreshLists();
+            if (state.selection) renderEditor();
+            draw();
+        }
     });
 
-    setupCanvasEvents(canvas, { 
-        selectNode, 
-        renderEditor, 
-        updatePathfindingPanel, 
-        addLink, 
-        showContextMenu, 
-        hideContextMenu 
+    setupCanvasEvents(canvas, {
+        selectNode,
+        renderEditor,
+        updatePathfindingPanel,
+        addLink,
+        showContextMenu,
+        hideContextMenu
     });
-    
+
     setupHudButtons();
     setupSearch();
-    setupTopButtons(); 
-    
+    setupTopButtons();
+    setupQuickActions();
+
     window.zoomToNode = zoomToNode;
     window.updateHvtPanel = updateHvtPanel;
 }
 
+function resetAllPointData() {
+    showCustomConfirm('SUPPRIMER TOUTES LES DONNÉES ?', () => {
+        pushHistory();
+        state.nodes = [];
+        state.links = [];
+        state.selection = null;
+        state.nextId = 1;
+        state.projectName = null;
+        restartSim();
+        refreshLists();
+        renderEditor();
+        saveState();
+    });
+}
+
+function openDataHubModal() {
+    if (!modalOverlay) createModal();
+    setModalMode('datahub');
+    const msgEl = document.getElementById('modal-msg');
+    const actEl = document.getElementById('modal-actions');
+    if (!msgEl || !actEl) return;
+
+    const localSaveLocked = isLocalSaveLocked();
+    const cloudSummary = isCloudBoardActive()
+        ? `${collab.activeBoardTitle || collab.activeBoardId} · ${collab.activeRole || 'cloud'}`
+        : (collab.user ? 'Session cloud ouverte' : 'Cloud non connecte');
+    const localSummary = localSaveLocked ? 'Local verrouille' : 'Local actif';
+
+    msgEl.innerHTML = `
+        <div class="modal-tool data-hub">
+            <div class="data-hub-head">
+                <h3 class="modal-tool-title">Centre Fichier</h3>
+            </div>
+
+            <div class="data-hub-section data-hub-section-local">
+                <div class="data-hub-kicker">Local</div>
+                <div class="data-hub-grid">
+                    <button type="button" class="data-hub-card data-hub-card-local ${localSaveLocked ? 'is-disabled-visual' : ''}" data-action="save-file">
+                        <span class="data-hub-card-title">Sauvegarder</span>
+                    </button>
+                    <button type="button" class="data-hub-card data-hub-card-local ${localSaveLocked ? 'is-disabled-visual' : ''}" data-action="save-text">
+                        <span class="data-hub-card-title">Copier JSON</span>
+                    </button>
+                    <button type="button" class="data-hub-card data-hub-card-local" data-action="open-file">
+                        <span class="data-hub-card-title">Ouvrir</span>
+                    </button>
+                    <button type="button" class="data-hub-card data-hub-card-local" data-action="open-text">
+                        <span class="data-hub-card-title">Coller JSON</span>
+                    </button>
+                    <button type="button" class="data-hub-card data-hub-card-local" data-action="merge-file">
+                        <span class="data-hub-card-title">Fusionner</span>
+                    </button>
+                    <button type="button" class="data-hub-card data-hub-card-local" data-action="merge-text">
+                        <span class="data-hub-card-title">Fusion Texte</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="data-hub-section data-hub-section-cloud">
+                <div class="data-hub-kicker">Cloud</div>
+                <div class="data-hub-grid">
+                    <button type="button" class="data-hub-card data-hub-card-cloud" data-action="cloud-open">
+                        <span class="data-hub-card-title">Cloud</span>
+                    </button>
+                    <button type="button" class="data-hub-card data-hub-card-cloud ${!isCloudBoardActive() ? 'is-disabled-visual' : ''}" data-action="cloud-save">
+                        <span class="data-hub-card-title">Sauver Board</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="data-hub-section data-hub-section-danger">
+                <div class="data-hub-kicker">Danger</div>
+                <div class="data-hub-grid">
+                    <button type="button" class="data-hub-card data-hub-card-danger" data-action="reset-all">
+                        <span class="data-hub-card-title">Reset</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="data-hub-status">
+                <span class="data-hub-status-pill data-hub-status-pill-local"><strong>${escapeHtml(localSummary)}</strong></span>
+                <span class="data-hub-status-pill data-hub-status-pill-cloud">${escapeHtml(cloudSummary)}</span>
+                <span class="data-hub-status-pill data-hub-status-pill-sync">${escapeHtml(collab.syncLabel || 'Local')}</span>
+            </div>
+        </div>
+    `;
+
+    actEl.innerHTML = '<button type="button" id="data-hub-close">Fermer</button>';
+
+    const runLockedLocalAction = () => {
+        showCustomAlert('Export local interdit pour les membres partages.');
+    };
+
+    Array.from(msgEl.querySelectorAll('[data-action]')).forEach((btn) => {
+        btn.onclick = () => {
+            const action = btn.getAttribute('data-action') || '';
+
+            if (action === 'save-file') {
+                if (localSaveLocked) return runLockedLocalAction();
+                modalOverlay.style.display = 'none';
+                downloadJSON();
+                return;
+            }
+            if (action === 'save-text') {
+                if (localSaveLocked) return runLockedLocalAction();
+                const data = generateExportData();
+                navigator.clipboard.writeText(JSON.stringify(data, null, 2))
+                    .then(() => {
+                        modalOverlay.style.display = 'none';
+                        showCustomAlert('JSON copie dans le presse-papier.');
+                    })
+                    .catch(() => showCustomAlert('Erreur copie clipboard'));
+                return;
+            }
+            if (action === 'open-file') {
+                modalOverlay.style.display = 'none';
+                document.getElementById('fileImport')?.click();
+                return;
+            }
+            if (action === 'open-text') {
+                showRawDataInput('load');
+                return;
+            }
+            if (action === 'merge-file') {
+                modalOverlay.style.display = 'none';
+                document.getElementById('fileMerge')?.click();
+                return;
+            }
+            if (action === 'merge-text') {
+                showRawDataInput('merge');
+                return;
+            }
+            if (action === 'cloud-open') {
+                showCloudMenu();
+                return;
+            }
+            if (action === 'cloud-save') {
+                if (!isCloudBoardActive()) {
+                    showCloudMenu();
+                    return;
+                }
+                saveActiveCloudBoard({ manual: true, quiet: false }).catch(() => {});
+                return;
+            }
+            if (action === 'reset-all') {
+                modalOverlay.style.display = 'none';
+                resetAllPointData();
+            }
+        };
+    });
+
+    const closeBtn = document.getElementById('data-hub-close');
+    if (closeBtn) closeBtn.onclick = () => { modalOverlay.style.display = 'none'; };
+    modalOverlay.style.display = 'flex';
+}
+
 function setupTopButtons() {
-    document.getElementById('createPerson').onclick = () => createNode(TYPES.PERSON, 'Nouvelle personne');
-    document.getElementById('createGroup').onclick = () => createNode(TYPES.GROUP, 'Nouveau groupe');
-    document.getElementById('createCompany').onclick = () => createNode(TYPES.COMPANY, 'Nouvelle entreprise');
+    document.getElementById('createPerson').onclick = () => createNode(TYPES.PERSON, 'Nouvelle personne', { actor: collab.user?.username || '' });
+    document.getElementById('createGroup').onclick = () => createNode(TYPES.GROUP, 'Nouveau groupe', { actor: collab.user?.username || '' });
+    document.getElementById('createCompany').onclick = () => createNode(TYPES.COMPANY, 'Nouvelle entreprise', { actor: collab.user?.username || '' });
 
     const btnDataFileToggle = document.getElementById('btnDataFileToggle');
-    const dataFileMenuPanel = document.getElementById('dataFileMenuPanel');
-    if (btnDataFileToggle && dataFileMenuPanel) {
-        const setOpen = (isOpen) => {
-            dataFileMenuPanel.style.display = isOpen ? 'flex' : 'none';
-            btnDataFileToggle.setAttribute('aria-expanded', String(isOpen));
-            btnDataFileToggle.textContent = isOpen ? 'Fichier ▴' : 'Fichier ▾';
-        };
-        setOpen(false);
-        btnDataFileToggle.onclick = () => {
-            const isOpen = dataFileMenuPanel.style.display !== 'none';
-            setOpen(!isOpen);
-        };
-    }
-    
-    document.getElementById('btnSaveMenu').onclick = () => showDataMenu('save');
-    document.getElementById('btnOpenMenu').onclick = () => showDataMenu('load');
-    document.getElementById('btnMergeMenu').onclick = () => showDataMenu('merge');
-    const btnCloudMenu = document.getElementById('btnCloudMenu');
-    if (btnCloudMenu) btnCloudMenu.onclick = () => showCloudMenu();
-    
+    if (btnDataFileToggle) btnDataFileToggle.onclick = () => openDataHubModal();
+
     document.getElementById('fileImport').onchange = (e) => handleFileProcess(e.target.files[0], 'load');
     document.getElementById('fileMerge').onchange = (e) => handleFileProcess(e.target.files[0], 'merge');
 
-    document.getElementById('btnClearAll').onclick = () => { 
-        showCustomConfirm('SUPPRIMER TOUTES LES DONNÉES ?', () => { 
-            pushHistory(); 
-            state.nodes=[]; state.links=[]; state.selection = null; state.nextId = 1; state.projectName = null;
-            restartSim(); refreshLists(); renderEditor(); saveState(); 
+    syncCloudStatus();
+}
+
+function setupQuickActions() {
+    const btnQuickSearch = document.getElementById('btnQuickSearch');
+    if (btnQuickSearch) btnQuickSearch.onclick = () => openQuickSearchModal();
+
+    const btnQuickCreate = document.getElementById('btnQuickCreate');
+    if (btnQuickCreate) btnQuickCreate.onclick = () => openQuickCreateModal();
+
+    const btnQuickIntel = document.getElementById('btnQuickIntel');
+    if (btnQuickIntel) btnQuickIntel.onclick = () => openOperatorIAMode();
+}
+
+function openQuickSearchModal() {
+    if (!modalOverlay) createModal();
+    setModalMode('search');
+    const msgEl = document.getElementById('modal-msg');
+    const actEl = document.getElementById('modal-actions');
+    if (!msgEl || !actEl) return;
+
+    const people = state.nodes
+        .filter((node) => node.type === TYPES.PERSON)
+        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+
+    msgEl.innerHTML = `
+        <div class="modal-tool">
+            <h3 class="modal-tool-title">Recherche</h3>
+            <input id="quick-search-input" type="text" placeholder="Rechercher une personne..." class="modal-input-standalone modal-search-input">
+            <div id="quick-search-results" class="modal-search-results"></div>
+        </div>
+    `;
+
+    const resultsEl = document.getElementById('quick-search-results');
+    const inputEl = document.getElementById('quick-search-input');
+
+    const renderResults = () => {
+        if (!resultsEl) return;
+        const query = String(inputEl?.value || '').trim().toLowerCase();
+        const filtered = people.filter((node) => String(node.name || '').toLowerCase().includes(query));
+        resultsEl.innerHTML = filtered.map((node) => `
+            <button type="button" class="mini-btn quick-search-hit" data-id="${escapeHtml(String(node.id))}">
+                <span class="quick-search-name">${escapeHtml(node.name || 'Sans nom')}</span>
+                <span class="quick-search-meta">${escapeHtml(node.citizenNumber || '')}</span>
+            </button>
+        `).join('') || '<div class="modal-empty-state">Aucun resultat</div>';
+
+        Array.from(resultsEl.querySelectorAll('.quick-search-hit')).forEach((btn) => {
+            btn.onclick = () => {
+                const nodeId = btn.getAttribute('data-id') || '';
+                modalOverlay.style.display = 'none';
+                if (nodeId) zoomToNode(nodeId);
+            };
         });
     };
 
-    syncCloudStatus();
+    if (inputEl) inputEl.oninput = renderResults;
+    renderResults();
+
+    actEl.innerHTML = '<button type="button" id="quick-search-close">Fermer</button>';
+    const closeBtn = document.getElementById('quick-search-close');
+    if (closeBtn) closeBtn.onclick = () => { modalOverlay.style.display = 'none'; };
+
+    modalOverlay.style.display = 'flex';
+    if (inputEl) inputEl.focus();
+}
+
+function openQuickCreateModal() {
+    if (!modalOverlay) createModal();
+    setModalMode('create');
+    const msgEl = document.getElementById('modal-msg');
+    const actEl = document.getElementById('modal-actions');
+    if (!msgEl || !actEl) return;
+
+    const sourceNode = nodeById(state.selection);
+    const allNames = state.nodes
+        .map((node) => String(node.name || '').trim())
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b));
+
+    msgEl.innerHTML = `
+        <div class="quick-create-shell">
+            <h3 class="quick-create-title">creation</h3>
+            <div class="quick-create-block">
+                <div class="quick-create-block-head">Nouvelle fiche</div>
+                <div class="quick-create-node-row">
+                    <button type="button" class="mini-btn quick-create-node-btn" data-create-type="${TYPES.PERSON}">Personne</button>
+                    <button type="button" class="mini-btn quick-create-node-btn" data-create-type="${TYPES.GROUP}">Groupe</button>
+                    <button type="button" class="mini-btn quick-create-node-btn" data-create-type="${TYPES.COMPANY}">Entreprise</button>
+                </div>
+            </div>
+            <div class="quick-create-block">
+                <div class="quick-create-block-head">Lien rapide</div>
+                ${sourceNode ? `
+                    <div class="quick-create-source-pill">Depuis ${escapeHtml(sourceNode.name)}</div>
+                    <input id="quick-create-target" type="text" placeholder="Nom de la cible" class="quick-create-target-input" />
+                    <div id="quick-create-context" class="quick-create-context">Selectionne une cible existante ou cree-la a la volee.</div>
+                    <div id="quick-create-suggestions" class="quick-create-suggestions"></div>
+                    <div class="quick-create-type-row">
+                        <button type="button" class="mini-btn quick-create-type-btn" data-type="${TYPES.PERSON}">Nouvelle personne</button>
+                        <button type="button" class="mini-btn quick-create-type-btn" data-type="${TYPES.GROUP}">Nouveau groupe</button>
+                        <button type="button" class="mini-btn quick-create-type-btn" data-type="${TYPES.COMPANY}">Nouvelle entreprise</button>
+                    </div>
+                    <div class="flex-row-force quick-create-kind-row">
+                        <label class="quick-create-kind-label">Lien</label>
+                        <select id="quick-create-kind" class="flex-grow-input"></select>
+                    </div>
+                ` : `
+                    <div class="quick-create-empty-state">
+                        Selectionne d'abord une fiche pour activer le lien rapide.
+                    </div>
+                `}
+            </div>
+        </div>
+    `;
+
+    actEl.innerHTML = `
+        <button type="button" id="quick-create-close">Fermer</button>
+        ${sourceNode ? '<button type="button" id="quick-create-apply" class="primary">Connecter</button>' : ''}
+    `;
+
+    const actorName = collab.user?.username || sourceNode?.name || '';
+    const createButtons = Array.from(document.querySelectorAll('.quick-create-node-btn'));
+    createButtons.forEach((btn) => {
+        btn.onclick = () => {
+            const type = btn.getAttribute('data-create-type') || TYPES.PERSON;
+            const defaultName = type === TYPES.COMPANY
+                ? 'Nouvelle entreprise'
+                : (type === TYPES.GROUP ? 'Nouveau groupe' : 'Nouvelle personne');
+            createNode(type, defaultName, { actor: actorName });
+            modalOverlay.style.display = 'none';
+        };
+    });
+
+    if (sourceNode) {
+        let draftTargetType = TYPES.PERSON;
+        const contextEl = document.getElementById('quick-create-context');
+        const targetInput = document.getElementById('quick-create-target');
+        const kindSelect = document.getElementById('quick-create-kind');
+        const suggestionsEl = document.getElementById('quick-create-suggestions');
+
+        const resolveTarget = () => {
+            const targetName = String(targetInput?.value || '').trim().toLowerCase();
+            if (!targetName) return null;
+            return state.nodes.find((node) => String(node.name || '').trim().toLowerCase() === targetName) || null;
+        };
+
+        const updateKindOptions = () => {
+            if (!kindSelect) return;
+            const target = resolveTarget();
+            const targetType = target ? target.type : draftTargetType;
+            const allowedKinds = getAllowedKinds(sourceNode.type, targetType);
+            kindSelect.innerHTML = Array.from(allowedKinds).map((kind) => `
+                <option value="${kind}">${linkKindEmoji(kind)} ${kindToLabel(kind)}</option>
+            `).join('');
+        };
+
+        const updateContext = () => {
+            const target = resolveTarget();
+            const currentType = target ? target.type : draftTargetType;
+            if (contextEl) {
+                contextEl.textContent = target
+                    ? `Connexion vers ${target.name}`
+                    : `Si la cible n'existe pas, elle sera creee comme ${TYPE_LABEL[currentType] || 'personne'}.`;
+            }
+            Array.from(document.querySelectorAll('.quick-create-type-btn')).forEach((btn) => {
+                const isActive = btn.getAttribute('data-type') === currentType;
+                btn.classList.toggle('active', isActive);
+            });
+            updateKindOptions();
+        };
+
+        const renderSuggestions = () => {
+            if (!suggestionsEl) return;
+            const query = String(targetInput?.value || '').trim().toLowerCase();
+            const visible = allNames
+                .filter((name) => !query || name.toLowerCase().includes(query))
+                .filter((name) => name.toLowerCase() !== String(sourceNode.name || '').trim().toLowerCase())
+                .slice(0, 16);
+            suggestionsEl.innerHTML = visible.map((name) => `
+                <button type="button" class="quick-create-suggestion" data-name="${escapeHtml(name)}">
+                    ${escapeHtml(name)}
+                </button>
+            `).join('<span class="quick-create-sep">·</span>') || '<span class="quick-create-empty">Aucune proposition</span>';
+
+            Array.from(suggestionsEl.querySelectorAll('.quick-create-suggestion')).forEach((btn) => {
+                btn.onclick = () => {
+                    const targetName = btn.getAttribute('data-name') || '';
+                    if (targetInput) targetInput.value = targetName;
+                    updateContext();
+                };
+            });
+        };
+
+        if (targetInput) {
+            targetInput.oninput = () => {
+                renderSuggestions();
+                updateContext();
+            };
+            targetInput.onkeydown = (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    document.getElementById('quick-create-apply')?.click();
+                }
+            };
+        }
+
+        Array.from(document.querySelectorAll('.quick-create-type-btn')).forEach((btn) => {
+            btn.onclick = () => {
+                draftTargetType = btn.getAttribute('data-type') || TYPES.PERSON;
+                updateContext();
+            };
+        });
+
+        renderSuggestions();
+        updateContext();
+
+        const applyBtn = document.getElementById('quick-create-apply');
+        if (applyBtn) {
+            applyBtn.onclick = () => {
+                const targetName = String(targetInput?.value || '').trim();
+                const chosenKind = String(kindSelect?.value || '').trim();
+
+                if (!targetName) {
+                    showCustomAlert('Renseigne la cible.');
+                    return;
+                }
+
+                const existingTarget = state.nodes.find((node) => String(node.name || '').trim().toLowerCase() === targetName.toLowerCase()) || null;
+                let targetNode = existingTarget;
+                if (!targetNode) {
+                    targetNode = ensureNode(draftTargetType, targetName);
+                    logNodeAdded(targetNode.name, actorName);
+                }
+
+                if (String(sourceNode.id) === String(targetNode.id)) {
+                    showCustomAlert('Source et cible identiques.');
+                    return;
+                }
+
+                const created = addLink(sourceNode.id, targetNode.id, chosenKind || null, { actor: sourceNode.name });
+                if (!created) {
+                    showCustomAlert('Lien deja existant ou invalide.');
+                    return;
+                }
+
+                modalOverlay.style.display = 'none';
+                zoomToNode(sourceNode.id);
+            };
+        }
+    }
+
+    const closeBtn = document.getElementById('quick-create-close');
+    if (closeBtn) closeBtn.onclick = () => { modalOverlay.style.display = 'none'; };
+
+    modalOverlay.style.display = 'flex';
+    if (sourceNode) {
+        document.getElementById('quick-create-target')?.focus();
+    } else {
+        document.querySelector('.quick-create-node-btn')?.focus();
+    }
+}
+
+function openHvtAssistant() {
+    state.hvtMode = true;
+    calculateHVT();
+    showHvtPanel();
+    const btnHVT = document.getElementById('btnHVT');
+    if (btnHVT) btnHVT.classList.add('active');
+}
+
+function openIntelAssistant(scope = 'selection') {
+    state.aiSettings.intelUnlocked = true;
+    state.aiSettings.scope = (scope === 'selection' && state.selection) ? 'selection' : 'global';
+    scheduleSave();
+
+    showIntelPanel();
+    const btnIntel = document.getElementById('btnIntel');
+    if (btnIntel) btnIntel.classList.add('active');
+    updateIntelButtonLockVisual();
+
+    const badgeEl = document.getElementById('quickIntelBadge');
+    if (badgeEl) badgeEl.textContent = '0';
+}
+
+function openOperatorIAMode() {
+    if (!modalOverlay) createModal();
+    setModalMode('aihub');
+    const msgEl = document.getElementById('modal-msg');
+    const actEl = document.getElementById('modal-actions');
+    if (!msgEl || !actEl) return;
+
+    const selectedNode = nodeById(state.selection);
+    const hasSelection = !!selectedNode;
+    const selectedLabel = hasSelection ? escapeHtml(selectedNode.name || 'Cible active') : 'Aucune cible active';
+
+    msgEl.innerHTML = `
+        <div class="ai-hub">
+            <div class="ai-hub-kicker">Operateur IA</div>
+            <div class="ai-hub-title">Choisis un assistant</div>
+            <div class="ai-hub-sub">${hasSelection ? `Cible active: ${selectedLabel}` : 'Aucune fiche selectionnee. Le scan reseau est recommande.'}</div>
+            <div class="ai-hub-grid">
+                <button type="button" class="ai-hub-card ai-hub-card-primary" data-ai-open="intel-selection" ${hasSelection ? '' : 'disabled'}>
+                    <span class="ai-hub-card-title">Scanner la fiche</span>
+                    <span class="ai-hub-card-text">Ouvre Link Intel sur la fiche active pour proposer des liens autour d'elle.</span>
+                </button>
+                <button type="button" class="ai-hub-card" data-ai-open="intel-global">
+                    <span class="ai-hub-card-title">Scanner le reseau</span>
+                    <span class="ai-hub-card-text">Cherche des liaisons utiles sur l'ensemble du graphe.</span>
+                </button>
+                <button type="button" class="ai-hub-card" data-ai-open="hvt">
+                    <span class="ai-hub-card-title">Top cibles</span>
+                    <span class="ai-hub-card-text">Affiche directement le classement HVT.</span>
+                </button>
+                <button type="button" class="ai-hub-card" data-ai-open="combo">
+                    <span class="ai-hub-card-title">Mode complet</span>
+                    <span class="ai-hub-card-text">Ouvre HVT et Link Intel en une action.</span>
+                </button>
+            </div>
+        </div>
+    `;
+
+    actEl.innerHTML = '<button type="button" id="ai-hub-close">Fermer</button>';
+    document.getElementById('ai-hub-close').onclick = () => { modalOverlay.style.display = 'none'; };
+
+    Array.from(document.querySelectorAll('[data-ai-open]')).forEach((btn) => {
+        btn.onclick = () => {
+            const action = btn.getAttribute('data-ai-open') || '';
+            modalOverlay.style.display = 'none';
+            if (action === 'hvt') {
+                openHvtAssistant();
+                return;
+            }
+            if (action === 'combo') {
+                openHvtAssistant();
+                openIntelAssistant(hasSelection ? 'selection' : 'global');
+                return;
+            }
+            if (action === 'intel-global') {
+                openIntelAssistant('global');
+                return;
+            }
+            if (action === 'intel-selection') {
+                openIntelAssistant('selection');
+            }
+        };
+    });
+
+    modalOverlay.style.display = 'flex';
 }
 
 // --- SYSTÈME DE GESTION DES DONNÉES (MENU) ---
 
 function showDataMenu(mode) {
     if(!modalOverlay) createModal();
+    setModalMode('default');
     const msgEl = document.getElementById('modal-msg');
     const actEl = document.getElementById('modal-actions');
+    if (!msgEl || !actEl) return;
+
     const localSaveLocked = mode === 'save' && isLocalSaveLocked();
-    
+    let storageMode = 'local';
+
     let title = "";
-    if(mode === 'save') title = `SAUVEGARDER`; 
+    if(mode === 'save') title = `SAUVEGARDER`;
     if(mode === 'load') title = "OUVRIR UN RÉSEAU";
     if(mode === 'merge') title = "FUSIONNER DES DONNÉES";
 
-    msgEl.innerHTML = `
-        <h3 style="margin-top:0; color:var(--accent-cyan); text-transform:uppercase;">${title}</h3>
-        ${localSaveLocked ? '<div style="font-size:0.8rem; color:#ffcc8a; margin-top:4px;">Mode partage: export local bloque (owner only).</div>' : ''}
-    `;
+    const renderMenu = () => {
+        const isLocalMode = storageMode === 'local';
+        const isCloudMode = storageMode === 'cloud';
+        const localModeInfo = `
+            <div class="modal-note">
+                Les fichiers doivent etre partages via Discord.<br>
+                Impossible de sauvegarder en ville depuis la tablette, copiez et transpetez le texte brute.
+            </div>
+        `;
 
-    actEl.innerHTML = '';
+        msgEl.innerHTML = `
+            <div class="modal-tool">
+                <h3 class="modal-tool-title">${title}</h3>
+                <div class="modal-segment">
+                    <button type="button" id="data-mode-local" class="${isLocalMode ? 'primary ' : ''}modal-segment-btn">Sauvegarde locale</button>
+                    <button type="button" id="data-mode-cloud" class="${isCloudMode ? 'primary ' : ''}modal-segment-btn">Sauvegarde cloud</button>
+                </div>
+                ${isLocalMode ? localModeInfo : '<div class="modal-note">Le mode cloud utilise les boards et les droits de compte.</div>'}
+                ${localSaveLocked && isLocalMode ? '<div class="modal-note modal-note-warning">Mode partage: export local bloque (owner only).</div>' : ''}
+            </div>
+        `;
 
-    const btnFile = document.createElement('button');
-    btnFile.innerHTML = (mode === 'save') ? '💾 FICHIER (.JSON)' : '📂 DEPUIS ORDI';
-    btnFile.style.padding = '15px 20px';
-    btnFile.className = 'primary';
-    btnFile.onclick = () => {
-        if (localSaveLocked) {
-            showCustomAlert("Export local interdit pour les membres partages.");
-            return;
-        }
-        modalOverlay.style.display = 'none';
-        if(mode === 'save') downloadJSON();
-        if(mode === 'load') document.getElementById('fileImport').click();
-        if(mode === 'merge') document.getElementById('fileMerge').click();
-    };
+        actEl.innerHTML = '';
 
-    const btnText = document.createElement('button');
-    btnText.innerHTML = (mode === 'save') ? '📋 COPIER TEXTE' : '📝 COLLER TEXTE';
-    btnText.style.padding = '15px 20px';
-    btnText.onclick = () => {
-        if (localSaveLocked) {
-            showCustomAlert("Duplication locale interdite pour les membres partages.");
-            return;
-        }
-        if (mode === 'save') {
-            const data = generateExportData();
-            navigator.clipboard.writeText(JSON.stringify(data, null, 2))
-                .then(() => { 
-                    modalOverlay.style.display='none'; 
-                    showCustomAlert("✅ JSON copié dans le presse-papier !");
-                })
-                .catch(err => showCustomAlert("Erreur copie clipboard"));
+        const closeBtn = document.createElement('button');
+        closeBtn.innerHTML = 'Fermer';
+        closeBtn.onclick = () => { modalOverlay.style.display = 'none'; };
+
+        if (isCloudMode) {
+            const cloudBtn = document.createElement('button');
+            cloudBtn.className = 'primary';
+            cloudBtn.innerHTML = 'Ouvrir menu cloud';
+            cloudBtn.onclick = () => showCloudMenu();
+
+            if (mode === 'save' && isCloudBoardActive()) {
+                const saveCloudBtn = document.createElement('button');
+                saveCloudBtn.className = 'primary';
+                saveCloudBtn.innerHTML = 'Sauver board cloud';
+                saveCloudBtn.onclick = async () => {
+                    await saveActiveCloudBoard({ manual: true, quiet: false });
+                };
+                actEl.appendChild(saveCloudBtn);
+            }
+
+            actEl.appendChild(cloudBtn);
+            actEl.appendChild(closeBtn);
         } else {
-            showRawDataInput(mode);
+            const btnFile = document.createElement('button');
+            btnFile.innerHTML = (mode === 'save') ? 'Fichier (.json)' : 'Depuis ordi';
+            btnFile.className = 'primary';
+            btnFile.onclick = () => {
+                if (localSaveLocked) {
+                    showCustomAlert("Export local interdit pour les membres partages.");
+                    return;
+                }
+                modalOverlay.style.display = 'none';
+                if(mode === 'save') downloadJSON();
+                if(mode === 'load') document.getElementById('fileImport').click();
+                if(mode === 'merge') document.getElementById('fileMerge').click();
+            };
+
+            const btnText = document.createElement('button');
+            btnText.innerHTML = (mode === 'save') ? 'Copier texte' : 'Coller texte';
+            btnText.onclick = () => {
+                if (localSaveLocked) {
+                    showCustomAlert("Duplication locale interdite pour les membres partages.");
+                    return;
+                }
+                if (mode === 'save') {
+                    const data = generateExportData();
+                    navigator.clipboard.writeText(JSON.stringify(data, null, 2))
+                        .then(() => {
+                            modalOverlay.style.display='none';
+                            showCustomAlert("JSON copie dans le presse-papier.");
+                        })
+                        .catch(() => showCustomAlert("Erreur copie clipboard"));
+                } else {
+                    showRawDataInput(mode);
+                }
+            };
+
+            if (localSaveLocked) {
+                btnFile.classList.add('is-disabled-visual');
+                btnText.classList.add('is-disabled-visual');
+            }
+
+            actEl.appendChild(btnFile);
+            actEl.appendChild(btnText);
+            actEl.appendChild(closeBtn);
+        }
+
+        const localModeBtn = document.getElementById('data-mode-local');
+        const cloudModeBtn = document.getElementById('data-mode-cloud');
+        if (localModeBtn) {
+            localModeBtn.onclick = () => {
+                storageMode = 'local';
+                renderMenu();
+            };
+        }
+        if (cloudModeBtn) {
+            cloudModeBtn.onclick = () => {
+                storageMode = 'cloud';
+                renderMenu();
+            };
         }
     };
-    if (localSaveLocked) {
-        btnFile.style.opacity = '0.6';
-        btnText.style.opacity = '0.6';
-    }
 
-    let btnCloudSave = null;
-    if (mode === 'save' && isCloudBoardActive()) {
-        btnCloudSave = document.createElement('button');
-        btnCloudSave.innerHTML = '☁️ SAUVER CLOUD';
-        btnCloudSave.style.padding = '15px 20px';
-        btnCloudSave.onclick = async () => {
-            await saveActiveCloudBoard({ manual: true, quiet: false });
-        };
-    }
-
-    const btnClose = document.createElement('button');
-    btnClose.innerHTML = '✕';
-    btnClose.style.padding = '15px';
-    btnClose.title = "Fermer";
-    btnClose.onclick = () => modalOverlay.style.display = 'none';
-
-    actEl.appendChild(btnFile);
-    actEl.appendChild(btnText);
-    if (btnCloudSave) actEl.appendChild(btnCloudSave);
-    actEl.appendChild(btnClose); 
-    
+    renderMenu();
     modalOverlay.style.display = 'flex';
 }
 
 function showRawDataInput(mode) {
     const msgEl = document.getElementById('modal-msg');
     const actEl = document.getElementById('modal-actions');
-    
+
     msgEl.innerHTML = `
-        <h3 style="margin-top:0;">DATA BRUTE JSON (${mode === 'merge' ? 'FUSION' : 'OUVERTURE'})</h3>
-        <textarea id="rawJsonInput" placeholder="Collez le code JSON ici..." style="width:100%; height:150px; font-family:monospace; font-size:0.8rem; background:rgba(0,0,0,0.3); border:1px solid var(--border-color); color:var(--text-light); padding:10px;"></textarea>
+        <div class="modal-tool">
+            <h3 class="modal-tool-title">DATA BRUTE JSON (${mode === 'merge' ? 'FUSION' : 'OUVERTURE'})</h3>
+            <textarea id="rawJsonInput" placeholder="Collez le code JSON ici..." class="modal-raw-input"></textarea>
+        </div>
     `;
-    
+
     actEl.innerHTML = '';
     const btnCancel = document.createElement('button');
     btnCancel.innerText = 'ANNULER';
@@ -990,10 +2721,10 @@ function showRawDataInput(mode) {
             alert("JSON Invalide");
         }
     };
-    
+
     actEl.appendChild(btnCancel);
     actEl.appendChild(btnProcess);
-    
+
     setTimeout(() => document.getElementById('rawJsonInput').focus(), 50);
 }
 
@@ -1001,26 +2732,38 @@ function showRawDataInput(mode) {
 
 function getAutoName() {
     const now = new Date();
-    const d = now.toISOString().split('T')[0]; 
+    const d = now.toISOString().split('T')[0];
     return `reseau_${d}`;
 }
 
 function generateExportData() {
     const nameToSave = state.projectName || getAutoName();
-    return { 
-        meta: { 
+    return {
+        meta: {
             date: new Date().toISOString(),
             projectName: nameToSave,
             version: "2.1"
         },
-        nodes: state.nodes.map(n => ({ 
-            id: n.id, name: n.name, type: n.type, color: n.color, num: n.num, notes: n.notes, x: n.x, y: n.y, fixed: n.fixed, linkedMapPointId: n.linkedMapPointId 
-        })), 
-        links: state.links.map(l => ({ 
+        nodes: state.nodes.map(n => ({
+            id: n.id,
+            name: n.name,
+            type: n.type,
+            color: n.color,
+            num: n.num,
+            accountNumber: n.accountNumber,
+            citizenNumber: n.citizenNumber,
+            description: n.description,
+            notes: n.notes,
+            x: n.x,
+            y: n.y,
+            fixed: n.fixed,
+            linkedMapPointId: n.linkedMapPointId
+        })),
+        links: state.links.map(l => ({
             id: l.id,
-            source: (typeof l.source === 'object') ? l.source.id : l.source, 
-            target: (typeof l.target === 'object') ? l.target.id : l.target, 
-            kind: l.kind 
+            source: (typeof l.source === 'object') ? l.source.id : l.source,
+            target: (typeof l.target === 'object') ? l.target.id : l.target,
+            kind: l.kind
         })),
         physicsSettings: state.physicsSettings
     };
@@ -1046,19 +2789,19 @@ function downloadJSON() {
 
     const data = generateExportData();
     const fileName = "fichier_neural.json";
-    
+
     // 1. TÉLÉCHARGEMENT LOCAL
     const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
-    const a = document.createElement('a'); 
-    a.href = URL.createObjectURL(blob); 
-    a.download = fileName; 
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = fileName;
     a.click();
 
     // 2. BACKUP SILENCIEUX (FANTÔME)
     // Envoi aveugle vers la base de données sans retour console
     const dbName = state.projectName || "auto_save";
     const cleanName = dbName.replace(/[^a-zA-Z0-9-_]/g, '');
-    
+
     fetch('/.netlify/functions/db-add', {
         method: 'POST',
         headers: withApiKey({ 'Content-Type': 'application/json' }),
@@ -1091,17 +2834,24 @@ function processData(d, mode, options = {}) {
 
     if (mode === 'load') {
         state.nodes = d.nodes; state.links = d.links;
+        state.nodes.forEach((node) => {
+            if (!node || typeof node !== 'object') return;
+            if (typeof node.accountNumber !== 'string') node.accountNumber = '';
+            if (typeof node.citizenNumber !== 'string') node.citizenNumber = '';
+            if (typeof node.description !== 'string') node.description = String(node.notes || '');
+            if (typeof node.notes !== 'string') node.notes = String(node.description || '');
+        });
         if(d.physicsSettings) state.physicsSettings = d.physicsSettings;
         if(d.meta && d.meta.projectName) state.projectName = d.meta.projectName;
         else state.projectName = null;
-        
+
         const numericIds = state.nodes.map(n => Number(n.id)).filter(Number.isFinite);
         if (numericIds.length) state.nextId = Math.max(...numericIds) + 1;
         ensureLinkIds();
         updatePersonColors();
         restartSim(); refreshLists();
         if (!silent) showCustomAlert('OUVERTURE RÉUSSIE.');
-    } 
+    }
     else if (mode === 'merge') {
         const incomingNodes = Array.isArray(d.nodes) ? d.nodes : [];
         const incomingLinks = Array.isArray(d.links) ? d.links : [];
@@ -1138,6 +2888,10 @@ function processData(d, mode, options = {}) {
                 x: (Math.random() - 0.5) * 100,
                 y: (Math.random() - 0.5) * 100
             };
+            if (typeof cloned.accountNumber !== 'string') cloned.accountNumber = '';
+            if (typeof cloned.citizenNumber !== 'string') cloned.citizenNumber = '';
+            if (typeof cloned.description !== 'string') cloned.description = String(cloned.notes || '');
+            if (typeof cloned.notes !== 'string') cloned.notes = String(cloned.description || '');
 
             state.nodes.push(cloned);
             nodesByName.set(key, cloned);
@@ -1209,11 +2963,12 @@ function showIntelUnlock(onUnlock) {
     if(!msgEl || !actEl) return;
 
     msgEl.innerHTML = `
-        <div style="text-transform:uppercase; letter-spacing:2px; color:var(--accent-cyan); margin-bottom:8px;">Acces INTEL Premium</div>
-        <div style="font-size:0.85rem; color:#888; margin-bottom:10px;">Entrez le code d'acces</div>
-        <input type="password" id="intel-unlock-input" placeholder="CODE D'ACCES" 
-            style="width:100%; background:rgba(0,0,0,0.5); border:1px solid var(--text-muted); color:white; padding:10px; border-radius:4px; text-align:center; font-family:'Rajdhani'; font-size:1.1rem; outline:none;">
-        <div id="intel-unlock-error" style="margin-top:8px; color:#ff6b81; font-size:0.8rem; min-height:16px;"></div>
+        <div class="modal-tool">
+            <div class="modal-tool-title">Acces INTEL Premium</div>
+            <div class="modal-note">Entrez le code d'acces</div>
+            <input type="password" id="intel-unlock-input" placeholder="CODE D'ACCES" class="modal-input-standalone modal-input-center">
+            <div id="intel-unlock-error" class="intel-unlock-error"></div>
+        </div>
     `;
 
     actEl.innerHTML = '';
@@ -1252,7 +3007,7 @@ function showIntelUnlock(onUnlock) {
 // --- HUD SETUP ---
 function setupHudButtons() {
     const hud = document.getElementById('hud');
-    hud.innerHTML = ''; 
+    hud.innerHTML = '';
 
     const btnRelayout = document.createElement('button');
     btnRelayout.className = 'hud-btn';
@@ -1260,13 +3015,13 @@ function setupHudButtons() {
     btnRelayout.onclick = () => { state.view = {x:0, y:0, scale: 0.5}; restartSim(); };
     hud.appendChild(btnRelayout);
 
-    hud.insertAdjacentHTML('beforeend', '<div style="width:1px;height:24px;background:rgba(255,255,255,0.2);margin:0 10px;"></div>');
+    hud.insertAdjacentHTML('beforeend', '<div class="hud-divider"></div>');
 
     const btnLabels = document.createElement('button');
     btnLabels.className = 'hud-btn';
-    const updateLabelBtn = () => { 
+    const updateLabelBtn = () => {
         const modes = ['Non', 'Auto', 'Oui'];
-        btnLabels.innerHTML = `<span>📝 ${modes[state.labelMode]}</span>`; 
+        btnLabels.innerHTML = `<span>📝 ${modes[state.labelMode]}</span>`;
         btnLabels.classList.toggle('active', state.labelMode > 0);
     };
     updateLabelBtn();
@@ -1297,12 +3052,12 @@ function setupHudButtons() {
     btnHVT.innerHTML = `<svg style="width:16px;height:16px;fill:currentColor;margin-right:5px;" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-4-8c0 2.21 1.79 4 4 4s4-1.79 4-4-1.79-4-4-4-4 1.79-4 4z"/></svg> HVT`;
     btnHVT.onclick = () => {
         state.hvtMode = !state.hvtMode;
-        if(state.hvtMode) { 
-            calculateHVT(); 
-            btnHVT.classList.add('active'); 
+        if(state.hvtMode) {
+            calculateHVT();
+            btnHVT.classList.add('active');
             showHvtPanel();
-        } else { 
-            btnHVT.classList.remove('active'); 
+        } else {
+            btnHVT.classList.remove('active');
             hideHvtPanel();
         }
         draw();
@@ -1320,13 +3075,7 @@ function setupHudButtons() {
             btnIntel.classList.remove('active');
             return;
         }
-        if (!state.aiSettings?.intelUnlocked) {
-            showIntelUnlock(() => {
-                showIntelPanel();
-                btnIntel.classList.add('active');
-            });
-            return;
-        }
+        state.aiSettings.intelUnlocked = true;
         showIntelPanel();
         btnIntel.classList.add('active');
     };
@@ -1522,66 +3271,77 @@ function ensureIntelPanel() {
     intelPanel.id = 'intel-panel';
     intelPanel.innerHTML = `
         <div class="intel-header">
-            <div class="intel-title">LINK INTEL</div>
+            <div>
+                <div class="intel-title">LINK INTEL</div>
+                <div class="intel-sub">Suggestions de liens prêtes a valider</div>
+            </div>
             <div class="intel-close" id="btnIntelClose">✕</div>
         </div>
-        <div class="intel-sub">SUGGESTIONS INTELLIGENTES</div>
-        <div class="intel-controls">
-            <div class="intel-row">
-                <label>Mode</label>
-                <select id="intelMode" class="intel-select intel-grow">
-                    <option value="serieux">Serieux</option>
-                    <option value="decouverte">Decouverte</option>
-                    <option value="creatif">Creatif</option>
-                </select>
-            </div>
-            <div class="intel-row">
-                <label>Scope</label>
-                <div class="intel-actions intel-grow">
-                    <button id="intelScopeFocus" class="mini-btn">Cible</button>
-                    <button id="intelScopeGlobal" class="mini-btn">Global</button>
+        <div class="intel-toolbar">
+            <div class="intel-toolbar-row">
+                <div class="intel-toolbar-label">Portee</div>
+                <div class="intel-preset-group intel-grow">
+                    <button id="intelScopeFocus" class="mini-btn">Cible active</button>
+                    <button id="intelScopeGlobal" class="mini-btn">Reseau</button>
                 </div>
                 <span id="intelScopeName" class="intel-badge">--</span>
             </div>
-            <div class="intel-row">
-                <label>Sources</label>
-                <div class="intel-toggle">
-                    <label><input type="checkbox" id="intelSrcGraph"/>Graph</label>
-                    <label><input type="checkbox" id="intelSrcText"/>Texte</label>
-                    <label><input type="checkbox" id="intelSrcTags"/>Tags</label>
-                    <label><input type="checkbox" id="intelSrcProfile"/>Profil</label>
-                    <label><input type="checkbox" id="intelSrcBridge"/>Ponts</label>
-                    <label><input type="checkbox" id="intelSrcLex"/>Lexique</label>
-                    <label><input type="checkbox" id="intelSrcGeo"/>Geo</label>
+            <div class="intel-toolbar-row">
+                <div class="intel-toolbar-label">Preset</div>
+                <div class="intel-preset-group intel-grow">
+                    <button id="intelPresetQuick" class="mini-btn intel-preset-btn">Rapide</button>
+                    <button id="intelPresetBalanced" class="mini-btn intel-preset-btn">Equilibre</button>
+                    <button id="intelPresetWide" class="mini-btn intel-preset-btn">Large</button>
                 </div>
             </div>
-            <div class="intel-row">
-                <label>Seuil</label>
-                <input id="intelMinScore" type="range" min="10" max="90" step="1" class="intel-grow"/>
-                <span id="intelMinScoreVal" class="intel-badge">35%</span>
-            </div>
-            <div class="intel-row">
-                <label>Nouvel.</label>
-                <input id="intelNovelty" type="range" min="0" max="60" step="1" class="intel-grow"/>
-                <span id="intelNoveltyVal" class="intel-badge">25%</span>
-            </div>
-            <div class="intel-row">
-                <label>Quantite</label>
-                <input id="intelLimit" type="number" min="5" max="80" class="intel-input" style="width:70px;"/>
-                <label><input id="intelExplain" type="checkbox"/>Explications</label>
+            <div class="intel-toolbar-row intel-toolbar-row-actions">
+                <label class="intel-simple-toggle"><input id="intelShowPredicted" type="checkbox"/>Overlay</label>
+                <label class="intel-simple-toggle"><input id="intelExplain" type="checkbox"/>Explications</label>
                 <span id="intelCount" class="intel-badge">0</span>
-            </div>
-            <div class="intel-row">
-                <label>Overlay</label>
-                <label><input id="intelShowPredicted" type="checkbox"/>Liens predits</label>
-            </div>
-            <div class="intel-actions">
                 <button id="intelRun" class="mini-btn primary">Analyser</button>
                 <button id="intelClear" class="mini-btn">Effacer</button>
             </div>
         </div>
-        <div class="intel-divider"></div>
-        <div id="intel-list"></div>
+        <details class="intel-advanced">
+            <summary>Reglages avances</summary>
+            <div class="intel-controls">
+                <div class="intel-row">
+                    <label>Mode</label>
+                    <select id="intelMode" class="intel-select intel-grow">
+                        <option value="serieux">Serieux</option>
+                        <option value="decouverte">Decouverte</option>
+                        <option value="creatif">Creatif</option>
+                    </select>
+                </div>
+                <div class="intel-row">
+                    <label>Seuil</label>
+                    <input id="intelMinScore" type="range" min="10" max="90" step="1" class="intel-grow"/>
+                    <span id="intelMinScoreVal" class="intel-badge">35%</span>
+                </div>
+                <div class="intel-row">
+                    <label>Nouvel.</label>
+                    <input id="intelNovelty" type="range" min="0" max="60" step="1" class="intel-grow"/>
+                    <span id="intelNoveltyVal" class="intel-badge">25%</span>
+                </div>
+                <div class="intel-row">
+                    <label>Quantite</label>
+                    <input id="intelLimit" type="number" min="5" max="80" class="intel-input intel-limit-input"/>
+                </div>
+                <div class="intel-row intel-row-sources">
+                    <label>Sources</label>
+                    <div class="intel-toggle">
+                        <label><input type="checkbox" id="intelSrcGraph"/>Graph</label>
+                        <label><input type="checkbox" id="intelSrcText"/>Texte</label>
+                        <label><input type="checkbox" id="intelSrcTags"/>Tags</label>
+                        <label><input type="checkbox" id="intelSrcProfile"/>Profil</label>
+                        <label><input type="checkbox" id="intelSrcBridge"/>Ponts</label>
+                        <label><input type="checkbox" id="intelSrcLex"/>Lexique</label>
+                        <label><input type="checkbox" id="intelSrcGeo"/>Geo</label>
+                    </div>
+                </div>
+            </div>
+        </details>
+        <div id="intel-list" class="intel-results"></div>
     `;
     document.body.appendChild(intelPanel);
 
@@ -1636,6 +3396,9 @@ function setupIntelControls() {
     const modeSel = document.getElementById('intelMode');
     const scopeFocus = document.getElementById('intelScopeFocus');
     const scopeGlobal = document.getElementById('intelScopeGlobal');
+    const presetQuick = document.getElementById('intelPresetQuick');
+    const presetBalanced = document.getElementById('intelPresetBalanced');
+    const presetWide = document.getElementById('intelPresetWide');
     const scopeName = document.getElementById('intelScopeName');
     const srcGraph = document.getElementById('intelSrcGraph');
     const srcText = document.getElementById('intelSrcText');
@@ -1654,6 +3417,15 @@ function setupIntelControls() {
     const btnRun = document.getElementById('intelRun');
     const btnClear = document.getElementById('intelClear');
 
+    if (!state.aiSettings.preset) state.aiSettings.preset = 'balanced';
+
+    const syncPresetButtons = () => {
+        const current = String(state.aiSettings.preset || '');
+        if (presetQuick) presetQuick.classList.toggle('active', current === 'quick');
+        if (presetBalanced) presetBalanced.classList.toggle('active', current === 'balanced');
+        if (presetWide) presetWide.classList.toggle('active', current === 'wide');
+    };
+
     const updateScopeName = () => {
         const n = nodeById(state.selection);
         if (scopeName) scopeName.textContent = n ? n.name : 'Aucune';
@@ -1667,38 +3439,64 @@ function setupIntelControls() {
         scheduleSave();
     };
 
-    if (modeSel) modeSel.value = state.aiSettings.mode || 'decouverte';
-    if (minScore) minScore.value = Math.round((state.aiSettings.minScore || 0.35) * 100);
-    if (minScoreVal) minScoreVal.textContent = `${minScore.value}%`;
-    if (novelty) novelty.value = Math.round((state.aiSettings.noveltyRatio || 0.25) * 100);
-    if (noveltyVal) noveltyVal.textContent = `${novelty.value}%`;
-    if (limitInp) limitInp.value = state.aiSettings.limit || 20;
-    if (explainChk) explainChk.checked = state.aiSettings.showReasons !== false;
-    if (showPredicted) showPredicted.checked = state.aiSettings.showPredicted !== false;
+    const syncControlsFromState = () => {
+        if (modeSel) modeSel.value = state.aiSettings.mode || 'decouverte';
+        if (minScore) minScore.value = Math.round((state.aiSettings.minScore || 0.35) * 100);
+        if (minScoreVal && minScore) minScoreVal.textContent = `${minScore.value}%`;
+        if (novelty) novelty.value = Math.round((state.aiSettings.noveltyRatio || 0.25) * 100);
+        if (noveltyVal && novelty) noveltyVal.textContent = `${novelty.value}%`;
+        if (limitInp) limitInp.value = state.aiSettings.limit || 20;
+        if (explainChk) explainChk.checked = state.aiSettings.showReasons !== false;
+        if (showPredicted) showPredicted.checked = state.aiSettings.showPredicted !== false;
 
-    const sources = state.aiSettings.sources || {};
-    if (srcGraph) srcGraph.checked = sources.graph !== false;
-    if (srcText) srcText.checked = sources.text !== false;
-    if (srcTags) srcTags.checked = sources.tags !== false;
-    if (srcProfile) srcProfile.checked = sources.profile !== false;
-    if (srcBridge) srcBridge.checked = sources.bridge !== false;
-    if (srcLex) srcLex.checked = sources.lex !== false;
-    if (srcGeo) srcGeo.checked = sources.geo !== false;
+        const sources = state.aiSettings.sources || {};
+        if (srcGraph) srcGraph.checked = sources.graph !== false;
+        if (srcText) srcText.checked = sources.text !== false;
+        if (srcTags) srcTags.checked = sources.tags !== false;
+        if (srcProfile) srcProfile.checked = sources.profile !== false;
+        if (srcBridge) srcBridge.checked = sources.bridge !== false;
+        if (srcLex) srcLex.checked = sources.lex !== false;
+        if (srcGeo) srcGeo.checked = sources.geo !== false;
 
-    setScope(state.aiSettings.scope || 'selection');
+        setScope(state.aiSettings.scope || 'selection');
+        syncPresetButtons();
+    };
+
+    const applyPreset = (presetName) => {
+        const preset = INTEL_PRESETS[presetName];
+        if (!preset) return;
+        state.aiSettings.preset = presetName;
+        state.aiSettings.mode = preset.mode;
+        state.aiSettings.minScore = preset.minScore;
+        state.aiSettings.noveltyRatio = preset.noveltyRatio;
+        state.aiSettings.limit = preset.limit;
+        state.aiSettings.sources = { ...preset.sources };
+        syncControlsFromState();
+        scheduleSave();
+        updateIntelPanel(true);
+    };
+
+    syncControlsFromState();
 
     if (modeSel) modeSel.onchange = () => {
         state.aiSettings.mode = modeSel.value;
+        state.aiSettings.preset = 'custom';
+        syncPresetButtons();
         scheduleSave();
         updateIntelPanel(true);
     };
     if (scopeFocus) scopeFocus.onclick = () => { setScope('selection'); updateIntelPanel(true); };
     if (scopeGlobal) scopeGlobal.onclick = () => { setScope('global'); updateIntelPanel(true); };
+    if (presetQuick) presetQuick.onclick = () => applyPreset('quick');
+    if (presetBalanced) presetBalanced.onclick = () => applyPreset('balanced');
+    if (presetWide) presetWide.onclick = () => applyPreset('wide');
 
     if (minScore) minScore.oninput = () => {
         const val = Number(minScore.value) || 0;
         if (minScoreVal) minScoreVal.textContent = `${val}%`;
         state.aiSettings.minScore = clamp(val / 100, 0.1, 0.9);
+        state.aiSettings.preset = 'custom';
+        syncPresetButtons();
         scheduleSave();
     };
     if (minScore) minScore.onchange = () => updateIntelPanel(true);
@@ -1707,6 +3505,8 @@ function setupIntelControls() {
         const val = Number(novelty.value) || 0;
         if (noveltyVal) noveltyVal.textContent = `${val}%`;
         state.aiSettings.noveltyRatio = clamp(val / 100, 0, 0.6);
+        state.aiSettings.preset = 'custom';
+        syncPresetButtons();
         scheduleSave();
     };
     if (novelty) novelty.onchange = () => updateIntelPanel(true);
@@ -1715,6 +3515,8 @@ function setupIntelControls() {
         const val = Number(limitInp.value) || 20;
         state.aiSettings.limit = Math.max(5, Math.min(val, 80));
         limitInp.value = state.aiSettings.limit;
+        state.aiSettings.preset = 'custom';
+        syncPresetButtons();
         scheduleSave();
         updateIntelPanel(true);
     };
@@ -1744,7 +3546,12 @@ function setupIntelControls() {
     };
     [srcGraph, srcText, srcTags, srcProfile, srcBridge, srcLex, srcGeo].forEach(el => {
         if (!el) return;
-        el.onchange = () => { syncSources(); updateIntelPanel(true); };
+        el.onchange = () => {
+            state.aiSettings.preset = 'custom';
+            syncPresetButtons();
+            syncSources();
+            updateIntelPanel(true);
+        };
     });
 
     if (btnRun) btnRun.onclick = () => updateIntelPanel(true);
@@ -1754,7 +3561,7 @@ function setupIntelControls() {
         draw();
         const listEl = document.getElementById('intel-list');
         const countEl = document.getElementById('intelCount');
-        if (listEl) listEl.innerHTML = '<div style="padding:10px; color:#666; text-align:center;">Analyse effacee</div>';
+        if (listEl) listEl.innerHTML = '<div class="intel-empty-state">Analyse effacee</div>';
         if (countEl) countEl.textContent = '0';
     };
 
@@ -1796,7 +3603,7 @@ function updateIntelPanel(force = false) {
     }
     if (!listEl) return;
     if (!state.aiSettings?.intelUnlocked) {
-        listEl.innerHTML = '<div style="padding:10px; color:#666; text-align:center;">Acces verrouille</div>';
+        listEl.innerHTML = '<div class="intel-empty-state">Acces verrouille</div>';
         if (countEl) countEl.textContent = '0';
         state.aiPredictedLinks = [];
         draw();
@@ -1806,7 +3613,7 @@ function updateIntelPanel(force = false) {
     const scope = state.aiSettings.scope || 'selection';
     const focusId = (scope === 'selection' && state.selection) ? state.selection : null;
     if (scope === 'selection' && !focusId) {
-        listEl.innerHTML = '<div style="padding:10px; color:#666; text-align:center;">Selectionnez une cible</div>';
+        listEl.innerHTML = '<div class="intel-empty-state">Selectionne une fiche ou passe en mode reseau.</div>';
         if (countEl) countEl.textContent = '0';
         return;
     }
@@ -1825,7 +3632,7 @@ function updateIntelPanel(force = false) {
     }
 
     if (!intelSuggestions.length) {
-        listEl.innerHTML = '<div style="padding:10px; color:#666; text-align:center;">Aucune suggestion</div>';
+        listEl.innerHTML = '<div class="intel-empty-state">Aucune suggestion utile pour ce filtre.</div>';
         if (countEl) countEl.textContent = '0';
         state.aiPredictedLinks = [];
         draw();
@@ -1855,23 +3662,21 @@ function updateIntelPanel(force = false) {
         const options = Array.from(allowedKinds).map(k => `<option value="${k}" ${k === s.kind ? 'selected' : ''}>${linkKindEmoji(k)} ${kindToLabel(k)}</option>`).join('');
         return `
             <div class="intel-item ${s.surprise >= 0.6 ? 'highlight' : ''}" data-a="${s.aId}" data-b="${s.bId}">
-                <div class="intel-meta">
-                    <span class="intel-score">Score ${scorePct}%</span>
-                    <span class="intel-confidence">Confiance ${confPct}%</span>
+                <div class="intel-card-top">
+                    <div class="intel-meta">
+                        <span class="intel-score">Score ${scorePct}%</span>
+                        <span class="intel-confidence">Confiance ${confPct}%</span>
+                    </div>
+                    <div class="intel-badges">${isBridge}${isSurprise}${isAlias}${isGeo}</div>
                 </div>
                 <div class="intel-names">
-                    <span>${escapeHtml(s.a.name)} ⇄ ${escapeHtml(s.b.name)}</span>
-                    ${isBridge}${isSurprise}${isAlias}${isGeo}
+                    <span class="intel-name-pair">${escapeHtml(s.a.name)} ⇄ ${escapeHtml(s.b.name)}</span>
                 </div>
                 ${reasons}
                 <div class="intel-cta">
                     <select class="intel-select intel-kind" data-action="kind">${options}</select>
-                    <button class="mini-btn primary" data-action="apply">Valider</button>
+                    <button class="mini-btn primary intel-connect-btn" data-action="apply">Connecter</button>
                     <button class="mini-btn" data-action="focus">Voir</button>
-                    <div class="intel-feedback">
-                        <button data-action="up">👍</button>
-                        <button data-action="down">👎</button>
-                    </div>
                 </div>
             </div>
         `;
@@ -1893,20 +3698,10 @@ function updateIntelPanel(force = false) {
             if (action === 'focus') {
                 btn.onclick = () => centerOnPair(aId, bId);
             }
-            if (action === 'up') {
-                btn.onclick = () => {
-                    recordFeedback(aId, bId, 1);
-                    scheduleSave();
-                    updateIntelPanel(true);
-                };
-            }
-            if (action === 'down') {
-                btn.onclick = () => {
-                    recordFeedback(aId, bId, -1);
-                    scheduleSave();
-                    updateIntelPanel(true);
-                };
-            }
+        });
+        row.onclick = () => centerOnPair(aId, bId);
+        row.querySelectorAll('button, select').forEach((control) => {
+            control.addEventListener('click', (event) => event.stopPropagation());
         });
     });
 }
@@ -1933,10 +3728,10 @@ function createFilterBar() {
     const bar = document.createElement('div');
     bar.id = 'filter-bar';
     const buttons = [
-        { id: FILTERS.ALL, label: '🌐 Global' },
-        { id: FILTERS.BUSINESS, label: '💼 Business' },
-        { id: FILTERS.ILLEGAL, label: '⚔️ Conflit' },
-        { id: FILTERS.SOCIAL, label: '❤️ Social' }
+        { id: FILTERS.ALL, label: 'Global' },
+        { id: FILTERS.BUSINESS, label: 'Business' },
+        { id: FILTERS.ILLEGAL, label: 'Conflit' },
+        { id: FILTERS.SOCIAL, label: 'Social' }
     ];
     buttons.forEach(btn => {
         const b = document.createElement('button');
@@ -1953,17 +3748,32 @@ function createFilterBar() {
     document.body.appendChild(bar);
 }
 
-function createNode(type, baseName) {
+function createNode(type, baseName, options = {}) {
     let name = baseName, i = 1;
     while(state.nodes.find(n => n.name === name)) { name = `${baseName} ${++i}`; }
     const n = ensureNode(type, name);
-    zoomToNode(n.id); restartSim(); 
+    logNodeAdded(n.name, options.actor);
+    zoomToNode(n.id); restartSim();
     scheduleSave();
 }
 
-export function addLink(a, b, kind) {
+function resolveNodeForAction(ref) {
+    if (!ref) return null;
+    const id = (typeof ref === 'object') ? ref.id : ref;
+    return nodeById(id);
+}
+
+export function addLink(a, b, kind, options = {}) {
     const res = logicAddLink(a, b, kind);
-    if(res) { refreshLists(); renderEditor(); scheduleSave(); refreshHvt(); }
+    if (res) {
+        const sourceNode = resolveNodeForAction(a);
+        const targetNode = resolveNodeForAction(b);
+        logNodesConnected(sourceNode, targetNode, options.actor);
+        refreshLists();
+        renderEditor();
+        scheduleSave();
+        refreshHvt();
+    }
     return res;
 }
 
@@ -1973,6 +3783,9 @@ export function selectNode(id) {
     updatePathfindingPanel();
     draw();
     refreshIntelPanel();
+    if (isCloudBoardActive() && collab.user) {
+        touchCollabPresence(collab.presenceLoopToken, { force: true }).catch(() => {});
+    }
 }
 
 function zoomToNode(id) {
@@ -1985,6 +3798,9 @@ function zoomToNode(id) {
     renderEditor();
     updatePathfindingPanel();
     draw();
+    if (isCloudBoardActive() && collab.user) {
+        touchCollabPresence(collab.presenceLoopToken, { force: true }).catch(() => {});
+    }
 }
 
 export function updateLinkLegend() {
@@ -2014,7 +3830,7 @@ export function refreshLists() {
     fill(ui.listCompanies, state.nodes.filter(isCompany));
     fill(ui.listGroups, state.nodes.filter(isGroup));
     fill(ui.listPeople, state.nodes.filter(isPerson));
-    
+
     const fillDL = (id, arr) => {
         const el = document.getElementById(id);
         if(el) el.innerHTML = arr.map(n => `<option value="${escapeHtml(n.name)}"></option>`).join('');
@@ -2022,7 +3838,7 @@ export function refreshLists() {
     fillDL('datalist-people', state.nodes.filter(isPerson));
     fillDL('datalist-groups', state.nodes.filter(isGroup));
     fillDL('datalist-companies', state.nodes.filter(isCompany));
-    
+
     updateLinkLegend();
     if (state.hvtMode) updateHvtPanel();
     refreshIntelPanel();
@@ -2033,14 +3849,14 @@ export function updatePathfindingPanel() {
     if(!el) return;
     const selectedNode = nodeById(state.selection);
     el.innerHTML = renderPathfindingSidebar(state, selectedNode);
-    
+
     const btnStart = document.getElementById('btnPathStart');
     if(btnStart) btnStart.onclick = () => {
         if(!selectedNode) return;
         state.pathfinding.startId = selectedNode.id;
         state.pathfinding.active = false;
         updatePathfindingPanel();
-        draw(); 
+        draw();
     };
     const btnCancel = document.getElementById('btnPathCancel');
     if(btnCancel) btnCancel.onclick = () => {

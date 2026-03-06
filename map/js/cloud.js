@@ -1,7 +1,6 @@
 import {
     state,
     generateID,
-    getMapData,
     setGroups,
     saveLocalState,
     setLocalPersistenceEnabled,
@@ -16,6 +15,7 @@ const COLLAB_AUTH_ENDPOINT = '/.netlify/functions/collab-auth';
 const COLLAB_BOARD_ENDPOINT = '/.netlify/functions/collab-board';
 const COLLAB_SESSION_STORAGE_KEY = 'bniLinkedCollabSession_v1';
 const COLLAB_ACTIVE_BOARD_STORAGE_KEY = 'bniLinkedMapActiveBoard_v1';
+const MAP_LOCAL_CHANGE_EVENT = 'bni:map-local-change';
 
 const collab = {
     token: '',
@@ -26,9 +26,22 @@ const collab = {
     ownerId: '',
     activeBoardUpdatedAt: '',
     pendingBoardId: '',
-    autosaveTimer: null,
+    autosaveDebounceTimer: null,
+    syncTimer: null,
+    syncLoopToken: 0,
+    syncRetryMs: 0,
+    syncLoopRunning: false,
+    autosaveListenerBound: false,
+    syncInFlight: false,
+    lastSavedFingerprint: '',
     saveInFlight: false
 };
+
+const COLLAB_AUTOSAVE_DEBOUNCE_MS = 700;
+const COLLAB_AUTOSAVE_RETRY_MS = 250;
+const COLLAB_WATCH_TIMEOUT_MS = 7000;
+const COLLAB_WATCH_RETRY_MIN_MS = 500;
+const COLLAB_WATCH_RETRY_MAX_MS = 4000;
 
 function parseJsonSafe(value) {
     try {
@@ -175,19 +188,367 @@ function applyLocalPersistencePolicy() {
     }
 }
 
-function stopCollabAutosave() {
-    if (collab.autosaveTimer) {
-        clearInterval(collab.autosaveTimer);
-        collab.autosaveTimer = null;
+function updateActiveBoardSummary(summary = null) {
+    if (!summary || !summary.id) return;
+    collab.activeBoardId = String(summary.id || collab.activeBoardId || '');
+    collab.activeRole = String(summary.role || collab.activeRole || '');
+    collab.activeBoardTitle = String(summary.title || collab.activeBoardTitle || '');
+    collab.ownerId = String(summary.ownerId || collab.ownerId || '');
+    collab.activeBoardUpdatedAt = String(summary.updatedAt || collab.activeBoardUpdatedAt || '');
+    syncCloudStatus();
+    persistCollabState();
+}
+
+function cloneJsonSafe(value, fallback) {
+    try {
+        return JSON.parse(JSON.stringify(value));
+    } catch (e) {
+        return fallback;
     }
 }
 
-function startCollabAutosave() {
+function getCloudMapPayload() {
+    return {
+        groups: cloneJsonSafe(state.groups || [], []),
+        tacticalLinks: cloneJsonSafe(state.tacticalLinks || [], [])
+    };
+}
+
+function computeCloudFingerprint() {
+    try {
+        if (!isCloudBoardActive()) return '';
+        return JSON.stringify(getCloudMapPayload());
+    } catch (e) {
+        return '';
+    }
+}
+
+function captureCloudSavedFingerprint() {
+    const fp = computeCloudFingerprint();
+    collab.lastSavedFingerprint = fp;
+    return fp;
+}
+
+function hasLocalCloudChanges() {
+    if (!isCloudBoardActive()) return false;
+    const current = computeCloudFingerprint();
+    return Boolean(current) && current !== String(collab.lastSavedFingerprint || '');
+}
+
+function stopCollabAutosave() {
+    if (collab.autosaveDebounceTimer) {
+        clearTimeout(collab.autosaveDebounceTimer);
+        collab.autosaveDebounceTimer = null;
+    }
+}
+
+function queueCloudAutosave(delayMs = COLLAB_AUTOSAVE_DEBOUNCE_MS) {
+    if (!isCloudBoardActive() || !canEditCloudBoard()) return;
     stopCollabAutosave();
-    if (!canEditCloudBoard()) return;
-    collab.autosaveTimer = setInterval(() => {
+    collab.autosaveDebounceTimer = setTimeout(() => {
+        collab.autosaveDebounceTimer = null;
         saveActiveCloudBoard({ manual: false, quiet: true }).catch(() => {});
-    }, 45000);
+    }, Math.max(0, Number(delayMs) || 0));
+}
+
+function onMapLocalChange() {
+    queueCloudAutosave();
+}
+
+function ensureCollabAutosaveListener() {
+    if (collab.autosaveListenerBound) return;
+    collab.autosaveListenerBound = true;
+    window.addEventListener(MAP_LOCAL_CHANGE_EVENT, onMapLocalChange);
+}
+
+function startCollabAutosave() {
+    ensureCollabAutosaveListener();
+    if (!isCloudBoardActive() || !canEditCloudBoard()) {
+        stopCollabAutosave();
+        return;
+    }
+    queueCloudAutosave(COLLAB_AUTOSAVE_RETRY_MS);
+}
+
+function stopCollabLiveSync() {
+    collab.syncLoopToken += 1;
+    collab.syncLoopRunning = false;
+    collab.syncRetryMs = 0;
+    if (collab.syncTimer) {
+        clearTimeout(collab.syncTimer);
+        collab.syncTimer = null;
+    }
+}
+
+function scheduleNextWatchTick(loopToken, delayMs = 0) {
+    if (collab.syncLoopToken !== loopToken) return;
+    if (collab.syncTimer) clearTimeout(collab.syncTimer);
+    collab.syncTimer = setTimeout(() => {
+        collab.syncTimer = null;
+        runCollabWatchLoop(loopToken).catch(() => {});
+    }, Math.max(0, Number(delayMs) || 0));
+}
+
+async function runCollabWatchLoop(loopToken) {
+    if (collab.syncLoopToken !== loopToken) return;
+    if (!isCloudBoardActive() || !collab.user || !collab.token) {
+        collab.syncLoopRunning = false;
+        return;
+    }
+
+    try {
+        const watch = await collabBoardRequest('watch_board', {
+            boardId: collab.activeBoardId,
+            sinceUpdatedAt: String(collab.activeBoardUpdatedAt || ''),
+            timeoutMs: COLLAB_WATCH_TIMEOUT_MS
+        });
+
+        if (collab.syncLoopToken !== loopToken) return;
+        collab.syncRetryMs = COLLAB_WATCH_RETRY_MIN_MS;
+
+        if (watch?.deleted || watch?.revoked) {
+            setActiveCloudBoardFromSummary(null);
+            setBoardQueryParam('');
+            collab.syncLoopRunning = false;
+            return;
+        }
+
+        if (watch?.changed) {
+            const watchedUpdatedAt = String(watch.updatedAt || '');
+            if (!watchedUpdatedAt || watchedUpdatedAt !== String(collab.activeBoardUpdatedAt || '')) {
+                await syncActiveCloudBoard({ quiet: true });
+            }
+        }
+
+        scheduleNextWatchTick(loopToken, 0);
+    } catch (e) {
+        if (collab.syncLoopToken !== loopToken) return;
+        const status = Number(e?.status || 0);
+        if (status === 401 || status === 403 || status === 404) {
+            collab.syncLoopRunning = false;
+            stopCollabLiveSync();
+            return;
+        }
+
+        collab.syncRetryMs = collab.syncRetryMs
+            ? Math.min(COLLAB_WATCH_RETRY_MAX_MS, collab.syncRetryMs * 2)
+            : COLLAB_WATCH_RETRY_MIN_MS;
+        scheduleNextWatchTick(loopToken, collab.syncRetryMs);
+    }
+}
+
+function makeLinkPairKey(a, b) {
+    const x = String(a || '').trim();
+    const y = String(b || '').trim();
+    return x < y ? `${x}|${y}` : `${y}|${x}`;
+}
+
+function mergeMapBoardData(remoteRaw, localRaw) {
+    const remote = normalizeMapBoardData(remoteRaw);
+    const local = normalizeMapBoardData(localRaw);
+
+    const mergedGroups = cloneJsonSafe(remote.groups, []);
+    const pointIndex = new Map();
+    const zoneIndex = new Map();
+    const groupByName = new Map();
+
+    mergedGroups.forEach((group, groupIdx) => {
+        const key = String(group?.name || '').trim().toLowerCase();
+        if (key && !groupByName.has(key)) groupByName.set(key, groupIdx);
+
+        const points = Array.isArray(group.points) ? group.points : [];
+        points.forEach((point, pointIdx) => {
+            const pointId = String(point?.id || '').trim();
+            if (!pointId || pointIndex.has(pointId)) return;
+            pointIndex.set(pointId, { groupIdx, pointIdx });
+        });
+
+        const zones = Array.isArray(group.zones) ? group.zones : [];
+        zones.forEach((zone, zoneIdx) => {
+            let zoneId = String(zone?.id || '').trim();
+            if (!zoneId) {
+                zoneId = generateID();
+                zone.id = zoneId;
+            }
+            if (zoneIndex.has(zoneId)) return;
+            zoneIndex.set(zoneId, { groupIdx, zoneIdx });
+        });
+    });
+
+    local.groups.forEach((localGroup, localIdx) => {
+        const localName = String(localGroup?.name || '').trim();
+        const key = localName.toLowerCase();
+        let targetIdx = key && groupByName.has(key) ? groupByName.get(key) : -1;
+        if (targetIdx < 0) {
+            const created = {
+                name: localName || `GROUPE ${mergedGroups.length + 1}`,
+                color: String(localGroup?.color || '#73fbf7'),
+                visible: localGroup?.visible !== false,
+                points: [],
+                zones: []
+            };
+            targetIdx = mergedGroups.push(created) - 1;
+            if (key) groupByName.set(key, targetIdx);
+        }
+
+        const targetGroup = mergedGroups[targetIdx];
+        if (!targetGroup || typeof targetGroup !== 'object') return;
+        targetGroup.name = localName || targetGroup.name || `GROUPE ${localIdx + 1}`;
+        targetGroup.color = String(localGroup?.color || targetGroup.color || '#73fbf7');
+        targetGroup.visible = localGroup?.visible !== false;
+        if (!Array.isArray(targetGroup.points)) targetGroup.points = [];
+        if (!Array.isArray(targetGroup.zones)) targetGroup.zones = [];
+
+        const localPoints = Array.isArray(localGroup?.points) ? localGroup.points : [];
+        localPoints.forEach((rawPoint) => {
+            const pointCopy = cloneJsonSafe(rawPoint, null);
+            const pointId = String(pointCopy?.id || '').trim();
+            if (!pointCopy || !pointId) return;
+
+            if (pointIndex.has(pointId)) {
+                const loc = pointIndex.get(pointId);
+                const points = mergedGroups[loc.groupIdx].points;
+                points[loc.pointIdx] = pointCopy;
+                return;
+            }
+
+            const nextPointIdx = targetGroup.points.push(pointCopy) - 1;
+            pointIndex.set(pointId, { groupIdx: targetIdx, pointIdx: nextPointIdx });
+        });
+
+        const localZones = Array.isArray(localGroup?.zones) ? localGroup.zones : [];
+        localZones.forEach((rawZone) => {
+            const zoneCopy = cloneJsonSafe(rawZone, null);
+            if (!zoneCopy || typeof zoneCopy !== 'object') return;
+
+            let zoneId = String(zoneCopy.id || '').trim();
+            if (!zoneId) {
+                zoneId = generateID();
+                zoneCopy.id = zoneId;
+            }
+
+            if (zoneIndex.has(zoneId)) {
+                const loc = zoneIndex.get(zoneId);
+                const zones = mergedGroups[loc.groupIdx].zones;
+                zones[loc.zoneIdx] = zoneCopy;
+                return;
+            }
+
+            const nextZoneIdx = targetGroup.zones.push(zoneCopy) - 1;
+            zoneIndex.set(zoneId, { groupIdx: targetIdx, zoneIdx: nextZoneIdx });
+        });
+    });
+
+    const validPointIds = new Set();
+    mergedGroups.forEach((group) => {
+        const points = Array.isArray(group?.points) ? group.points : [];
+        points.forEach((point) => {
+            const pointId = String(point?.id || '').trim();
+            if (pointId) validPointIds.add(pointId);
+        });
+    });
+
+    const mergedLinkMap = new Map();
+    const remoteLinks = Array.isArray(remote.tacticalLinks) ? remote.tacticalLinks : [];
+    remoteLinks.forEach((rawLink) => {
+        const from = String(rawLink?.from || '').trim();
+        const to = String(rawLink?.to || '').trim();
+        if (!from || !to || from === to) return;
+        if (!validPointIds.has(from) || !validPointIds.has(to)) return;
+        const pairKey = makeLinkPairKey(from, to);
+        mergedLinkMap.set(pairKey, cloneJsonSafe(rawLink, null));
+    });
+
+    const localLinks = Array.isArray(local.tacticalLinks) ? local.tacticalLinks : [];
+    localLinks.forEach((rawLink) => {
+        const from = String(rawLink?.from || '').trim();
+        const to = String(rawLink?.to || '').trim();
+        if (!from || !to || from === to) return;
+        if (!validPointIds.has(from) || !validPointIds.has(to)) return;
+        const pairKey = makeLinkPairKey(from, to);
+        mergedLinkMap.set(pairKey, cloneJsonSafe(rawLink, null));
+    });
+
+    const usedLinkIds = new Set();
+    const tacticalLinks = Array.from(mergedLinkMap.values())
+        .filter(Boolean)
+        .map((link) => {
+            const safeLink = cloneJsonSafe(link, {}) || {};
+            let linkId = String(safeLink.id || '').trim();
+            if (!linkId || usedLinkIds.has(linkId)) {
+                linkId = generateID();
+            }
+            usedLinkIds.add(linkId);
+            return {
+                id: linkId,
+                from: String(safeLink.from || ''),
+                to: String(safeLink.to || ''),
+                color: safeLink.color || null,
+                type: String(safeLink.type || 'Standard')
+            };
+        });
+
+    return { groups: mergedGroups, tacticalLinks };
+}
+
+async function syncActiveCloudBoard(options = {}) {
+    const quiet = Boolean(options.quiet);
+    const allowDuringSave = Boolean(options.allowDuringSave);
+    if (!isCloudBoardActive() || !collab.user || !collab.token) return false;
+    if (collab.syncInFlight) return false;
+    if (collab.saveInFlight && !allowDuringSave) return false;
+
+    collab.syncInFlight = true;
+    try {
+        const result = await collabBoardRequest('get_board', { boardId: collab.activeBoardId });
+        if (!result || !result.board || !result.board.data) return false;
+
+        const remoteSummary = {
+            id: result.board.id || collab.activeBoardId,
+            role: result.role || collab.activeRole,
+            title: result.board.title || collab.activeBoardTitle || state.currentFileName || 'Carte cloud',
+            ownerId: result.board.ownerId || collab.ownerId || '',
+            updatedAt: result.board.updatedAt || collab.activeBoardUpdatedAt || ''
+        };
+
+        const remoteUpdatedAt = String(remoteSummary.updatedAt || '');
+        const localUpdatedAt = String(collab.activeBoardUpdatedAt || '');
+        if (!remoteUpdatedAt || remoteUpdatedAt === localUpdatedAt) return false;
+
+        const localChanged = hasLocalCloudChanges();
+        updateActiveBoardSummary(remoteSummary);
+
+        if (localChanged && canEditCloudBoard()) {
+            const localSnapshot = getCloudMapPayload();
+            const mergedPayload = mergeMapBoardData(result.board.data, localSnapshot);
+            applyCloudMapData(mergedPayload);
+            state.currentFileName = remoteSummary.title;
+            const mergedSaved = await saveActiveCloudBoard({ manual: false, quiet: true, force: true });
+            if (!mergedSaved) return false;
+            captureCloudSavedFingerprint();
+            return true;
+        }
+
+        applyCloudMapData(result.board.data);
+        state.currentFileName = remoteSummary.title;
+        captureCloudSavedFingerprint();
+        return true;
+    } catch (e) {
+        if (!quiet) await customAlert('ERREUR CLOUD', escapeHtml(e.message || 'Erreur sync live.'));
+        return false;
+    } finally {
+        collab.syncInFlight = false;
+    }
+}
+
+function startCollabLiveSync() {
+    stopCollabLiveSync();
+    if (!isCloudBoardActive() || !collab.user || !collab.token) return;
+    const loopToken = collab.syncLoopToken + 1;
+    collab.syncLoopToken = loopToken;
+    collab.syncLoopRunning = true;
+    collab.syncRetryMs = COLLAB_WATCH_RETRY_MIN_MS;
+    scheduleNextWatchTick(loopToken, 0);
 }
 
 async function collabAuthRequest(action, payload = {}) {
@@ -232,7 +593,10 @@ async function collabBoardRequest(action, payload = {}) {
     const data = await readResponseSafe(response);
     if (!response.ok || !data.ok) {
         const hint = endpointHintMessage(response.status, 'Cloud');
-        throw new Error(hint || data.error || `Erreur cloud (${response.status})`);
+        const err = new Error(hint || data.error || `Erreur cloud (${response.status})`);
+        err.status = response.status;
+        err.payload = data || {};
+        throw err;
     }
     return data;
 }
@@ -244,6 +608,7 @@ function setActiveCloudBoardFromSummary(summary = null) {
         collab.activeBoardTitle = '';
         collab.ownerId = '';
         collab.activeBoardUpdatedAt = '';
+        collab.lastSavedFingerprint = '';
     } else {
         collab.activeBoardId = String(summary.id || '');
         collab.activeRole = String(summary.role || '');
@@ -255,8 +620,13 @@ function setActiveCloudBoardFromSummary(summary = null) {
     applyLocalPersistencePolicy();
     syncCloudStatus();
     persistCollabState();
-    if (isCloudBoardActive()) startCollabAutosave();
-    else stopCollabAutosave();
+    if (isCloudBoardActive()) {
+        startCollabAutosave();
+        startCollabLiveSync();
+    } else {
+        stopCollabAutosave();
+        stopCollabLiveSync();
+    }
 }
 
 function normalizeMapBoardData(rawData) {
@@ -326,6 +696,7 @@ async function openCloudBoard(boardId, options = {}) {
     setActiveCloudBoardFromSummary(summary);
     applyCloudMapData(result.board.data);
     state.currentFileName = summary.title;
+    captureCloudSavedFingerprint();
     setBoardQueryParam(summary.id);
 
     if (!options.quiet) {
@@ -336,6 +707,7 @@ async function openCloudBoard(boardId, options = {}) {
 export async function saveActiveCloudBoard(options = {}) {
     const manual = Boolean(options.manual);
     const quiet = Boolean(options.quiet);
+    const force = Boolean(options.force);
 
     if (!isCloudBoardActive()) {
         if (manual && !quiet) await customAlert('CLOUD', 'Aucun board cloud actif.');
@@ -347,15 +719,21 @@ export async function saveActiveCloudBoard(options = {}) {
         return false;
     }
 
-    if (collab.saveInFlight) return false;
+    if (collab.saveInFlight) {
+        if (!manual) queueCloudAutosave(COLLAB_AUTOSAVE_RETRY_MS);
+        return false;
+    }
+    if (!force && !manual && !hasLocalCloudChanges()) return true;
     collab.saveInFlight = true;
 
     try {
         const title = (state.currentFileName || collab.activeBoardTitle || 'Carte cloud').trim();
+        const payload = getCloudMapPayload();
+        const localFingerprint = JSON.stringify(payload);
         const result = await collabBoardRequest('save_board', {
             boardId: collab.activeBoardId,
             title,
-            data: getMapData(),
+            data: payload,
             ...(collab.activeBoardUpdatedAt ? { expectedUpdatedAt: collab.activeBoardUpdatedAt } : {})
         });
 
@@ -365,15 +743,25 @@ export async function saveActiveCloudBoard(options = {}) {
             state.currentFileName = collab.activeBoardTitle;
             persistCollabState();
             syncCloudStatus();
+            collab.lastSavedFingerprint = localFingerprint;
         }
 
         if (manual && !quiet) await customAlert('CLOUD', '☁️ Board cloud sauvegarde.');
         return true;
     } catch (e) {
+        if (e && Number(e.status) === 409) {
+            await syncActiveCloudBoard({ quiet: true, allowDuringSave: true });
+            queueCloudAutosave(25);
+            if (!quiet) await customAlert('CLOUD', 'Conflit detecte. Sync live appliquee automatiquement.');
+            return false;
+        }
         if (!quiet) await customAlert('ERREUR CLOUD', escapeHtml(e.message || 'Erreur inconnue.'));
         return false;
     } finally {
         collab.saveInFlight = false;
+        if (!manual && hasLocalCloudChanges()) {
+            queueCloudAutosave(COLLAB_AUTOSAVE_RETRY_MS);
+        }
     }
 }
 
@@ -389,10 +777,11 @@ async function createCloudBoardFromCurrent() {
     if (titleRaw === null) return false;
 
     const title = String(titleRaw || '').trim() || defaultTitle;
+    const payload = getCloudMapPayload();
     const result = await collabBoardRequest('create_board', {
         title,
         page: 'map',
-        data: getMapData()
+        data: payload
     });
 
     if (!result.board) throw new Error('Creation cloud echouee.');
@@ -406,6 +795,7 @@ async function createCloudBoardFromCurrent() {
     });
 
     state.currentFileName = collab.activeBoardTitle;
+    captureCloudSavedFingerprint();
     setBoardQueryParam(result.board.id);
     return true;
 }
@@ -420,6 +810,7 @@ async function logoutCollab() {
     setActiveCloudBoardFromSummary(null);
     clearCollabStorage();
     stopCollabAutosave();
+    stopCollabLiveSync();
     setLocalPersistenceEnabled(true);
     setBoardQueryParam('');
     syncCloudStatus();
@@ -503,6 +894,7 @@ async function renderCloudMembers(boardId) {
                 <select id="cloud-share-role" style="width:120px; margin-bottom:0;">
                     <option value="editor">editor</option>
                     <option value="viewer">viewer</option>
+                    <option value="owner">owner</option>
                 </select>
                 <button type="button" id="cloud-share-add" class="mini-btn">Ajouter</button>
             </div>
@@ -676,6 +1068,8 @@ async function renderCloudHome() {
                 <div style="display:flex; gap:6px; flex-shrink:0;">
                     <button type="button" class="mini-btn cloud-open-board" data-board="${escapeHtml(board.id)}">Ouvrir</button>
                     ${role === 'owner' ? `<button type="button" class="mini-btn cloud-manage-board" data-board="${escapeHtml(board.id)}">Membres</button>` : ''}
+                    ${role === 'owner' ? `<button type="button" class="mini-btn cloud-rename-board" data-board="${escapeHtml(board.id)}">Renommer</button>` : ''}
+                    ${role === 'owner' ? `<button type="button" class="mini-btn cloud-delete-board" data-board="${escapeHtml(board.id)}">Supprimer</button>` : ''}
                     ${role !== 'owner' ? `<button type="button" class="mini-btn cloud-leave-board" data-board="${escapeHtml(board.id)}">Quitter</button>` : ''}
                 </div>
             </div>
@@ -761,6 +1155,55 @@ async function renderCloudHome() {
             const boardId = btn.getAttribute('data-board') || '';
             if (!boardId) return;
             renderCloudMembers(boardId).catch(() => {});
+        };
+    });
+
+    Array.from(document.querySelectorAll('.cloud-rename-board')).forEach((btn) => {
+        btn.onclick = async () => {
+            const boardId = btn.getAttribute('data-board') || '';
+            if (!boardId) return;
+
+            const board = boards.find((item) => String(item.id) === String(boardId));
+            const defaultTitle = String(board?.title || 'Board cloud');
+            const nextTitleRaw = await customPrompt('RENOMMER BOARD', 'Nouveau nom du board :', defaultTitle);
+            if (nextTitleRaw === null) return;
+            const nextTitle = String(nextTitleRaw || '').trim();
+            if (!nextTitle) return;
+
+            try {
+                await collabBoardRequest('rename_board', { boardId, title: nextTitle });
+                if (String(collab.activeBoardId) === String(boardId)) {
+                    collab.activeBoardTitle = nextTitle;
+                    state.currentFileName = nextTitle;
+                    persistCollabState();
+                    syncCloudStatus();
+                }
+                await renderCloudHome();
+            } catch (e) {
+                await customAlert('ERREUR CLOUD', escapeHtml(e.message || 'Erreur inconnue.'));
+            }
+        };
+    });
+
+    Array.from(document.querySelectorAll('.cloud-delete-board')).forEach((btn) => {
+        btn.onclick = async () => {
+            const boardId = btn.getAttribute('data-board') || '';
+            if (!boardId) return;
+
+            const confirmed = await customConfirm('CLOUD', 'Supprimer ce board cloud ?');
+            if (!confirmed) return;
+
+            try {
+                await collabBoardRequest('delete_board', { boardId });
+                if (String(boardId) === String(collab.activeBoardId)) {
+                    setActiveCloudBoardFromSummary(null);
+                    state.currentFileName = null;
+                    setBoardQueryParam('');
+                }
+                await renderCloudHome();
+            } catch (e) {
+                await customAlert('ERREUR CLOUD', escapeHtml(e.message || 'Erreur inconnue.'));
+            }
         };
     });
 

@@ -31,15 +31,28 @@ export const state = {
         sources: { graph: true, text: true, tags: true, profile: true, bridge: true, lex: true, geo: true },
         showReasons: true,
         showPredicted: true,
-        intelUnlocked: false
+        intelUnlocked: true
     },
     aiFeedback: {},
     aiPredictedLinks: []
 };
 
 const STORAGE_KEY = 'pointPageState_v13'; 
+const LOCAL_CHANGE_EVENT = 'bni:point-local-change';
 let saveTimer = null;
 let localPersistenceEnabled = true;
+
+function emitLocalChange(detail = {}) {
+    try {
+        if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
+        window.dispatchEvent(new CustomEvent(LOCAL_CHANGE_EVENT, {
+            detail: {
+                at: Date.now(),
+                ...detail
+            }
+        }));
+    } catch (e) {}
+}
 
 export function setLocalPersistenceEnabled(enabled, options = {}) {
     localPersistenceEnabled = Boolean(enabled);
@@ -56,13 +69,21 @@ export function isLocalPersistenceEnabled() {
 }
 
 export function saveState() {
-    if (!localPersistenceEnabled) return;
+    if (!localPersistenceEnabled) {
+        emitLocalChange({ source: 'saveState', persisted: false });
+        return;
+    }
     try {
         const payload = {
             meta: { projectName: state.projectName }, // SAUVEGARDE DU NOM
             nodes: state.nodes.map(n => ({
                 id: n.id, name: n.name, type: n.type, color: n.color, 
-                num: n.num, notes: n.notes, x: n.x, y: n.y, fixed: n.fixed,
+                num: n.num,
+                accountNumber: n.accountNumber,
+                citizenNumber: n.citizenNumber,
+                description: n.description,
+                notes: n.notes,
+                x: n.x, y: n.y, fixed: n.fixed,
                 linkedMapPointId: n.linkedMapPointId 
             })),
             links: state.links.map(l => ({
@@ -78,7 +99,11 @@ export function saveState() {
             aiPredictedLinks: state.aiPredictedLinks
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-    } catch (e) { console.error("Save error", e); }
+        emitLocalChange({ source: 'saveState', persisted: true });
+    } catch (e) {
+        console.error("Save error", e);
+        emitLocalChange({ source: 'saveState', persisted: false });
+    }
 }
 
 export function scheduleSave(delay = 400) {
@@ -96,6 +121,13 @@ export function loadState() {
         if (!raw) return false;
         const data = JSON.parse(raw);
         if (data.nodes) state.nodes = data.nodes;
+        state.nodes.forEach((node) => {
+            if (!node || typeof node !== 'object') return;
+            if (typeof node.accountNumber !== 'string') node.accountNumber = '';
+            if (typeof node.citizenNumber !== 'string') node.citizenNumber = '';
+            if (typeof node.description !== 'string') node.description = String(node.notes || '');
+            if (typeof node.notes !== 'string') node.notes = String(node.description || '');
+        });
         if (data.links) state.links = data.links;
         if (data.view) state.view = data.view;
         if (data.nextId) state.nextId = data.nextId;
@@ -110,7 +142,7 @@ export function loadState() {
                 state.aiSettings.sources = { ...state.aiSettings.sources, ...data.aiSettings.sources };
             }
         }
-        state.aiSettings.intelUnlocked = false;
+        state.aiSettings.intelUnlocked = true;
         if (data.aiFeedback) state.aiFeedback = data.aiFeedback;
         if (data.aiPredictedLinks) state.aiPredictedLinks = data.aiPredictedLinks;
         if (data.meta && data.meta.projectName) state.projectName = data.meta.projectName; // CHARGEMENT DU NOM

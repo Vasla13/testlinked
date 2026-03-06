@@ -20,7 +20,9 @@ export function updateTransform() {
         markersLayer.style.height = `${state.mapHeight * state.view.scale}px`;
         
         // 3. Gestion du Level of Detail (LOD)
-        if (state.view.scale < 0.5) {
+        const zoomScale = Math.max(0.05, Number(state.view.scale || 1));
+        document.body.style.setProperty('--map-zoom-scale', zoomScale.toFixed(3));
+        if (zoomScale < 0.38) {
             document.body.classList.add('view-zoomed-out');
         } else {
             document.body.classList.remove('view-zoomed-out');

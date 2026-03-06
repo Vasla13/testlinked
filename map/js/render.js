@@ -60,6 +60,14 @@ function configureSVG(layer) {
     }
 }
 
+function getTacticalLinkWidths() {
+    const scale = Math.max(0.08, Number(state.view?.scale || 1));
+    const zoomCompensation = 1 / Math.sqrt(scale);
+    const normal = Math.min(0.5, Math.max(0.15, 0.16 * zoomCompensation));
+    const hover = Math.min(0.95, normal * 2.1);
+    return { normal, hover };
+}
+
 export function renderAll() {
     configureSVG(zonesLayer);
     configureSVG(linksLayer);
@@ -193,6 +201,7 @@ function renderTacticalLinks() {
     // Liste des IDs valides pour ce cycle de rendu
     const activeLinkIds = new Set();
     const activeGradIds = new Set();
+    const widths = getTacticalLinkWidths();
 
     state.tacticalLinks.forEach(link => {
         const fromInfo = findPointInfo(link.from);
@@ -219,8 +228,16 @@ function renderTacticalLinks() {
                 
                 // Events (attachés une seule fois à la création)
                 line.onclick = (e) => { e.stopPropagation(); handleLinkClick(e, link); };
-                line.onmouseover = (e) => { line.setAttribute("stroke-width", "0.4"); handleLinkHover(e, link); };
-                line.onmouseout = (e) => { line.setAttribute("stroke-width", "0.15"); handleLinkOut(); };
+                line.onmouseover = (e) => {
+                    const hoverWidth = line.getAttribute("data-hover-width") || String(widths.hover);
+                    line.setAttribute("stroke-width", hoverWidth);
+                    handleLinkHover(e, link);
+                };
+                line.onmouseout = () => {
+                    const normalWidth = line.getAttribute("data-normal-width") || String(widths.normal);
+                    line.setAttribute("stroke-width", normalWidth);
+                    handleLinkOut();
+                };
                 
                 linksLayer.appendChild(line);
             }
@@ -267,7 +284,9 @@ function renderTacticalLinks() {
             }
             
             line.setAttribute("stroke", finalColor);
-            line.setAttribute("stroke-width", "0.15");
+            line.setAttribute("data-normal-width", String(widths.normal));
+            line.setAttribute("data-hover-width", String(widths.hover));
+            line.setAttribute("stroke-width", String(widths.normal));
         }
     });
 

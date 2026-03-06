@@ -4,6 +4,18 @@ import { initUI, refreshLists, selectNode, initCloudCollab } from './ui.js';
 import { updatePersonColors } from './logic.js'; 
 import { resizeCanvas, draw } from './render.js';
 
+function refreshCanvasSize() {
+    requestAnimationFrame(() => {
+        resizeCanvas();
+        draw();
+    });
+}
+
+window.addEventListener('pageshow', () => {
+    refreshCanvasSize();
+    setTimeout(refreshCanvasSize, 120);
+});
+
 window.addEventListener('load', () => {
     // 1. Initialiser UI et Injection CSS
     initUI();
@@ -25,13 +37,15 @@ window.addEventListener('load', () => {
 
     // 4. Correction affichage resize
     const centerDiv = document.getElementById('center');
-    if (centerDiv) {
-        const observer = new ResizeObserver(() => requestAnimationFrame(() => resizeCanvas()));
+    if (centerDiv && typeof ResizeObserver === 'function') {
+        const observer = new ResizeObserver(() => refreshCanvasSize());
         observer.observe(centerDiv);
     } else {
-        resizeCanvas();
+        refreshCanvasSize();
     }
-    setTimeout(resizeCanvas, 100);
+    refreshCanvasSize();
+    setTimeout(refreshCanvasSize, 100);
+    setTimeout(refreshCanvasSize, 500);
 
     // --- FIX NAVIGATION RETOUR (Map -> Point) ---
     const params = new URLSearchParams(window.location.search);

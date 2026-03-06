@@ -123,7 +123,11 @@ export function ensureNode(type, name) {
         n = { 
             id: uid(), name, type, 
             x: startX, y: startY, fx: startX, fy: startY, vx: 0, vy: 0, 
-            color: (type === TYPES.PERSON ? '#ffffff' : randomPastel()) 
+            color: (type === TYPES.PERSON ? '#ffffff' : randomPastel()),
+            accountNumber: '',
+            citizenNumber: '',
+            description: '',
+            notes: ''
         };
         state.nodes.push(n);
     }
