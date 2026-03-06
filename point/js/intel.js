@@ -107,6 +107,8 @@ const DEFAULT_WEIGHTS = {
     decouverte: { graph: 0.4, text: 0.22, tags: 0.12, profile: 0.09, bridge: 0.07, lex: 0.06, geo: 0.04 },
     creatif: { graph: 0.28, text: 0.28, tags: 0.18, profile: 0.06, bridge: 0.1, lex: 0.05, geo: 0.05 }
 };
+const MAP_ACTIVE_BOARD_STORAGE_KEY = 'bniLinkedMapActiveBoard_v1';
+const MAP_SHARED_SNAPSHOT_STORAGE_KEY = 'bniLinkedMapSharedSnapshot_v1';
 
 function pairKey(aId, bId) {
     const a = String(aId);
@@ -264,21 +266,42 @@ function tokenize(text) {
 function loadMapPoints() {
     try {
         if (typeof localStorage === 'undefined') return null;
-        const raw = localStorage.getItem('tacticalMapData');
-        if (!raw) return null;
-        const data = JSON.parse(raw);
-        if (!data || !data.groups) return null;
+        const sources = [];
+
+        const localRaw = localStorage.getItem('tacticalMapData');
+        if (localRaw) {
+            sources.push(localRaw);
+        }
+
+        const activeBoardRaw = localStorage.getItem(MAP_ACTIVE_BOARD_STORAGE_KEY);
+        const snapshotRaw = localStorage.getItem(MAP_SHARED_SNAPSHOT_STORAGE_KEY);
+        if (activeBoardRaw && snapshotRaw) {
+            const activeBoard = JSON.parse(activeBoardRaw);
+            const snapshot = JSON.parse(snapshotRaw);
+            if (activeBoard?.boardId && snapshot?.boardId && String(activeBoard.boardId) === String(snapshot.boardId)) {
+                sources.push(JSON.stringify(snapshot.data || null));
+            }
+        }
+
         const map = new Map();
-        data.groups.forEach(group => {
-            (group.points || []).forEach(pt => {
-                if (!pt || !pt.id) return;
-                const x = Number(pt.x);
-                const y = Number(pt.y);
-                if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-                map.set(String(pt.id), { x, y });
+
+        sources.forEach((raw) => {
+            if (!raw) return;
+            const data = JSON.parse(raw);
+            if (!data || !Array.isArray(data.groups)) return;
+
+            data.groups.forEach(group => {
+                (group.points || []).forEach(pt => {
+                    if (!pt || !pt.id) return;
+                    const x = Number(pt.x);
+                    const y = Number(pt.y);
+                    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+                    map.set(String(pt.id), { x, y });
+                });
             });
         });
-        return map;
+
+        return map.size ? map : null;
     } catch (e) {
         return null;
     }

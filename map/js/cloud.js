@@ -15,6 +15,7 @@ const COLLAB_AUTH_ENDPOINT = '/.netlify/functions/collab-auth';
 const COLLAB_BOARD_ENDPOINT = '/.netlify/functions/collab-board';
 const COLLAB_SESSION_STORAGE_KEY = 'bniLinkedCollabSession_v1';
 const COLLAB_ACTIVE_BOARD_STORAGE_KEY = 'bniLinkedMapActiveBoard_v1';
+const MAP_SHARED_SNAPSHOT_STORAGE_KEY = 'bniLinkedMapSharedSnapshot_v1';
 const MAP_LOCAL_CHANGE_EVENT = 'bni:map-local-change';
 
 const collab = {
@@ -118,6 +119,22 @@ function clearCollabStorage() {
     try {
         localStorage.removeItem(COLLAB_SESSION_STORAGE_KEY);
         localStorage.removeItem(COLLAB_ACTIVE_BOARD_STORAGE_KEY);
+        localStorage.removeItem(MAP_SHARED_SNAPSHOT_STORAGE_KEY);
+    } catch (e) {}
+}
+
+function syncSharedMapSnapshot(payload = null) {
+    try {
+        if (!collab.activeBoardId || !payload || !Array.isArray(payload.groups)) {
+            localStorage.removeItem(MAP_SHARED_SNAPSHOT_STORAGE_KEY);
+            return;
+        }
+
+        localStorage.setItem(MAP_SHARED_SNAPSHOT_STORAGE_KEY, JSON.stringify({
+            boardId: collab.activeBoardId,
+            updatedAt: collab.activeBoardUpdatedAt || '',
+            data: payload
+        }));
     } catch (e) {}
 }
 
@@ -254,6 +271,9 @@ function queueCloudAutosave(delayMs = COLLAB_AUTOSAVE_DEBOUNCE_MS) {
 }
 
 function onMapLocalChange() {
+    if (isCloudBoardActive()) {
+        syncSharedMapSnapshot(getCloudMapPayload());
+    }
     queueCloudAutosave();
 }
 
@@ -611,6 +631,7 @@ function setActiveCloudBoardFromSummary(summary = null) {
         collab.ownerId = '';
         collab.activeBoardUpdatedAt = '';
         collab.lastSavedFingerprint = '';
+        syncSharedMapSnapshot(null);
     } else {
         collab.activeBoardId = String(summary.id || '');
         collab.activeRole = String(summary.role || '');
@@ -673,6 +694,7 @@ function applyCloudMapData(rawData) {
     renderGroupsList();
     renderAll();
     saveLocalState();
+    syncSharedMapSnapshot(normalized);
 }
 
 async function openCloudBoard(boardId, options = {}) {
@@ -745,10 +767,29 @@ export async function saveActiveCloudBoard(options = {}) {
             state.currentFileName = collab.activeBoardTitle;
             persistCollabState();
             syncCloudStatus();
-            collab.lastSavedFingerprint = localFingerprint;
+
+            if (result.board.data) {
+                const serverPayload = normalizeMapBoardData(result.board.data);
+                const serverFingerprint = JSON.stringify(serverPayload);
+                collab.lastSavedFingerprint = serverFingerprint;
+
+                if (serverFingerprint !== localFingerprint) {
+                    applyCloudMapData(serverPayload);
+                } else {
+                    syncSharedMapSnapshot(serverPayload);
+                }
+            } else {
+                collab.lastSavedFingerprint = localFingerprint;
+                syncSharedMapSnapshot(payload);
+            }
         }
 
-        if (manual && !quiet) await customAlert('CLOUD', '☁️ Board cloud sauvegarde.');
+        if (manual && !quiet) {
+            await customAlert(
+                'CLOUD',
+                result?.mergedConflict ? '☁️ Board cloud sauvegarde avec fusion auto.' : '☁️ Board cloud sauvegarde.'
+            );
+        }
         return true;
     } catch (e) {
         if (e && Number(e.status) === 409) {
@@ -798,6 +839,7 @@ async function createCloudBoardFromCurrent() {
 
     state.currentFileName = collab.activeBoardTitle;
     captureCloudSavedFingerprint();
+    syncSharedMapSnapshot(payload);
     setBoardQueryParam(result.board.id);
     return true;
 }

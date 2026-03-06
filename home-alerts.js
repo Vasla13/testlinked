@@ -77,7 +77,8 @@ function injectPopup() {
 
     const openAlert = () => {
         if (!currentAlert) return;
-        window.location.href = './map/';
+        const alertId = String(currentAlert.id || '').trim();
+        window.location.href = alertId ? `./map/?alert=${encodeURIComponent(alertId)}` : './map/';
     };
 
     closeBtn?.addEventListener('click', (event) => {
