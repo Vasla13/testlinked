@@ -514,8 +514,13 @@ function normalizeBoardActivity(board) {
     .slice(0, BOARD_ACTIVITY_MAX);
 }
 
+function sanitizeBoardActivityText(value) {
+  return String(value || "").replace(/\s+/g, " ").trim().slice(0, 180);
+}
+
 function appendBoardActivity(board, user, type, text) {
-  if (!board || !text) return;
+  const cleanText = sanitizeBoardActivityText(text);
+  if (!board || !cleanText) return false;
   const existing = normalizeBoardActivity(board);
   const latest = existing[0];
   if (
@@ -526,9 +531,9 @@ function appendBoardActivity(board, user, type, text) {
     (Date.now() - timeValue(latest.at)) < 25000
   ) {
     latest.at = nowIso();
-    latest.text = String(text || "").trim();
+    latest.text = cleanText;
     board.activity = [latest, ...existing.slice(1)].slice(0, BOARD_ACTIVITY_MAX);
-    return;
+    return true;
   }
 
   const entry = {
@@ -537,9 +542,10 @@ function appendBoardActivity(board, user, type, text) {
     actorId: String(user?.id || ""),
     actorName: String(user?.username || ""),
     type: String(type || "info"),
-    text: String(text || "").trim(),
+    text: cleanText,
   };
   board.activity = [entry, ...existing].slice(0, BOARD_ACTIVITY_MAX);
+  return true;
 }
 
 function summarizeBoardDelta(previousData, nextData, options = {}) {

@@ -9,6 +9,8 @@ const {
 
 const STORE_NAME = "bni-linked-alerts";
 const CURRENT_KEY = "alerts/current";
+const ALERTS_KEY = "alerts/all";
+const ALERTS_MAX = 120;
 const API_KEY = process.env.BNI_LINKED_KEY;
 const REQUIRE_AUTH = process.env.BNI_LINKED_REQUIRE_AUTH !== "0";
 const STAFF_ACCESS_CODE = "staff";
@@ -164,6 +166,24 @@ function isAlertStarted(alert) {
   return timestamp <= Date.now();
 }
 
+function timeValue(value) {
+  const timestamp = Date.parse(String(value || "").trim());
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function sortAlerts(alerts) {
+  return (Array.isArray(alerts) ? alerts : [])
+    .filter((alert) => alert && typeof alert === "object")
+    .sort((a, b) => {
+      const startDelta = timeValue(b?.startsAt || "") - timeValue(a?.startsAt || "");
+      if (startDelta !== 0) return startDelta;
+      const updateDelta = timeValue(b?.updatedAt || b?.createdAt || "") - timeValue(a?.updatedAt || a?.createdAt || "");
+      if (updateDelta !== 0) return updateDelta;
+      return String(a?.title || "").localeCompare(String(b?.title || ""));
+    })
+    .slice(0, ALERTS_MAX);
+}
+
 function normalizeAlert(raw, previous = null) {
   const source = raw && typeof raw === "object" ? raw : {};
   const title = String(source.title || "").trim();
@@ -258,10 +278,47 @@ function normalizeAlert(raw, previous = null) {
   };
 }
 
-async function getCurrentAlert(store) {
+async function getLegacyCurrentAlert(store) {
   const value = await store.get(CURRENT_KEY, { type: "json" }).catch(() => null);
   if (!value || typeof value !== "object") return null;
   return value;
+}
+
+async function getAlertList(store) {
+  const value = await store.get(ALERTS_KEY, { type: "json" }).catch(() => null);
+  const stored = Array.isArray(value?.alerts) ? value.alerts : (Array.isArray(value) ? value : []);
+  if (stored.length) return sortAlerts(stored);
+
+  const legacy = await getLegacyCurrentAlert(store);
+  return legacy ? [legacy] : [];
+}
+
+function findAlertById(alerts, id) {
+  const targetId = String(id || "").trim();
+  if (!targetId) return null;
+  return (Array.isArray(alerts) ? alerts : []).find((alert) => String(alert?.id || "") === targetId) || null;
+}
+
+function pickPublicAlert(alerts, viewer = null, preferredId = "") {
+  const visible = sortAlerts(alerts).filter((alert) => isViewerAllowed(alert, viewer));
+  if (preferredId) {
+    return visible.find((alert) => String(alert.id || "") === String(preferredId)) || null;
+  }
+  return visible[0] || null;
+}
+
+async function saveAlertList(store, alerts) {
+  const nextAlerts = sortAlerts(alerts);
+  await store.setJSON(ALERTS_KEY, nextAlerts);
+
+  const publicAlert = pickPublicAlert(nextAlerts, null);
+  if (publicAlert) {
+    await store.setJSON(CURRENT_KEY, publicAlert);
+  } else {
+    await store.delete(CURRENT_KEY).catch(() => null);
+  }
+
+  return nextAlerts;
 }
 
 function isViewerAllowed(alert, viewer) {
@@ -330,9 +387,9 @@ exports.handler = async (event) => {
 
   if (event.httpMethod === "GET") {
     const id = String(event.queryStringParameters?.id || "").trim();
-    const current = await getCurrentAlert(store);
+    const alerts = await getAlertList(store);
     const viewer = await resolveViewer(event);
-    const publicAlert = toPublicAlert(current, viewer);
+    const publicAlert = toPublicAlert(pickPublicAlert(alerts, viewer, id), viewer);
 
     if (id) {
       if (!publicAlert || String(publicAlert.id) !== id) {
@@ -362,8 +419,15 @@ exports.handler = async (event) => {
   const action = String(body.action || "").toLowerCase();
 
   if (action === "get-admin") {
-    const current = await getCurrentAlert(store);
-    return jsonResponse(200, { ok: true, alert: current });
+    const alerts = await getAlertList(store);
+    const requestedId = String(body.id || "").trim();
+    const alert = requestedId ? findAlertById(alerts, requestedId) : (alerts[0] || null);
+    return jsonResponse(200, { ok: true, alert, alerts });
+  }
+
+  if (action === "list-admin") {
+    const alerts = await getAlertList(store);
+    return jsonResponse(200, { ok: true, alerts, alert: alerts[0] || null });
   }
 
   if (action === "list_users") {
@@ -373,16 +437,40 @@ exports.handler = async (event) => {
   }
 
   if (action === "delete") {
-    await store.delete(CURRENT_KEY).catch(() => null);
-    return jsonResponse(200, { ok: true, alert: null });
+    const targetId = String(body.id || "").trim();
+    const previousAlerts = await getAlertList(store);
+    if (!previousAlerts.length) {
+      await store.delete(CURRENT_KEY).catch(() => null);
+      await store.delete(ALERTS_KEY).catch(() => null);
+      return jsonResponse(200, { ok: true, alert: null, alerts: [] });
+    }
+
+    const resolvedId = targetId || String(previousAlerts[0]?.id || "").trim();
+    const nextAlerts = previousAlerts.filter((alert) => String(alert?.id || "") !== resolvedId);
+
+    if (!nextAlerts.length) {
+      await store.delete(CURRENT_KEY).catch(() => null);
+      await store.delete(ALERTS_KEY).catch(() => null);
+      return jsonResponse(200, { ok: true, alert: null, alerts: [] });
+    }
+
+    const savedAlerts = await saveAlertList(store, nextAlerts);
+    return jsonResponse(200, {
+      ok: true,
+      alert: savedAlerts[0] || null,
+      alerts: savedAlerts,
+    });
   }
 
   if (action === "upsert") {
     try {
-      const previous = await getCurrentAlert(store);
+      const previousAlerts = await getAlertList(store);
+      const requestedId = String(body?.alert?.id || "").trim();
+      const previous = requestedId ? findAlertById(previousAlerts, requestedId) : null;
       const nextAlert = normalizeAlert(body.alert, previous);
-      await store.setJSON(CURRENT_KEY, nextAlert);
-      return jsonResponse(200, { ok: true, alert: nextAlert });
+      const remainingAlerts = previousAlerts.filter((alert) => String(alert?.id || "") !== String(nextAlert.id || ""));
+      const savedAlerts = await saveAlertList(store, [nextAlert, ...remainingAlerts]);
+      return jsonResponse(200, { ok: true, alert: nextAlert, alerts: savedAlerts });
     } catch (error) {
       return jsonResponse(400, { ok: false, error: error.message || "Invalid alert" });
     }

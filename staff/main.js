@@ -14,11 +14,8 @@ const dom = {
     accessInput: document.getElementById('staff-access-input'),
     accessError: document.getElementById('staff-access-error'),
     accessSubmit: document.getElementById('staff-access-submit'),
+    newAlertBtn: document.getElementById('btnNewAlert'),
     publishBtn: document.getElementById('btnPublishAlert'),
-    deleteBtn: document.getElementById('btnDeleteAlert'),
-    lockBtn: document.getElementById('btnLockStaff'),
-    clearBtn: document.getElementById('btnClearDraft'),
-    removeCircleBtn: document.getElementById('btnRemoveActiveCircle'),
     radius: document.getElementById('alertRadius'),
     radiusValue: document.getElementById('alertRadiusValue'),
     drawStatus: document.getElementById('staffDrawStatus'),
@@ -46,10 +43,16 @@ const dom = {
     mapBanner: document.getElementById('staff-map-banner'),
     coords: document.getElementById('coords-display'),
     resetView: document.getElementById('btnResetView'),
+    alertsList: document.getElementById('staffAlertsList'),
+    modal: document.getElementById('staff-alert-modal'),
+    modalTitle: document.getElementById('staffAlertModalTitle'),
+    modalCloseBtn: document.getElementById('btnAlertModalClose'),
+    modalCancelBtn: document.getElementById('btnAlertModalCancel'),
 };
 
 const state = {
     unlocked: false,
+    alerts: [],
     currentAlert: null,
     selection: null,
     drawMode: false,
@@ -75,6 +78,12 @@ const state = {
     userDirectory: [],
     selectionDrag: null,
     contextMenuOpen: false,
+    modalSession: {
+        open: false,
+        openedFromDraw: false,
+        originAlert: null,
+        originSelection: null,
+    },
 };
 
 function escapeText(value) {
@@ -98,6 +107,41 @@ function formatAlertDateTime(value) {
         dateStyle: 'short',
         timeStyle: 'short',
     }).format(date);
+}
+
+function cloneAlertRecord(alert) {
+    if (!alert || typeof alert !== 'object') return null;
+    try {
+        return JSON.parse(JSON.stringify(alert));
+    } catch (error) {
+        return { ...alert };
+    }
+}
+
+function getAlertId(alert = state.currentAlert) {
+    return String(alert?.id || '').trim();
+}
+
+function getAlertShapeLabel(alert) {
+    return alert?.shapeType === 'zone' ? 'Zone' : 'Cercle';
+}
+
+function getAlertStateLabel(alert) {
+    if (!alert) return 'Brouillon';
+    if (alert.active === false) return 'Inactive';
+    if (isAlertScheduled(alert)) return 'Programmee';
+    return 'Live';
+}
+
+function getAlertStateTone(alert) {
+    if (!alert) return 'muted';
+    if (alert.active === false) return 'muted';
+    if (isAlertScheduled(alert)) return 'warn';
+    return 'live';
+}
+
+function getAlertStamp(alert) {
+    return formatAlertDateTime(alert?.startsAt || alert?.updatedAt || alert?.createdAt || '');
 }
 
 function toLocalDateTimeInputValue(value) {
@@ -252,6 +296,135 @@ async function loadUserDirectory() {
         state.userDirectory = [];
         renderAudienceUi();
     }
+}
+
+function isAlertModalOpen() {
+    return Boolean(dom.modal && !dom.modal.hidden);
+}
+
+function updateAlertModalTitle() {
+    if (!dom.modalTitle) return;
+    dom.modalTitle.textContent = getAlertId()
+        ? 'Modifier l alerte'
+        : 'Nouvelle alerte';
+}
+
+function openAlertModal(options = {}) {
+    if (!dom.modal) return;
+    state.modalSession = {
+        open: true,
+        openedFromDraw: Boolean(options.openedFromDraw),
+        originAlert: cloneAlertRecord(options.originAlert ?? state.currentAlert),
+        originSelection: cloneSelection(options.originSelection ?? state.selection),
+    };
+    dom.modal.hidden = false;
+    updateAlertModalTitle();
+    window.setTimeout(() => {
+        dom.title?.focus();
+    }, 0);
+}
+
+function closeAlertModal(options = {}) {
+    if (!dom.modal) return;
+    const session = state.modalSession;
+    dom.modal.hidden = true;
+
+    if (options.restore && session.openedFromDraw) {
+        const restoreAlert = cloneAlertRecord(session.originAlert);
+        state.currentAlert = restoreAlert;
+        if (restoreAlert) {
+            fillForm(restoreAlert, { focus: false });
+        } else {
+            fillForm(null, { preserveSelection: false, focus: false });
+        }
+        if (!restoreAlert && session.originSelection) {
+            setSelection(session.originSelection, {
+                syncForm: false,
+                resetDraft: true,
+            });
+        }
+    } else if (options.restore && state.currentAlert) {
+        fillForm(state.currentAlert, { focus: false });
+    }
+
+    state.modalSession = {
+        open: false,
+        openedFromDraw: false,
+        originAlert: null,
+        originSelection: null,
+    };
+    renderBanner();
+    refreshStatusCards();
+}
+
+function renderAlertsList() {
+    if (!dom.alertsList) return;
+    const rows = Array.isArray(state.alerts) ? state.alerts : [];
+    if (!rows.length) {
+        dom.alertsList.innerHTML = `
+            <div class="staff-alert-empty">
+                Aucune alerte enregistree.<br>
+                Clique droit sur la carte pour en creer une.
+            </div>
+        `;
+        return;
+    }
+
+    dom.alertsList.innerHTML = rows.map((alert) => {
+        const alertId = getAlertId(alert);
+        const isSelected = alertId && alertId === getAlertId();
+        return `
+            <article class="staff-alert-card${isSelected ? ' is-selected' : ''}" data-alert-focus="${escapeText(alertId)}">
+                <div class="staff-alert-card-head">
+                    <div class="staff-alert-card-title">${escapeText(alert.title || 'Alerte sans titre')}</div>
+                    <div class="staff-alert-card-meta">
+                        <span class="staff-alert-badge" data-tone="${escapeText(getAlertStateTone(alert))}">${escapeText(getAlertStateLabel(alert))}</span>
+                        <span class="staff-alert-badge">${escapeText(getAlertShapeLabel(alert))}</span>
+                    </div>
+                </div>
+                <div class="staff-alert-card-desc">${escapeText(alert.description || 'Aucune description')}</div>
+                <div class="staff-alert-card-meta">
+                    <span class="staff-alert-badge" data-tone="muted">${escapeText(getAlertStamp(alert) || 'Sans date')}</span>
+                    <span class="staff-alert-badge" data-tone="muted">GPS ${Number(alert.gpsX || 0).toFixed(2)} / ${Number(alert.gpsY || 0).toFixed(2)}</span>
+                </div>
+                <div class="staff-alert-card-actions">
+                    <button type="button" class="mini-btn" data-alert-edit="${escapeText(alertId)}">Modifier</button>
+                    <button type="button" class="mini-btn" data-alert-delete="${escapeText(alertId)}">Supprimer</button>
+                </div>
+            </article>
+        `;
+    }).join('');
+
+    Array.from(dom.alertsList.querySelectorAll('[data-alert-focus]')).forEach((button) => {
+        button.onclick = (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const alertId = button.getAttribute('data-alert-focus') || '';
+            if (!alertId) return;
+            selectAlert(alertId, { focus: true });
+        };
+    });
+
+    Array.from(dom.alertsList.querySelectorAll('[data-alert-edit]')).forEach((button) => {
+        button.onclick = (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const alertId = button.getAttribute('data-alert-edit') || '';
+            if (!alertId) return;
+            const selected = selectAlert(alertId, { focus: true });
+            if (selected) openAlertModal({ openedFromDraw: false, originAlert: selected, originSelection: state.selection });
+        };
+    });
+
+    Array.from(dom.alertsList.querySelectorAll('[data-alert-delete]')).forEach((button) => {
+        button.onclick = (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const alertId = button.getAttribute('data-alert-delete') || '';
+            if (!alertId) return;
+            deleteAlert(alertId).catch(() => {});
+        };
+    });
 }
 
 function clampRadius(value) {
@@ -592,6 +765,8 @@ function openContextMenu(clientX, clientY) {
 }
 
 function stopDrawingMode(options = {}) {
+    const shouldRestore = Boolean(options.restoreBackup);
+    const backupSelection = cloneSelection(state.drawBackupSelection);
     state.drawMode = false;
     state.drawType = '';
     state.drawCircleDraft = null;
@@ -601,6 +776,13 @@ function stopDrawingMode(options = {}) {
     if (options.clearBackup !== false) {
         state.drawBackupSelection = null;
     }
+    if (shouldRestore && backupSelection) {
+        setSelection(backupSelection, {
+            syncForm: false,
+            resetDraft: true,
+        });
+        return;
+    }
     renderSelection();
     renderBanner();
     refreshStatusCards();
@@ -608,12 +790,19 @@ function stopDrawingMode(options = {}) {
 
 function startCircleDraw() {
     closeContextMenu();
+    if (isAlertModalOpen()) closeAlertModal({ restore: false });
     state.drawMode = true;
     state.drawType = 'circle';
     state.drawCircleDraft = null;
     state.isFreeDrawing = false;
     state.drawDraftPoints = [];
-    setStatusMessage('Mode zone actif. Clique puis glisse pour creer le cercle.', 'ok');
+    state.drawBackupSelection = cloneSelection(state.selection);
+    setStatusMessage(
+        state.currentAlert
+            ? 'Redessine la forme puis valide la fenetre pour mettre a jour l alerte.'
+            : 'Clique puis glisse pour creer le cercle de la nouvelle alerte.',
+        'ok'
+    );
     renderSelection();
     renderBanner();
     refreshStatusCards();
@@ -621,12 +810,19 @@ function startCircleDraw() {
 
 function startFreeDraw() {
     closeContextMenu();
+    if (isAlertModalOpen()) closeAlertModal({ restore: false });
     state.drawMode = true;
     state.drawType = 'free';
     state.drawCircleDraft = null;
     state.isFreeDrawing = false;
     state.drawDraftPoints = [];
-    setStatusMessage('Dessin libre actif. Maintiens clic gauche pour tracer la zone.', 'ok');
+    state.drawBackupSelection = cloneSelection(state.selection);
+    setStatusMessage(
+        state.currentAlert
+            ? 'Trace la nouvelle zone puis valide la fenetre pour mettre a jour l alerte.'
+            : 'Maintiens clic gauche pour dessiner la zone de la nouvelle alerte.',
+        'ok'
+    );
     renderSelection();
     renderBanner();
     refreshStatusCards();
@@ -635,23 +831,21 @@ function startFreeDraw() {
 function finalizeCircleDraft() {
     const draft = state.drawCircleDraft;
     if (!draft) return;
+    const originAlert = cloneAlertRecord(state.currentAlert);
+    const originSelection = cloneSelection(state.drawBackupSelection);
 
     if (!Number.isFinite(draft.r) || draft.r < 0.2) {
         state.drawCircleDraft = null;
-        stopDrawingMode();
+        stopDrawingMode({ restoreBackup: true });
         setStatusMessage('Zone trop petite.', 'warn');
         return;
     }
 
-    const baseCircles = state.selection?.shapeType === 'circle' ? getSelectionCircles() : [];
-    const nextSelection = buildCircleSelection([
-        ...baseCircles,
-        {
-            xPercent: draft.cx,
-            yPercent: draft.cy,
-            radius: draft.r,
-        },
-    ]);
+    const nextSelection = buildCircleSelection([{
+        xPercent: draft.cx,
+        yPercent: draft.cy,
+        radius: draft.r,
+    }]);
 
     state.drawCircleDraft = null;
     setSelection(nextSelection, {
@@ -660,20 +854,28 @@ function finalizeCircleDraft() {
     });
     state.drawMode = false;
     state.drawType = '';
-    setStatusMessage('Zone ajoutee.', 'ok');
+    updateAlertModalTitle();
+    openAlertModal({
+        openedFromDraw: true,
+        originAlert,
+        originSelection,
+    });
+    setStatusMessage('Cercle pret. Termine l alerte dans la fenetre.', 'ok');
 }
 
 function finalizeFreeDraw() {
     const pointCount = state.drawDraftPoints.length;
+    const originAlert = cloneAlertRecord(state.currentAlert);
+    const originSelection = cloneSelection(state.drawBackupSelection);
     if (pointCount < 3) {
-        stopDrawingMode();
+        stopDrawingMode({ restoreBackup: true });
         setStatusMessage('Trace trop court.', 'warn');
         return;
     }
 
     const nextSelection = buildZoneSelection(state.drawDraftPoints, getCurrentRadius());
     if (!nextSelection) {
-        stopDrawingMode();
+        stopDrawingMode({ restoreBackup: true });
         setStatusMessage('Zone invalide.', 'error');
         return;
     }
@@ -685,17 +887,19 @@ function finalizeFreeDraw() {
     state.drawMode = false;
     state.drawType = '';
     state.isFreeDrawing = false;
-    setStatusMessage(`Zone libre creee avec ${pointCount} points.`, 'ok');
+    updateAlertModalTitle();
+    openAlertModal({
+        openedFromDraw: true,
+        originAlert,
+        originSelection,
+    });
+    setStatusMessage(`Zone prete. ${pointCount} points enregistres.`, 'ok');
 }
 
 function refreshModeControls() {
     const selection = state.selection;
     const isZoneSelection = selection?.shapeType === 'zone';
     const circleCount = getSelectionCircles(selection).length;
-
-    if (dom.removeCircleBtn) {
-        dom.removeCircleBtn.disabled = circleCount === 0 || state.drawMode || isZoneSelection;
-    }
 
     if (!state.mapSelectionEnabled) {
         setDrawStatus('Placement en pause. Reactive le bouton du HUD pour modifier la carte.', 'circle');
@@ -879,12 +1083,10 @@ function refreshStatusCards() {
         if (!state.mapSelectionEnabled) dom.selectionMode.textContent = 'Pause';
         else if (state.drawMode && state.drawType === 'circle') dom.selectionMode.textContent = 'Nouvelle zone';
         else if (state.drawMode) dom.selectionMode.textContent = 'Dessin libre';
+        else if (!selection) dom.selectionMode.textContent = 'Aucune';
         else if (selection?.shapeType === 'zone') dom.selectionMode.textContent = 'Zone';
         else if (circleCount > 1) dom.selectionMode.textContent = `${circleCount} cercles`;
         else dom.selectionMode.textContent = 'Cercle';
-    }
-    if (dom.deleteBtn) {
-        dom.deleteBtn.disabled = !current;
     }
 
     refreshModeControls();
@@ -1090,8 +1292,10 @@ function readDraftAlert() {
     };
 }
 
-function fillForm(alert) {
+function fillForm(alert, options = {}) {
     if (!dom.title || !dom.description || !dom.active) return;
+    const preserveSelection = Boolean(options.preserveSelection);
+    const shouldFocus = options.focus !== false;
 
     state.drawMode = false;
     state.drawDraftPoints = [];
@@ -1106,10 +1310,19 @@ function fillForm(alert) {
         state.allowedUsers = [];
         if (dom.publishBtn) dom.publishBtn.textContent = 'Publier';
         updateRadiusUi(DEFAULT_RADIUS);
-        setSelection(null, { syncForm: false, resetDraft: true });
+        if (!preserveSelection) {
+            setSelection(null, { syncForm: false, resetDraft: true });
+        } else {
+            renderSelection();
+            renderBanner();
+            refreshStatusCards();
+        }
         renderAudienceUi();
         refreshAlertModePill();
-        scheduleMapView(false);
+        updateAlertModalTitle();
+        if (!preserveSelection && shouldFocus) {
+            scheduleMapView(false);
+        }
         return;
     }
 
@@ -1123,6 +1336,7 @@ function fillForm(alert) {
     updateRadiusUi(alert.radius || DEFAULT_RADIUS);
     renderAudienceUi();
     refreshAlertModePill();
+    updateAlertModalTitle();
 
     if (alert.shapeType === 'zone') {
         setSelection({
@@ -1146,7 +1360,9 @@ function fillForm(alert) {
             }];
         setSelection(buildCircleSelection(circles, Number(alert.activeCircleIndex)), { resetDraft: true });
     }
-    scheduleMapView(true);
+    if (shouldFocus) {
+        scheduleMapView(true);
+    }
 }
 
 function syncMapFrame() {
@@ -1292,6 +1508,60 @@ function requestAdmin(action, payload = {}) {
     });
 }
 
+function selectAlert(alertId, options = {}) {
+    const target = (Array.isArray(state.alerts) ? state.alerts : []).find((alert) => getAlertId(alert) === String(alertId || '').trim());
+    if (!target) return null;
+    state.currentAlert = cloneAlertRecord(target);
+    fillForm(state.currentAlert, { focus: options.focus !== false });
+    renderAlertsList();
+    if (options.focus !== false) {
+        setStatusMessage(`Alerte "${target.title}" chargee.`, 'ok');
+    }
+    return state.currentAlert;
+}
+
+async function loadAlerts(options = {}) {
+    const data = await requestAdmin('list-admin');
+    state.alerts = Array.isArray(data.alerts) ? data.alerts : [];
+
+    const selectedId = String(options.selectedId || '').trim();
+    const keepCurrent = Boolean(options.keepCurrent);
+    const currentId = keepCurrent ? getAlertId() : '';
+
+    if (selectedId) {
+        const selected = selectAlert(selectedId, { focus: options.focus !== false });
+        if (!selected) {
+            state.currentAlert = null;
+            fillForm(null, { preserveSelection: false, focus: false });
+        }
+        renderAlertsList();
+        return;
+    }
+
+    if (currentId) {
+        const selected = selectAlert(currentId, { focus: false });
+        if (!selected) {
+            state.currentAlert = null;
+            fillForm(null, { preserveSelection: false, focus: false });
+        }
+        renderAlertsList();
+        return;
+    }
+
+    renderAlertsList();
+}
+
+function resetToNewAlertDraft(options = {}) {
+    state.currentAlert = null;
+    fillForm(null, {
+        preserveSelection: Boolean(options.keepSelection),
+        focus: false,
+    });
+    renderAlertsList();
+    updateAlertModalTitle();
+    setStatusMessage('Trace une nouvelle alerte sur la carte.', 'ok');
+}
+
 function openPickerMapWindow() {
     if (!state.unlocked) {
         setStatusMessage('Deverrouille la console avant d’ouvrir la carte dediee.', 'warn');
@@ -1326,9 +1596,7 @@ function handlePickerMessage(event) {
 }
 
 async function loadCurrentAlert() {
-    const data = await requestAdmin('get-admin');
-    state.currentAlert = data.alert || null;
-    fillForm(state.currentAlert);
+    await loadAlerts({ keepCurrent: true });
     refreshStatusCards();
     if (state.currentAlert) {
         if (state.currentAlert.active === false) {
@@ -1336,8 +1604,10 @@ async function loadCurrentAlert() {
         } else if (isAlertScheduled(state.currentAlert)) {
             setStatusMessage(`Alerte programmee pour ${formatAlertDateTime(state.currentAlert.startsAt)}.`, 'warn');
         } else {
-            setStatusMessage('Alerte active chargee.', 'ok');
+            setStatusMessage('Alerte chargee.', 'ok');
         }
+    } else if (state.alerts.length) {
+        setStatusMessage('Selectionne une alerte dans les calques ou cree-en une nouvelle.', 'idle');
     } else {
         setStatusMessage('Aucune alerte enregistree. Cree une nouvelle alerte.', 'idle');
     }
@@ -1348,7 +1618,11 @@ async function saveAlert() {
         const payload = readDraftAlert();
         const data = await requestAdmin('upsert', { alert: payload });
         state.currentAlert = data.alert || null;
-        fillForm(state.currentAlert);
+        await loadAlerts({
+            selectedId: getAlertId(state.currentAlert),
+            focus: true,
+        });
+        closeAlertModal({ restore: false });
         refreshStatusCards();
         notifyPublicAlertRefresh();
         if (state.currentAlert?.active === false) {
@@ -1363,78 +1637,29 @@ async function saveAlert() {
     }
 }
 
-async function toggleAlert() {
-    if (!state.currentAlert) {
-        setStatusMessage('Aucune alerte a activer ou desactiver.', 'warn');
-        return;
-    }
-
-    try {
-        const payload = readDraftAlert();
-        payload.id = state.currentAlert.id;
-        payload.active = !Boolean(state.currentAlert.active);
-        const data = await requestAdmin('upsert', { alert: payload });
-        state.currentAlert = data.alert || null;
-        fillForm(state.currentAlert);
-        refreshStatusCards();
-        notifyPublicAlertRefresh();
-        setStatusMessage(state.currentAlert?.active === false ? 'Alerte desactivee.' : 'Alerte activee.', 'ok');
-    } catch (error) {
-        setStatusMessage(error.message || 'Impossible de changer l’etat de l’alerte.', 'error');
-    }
-}
-
-async function deleteAlert() {
-    if (!state.currentAlert) {
+async function deleteAlert(targetId = getAlertId()) {
+    const deleteId = String(targetId || '').trim();
+    if (!deleteId) {
         setStatusMessage('Aucune alerte a supprimer.', 'warn');
         return;
     }
-    if (!window.confirm('Supprimer l’alerte courante ?')) return;
+    if (!window.confirm('Supprimer cette alerte ?')) return;
 
     try {
-        await requestAdmin('delete');
-        state.currentAlert = null;
-        fillForm(null);
+        await requestAdmin('delete', { id: deleteId });
+        const wasCurrent = deleteId === getAlertId();
+        if (wasCurrent) {
+            state.currentAlert = null;
+            fillForm(null, { preserveSelection: false, focus: false });
+        }
+        await loadAlerts({ keepCurrent: !wasCurrent, focus: false });
+        closeAlertModal({ restore: false });
         refreshStatusCards();
         notifyPublicAlertRefresh();
         setStatusMessage('Alerte supprimee.', 'ok');
     } catch (error) {
         setStatusMessage(error.message || 'Suppression impossible.', 'error');
     }
-}
-
-function clearDraft() {
-    state.currentAlert = null;
-    stopDrawingMode();
-    fillForm(null);
-    refreshStatusCards();
-    renderBanner();
-    setStatusMessage('Brouillon vide. L’alerte live reste inchangée tant que tu ne republies pas.', 'warn');
-}
-
-function removeActiveCircle() {
-    const circles = getSelectionCircles();
-    if (!circles.length) {
-        setStatusMessage('Aucun cercle a retirer.', 'warn');
-        return;
-    }
-
-    const activeIndex = getActiveCircleIndex();
-    const nextCircles = circles.filter((_, index) => index !== activeIndex);
-    if (!nextCircles.length) {
-        setSelection(null, { syncForm: false, resetDraft: false });
-        if (dom.gpsX) dom.gpsX.value = '';
-        if (dom.gpsY) dom.gpsY.value = '';
-        setStatusMessage('Dernier cercle retire.', 'warn');
-        return;
-    }
-
-    const nextIndex = Math.max(0, Math.min(activeIndex, nextCircles.length - 1));
-    setSelection(buildCircleSelection(nextCircles, nextIndex), {
-        syncForm: true,
-        resetDraft: false,
-    });
-    setStatusMessage('Cercle actif retire.', 'warn');
 }
 
 function choosePositionOnMap(event) {
@@ -1610,11 +1835,6 @@ function unlockConsole() {
     scheduleMapView(Boolean(state.selection));
 }
 
-function lockConsole() {
-    setLockState(true);
-    setStatusMessage('Console verrouillee.', 'idle');
-}
-
 function bindEvents() {
     dom.accessSubmit?.addEventListener('click', () => {
         const code = String(dom.accessInput?.value || '').trim();
@@ -1629,11 +1849,16 @@ function bindEvents() {
         if (event.key === 'Enter') dom.accessSubmit?.click();
     });
 
+    dom.newAlertBtn?.addEventListener('click', () => {
+        if (!state.unlocked) return;
+        stopDrawingMode({ restoreBackup: false });
+        closeAlertModal({ restore: false });
+        resetToNewAlertDraft({ keepSelection: false });
+    });
+
     dom.publishBtn?.addEventListener('click', saveAlert);
-    dom.deleteBtn?.addEventListener('click', deleteAlert);
-    dom.lockBtn?.addEventListener('click', lockConsole);
-    dom.clearBtn?.addEventListener('click', clearDraft);
-    dom.removeCircleBtn?.addEventListener('click', removeActiveCircle);
+    dom.modalCloseBtn?.addEventListener('click', () => closeAlertModal({ restore: true }));
+    dom.modalCancelBtn?.addEventListener('click', () => closeAlertModal({ restore: true }));
     dom.ctxNewZone?.addEventListener('click', startCircleDraw);
     dom.ctxNewFreeZone?.addEventListener('click', startFreeDraw);
     dom.ctxCancel?.addEventListener('click', closeContextMenu);
@@ -1671,8 +1896,6 @@ function bindEvents() {
 
     dom.title?.addEventListener('input', renderBanner);
     dom.description?.addEventListener('input', renderBanner);
-    dom.gpsX?.addEventListener('input', updateSelectionFromGpsInputs);
-    dom.gpsY?.addEventListener('input', updateSelectionFromGpsInputs);
     dom.active?.addEventListener('change', () => {
         refreshAlertModePill();
         renderBanner();
@@ -1714,6 +1937,18 @@ function bindEvents() {
         if (dom.contextMenu?.contains(event.target)) return;
         closeContextMenu();
     });
+
+    dom.modal?.addEventListener('click', (event) => {
+        if (event.target === dom.modal) {
+            closeAlertModal({ restore: true });
+        }
+    });
+
+    window.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && isAlertModalOpen()) {
+            closeAlertModal({ restore: true });
+        }
+    });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -1721,6 +1956,8 @@ document.addEventListener('DOMContentLoaded', () => {
     bindEvents();
     initMap();
     renderAudienceUi();
+    renderAlertsList();
+    updateAlertModalTitle();
     refreshAlertModePill();
     refreshStatusCards();
     renderBanner();

@@ -1313,6 +1313,8 @@ export function injectStyles() {
             padding-right: 4px;
         }
         .cloud-board-log-row {
+            width: 100%;
+            margin: 0;
             display: flex;
             flex-direction: column;
             gap: 4px;
@@ -1320,6 +1322,23 @@ export function injectStyles() {
             border: 1px solid rgba(102, 243, 255, 0.08);
             border-radius: 8px;
             background: rgba(2, 8, 18, 0.82);
+            text-align: left;
+            font-family: var(--font-main);
+            box-shadow: none;
+        }
+        .cloud-board-log-row.is-clickable {
+            appearance: none;
+            cursor: pointer;
+            transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+        }
+        .cloud-board-log-row.is-clickable:hover {
+            border-color: rgba(102, 243, 255, 0.28);
+            background: rgba(7, 18, 36, 0.92);
+            transform: translateY(-1px);
+        }
+        .cloud-board-log-row.is-clickable:focus-visible {
+            outline: 1px solid rgba(102, 243, 255, 0.42);
+            outline-offset: 1px;
         }
         .cloud-board-log-meta {
             display: flex;
@@ -1343,6 +1362,25 @@ export function injectStyles() {
             color: #a9bdd4;
             font-size: 0.8rem;
             line-height: 1.45;
+        }
+        .cloud-board-log-summary {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        .cloud-board-log-summary span {
+            padding: 6px 10px;
+            border: 1px solid rgba(102, 243, 255, 0.12);
+            border-radius: 999px;
+            background: rgba(8, 17, 34, 0.72);
+            color: #8ca9c9;
+            font-size: 0.7rem;
+            letter-spacing: 1.1px;
+            text-transform: uppercase;
+        }
+        .cloud-board-log-list-detail {
+            max-height: 280px;
         }
         .cloud-board-log-empty {
             color: #7388a4;

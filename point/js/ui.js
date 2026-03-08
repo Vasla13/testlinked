@@ -172,10 +172,10 @@ function renderActionLogs() {
 }
 
 function resolveActionActor(preferred = '') {
-    const preferredName = sanitizeLogText(preferred, '');
-    if (preferredName) return preferredName;
     const collabName = sanitizeLogText(collab.user?.username || '', '');
     if (collabName) return collabName;
+    const preferredName = sanitizeLogText(preferred, '');
+    if (preferredName) return preferredName;
     const selected = nodeById(state.selection);
     const selectedName = sanitizeLogText(selected?.name || '', '');
     if (selectedName) return selectedName;
@@ -203,17 +203,17 @@ export function appendActionLog(message, options = {}) {
 export function logNodeAdded(nodeName, actor = '') {
     const cleanNode = sanitizeLogText(nodeName, 'Point');
     const cleanActor = resolveActionActor(actor);
-    return appendActionLog(`${cleanActor} a ajouté "${cleanNode}"`);
+    const detailText = `a ajoute le point ${cleanNode}`;
+    return appendActionLog(`${cleanActor} ${detailText}`);
 }
 
 function logNodesConnected(sourceNode, targetNode, actor = '') {
     if (!sourceNode || !targetNode) return false;
     const cleanActor = resolveActionActor(actor);
-    const order = { Entreprise: 1, Groupe: 2, Personne: 3, Point: 4 };
-    const sourceType = nodeTypeLabel(sourceNode.type);
-    const targetType = nodeTypeLabel(targetNode.type);
-    const pair = [sourceType, targetType].sort((a, b) => (order[a] || 99) - (order[b] || 99));
-    return appendActionLog(`${cleanActor} a connecté "${pair[0]}" avec "${pair[1]}"`);
+    const sourceName = sanitizeLogText(sourceNode.name || '', 'Source');
+    const targetName = sanitizeLogText(targetNode.name || '', 'Cible');
+    const detailText = `a ajoute la liaison entre ${sourceName} et ${targetName}`;
+    return appendActionLog(`${cleanActor} ${detailText}`);
 }
 
 function getApiKey() {
@@ -749,33 +749,6 @@ function renderCloudPresenceChips(entries = [], options = {}) {
             </div>
         `;
     }).join('');
-}
-
-function formatBoardActivityTime(value) {
-    const ts = Date.parse(String(value || ''));
-    if (!Number.isFinite(ts)) return '--:--';
-    const deltaSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
-    if (deltaSec < 60) return `${deltaSec}s`;
-    if (deltaSec < 3600) return `${Math.floor(deltaSec / 60)}m`;
-    if (deltaSec < 86400) return `${Math.floor(deltaSec / 3600)}h`;
-    return `${Math.floor(deltaSec / 86400)}j`;
-}
-
-function renderBoardActivityRows(activity = [], options = {}) {
-    const emptyLabel = options.emptyLabel || 'Aucune activite recente.';
-    const rows = Array.isArray(activity) ? activity.slice(0, Number(options.limit) || 8) : [];
-    if (!rows.length) {
-        return `<div class="cloud-board-log-empty">${escapeHtml(emptyLabel)}</div>`;
-    }
-    return rows.map((entry) => `
-        <div class="cloud-board-log-row">
-            <div class="cloud-board-log-meta">
-                <span class="cloud-board-log-actor">${escapeHtml(entry.actorName || 'systeme')}</span>
-                <span class="cloud-board-log-time">${escapeHtml(formatBoardActivityTime(entry.at))}</span>
-            </div>
-            <div class="cloud-board-log-text">${escapeHtml(entry.text || '')}</div>
-        </div>
-    `).join('');
 }
 
 function syncCloudLivePanels() {
@@ -1421,7 +1394,6 @@ async function renderCloudMembers(boardId) {
 
     const board = result.board;
     const members = Array.isArray(board.members) ? board.members : [];
-    const boardActivity = Array.isArray(board.activity) ? board.activity : [];
     const onlineUsers = new Set(Array.isArray(result.onlineUsers) ? result.onlineUsers.map((id) => String(id)) : []);
     const presenceByUser = new Map(
         (Array.isArray(result.presence) ? result.presence : []).map((entry) => [String(entry.userId || ''), entry])
@@ -1476,13 +1448,6 @@ async function renderCloudMembers(boardId) {
                 <button type="button" id="cloud-copy-link" class="mini-btn">Copier</button>
             </div>
             <div class="cloud-scroll">${membersHtml || '<div class="modal-empty-state">Aucun membre.</div>'}</div>
-            <div class="cloud-board-log">
-                <div class="cloud-board-log-head">
-                    <span>Suivi du board</span>
-                    <span>${escapeHtml(board.title || 'Sans nom')}</span>
-                </div>
-                <div class="cloud-board-log-list">${renderBoardActivityRows(boardActivity, { limit: 10, emptyLabel: 'Aucune action recente sur ce board.' })}</div>
-            </div>
         </div>
     `;
 
