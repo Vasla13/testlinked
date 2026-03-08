@@ -38,6 +38,10 @@ body.staff-shell .shell-mode-btn {
     letter-spacing: 0.9px;
 }
 
+body.staff-shell .full-width {
+    width: 100%;
+}
+
 body.staff-shell .editor-section {
     padding: 10px 12px;
 }

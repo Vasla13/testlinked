@@ -3,7 +3,7 @@ import { ensureNode, addLink as logicAddLink, calculatePath, clearPath, calculat
 import { renderPathfindingSidebar } from './templates.js';
 import { restartSim } from './physics.js';
 import { draw, updateDegreeCache, resizeCanvas } from './render.js';
-import { escapeHtml, linkKindEmoji, kindToLabel, clamp } from './utils.js';
+import { escapeHtml, linkKindEmoji, kindToLabel, clamp, uid } from './utils.js';
 import { TYPES, FILTERS } from './constants.js';
 import { injectStyles } from './styles.js';
 import { setupCanvasEvents } from './interaction.js';
@@ -2974,6 +2974,153 @@ function linkSignature(sourceId, targetId, kind) {
     return `${pair}|${String(kind || '')}`;
 }
 
+function normalizeMergeText(value) {
+    return String(value ?? '').trim().toLowerCase();
+}
+
+function pushIndexedNode(map, key, node) {
+    if (!key) return;
+    let bucket = map.get(key);
+    if (!bucket) {
+        bucket = new Set();
+        map.set(key, bucket);
+    }
+    bucket.add(node);
+}
+
+function getUniqueIndexedNode(map, key) {
+    const bucket = map.get(key);
+    if (!bucket || bucket.size !== 1) return null;
+    return bucket.values().next().value || null;
+}
+
+function normalizeImportedNode(rawNode, fallbackId = `node_${uid()}`) {
+    const source = rawNode && typeof rawNode === 'object' ? rawNode : {};
+    const type = [TYPES.PERSON, TYPES.GROUP, TYPES.COMPANY].includes(source.type) ? source.type : TYPES.PERSON;
+    const x = Number(source.x);
+    const y = Number(source.y);
+    const rawDescription = typeof source.description === 'string' ? source.description : String(source.notes || '');
+    const rawNotes = typeof source.notes === 'string' ? source.notes : String(source.description || '');
+
+    return {
+        ...source,
+        id: String(source.id ?? fallbackId),
+        name: String(source.name || '').trim() || 'Sans nom',
+        type,
+        color: (typeof source.color === 'string' && source.color.trim())
+            ? source.color.trim()
+            : (type === TYPES.PERSON ? '#ffffff' : '#cfd8e3'),
+        num: typeof source.num === 'string' ? source.num : String(source.num ?? ''),
+        accountNumber: typeof source.accountNumber === 'string' ? source.accountNumber : '',
+        citizenNumber: typeof source.citizenNumber === 'string' ? source.citizenNumber : '',
+        description: rawDescription,
+        notes: rawNotes,
+        x: Number.isFinite(x) ? x : (Math.random() - 0.5) * 100,
+        y: Number.isFinite(y) ? y : (Math.random() - 0.5) * 100,
+        fixed: Boolean(source.fixed),
+        linkedMapPointId: typeof source.linkedMapPointId === 'string' ? source.linkedMapPointId.trim() : ''
+    };
+}
+
+function normalizeImportedLink(rawLink) {
+    if (!rawLink || typeof rawLink !== 'object') return null;
+    const source = normalizeLinkEndpoint(rawLink.source ?? rawLink.from);
+    const target = normalizeLinkEndpoint(rawLink.target ?? rawLink.to);
+    if (!source || !target || source === target) return null;
+
+    return {
+        id: String(rawLink.id || `link_${uid()}`),
+        source,
+        target,
+        kind: String(rawLink.kind || 'relation')
+    };
+}
+
+function indexNodeForMerge(indexes, node) {
+    if (!node || typeof node !== 'object') return;
+    pushIndexedNode(indexes.byId, normalizeMergeText(node.id), node);
+    pushIndexedNode(indexes.byLinkedMapPointId, normalizeMergeText(node.linkedMapPointId), node);
+    pushIndexedNode(indexes.byCitizenNumber, normalizeMergeText(node.citizenNumber), node);
+    pushIndexedNode(indexes.byAccountNumber, normalizeMergeText(node.accountNumber), node);
+    pushIndexedNode(indexes.byNum, normalizeMergeText(node.num), node);
+    pushIndexedNode(indexes.byNameType, `${normalizeMergeText(node.type)}|${normalizeMergeText(node.name)}`, node);
+}
+
+function buildNodeMergeIndexes(nodes) {
+    const indexes = {
+        byId: new Map(),
+        byLinkedMapPointId: new Map(),
+        byCitizenNumber: new Map(),
+        byAccountNumber: new Map(),
+        byNum: new Map(),
+        byNameType: new Map()
+    };
+
+    nodes.forEach((node) => indexNodeForMerge(indexes, node));
+    return indexes;
+}
+
+function findMergeTarget(indexes, node) {
+    const exactId = getUniqueIndexedNode(indexes.byId, normalizeMergeText(node.id));
+    if (exactId) return exactId;
+
+    const linkedMapMatch = getUniqueIndexedNode(indexes.byLinkedMapPointId, normalizeMergeText(node.linkedMapPointId));
+    if (linkedMapMatch) return linkedMapMatch;
+
+    const citizenMatch = getUniqueIndexedNode(indexes.byCitizenNumber, normalizeMergeText(node.citizenNumber));
+    if (citizenMatch) return citizenMatch;
+
+    const accountMatch = getUniqueIndexedNode(indexes.byAccountNumber, normalizeMergeText(node.accountNumber));
+    if (accountMatch) return accountMatch;
+
+    const numMatch = getUniqueIndexedNode(indexes.byNum, normalizeMergeText(node.num));
+    if (numMatch) return numMatch;
+
+    if (String(node.type || '') !== TYPES.PERSON) {
+        return getUniqueIndexedNode(indexes.byNameType, `${normalizeMergeText(node.type)}|${normalizeMergeText(node.name)}`);
+    }
+
+    return null;
+}
+
+function mergeImportedNodeIntoExisting(existingNode, incomingNode) {
+    if (!existingNode || !incomingNode) return false;
+
+    let changed = false;
+    const fillBlank = (field) => {
+        const current = String(existingNode[field] ?? '').trim();
+        const next = String(incomingNode[field] ?? '').trim();
+        if (!current && next) {
+            existingNode[field] = incomingNode[field];
+            changed = true;
+        }
+    };
+
+    fillBlank('linkedMapPointId');
+    fillBlank('accountNumber');
+    fillBlank('citizenNumber');
+    fillBlank('num');
+    fillBlank('description');
+    fillBlank('notes');
+
+    if ((!existingNode.color || existingNode.color === '#ffffff' || existingNode.color === '#cfd8e3') && incomingNode.color && existingNode.color !== incomingNode.color) {
+        existingNode.color = incomingNode.color;
+        changed = true;
+    }
+
+    if (!String(existingNode.name || '').trim() && String(incomingNode.name || '').trim()) {
+        existingNode.name = incomingNode.name;
+        changed = true;
+    }
+
+    if (!existingNode.type && incomingNode.type) {
+        existingNode.type = incomingNode.type;
+        changed = true;
+    }
+
+    return changed;
+}
+
 function downloadJSON() {
     if (isLocalSaveLocked()) {
         showCustomAlert("Export local bloque: seul le lead peut dupliquer/sauvegarder en local.");
@@ -3026,16 +3173,48 @@ function processData(d, mode, options = {}) {
     const silent = Boolean(options && options.silent);
 
     if (mode === 'load') {
-        state.nodes = d.nodes; state.links = d.links;
-        state.nodes.forEach((node) => {
-            if (!node || typeof node !== 'object') return;
-            if (typeof node.accountNumber !== 'string') node.accountNumber = '';
-            if (typeof node.citizenNumber !== 'string') node.citizenNumber = '';
-            if (typeof node.description !== 'string') node.description = String(node.notes || '');
-            if (typeof node.notes !== 'string') node.notes = String(node.description || '');
+        if (!d || !Array.isArray(d.nodes) || !Array.isArray(d.links)) {
+            if (!silent) showCustomAlert('FORMAT DE FICHIER INVALIDE.');
+            return false;
+        }
+
+        if (!silent && (state.nodes.length || state.links.length)) {
+            pushHistory();
+        }
+
+        const usedNodeIds = new Set();
+        state.nodes = d.nodes.map((rawNode, index) => {
+            const node = normalizeImportedNode(rawNode, `node_${uid()}_${index}`);
+            while (!node.id || usedNodeIds.has(String(node.id))) {
+                node.id = `node_${uid()}_${index}`;
+            }
+            usedNodeIds.add(String(node.id));
+            return node;
         });
-        if(d.physicsSettings) state.physicsSettings = d.physicsSettings;
-        if(d.meta && d.meta.projectName) state.projectName = d.meta.projectName;
+
+        const validNodeIds = new Set(state.nodes.map((node) => String(node.id)));
+        const linkIds = new Set();
+        const linkSigs = new Set();
+        state.links = d.links
+            .map((rawLink) => normalizeImportedLink(rawLink))
+            .filter((link) => {
+                if (!link) return false;
+                if (!validNodeIds.has(String(link.source)) || !validNodeIds.has(String(link.target))) return false;
+
+                const sig = linkSignature(link.source, link.target, link.kind);
+                if (linkSigs.has(sig)) return false;
+
+                while (!link.id || linkIds.has(String(link.id))) {
+                    link.id = `link_${uid()}`;
+                }
+
+                linkIds.add(String(link.id));
+                linkSigs.add(sig);
+                return true;
+            });
+
+        if (d.physicsSettings) state.physicsSettings = d.physicsSettings;
+        if (d.meta && d.meta.projectName) state.projectName = d.meta.projectName;
         else state.projectName = null;
 
         const numericIds = state.nodes.map(n => Number(n.id)).filter(Number.isFinite);
@@ -3046,49 +3225,41 @@ function processData(d, mode, options = {}) {
         if (!silent) showCustomAlert('OUVERTURE RÉUSSIE.');
     }
     else if (mode === 'merge') {
-        const incomingNodes = Array.isArray(d.nodes) ? d.nodes : [];
-        const incomingLinks = Array.isArray(d.links) ? d.links : [];
+        const incomingNodes = Array.isArray(d?.nodes) ? d.nodes : [];
+        const incomingLinks = Array.isArray(d?.links) ? d.links : [];
 
         let addedNodes = 0;
+        let enrichedNodes = 0;
         let addedLinks = 0;
 
         const idMap = new Map();
-        const nodesByName = new Map(
-            state.nodes
-                .filter(n => n && typeof n.name === 'string')
-                .map(n => [n.name.trim().toLowerCase(), n])
-        );
+        const mergeIndexes = buildNodeMergeIndexes(state.nodes);
 
-        incomingNodes.forEach((rawNode) => {
-            if (!rawNode || typeof rawNode.name !== 'string') return;
-            const safeName = rawNode.name.trim();
-            if (!safeName) return;
+        if (!silent && (incomingNodes.length || incomingLinks.length)) {
+            pushHistory();
+        }
 
-            const key = safeName.toLowerCase();
-            const existing = nodesByName.get(key);
-            const rawId = String(rawNode.id ?? '');
+        incomingNodes.forEach((rawNode, index) => {
+            const rawId = String(rawNode?.id ?? '');
+            const normalizedNode = normalizeImportedNode(rawNode, `node_${uid()}_${index}`);
+            const existing = findMergeTarget(mergeIndexes, normalizedNode);
 
             if (existing) {
                 if (rawId) idMap.set(rawId, existing.id);
+                if (mergeImportedNodeIntoExisting(existing, normalizedNode)) {
+                    indexNodeForMerge(mergeIndexes, existing);
+                    enrichedNodes++;
+                }
                 return;
             }
 
-            const newId = state.nextId++;
-            const cloned = {
-                ...rawNode,
-                id: newId,
-                name: safeName,
-                x: (Math.random() - 0.5) * 100,
-                y: (Math.random() - 0.5) * 100
-            };
-            if (typeof cloned.accountNumber !== 'string') cloned.accountNumber = '';
-            if (typeof cloned.citizenNumber !== 'string') cloned.citizenNumber = '';
-            if (typeof cloned.description !== 'string') cloned.description = String(cloned.notes || '');
-            if (typeof cloned.notes !== 'string') cloned.notes = String(cloned.description || '');
+            while (!normalizedNode.id || getUniqueIndexedNode(mergeIndexes.byId, normalizeMergeText(normalizedNode.id)) || state.nodes.some((node) => String(node.id) === String(normalizedNode.id))) {
+                normalizedNode.id = `node_${uid()}_${index}`;
+            }
 
-            state.nodes.push(cloned);
-            nodesByName.set(key, cloned);
-            if (rawId) idMap.set(rawId, newId);
+            state.nodes.push(normalizedNode);
+            indexNodeForMerge(mergeIndexes, normalizedNode);
+            if (rawId) idMap.set(rawId, normalizedNode.id);
             addedNodes++;
         });
 
@@ -3124,7 +3295,7 @@ function processData(d, mode, options = {}) {
             let nextId = String(rawLink.id ?? '');
             if (!nextId || existingLinkIds.has(nextId)) {
                 do {
-                    nextId = `link_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+                    nextId = `link_${uid()}`;
                 } while (existingLinkIds.has(nextId));
             }
 
@@ -3144,9 +3315,15 @@ function processData(d, mode, options = {}) {
         updatePersonColors();
         restartSim();
         refreshLists();
-        if (!silent) showCustomAlert(`FUSION : ${addedNodes} NOUVEAUX ÉLÉMENTS, ${addedLinks} NOUVEAUX LIENS.`);
+        if (!state.projectName && d?.meta?.projectName) {
+            state.projectName = d.meta.projectName;
+        }
+        if (!silent) {
+            showCustomAlert(`FUSION : ${addedNodes} NOUVEAUX ÉLÉMENTS, ${enrichedNodes} FICHES ENRICHIES, ${addedLinks} NOUVEAUX LIENS.`);
+        }
     }
     saveState();
+    return true;
 }
 
 function showIntelUnlock(onUnlock) {

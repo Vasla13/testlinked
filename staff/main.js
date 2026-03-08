@@ -17,6 +17,7 @@ const dom = {
     clearBtn: document.getElementById('btnClearDraft'),
     useMapBtn: document.getElementById('btnUseMapSelection'),
     startZoneBtn: document.getElementById('btnStartZoneDraw'),
+    openPickerBtn: document.getElementById('btnOpenPickerMap'),
     finishZoneBtn: document.getElementById('btnFinishZoneDraw'),
     cancelZoneBtn: document.getElementById('btnCancelZoneDraw'),
     radius: document.getElementById('alertRadius'),
@@ -75,6 +76,7 @@ const state = {
     audienceMode: 'all',
     allowedUsers: [],
     userDirectory: [],
+    pickerWindow: null,
 };
 
 function escapeText(value) {
@@ -320,6 +322,25 @@ function buildZoneSelection(points, radius = getCurrentRadius()) {
     };
 }
 
+function sanitizePickerPayload(payload) {
+    if (!payload || typeof payload !== 'object') return null;
+
+    const xPercent = Number(payload.xPercent);
+    const yPercent = Number(payload.yPercent);
+    const gpsX = Number(payload.gpsX);
+    const gpsY = Number(payload.gpsY);
+
+    if (!Number.isFinite(xPercent) || !Number.isFinite(yPercent)) return null;
+    if (!Number.isFinite(gpsX) || !Number.isFinite(gpsY)) return null;
+
+    return {
+        xPercent: Number(xPercent.toFixed(4)),
+        yPercent: Number(yPercent.toFixed(4)),
+        gpsX: Number(gpsX.toFixed(2)),
+        gpsY: Number(gpsY.toFixed(2)),
+    };
+}
+
 function updateRadiusUi(radius = getCurrentRadius()) {
     const value = clampRadius(radius);
     if (dom.radius) dom.radius.value = String(value);
@@ -525,6 +546,30 @@ function setSelection(selection, options = {}) {
     renderSelection();
     renderBanner();
     refreshStatusCards();
+}
+
+function applyPickerSelection(payload) {
+    const safePayload = sanitizePickerPayload(payload);
+    if (!safePayload) {
+        setStatusMessage('Position recue invalide.', 'warn');
+        return;
+    }
+
+    setSelection({
+        shapeType: 'circle',
+        xPercent: safePayload.xPercent,
+        yPercent: safePayload.yPercent,
+        gpsX: safePayload.gpsX,
+        gpsY: safePayload.gpsY,
+        radius: getCurrentRadius(),
+        zonePoints: [],
+    }, {
+        syncForm: true,
+        resetDraft: true,
+    });
+
+    focusSelection();
+    setStatusMessage('Position recue depuis la carte dediee.', 'ok');
 }
 
 function finalizeZoneDraft(options = {}) {
@@ -778,6 +823,39 @@ function requestAdmin(action, payload = {}) {
         }
         return data;
     });
+}
+
+function openPickerMapWindow() {
+    if (!state.unlocked) {
+        setStatusMessage('Deverrouille la console avant d’ouvrir la carte dediee.', 'warn');
+        return;
+    }
+
+    const picker = window.open(
+        '../map/index.html?pickAlert=1',
+        'bni-alert-picker',
+        'width=1480,height=940,resizable=yes,scrollbars=no'
+    );
+
+    if (!picker) {
+        setStatusMessage('Popup bloquee. Autorise les fenetres puis reessaie.', 'error');
+        return;
+    }
+
+    state.pickerWindow = picker;
+    try {
+        picker.focus();
+    } catch (e) {}
+    setStatusMessage('Carte dediee ouverte. Clique sur la carte pour rapatrier la position.', 'ok');
+}
+
+function handlePickerMessage(event) {
+    if (event.origin !== window.location.origin) return;
+    const data = event.data && typeof event.data === 'object' ? event.data : null;
+    if (!data || data.type !== 'bni-alert-location') return;
+
+    applyPickerSelection(data.payload);
+    state.pickerWindow = null;
 }
 
 async function loadCurrentAlert() {
@@ -1064,6 +1142,7 @@ function bindEvents() {
     dom.clearBtn?.addEventListener('click', clearDraft);
     dom.useMapBtn?.addEventListener('click', activateCircleMode);
     dom.startZoneBtn?.addEventListener('click', beginZoneDraw);
+    dom.openPickerBtn?.addEventListener('click', openPickerMapWindow);
     dom.finishZoneBtn?.addEventListener('click', () => {
         if (finalizeZoneDraft({ silent: false })) {
             focusSelection();
@@ -1135,6 +1214,8 @@ function bindEvents() {
     window.addEventListener('resize', () => {
         scheduleMapView(Boolean(state.selection));
     });
+
+    window.addEventListener('message', handlePickerMessage);
 
     window.addEventListener('load', () => {
         scheduleMapView(Boolean(state.selection));
