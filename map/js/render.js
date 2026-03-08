@@ -330,6 +330,17 @@ function renderAlertOverlay() {
         zone.setAttribute("stroke", "#ff4d67");
         zone.setAttribute("stroke-width", "0.18");
         zone.setAttribute("class", "map-alert-zone");
+        zone.style.pointerEvents = 'auto';
+        zone.style.cursor = 'pointer';
+        zone.onmousedown = (event) => {
+            event.stopPropagation();
+        };
+        zone.onclick = (event) => {
+            event.stopPropagation();
+            window.dispatchEvent(new CustomEvent('bni:map-alert-click', {
+                detail: { alert }
+            }));
+        };
         alertLayer.appendChild(zone);
         return;
     }
@@ -348,6 +359,17 @@ function renderAlertOverlay() {
     circle.setAttribute("stroke", "#ff4d67");
     circle.setAttribute("stroke-width", "0.18");
     circle.setAttribute("class", "map-alert-ring");
+    circle.style.pointerEvents = 'auto';
+    circle.style.cursor = 'pointer';
+    circle.onmousedown = (event) => {
+        event.stopPropagation();
+    };
+    circle.onclick = (event) => {
+        event.stopPropagation();
+        window.dispatchEvent(new CustomEvent('bni:map-alert-click', {
+            detail: { alert }
+        }));
+    };
     alertLayer.appendChild(circle);
 }
 

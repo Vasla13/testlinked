@@ -8,7 +8,13 @@ const ALERTS_ENDPOINT = '/.netlify/functions/alerts';
 const ALERT_REFRESH_EVENT_KEY = 'bniAlertRefresh_v1';
 const ALERT_POLL_MS = 6000;
 const COLLAB_SESSION_STORAGE_KEY = 'bniLinkedCollabSession_v1';
+const MAP_ALERT_SEEN_STORAGE_KEY = 'bniMapAlertSeen_v2';
+const MAP_ALERT_CLICK_EVENT = 'bni:map-alert-click';
 let alertRefreshStarted = false;
+const alertUiState = {
+    activeBannerKey: '',
+    clickListenerBound: false,
+};
 
 function escapeText(value) {
     return String(value ?? '')
@@ -25,6 +31,40 @@ function getAlertBanner() {
 
 function getPickerOverlay() {
     return document.getElementById('alert-picker-overlay');
+}
+
+function getAlertKey(alert) {
+    if (!alert || typeof alert !== 'object') return '';
+    const gpsX = Number.isFinite(Number(alert.gpsX)) ? Number(alert.gpsX).toFixed(2) : '';
+    const gpsY = Number.isFinite(Number(alert.gpsY)) ? Number(alert.gpsY).toFixed(2) : '';
+    return [
+        String(alert.id || ''),
+        String(alert.updatedAt || ''),
+        String(alert.title || ''),
+        gpsX,
+        gpsY
+    ].join('::');
+}
+
+function readSeenAlertKey() {
+    try {
+        return String(localStorage.getItem(MAP_ALERT_SEEN_STORAGE_KEY) || '');
+    } catch (e) {
+        return '';
+    }
+}
+
+function markAlertSeen(alert) {
+    const alertKey = getAlertKey(alert);
+    if (!alertKey) return;
+    try {
+        localStorage.setItem(MAP_ALERT_SEEN_STORAGE_KEY, alertKey);
+    } catch (e) {}
+}
+
+function isAlertNewForViewer(alert) {
+    const alertKey = getAlertKey(alert);
+    return Boolean(alertKey) && alertKey !== readSeenAlertKey();
 }
 
 function readViewerSession() {
@@ -122,8 +162,9 @@ function focusAlert(alert, attempt = 0) {
 function renderAlertBanner(alert) {
     const banner = getAlertBanner();
     if (!banner) return;
+    const alertKey = getAlertKey(alert);
 
-    if (!alert) {
+    if (!alert || !alertKey || alertUiState.activeBannerKey !== alertKey) {
         banner.hidden = true;
         banner.innerHTML = '';
         return;
@@ -141,9 +182,34 @@ function renderAlertBanner(alert) {
     const dismissBtn = document.getElementById('map-alert-dismiss');
     if (dismissBtn) {
         dismissBtn.onclick = () => {
+            alertUiState.activeBannerKey = '';
+            markAlertSeen(alert);
             banner.hidden = true;
         };
     }
+}
+
+async function openAlertDetails(alert) {
+    if (!alert) return;
+    await customAlert(
+        'ALERTE BNI',
+        `
+            <div class="map-alert-kicker">Zone signalee</div>
+            <div class="map-alert-title">${escapeText(alert.title || 'Alerte')}</div>
+            <div class="map-alert-desc">${escapeText(alert.description || 'Aucune precision')}</div>
+            <div class="map-alert-meta">GPS ${alert.gpsX.toFixed(2)} / ${alert.gpsY.toFixed(2)}</div>
+        `
+    );
+}
+
+function bindAlertClickListener() {
+    if (alertUiState.clickListenerBound) return;
+    alertUiState.clickListenerBound = true;
+
+    window.addEventListener(MAP_ALERT_CLICK_EVENT, (event) => {
+        const alert = event?.detail?.alert || state.activeAlert;
+        openAlertDetails(alert).catch(() => {});
+    });
 }
 
 async function fetchAlertById(id) {
@@ -181,11 +247,24 @@ async function fetchCurrentAlert() {
 async function refreshMapAlert(options = {}) {
     const params = new URLSearchParams(window.location.search);
     const alertId = String(params.get('alert') || '').trim();
-    const shouldFocus = Boolean(options.focus) || Boolean(alertId);
+    const shouldFocus = Boolean(options.focus) || (Boolean(alertId) && Boolean(options.initialLoad));
 
     try {
         const alert = alertId ? await fetchAlertById(alertId) : await fetchCurrentAlert();
         state.activeAlert = alert;
+        const alertKey = getAlertKey(alert);
+
+        if (!alert || !alertKey) {
+            alertUiState.activeBannerKey = '';
+        } else if (alertUiState.activeBannerKey && alertUiState.activeBannerKey === alertKey) {
+            // Keep current banner visible until user closes it.
+        } else if (options.initialLoad && isAlertNewForViewer(alert)) {
+            alertUiState.activeBannerKey = alertKey;
+            markAlertSeen(alert);
+        } else {
+            alertUiState.activeBannerKey = '';
+        }
+
         renderAlertBanner(alert);
         renderAll();
         if (alert && shouldFocus) {
@@ -205,6 +284,7 @@ async function refreshMapAlert(options = {}) {
 function startAlertRefreshLoop() {
     if (alertRefreshStarted) return;
     alertRefreshStarted = true;
+    bindAlertClickListener();
 
     window.setInterval(() => {
         refreshMapAlert({ silent: true }).catch(() => {});
@@ -224,7 +304,7 @@ function startAlertRefreshLoop() {
 }
 
 export async function loadAlertFromUrl() {
-    await refreshMapAlert({ focus: false });
+    await refreshMapAlert({ focus: false, initialLoad: true });
     startAlertRefreshLoop();
 }
 
