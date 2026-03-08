@@ -829,8 +829,8 @@ export function injectStyles() {
         .quick-create-shell {
             display: flex;
             flex-direction: column;
-            gap: 12px;
-            padding: 18px;
+            gap: 10px;
+            padding: 14px;
             border: 1px solid rgba(102, 243, 255, 0.34);
             border-radius: 16px;
             background:
@@ -841,17 +841,17 @@ export function injectStyles() {
         .quick-create-tabs {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 8px;
+            gap: 6px;
         }
         .quick-create-tab {
             appearance: none;
-            padding: 14px 16px;
+            padding: 11px 14px;
             border: 1px solid rgba(102, 243, 255, 0.16);
             border-radius: 12px;
             background: rgba(3, 10, 24, 0.82);
             color: #6d88aa;
             font-family: var(--font-main);
-            font-size: clamp(1.35rem, 3vw, 1.9rem);
+            font-size: clamp(1.1rem, 2vw, 1.5rem);
             line-height: 0.92;
             letter-spacing: 0.08em;
             text-align: left;
@@ -878,7 +878,7 @@ export function injectStyles() {
         .quick-create-panel {
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 10px;
         }
         .quick-create-panel.is-hidden {
             display: none;
@@ -887,7 +887,7 @@ export function injectStyles() {
             margin: 0;
             color: var(--accent-cyan);
             font-family: var(--font-main);
-            font-size: clamp(2.4rem, 4vw, 3.4rem);
+            font-size: clamp(1.9rem, 3.2vw, 2.7rem);
             line-height: 0.82;
             letter-spacing: 0.08em;
             text-transform: uppercase;
@@ -895,50 +895,50 @@ export function injectStyles() {
         .quick-create-block {
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 8px;
             min-height: 100%;
-            padding: 14px;
+            padding: 12px;
             border: 1px solid rgba(102, 243, 255, 0.14);
             border-radius: 12px;
             background: rgba(2, 8, 20, 0.58);
         }
         .quick-create-block-head {
             color: #9eb8d4;
-            font-size: 0.75rem;
-            letter-spacing: 2px;
+            font-size: 0.7rem;
+            letter-spacing: 1.6px;
             text-transform: uppercase;
         }
         .quick-create-link-flow {
             display: grid;
             grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-            gap: 12px;
+            gap: 10px;
             align-items: start;
         }
         .quick-create-link-arrow {
             display: flex;
             align-items: center;
             justify-content: center;
-            min-width: 52px;
-            min-height: 54px;
+            min-width: 42px;
+            min-height: 46px;
             color: var(--accent-cyan);
-            font-size: clamp(2.1rem, 4vw, 2.8rem);
+            font-size: clamp(1.6rem, 3vw, 2.2rem);
             line-height: 1;
             text-shadow: 0 0 16px rgba(102, 243, 255, 0.2);
         }
         .quick-create-node-row {
             display: grid;
             grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 8px;
+            gap: 6px;
         }
         .quick-create-target-input {
-            min-height: 54px;
-            padding: 10px 12px;
+            min-height: 46px;
+            padding: 8px 11px;
             border: 1px solid rgba(102, 243, 255, 0.26);
             border-radius: 10px;
             background: rgba(2, 8, 20, 0.92);
             color: var(--text-light);
             font-family: var(--font-main);
-            font-size: clamp(1.1rem, 2.4vw, 1.55rem);
+            font-size: clamp(0.98rem, 1.8vw, 1.24rem);
             line-height: 1.1;
             letter-spacing: 0.04em;
         }
@@ -948,41 +948,49 @@ export function injectStyles() {
         .quick-create-field-stack {
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 6px;
         }
         .quick-create-field-label {
             color: #9bb0c7;
-            font-size: 0.72rem;
-            letter-spacing: 1.8px;
+            font-size: 0.68rem;
+            letter-spacing: 1.5px;
             text-transform: uppercase;
         }
         .quick-create-search-result {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
+            display: block;
             min-height: 18px;
+            line-height: 1.35;
+        }
+        .quick-create-search-list {
+            display: block;
         }
         .quick-create-search-hit {
             margin: 0;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
+            display: inline;
             width: auto;
-            padding: 7px 10px;
-            border: 1px solid rgba(102, 243, 255, 0.14);
-            border-radius: 999px;
-            background: rgba(4, 12, 28, 0.78);
-            color: #cfefff;
+            padding: 0;
+            border: 0;
+            background: transparent;
+            color: #95efff;
             font-family: var(--font-main);
-            font-size: 0.82rem;
-            line-height: 1;
+            font-size: 0.84rem;
+            line-height: 1.35;
             text-transform: none;
             box-shadow: none;
+            text-decoration: underline;
+            text-decoration-thickness: 1px;
+            text-underline-offset: 2px;
+            text-align: left;
+        }
+        .quick-create-search-hit:not(:first-child)::before {
+            content: '·';
+            display: inline-block;
+            margin: 0 8px 0 6px;
+            color: rgba(145, 188, 216, 0.78);
+            text-decoration: none;
         }
         .quick-create-search-hit:hover {
-            border-color: rgba(102, 243, 255, 0.34);
-            background: rgba(8, 20, 40, 0.92);
-            color: #fff;
+            color: #ffffff;
             box-shadow: none;
         }
         .quick-create-search-name {
@@ -997,6 +1005,71 @@ export function injectStyles() {
             letter-spacing: 1.2px;
             text-transform: uppercase;
             white-space: nowrap;
+        }
+        .quick-create-search-empty {
+            color: var(--text-faded);
+            font-size: 0.76rem;
+        }
+        .quick-create-search-create-wrap {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-bottom: 4px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid rgba(102, 243, 255, 0.12);
+        }
+        .quick-create-search-hit-create {
+            color: #f2fdff;
+            font-weight: 700;
+        }
+        .quick-create-search-hit-create::before {
+            display: none;
+        }
+        .quick-create-search-create-label {
+            color: #6f8ea6;
+            font-size: 0.68rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+        }
+        .quick-create-type-switch {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            flex-wrap: wrap;
+        }
+        .quick-create-type-chip {
+            margin: 0;
+            padding: 0;
+            border: 0;
+            background: transparent;
+            color: #89a6c5;
+            font-family: var(--font-main);
+            font-size: 0.72rem;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            box-shadow: none;
+            text-decoration: underline;
+            text-decoration-thickness: 1px;
+            text-underline-offset: 2px;
+        }
+        .quick-create-type-chip:not(:first-child)::before {
+            content: '·';
+            display: inline-block;
+            margin: 0 6px 0 4px;
+            color: rgba(145, 188, 216, 0.6);
+            text-decoration: none;
+        }
+        .quick-create-type-chip:hover {
+            color: #d9f9ff;
+            background: transparent;
+        }
+        .quick-create-type-chip.active {
+            color: #f2fdff;
+            font-weight: 700;
+        }
+        .quick-create-search-meta {
+            display: none;
         }
         .quick-create-search-empty {
             color: var(--text-faded);
@@ -1055,8 +1128,8 @@ export function injectStyles() {
             min-width: 74px;
             margin: 0;
             color: #9bb0c7;
-            font-size: 0.75rem;
-            letter-spacing: 1.2px;
+            font-size: 0.7rem;
+            letter-spacing: 1px;
             text-transform: uppercase;
             white-space: nowrap;
         }
@@ -1094,6 +1167,7 @@ export function injectStyles() {
         .quick-create-panel-action {
             width: 100%;
             margin-top: auto;
+            min-height: 42px;
         }
         .quick-create-sep {
             color: #3a6f7e;
@@ -2409,6 +2483,28 @@ export function injectStyles() {
             .quick-create-link-flow,
             .quick-create-node-row {
                 grid-template-columns: 1fr;
+            }
+            .quick-create-shell {
+                gap: 8px;
+                padding: 10px;
+            }
+            .quick-create-title {
+                font-size: clamp(1.55rem, 6vw, 2rem);
+            }
+            .quick-create-tab {
+                padding: 10px 12px;
+                font-size: 1rem;
+            }
+            .quick-create-block {
+                padding: 10px;
+            }
+            .quick-create-target-input {
+                min-height: 42px;
+                font-size: 0.96rem;
+            }
+            .quick-create-search-result {
+                max-height: none;
+                overflow: visible;
             }
             .quick-create-type-row,
             .quick-create-source-row,

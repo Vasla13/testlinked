@@ -1981,8 +1981,16 @@ function createModal() {
                 padding: 20px 20px 18px;
             }
             #custom-modal[data-mode="create"] .modal-card {
-                width: min(760px, calc(100vw - 300px));
-                min-height: 410px;
+                width: min(1120px, calc(100vw - 28px));
+                min-height: 0;
+                padding: 16px 18px 14px;
+                overflow: visible;
+            }
+            #custom-modal[data-mode="create"] #modal-msg {
+                margin-bottom: 10px;
+            }
+            #custom-modal[data-mode="create"] #modal-actions {
+                gap: 8px;
             }
             #custom-modal[data-mode="search"] .modal-card {
                 width: min(700px, calc(100vw - 300px));
@@ -2027,6 +2035,9 @@ function createModal() {
                 #custom-modal[data-mode="aihub"] .modal-card {
                     width: calc(100vw - 18px);
                     min-height: 260px;
+                }
+                #custom-modal[data-mode="create"] .modal-card {
+                    padding: 12px;
                 }
             }
         `;
@@ -2439,17 +2450,17 @@ function openQuickCreateModal() {
                 </section>
 
                 <section class="quick-create-block quick-create-panel is-hidden" data-panel="link">
-                    <div class="quick-create-block-head">Relier deux fiches existantes</div>
+                    <div class="quick-create-block-head">Relier deux fiches</div>
                     <div class="quick-create-link-flow">
                         <div class="quick-create-field-stack">
                             <label class="quick-create-field-label" for="quick-link-source">Source</label>
-                            <input id="quick-link-source" type="text" value="${escapeHtml(prefilledSourceNode?.name || '')}" placeholder="Nom exact de la fiche" class="quick-create-target-input" />
+                            <input id="quick-link-source" type="text" value="${escapeHtml(prefilledSourceNode?.name || '')}" placeholder="Nom de la fiche" class="quick-create-target-input" />
                             <div id="quick-link-source-result" class="quick-create-search-result" hidden></div>
                         </div>
                         <div class="quick-create-link-arrow" aria-hidden="true">&rarr;</div>
                         <div class="quick-create-field-stack">
                             <label class="quick-create-field-label" for="quick-link-target">Cible</label>
-                            <input id="quick-link-target" type="text" placeholder="Nom exact de la fiche" class="quick-create-target-input" />
+                            <input id="quick-link-target" type="text" placeholder="Nom de la fiche" class="quick-create-target-input" />
                             <div id="quick-link-target-result" class="quick-create-search-result" hidden></div>
                         </div>
                     </div>
@@ -2480,6 +2491,10 @@ function openQuickCreateModal() {
     const linkApplyBtn = document.getElementById('quick-link-apply');
     const tabButtons = Array.from(document.querySelectorAll('.quick-create-tab'));
     const panelEls = Array.from(document.querySelectorAll('.quick-create-panel'));
+    const linkDraftTypes = {
+        source: TYPES.PERSON,
+        target: TYPES.PERSON
+    };
 
     const defaultBaseName = () => (
         draftTargetType === TYPES.COMPANY
@@ -2493,8 +2508,47 @@ function openQuickCreateModal() {
         return state.nodes.find((node) => String(node.name || '').trim().toLowerCase() === targetName) || null;
     };
 
-    const resolveLinkSource = () => findNodeByName(linkSourceInput?.value);
-    const resolveLinkTarget = () => findNodeByName(linkTargetInput?.value);
+    const normalizeNodeName = (value) => String(value || '').replace(/\s+/g, ' ').trim();
+
+    const getLinkDraftType = (field) => linkDraftTypes[field] || TYPES.PERSON;
+    const setLinkDraftType = (field, type) => {
+        if (!Object.prototype.hasOwnProperty.call(linkDraftTypes, field)) return;
+        linkDraftTypes[field] = TYPE_LABEL[type] ? type : TYPES.PERSON;
+    };
+
+    const getLinkEndpoint = (field) => {
+        const input = field === 'source' ? linkSourceInput : linkTargetInput;
+        const name = normalizeNodeName(input?.value);
+        if (!name) return null;
+        const existingNode = findNodeByName(name);
+        if (existingNode) {
+            return {
+                mode: 'existing',
+                name: existingNode.name,
+                type: existingNode.type,
+                node: existingNode,
+                id: existingNode.id
+            };
+        }
+        return {
+            mode: 'draft',
+            name,
+            type: getLinkDraftType(field),
+            node: null,
+            id: ''
+        };
+    };
+
+    const resolveLinkSource = () => {
+        const endpoint = getLinkEndpoint('source');
+        return endpoint?.mode === 'existing' ? endpoint.node : null;
+    };
+    const resolveLinkTarget = () => {
+        const endpoint = getLinkEndpoint('target');
+        return endpoint?.mode === 'existing' ? endpoint.node : null;
+    };
+    const isDraftEndpoint = (endpoint) => endpoint?.mode === 'draft' && Boolean(endpoint?.name);
+    const formatTypeLabelLower = (type) => String(TYPE_LABEL[type] || 'Fiche').toLowerCase();
 
     const hideLinkResults = (resultsEl) => {
         if (!resultsEl) return;
@@ -2509,39 +2563,86 @@ function openQuickCreateModal() {
         return searchableNodes
             .filter((node) => String(node?.name || '').toLowerCase().includes(normalizedQuery))
             .filter((node) => !excludeIds.has(String(node?.id || '')))
-            .slice(0, 10);
+            .slice(0, 8);
     };
 
-    const renderLinkResults = (resultsEl, query, nodes, onPick) => {
+    const renderLinkResults = (resultsEl, field, query, nodes, onPick) => {
         if (!resultsEl) return;
-        const cleanQuery = String(query || '').trim();
+        const cleanQuery = normalizeNodeName(query);
         if (!cleanQuery) {
             hideLinkResults(resultsEl);
             return;
         }
 
-        if (!nodes.length) {
-            resultsEl.hidden = false;
-            resultsEl.innerHTML = '<span class="quick-create-search-empty">Aucun resultat</span>';
-            return;
-        }
-
-        resultsEl.hidden = false;
-        resultsEl.innerHTML = nodes.map((node) => `
-            <button type="button" class="quick-create-search-hit" data-id="${escapeHtml(String(node.id || ''))}">
-                <span class="quick-create-search-name">${escapeHtml(String(node.name || 'Sans nom'))}</span>
-                <span class="quick-create-search-meta">${escapeHtml(TYPE_LABEL[node.type] || node.type || '')}</span>
+        const exactMatch = findNodeByName(cleanQuery);
+        const draftType = getLinkDraftType(field);
+        const existingHits = nodes.map((node) => `
+            <button
+                type="button"
+                class="quick-create-search-hit"
+                data-id="${escapeHtml(String(node.id || ''))}"
+                title="${escapeHtml(TYPE_LABEL[node.type] || node.type || '')}"
+            >${escapeHtml(String(node.name || 'Sans nom'))}
             </button>
         `).join('');
+        const createMarkup = exactMatch ? '' : `
+            <div class="quick-create-search-create-wrap">
+                <button type="button" class="quick-create-search-hit quick-create-search-hit-create" data-create-field="${escapeHtml(field)}">
+                    Creer "${escapeHtml(cleanQuery)}"
+                </button>
+                <span class="quick-create-search-create-label">Type</span>
+                <div class="quick-create-type-switch" role="group" aria-label="Type de creation">
+                    ${[TYPES.PERSON, TYPES.GROUP, TYPES.COMPANY].map((type) => `
+                        <button
+                            type="button"
+                            class="quick-create-type-chip ${draftType === type ? 'active' : ''}"
+                            data-create-field-type="${escapeHtml(field)}"
+                            data-type="${escapeHtml(type)}"
+                        >${escapeHtml(TYPE_LABEL[type] || type)}</button>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+        const existingMarkup = existingHits ? `<div class="quick-create-search-list">${existingHits}</div>` : '';
+        const emptyMarkup = (!existingHits && !createMarkup)
+            ? '<span class="quick-create-search-empty">Aucun resultat</span>'
+            : '';
+
+        resultsEl.hidden = false;
+        resultsEl.innerHTML = `${createMarkup}${existingMarkup}${emptyMarkup}`;
 
         Array.from(resultsEl.querySelectorAll('.quick-create-search-hit')).forEach((btn) => {
             btn.onmousedown = (event) => {
                 event.preventDefault();
             };
             btn.onclick = () => {
+                const createField = btn.getAttribute('data-create-field') || '';
+                if (createField) {
+                    const input = createField === 'source' ? linkSourceInput : linkTargetInput;
+                    if (input) input.value = cleanQuery;
+                    hideLinkResults(resultsEl);
+                    updateLinkState();
+                    if (createField === 'source') linkTargetInput?.focus();
+                    return;
+                }
                 const nodeId = btn.getAttribute('data-id') || '';
                 const pickedNode = state.nodes.find((node) => String(node.id) === String(nodeId)) || null;
                 if (pickedNode && typeof onPick === 'function') onPick(pickedNode);
+            };
+        });
+
+        Array.from(resultsEl.querySelectorAll('.quick-create-type-chip')).forEach((btn) => {
+            btn.onmousedown = (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+            };
+            btn.onclick = () => {
+                const fieldName = btn.getAttribute('data-create-field-type') || '';
+                const nextType = btn.getAttribute('data-type') || TYPES.PERSON;
+                if (!fieldName) return;
+                setLinkDraftType(fieldName, nextType);
+                renderLinkResults(resultsEl, fieldName, cleanQuery, nodes, onPick);
+                updateLinkState();
             };
         });
     };
@@ -2554,14 +2655,17 @@ function openQuickCreateModal() {
 
     const updateKindOptions = () => {
         if (!linkKindSelect) return;
-        const source = resolveLinkSource();
-        const target = resolveLinkTarget();
+        const source = getLinkEndpoint('source');
+        const target = getLinkEndpoint('target');
         const currentKind = String(linkKindSelect.value || '').trim();
         if (!source || !target) {
             setLinkKindPlaceholder();
             return;
         }
-        if (String(source.id) === String(target.id)) {
+        if (
+            (source.id && target.id && String(source.id) === String(target.id))
+            || source.name.toLowerCase() === target.name.toLowerCase()
+        ) {
             setLinkKindPlaceholder('Source et cible identiques');
             return;
         }
@@ -2618,26 +2722,43 @@ function openQuickCreateModal() {
     };
 
     const updateLinkState = () => {
-        const source = resolveLinkSource();
-        const target = resolveLinkTarget();
+        const source = getLinkEndpoint('source');
+        const target = getLinkEndpoint('target');
+        const sameEndpoint = Boolean(source && target && (
+            (source.id && target.id && String(source.id) === String(target.id))
+            || source.name.toLowerCase() === target.name.toLowerCase()
+        ));
+        const usesDraft = isDraftEndpoint(source) || isDraftEndpoint(target);
 
         if (linkContextEl) {
-            if (source && target && String(source.id) !== String(target.id)) {
-                linkContextEl.textContent = `Relier ${source.name} vers ${target.name}.`;
+            if (source && target && !sameEndpoint) {
+                if (isDraftEndpoint(source) && isDraftEndpoint(target)) {
+                    linkContextEl.textContent = `Creer ${source.name} comme ${formatTypeLabelLower(source.type)} et ${target.name} comme ${formatTypeLabelLower(target.type)}, puis ajouter la liaison.`;
+                } else if (isDraftEndpoint(source)) {
+                    linkContextEl.textContent = `Creer ${source.name} comme ${formatTypeLabelLower(source.type)} puis le lier a ${target.name}.`;
+                } else if (isDraftEndpoint(target)) {
+                    linkContextEl.textContent = `Creer ${target.name} comme ${formatTypeLabelLower(target.type)} puis le lier a ${source.name}.`;
+                } else {
+                    linkContextEl.textContent = `Relier ${source.name} vers ${target.name}.`;
+                }
             } else if (source && target) {
                 linkContextEl.textContent = 'Choisis deux fiches differentes.';
             } else if (source) {
-                linkContextEl.textContent = 'Choisis maintenant la cible.';
+                linkContextEl.textContent = isDraftEndpoint(source)
+                    ? `La source sera creee comme ${formatTypeLabelLower(source.type)}. Choisis maintenant la cible.`
+                    : 'Choisis maintenant la cible.';
             } else if (target) {
-                linkContextEl.textContent = 'Choisis maintenant la source.';
+                linkContextEl.textContent = isDraftEndpoint(target)
+                    ? `La cible sera creee comme ${formatTypeLabelLower(target.type)}. Choisis maintenant la source.`
+                    : 'Choisis maintenant la source.';
             } else {
-                linkContextEl.textContent = 'Choisis la source puis la cible.';
+                linkContextEl.textContent = 'Tape un nom. Si la fiche n existe pas, elle pourra etre creee ici puis liee directement.';
             }
         }
 
         if (linkApplyBtn) {
-            const ready = source && target && String(source.id) !== String(target.id);
-            linkApplyBtn.textContent = ready ? 'Lier' : 'Choisir source et cible';
+            const ready = source && target && !sameEndpoint;
+            linkApplyBtn.textContent = !ready ? 'Choisir source et cible' : (usesDraft ? 'Creer et lier' : 'Lier');
             linkApplyBtn.disabled = !ready;
         }
 
@@ -2668,6 +2789,7 @@ function openQuickCreateModal() {
         linkSourceInput.oninput = () => {
             renderLinkResults(
                 linkSourceResultEl,
+                'source',
                 linkSourceInput.value,
                 queryLinkNodes(linkSourceInput.value, {
                     excludeIds: [resolveLinkTarget()?.id].filter(Boolean)
@@ -2684,6 +2806,7 @@ function openQuickCreateModal() {
         linkSourceInput.onfocus = () => {
             renderLinkResults(
                 linkSourceResultEl,
+                'source',
                 linkSourceInput.value,
                 queryLinkNodes(linkSourceInput.value, {
                     excludeIds: [resolveLinkTarget()?.id].filter(Boolean)
@@ -2702,7 +2825,7 @@ function openQuickCreateModal() {
         linkSourceInput.onkeydown = (event) => {
             if (event.key === 'Enter') {
                 event.preventDefault();
-                if (resolveLinkSource()) linkTargetInput?.focus();
+                if (getLinkEndpoint('source')) linkTargetInput?.focus();
             }
         };
     }
@@ -2711,6 +2834,7 @@ function openQuickCreateModal() {
         linkTargetInput.oninput = () => {
             renderLinkResults(
                 linkTargetResultEl,
+                'target',
                 linkTargetInput.value,
                 queryLinkNodes(linkTargetInput.value, {
                     excludeIds: [resolveLinkSource()?.id].filter(Boolean)
@@ -2726,6 +2850,7 @@ function openQuickCreateModal() {
         linkTargetInput.onfocus = () => {
             renderLinkResults(
                 linkTargetResultEl,
+                'target',
                 linkTargetInput.value,
                 queryLinkNodes(linkTargetInput.value, {
                     excludeIds: [resolveLinkSource()?.id].filter(Boolean)
@@ -2773,21 +2898,46 @@ function openQuickCreateModal() {
 
     if (linkApplyBtn) {
         linkApplyBtn.onclick = () => {
-            const sourceNode = resolveLinkSource();
-            const targetNode = resolveLinkTarget();
+            const sourceEndpoint = getLinkEndpoint('source');
+            const targetEndpoint = getLinkEndpoint('target');
 
-            if (!sourceNode || !targetNode) {
-                showCustomAlert('Choisis une source et une cible existantes.');
+            if (!sourceEndpoint || !targetEndpoint) {
+                showCustomAlert('Choisis une source et une cible.');
                 return;
             }
 
-            if (String(sourceNode.id) === String(targetNode.id)) {
+            if (
+                (sourceEndpoint.id && targetEndpoint.id && String(sourceEndpoint.id) === String(targetEndpoint.id))
+                || sourceEndpoint.name.toLowerCase() === targetEndpoint.name.toLowerCase()
+            ) {
                 showCustomAlert('Source et cible identiques.');
                 return;
             }
 
+            const createdNodes = [];
+            const resolveEndpointNode = (endpoint) => {
+                if (endpoint?.mode === 'existing' && endpoint.node) {
+                    return endpoint.node;
+                }
+                const alreadyExisting = findNodeByName(endpoint?.name);
+                if (alreadyExisting) return alreadyExisting;
+                const createdNode = ensureNode(endpoint?.type || TYPES.PERSON, endpoint?.name || defaultBaseName());
+                createdNodes.push(createdNode);
+                return createdNode;
+            };
+
+            const sourceNode = resolveEndpointNode(sourceEndpoint);
+            const targetNode = resolveEndpointNode(targetEndpoint);
+
+            createdNodes.forEach((node) => logNodeAdded(node.name, actorName));
+            if (createdNodes.length) {
+                refreshLists();
+                restartSim();
+            }
+
             const created = addLink(sourceNode.id, targetNode.id, String(linkKindSelect?.value || '').trim() || null, { actor: actorName });
             if (!created) {
+                if (createdNodes.length) scheduleSave();
                 showCustomAlert('Lien deja existant ou invalide.');
                 return;
             }
