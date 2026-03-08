@@ -82,6 +82,55 @@ function normalizeZonePoints(rawPoints) {
     .filter(Boolean);
 }
 
+function normalizeCircle(rawCircle, fallback = null) {
+  if (!rawCircle || typeof rawCircle !== "object") return null;
+  const xPercent = clampNumber(rawCircle.xPercent, fallback?.xPercent ?? NaN, 0, 100);
+  const yPercent = clampNumber(rawCircle.yPercent, fallback?.yPercent ?? NaN, 0, 100);
+  const gpsX = clampNumber(rawCircle.gpsX, fallback?.gpsX ?? NaN);
+  const gpsY = clampNumber(rawCircle.gpsY, fallback?.gpsY ?? NaN);
+  const radius = clampNumber(rawCircle.radius, fallback?.radius ?? 2.5, 0.4, 18);
+
+  if (!Number.isFinite(xPercent) || !Number.isFinite(yPercent)) return null;
+  if (!Number.isFinite(gpsX) || !Number.isFinite(gpsY)) return null;
+
+  return {
+    xPercent: Number(xPercent.toFixed(4)),
+    yPercent: Number(yPercent.toFixed(4)),
+    gpsX: Number(gpsX.toFixed(2)),
+    gpsY: Number(gpsY.toFixed(2)),
+    radius: Number(radius.toFixed(1)),
+  };
+}
+
+function normalizeCircles(rawCircles, fallbackCircles = []) {
+  if (!Array.isArray(rawCircles)) return [];
+  const fallback = Array.isArray(fallbackCircles) && fallbackCircles.length ? fallbackCircles[0] : null;
+  return rawCircles
+    .map((circle) => normalizeCircle(circle, fallback))
+    .filter(Boolean);
+}
+
+function summarizeCircles(circles) {
+  if (!Array.isArray(circles) || !circles.length) return null;
+  const minX = Math.min(...circles.map((circle) => circle.xPercent - circle.radius));
+  const maxX = Math.max(...circles.map((circle) => circle.xPercent + circle.radius));
+  const minY = Math.min(...circles.map((circle) => circle.yPercent - circle.radius));
+  const maxY = Math.max(...circles.map((circle) => circle.yPercent + circle.radius));
+  const minGpsX = Math.min(...circles.map((circle) => circle.gpsX));
+  const maxGpsX = Math.max(...circles.map((circle) => circle.gpsX));
+  const minGpsY = Math.min(...circles.map((circle) => circle.gpsY));
+  const maxGpsY = Math.max(...circles.map((circle) => circle.gpsY));
+  const radius = Math.max(...circles.map((circle) => circle.radius));
+
+  return {
+    xPercent: Number((((minX + maxX) / 2)).toFixed(4)),
+    yPercent: Number((((minY + maxY) / 2)).toFixed(4)),
+    gpsX: Number((((minGpsX + maxGpsX) / 2)).toFixed(2)),
+    gpsY: Number((((minGpsY + maxGpsY) / 2)).toFixed(2)),
+    radius: Number(radius.toFixed(1)),
+  };
+}
+
 function normalizeAllowedUsers(rawUsers) {
   if (!Array.isArray(rawUsers)) return [];
   const seen = new Set();
@@ -97,6 +146,24 @@ function normalizeAllowedUsers(rawUsers) {
   return clean;
 }
 
+function normalizeStartsAt(value, fallback = "") {
+  const raw = String(value ?? fallback ?? "").trim();
+  if (!raw) return "";
+  const date = new Date(raw);
+  if (!Number.isFinite(date.getTime())) {
+    throw new Error("Date de diffusion invalide.");
+  }
+  return date.toISOString();
+}
+
+function isAlertStarted(alert) {
+  const startsAt = String(alert?.startsAt || "").trim();
+  if (!startsAt) return true;
+  const timestamp = Date.parse(startsAt);
+  if (!Number.isFinite(timestamp)) return true;
+  return timestamp <= Date.now();
+}
+
 function normalizeAlert(raw, previous = null) {
   const source = raw && typeof raw === "object" ? raw : {};
   const title = String(source.title || "").trim();
@@ -110,31 +177,82 @@ function normalizeAlert(raw, previous = null) {
   const shapeType = source.shapeType === "zone" && zonePoints.length >= 3 ? "zone" : "circle";
   const visibilityMode = source.visibilityMode === "whitelist" ? "whitelist" : "all";
   const allowedUsers = normalizeAllowedUsers(source.allowedUsers);
+  const startsAt = normalizeStartsAt(
+    Object.prototype.hasOwnProperty.call(source, "startsAt") ? source.startsAt : previous?.startsAt,
+    previous?.startsAt || ""
+  );
+  const previousCircles = normalizeCircles(previous?.circles || []);
+  const fallbackCircle = normalizeCircle(source, previousCircles[0] || previous);
+  const circles = normalizeCircles(source.circles, previousCircles);
+  if (!circles.length && fallbackCircle) {
+    circles.push(fallbackCircle);
+  }
 
   if (!title) throw new Error("Titre requis.");
   if (!description) throw new Error("Description requise.");
-  if (!Number.isFinite(gpsX) || !Number.isFinite(gpsY)) {
-    throw new Error("Coordonnees GPS invalides.");
-  }
-  if (!Number.isFinite(xPercent) || !Number.isFinite(yPercent)) {
-    throw new Error("Position carte invalide.");
-  }
 
   const now = new Date().toISOString();
+  if (shapeType === "zone") {
+    if (!Number.isFinite(gpsX) || !Number.isFinite(gpsY)) {
+      throw new Error("Coordonnees GPS invalides.");
+    }
+    if (!Number.isFinite(xPercent) || !Number.isFinite(yPercent)) {
+      throw new Error("Position carte invalide.");
+    }
+
+    return {
+      id: String(previous?.id || source.id || `alert_${crypto.randomUUID()}`),
+      title,
+      description,
+      gpsX,
+      gpsY,
+      xPercent,
+      yPercent,
+      radius,
+      shapeType,
+      zonePoints,
+      circles: [],
+      activeCircleIndex: -1,
+      visibilityMode,
+      allowedUsers: visibilityMode === "whitelist" ? allowedUsers : [],
+      active: source.active !== false,
+      startsAt,
+      createdAt: String(previous?.createdAt || now),
+      updatedAt: now,
+    };
+  }
+
+  if (!circles.length) {
+    throw new Error("Au moins un cercle est requis.");
+  }
+
+  const summary = summarizeCircles(circles);
+  const rawActiveIndex = Number(source.activeCircleIndex);
+  const previousActiveIndex = Number(previous?.activeCircleIndex);
+  const activeCircleIndex = Number.isInteger(rawActiveIndex)
+    ? Math.min(circles.length - 1, Math.max(0, rawActiveIndex))
+    : Math.min(
+        circles.length - 1,
+        Math.max(0, Number.isInteger(previousActiveIndex) ? previousActiveIndex : (circles.length - 1))
+      );
+
   return {
     id: String(previous?.id || source.id || `alert_${crypto.randomUUID()}`),
     title,
     description,
-    gpsX,
-    gpsY,
-    xPercent,
-    yPercent,
-    radius,
-    shapeType,
-    zonePoints: shapeType === "zone" ? zonePoints : [],
+    gpsX: Number(summary.gpsX),
+    gpsY: Number(summary.gpsY),
+    xPercent: Number(summary.xPercent),
+    yPercent: Number(summary.yPercent),
+    radius: Number(summary.radius),
+    shapeType: "circle",
+    zonePoints: [],
+    circles,
+    activeCircleIndex,
     visibilityMode,
     allowedUsers: visibilityMode === "whitelist" ? allowedUsers : [],
     active: source.active !== false,
+    startsAt,
     createdAt: String(previous?.createdAt || now),
     updatedAt: now,
   };
@@ -148,6 +266,7 @@ async function getCurrentAlert(store) {
 
 function isViewerAllowed(alert, viewer) {
   if (!alert || typeof alert !== "object" || !alert.active) return false;
+  if (!isAlertStarted(alert)) return false;
   if (String(alert.visibilityMode || "all") !== "whitelist") return true;
   const normalized = normalizeUsername(viewer?.username || "");
   if (!normalized.ok) return false;
@@ -169,8 +288,13 @@ function toPublicAlert(alert, viewer = null) {
     radius: Number(alert.radius || 2.5),
     shapeType: String(alert.shapeType || "circle"),
     zonePoints: Array.isArray(alert.zonePoints) ? alert.zonePoints : [],
+    circles: normalizeCircles(alert.circles || []),
+    activeCircleIndex: Number.isInteger(Number(alert.activeCircleIndex))
+      ? Number(alert.activeCircleIndex)
+      : -1,
     visibilityMode: String(alert.visibilityMode || "all"),
     active: true,
+    startsAt: String(alert.startsAt || ""),
     createdAt: String(alert.createdAt || ""),
     updatedAt: String(alert.updatedAt || ""),
   };

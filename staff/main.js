@@ -6,21 +6,19 @@ const ALERT_REFRESH_EVENT_KEY = 'bniAlertRefresh_v1';
 const DEFAULT_RADIUS = 2.6;
 
 const dom = {
+    contextMenu: document.getElementById('context-menu'),
+    ctxNewZone: document.getElementById('ctx-new-zone'),
+    ctxNewFreeZone: document.getElementById('ctx-new-free-zone'),
+    ctxCancel: document.getElementById('ctx-cancel'),
     accessOverlay: document.getElementById('staff-access-overlay'),
     accessInput: document.getElementById('staff-access-input'),
     accessError: document.getElementById('staff-access-error'),
     accessSubmit: document.getElementById('staff-access-submit'),
-    homeBtn: document.getElementById('btnStaffHome'),
     publishBtn: document.getElementById('btnPublishAlert'),
     deleteBtn: document.getElementById('btnDeleteAlert'),
     lockBtn: document.getElementById('btnLockStaff'),
     clearBtn: document.getElementById('btnClearDraft'),
-    useMapBtn: document.getElementById('btnUseMapSelection'),
-    startZoneBtn: document.getElementById('btnStartZoneDraw'),
-    openPickerBtn: document.getElementById('btnOpenPickerMap'),
-    finishZoneBtn: document.getElementById('btnFinishZoneDraw'),
-    undoZoneBtn: document.getElementById('btnUndoZonePoint'),
-    cancelZoneBtn: document.getElementById('btnCancelZoneDraw'),
+    removeCircleBtn: document.getElementById('btnRemoveActiveCircle'),
     radius: document.getElementById('alertRadius'),
     radiusValue: document.getElementById('alertRadiusValue'),
     drawStatus: document.getElementById('staffDrawStatus'),
@@ -32,9 +30,8 @@ const dom = {
     audienceMode: document.getElementById('staffAudienceMode'),
     title: document.getElementById('alertTitle'),
     description: document.getElementById('alertDescription'),
-    gpsX: document.getElementById('alertGpsX'),
-    gpsY: document.getElementById('alertGpsY'),
     active: document.getElementById('alertActive'),
+    startAt: document.getElementById('alertStartAt'),
     audienceAllBtn: document.getElementById('btnAudienceAll'),
     audienceWhitelistBtn: document.getElementById('btnAudienceWhitelist'),
     whitelistPanel: document.getElementById('staffWhitelistPanel'),
@@ -56,6 +53,9 @@ const state = {
     currentAlert: null,
     selection: null,
     drawMode: false,
+    drawType: '',
+    drawCircleDraft: null,
+    isFreeDrawing: false,
     drawDraftPoints: [],
     drawBackupSelection: null,
     mapWidth: 0,
@@ -73,8 +73,8 @@ const state = {
     audienceMode: 'all',
     allowedUsers: [],
     userDirectory: [],
-    pickerWindow: null,
     selectionDrag: null,
+    contextMenuOpen: false,
 };
 
 function escapeText(value) {
@@ -84,6 +84,74 @@ function escapeText(value) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
+}
+
+function toValidDate(value) {
+    const date = value instanceof Date ? value : new Date(value);
+    return Number.isFinite(date.getTime()) ? date : null;
+}
+
+function formatAlertDateTime(value) {
+    const date = toValidDate(value);
+    if (!date) return '';
+    return new Intl.DateTimeFormat('fr-FR', {
+        dateStyle: 'short',
+        timeStyle: 'short',
+    }).format(date);
+}
+
+function toLocalDateTimeInputValue(value) {
+    const date = toValidDate(value);
+    if (!date) return '';
+    const pad = (num) => String(num).padStart(2, '0');
+    return [
+        date.getFullYear(),
+        pad(date.getMonth() + 1),
+        pad(date.getDate()),
+    ].join('-') + `T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function readScheduledAtInput() {
+    const raw = String(dom.startAt?.value || '').trim();
+    if (!raw) return '';
+    const date = toValidDate(raw);
+    if (!date) {
+        throw new Error('Date de diffusion invalide.');
+    }
+    return date.toISOString();
+}
+
+function getScheduledStartDate(alert = state.currentAlert) {
+    return toValidDate(alert?.startsAt || '');
+}
+
+function isAlertScheduled(alert = state.currentAlert) {
+    const date = getScheduledStartDate(alert);
+    return Boolean(alert?.active !== false && date && date.getTime() > Date.now());
+}
+
+function getDraftStartDate() {
+    if (dom.startAt) {
+        return toValidDate(String(dom.startAt.value || '').trim());
+    }
+    return getScheduledStartDate(state.currentAlert);
+}
+
+function refreshAlertModePill() {
+    if (!dom.alertMode) return;
+
+    if (!dom.active?.checked) {
+        dom.alertMode.textContent = 'Brouillon';
+        return;
+    }
+
+    const startDate = getDraftStartDate();
+    if (startDate && startDate.getTime() > Date.now()) {
+        dom.alertMode.textContent = 'Programmee';
+        return;
+    }
+
+    dom.alertMode.textContent = state.currentAlert ? 'Live' : 'Nouveau';
 }
 
 function normalizeAudienceUsername(value) {
@@ -152,9 +220,6 @@ function renderWhitelistList() {
 function renderAudienceUi() {
     if (dom.audienceMode) {
         dom.audienceMode.textContent = state.audienceMode === 'whitelist' ? 'Whitelist' : 'Tous';
-    }
-    if (dom.statusAudience) {
-        dom.statusAudience.textContent = audienceSummary();
     }
     dom.audienceAllBtn?.classList.toggle('is-active', state.audienceMode === 'all');
     dom.audienceWhitelistBtn?.classList.toggle('is-active', state.audienceMode === 'whitelist');
@@ -263,45 +328,180 @@ function getZoneBounds(points) {
     };
 }
 
+function clampPercent(value) {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return NaN;
+    return Math.min(100, Math.max(0, num));
+}
+
+function sanitizeCircle(rawCircle, fallbackRadius = DEFAULT_RADIUS) {
+    if (!rawCircle || typeof rawCircle !== 'object') return null;
+
+    let xPercent = clampPercent(rawCircle.xPercent);
+    let yPercent = clampPercent(rawCircle.yPercent);
+    let gpsX = Number(rawCircle.gpsX);
+    let gpsY = Number(rawCircle.gpsY);
+
+    if ((!Number.isFinite(xPercent) || !Number.isFinite(yPercent))
+        && Number.isFinite(gpsX)
+        && Number.isFinite(gpsY)) {
+        const percent = gpsToPercentage(gpsX, gpsY);
+        xPercent = clampPercent(percent.x);
+        yPercent = clampPercent(percent.y);
+    }
+
+    if ((!Number.isFinite(gpsX) || !Number.isFinite(gpsY))
+        && Number.isFinite(xPercent)
+        && Number.isFinite(yPercent)) {
+        const gps = percentageToGps(xPercent, yPercent);
+        gpsX = gps.x;
+        gpsY = gps.y;
+    }
+
+    if (!Number.isFinite(xPercent) || !Number.isFinite(yPercent)) return null;
+    if (!Number.isFinite(gpsX) || !Number.isFinite(gpsY)) return null;
+
+    return {
+        xPercent: Number(xPercent.toFixed(4)),
+        yPercent: Number(yPercent.toFixed(4)),
+        gpsX: Number(Number(gpsX).toFixed(2)),
+        gpsY: Number(Number(gpsY).toFixed(2)),
+        radius: clampRadius(rawCircle.radius ?? fallbackRadius),
+    };
+}
+
+function sanitizeCircles(rawCircles, fallbackRadius = DEFAULT_RADIUS) {
+    if (!Array.isArray(rawCircles)) return [];
+    return rawCircles
+        .map((circle) => sanitizeCircle(circle, fallbackRadius))
+        .filter(Boolean);
+}
+
+function buildCircleSelection(circles, activeCircleIndex = null) {
+    const clean = sanitizeCircles(circles, getCurrentRadius());
+    if (!clean.length) return null;
+
+    const index = Number.isInteger(activeCircleIndex)
+        ? Math.min(clean.length - 1, Math.max(0, activeCircleIndex))
+        : clean.length - 1;
+    const activeCircle = clean[index];
+
+    return {
+        shapeType: 'circle',
+        xPercent: activeCircle.xPercent,
+        yPercent: activeCircle.yPercent,
+        gpsX: activeCircle.gpsX,
+        gpsY: activeCircle.gpsY,
+        radius: activeCircle.radius,
+        circles: clean,
+        activeCircleIndex: index,
+        zonePoints: [],
+    };
+}
+
+function getSelectionCircles(selection = state.selection) {
+    if (!selection || selection.shapeType === 'zone') return [];
+    if (Array.isArray(selection.circles) && selection.circles.length) {
+        return selection.circles.map((circle) => ({ ...circle }));
+    }
+    const legacyCircle = sanitizeCircle(selection, selection.radius);
+    return legacyCircle ? [legacyCircle] : [];
+}
+
+function getActiveCircleIndex(selection = state.selection) {
+    const circles = getSelectionCircles(selection);
+    if (!circles.length) return -1;
+    const index = Number(selection?.activeCircleIndex);
+    if (Number.isInteger(index) && index >= 0 && index < circles.length) {
+        return index;
+    }
+    return circles.length - 1;
+}
+
+function getActiveCircle(selection = state.selection) {
+    const circles = getSelectionCircles(selection);
+    const index = getActiveCircleIndex(selection);
+    return index >= 0 ? circles[index] : null;
+}
+
+function getCircleBounds(selection = state.selection) {
+    const circles = getSelectionCircles(selection);
+    if (!circles.length) return null;
+
+    const minX = Math.min(...circles.map((circle) => circle.xPercent - circle.radius));
+    const maxX = Math.max(...circles.map((circle) => circle.xPercent + circle.radius));
+    const minY = Math.min(...circles.map((circle) => circle.yPercent - circle.radius));
+    const maxY = Math.max(...circles.map((circle) => circle.yPercent + circle.radius));
+
+    return {
+        minX: Math.max(0, minX),
+        maxX: Math.min(100, maxX),
+        minY: Math.max(0, minY),
+        maxY: Math.min(100, maxY),
+    };
+}
+
+function summarizeCircles(circles) {
+    const clean = sanitizeCircles(circles, getCurrentRadius());
+    if (!clean.length) return null;
+
+    const minX = Math.min(...clean.map((circle) => circle.xPercent - circle.radius));
+    const maxX = Math.max(...clean.map((circle) => circle.xPercent + circle.radius));
+    const minY = Math.min(...clean.map((circle) => circle.yPercent - circle.radius));
+    const maxY = Math.max(...clean.map((circle) => circle.yPercent + circle.radius));
+    const minGpsX = Math.min(...clean.map((circle) => circle.gpsX));
+    const maxGpsX = Math.max(...clean.map((circle) => circle.gpsX));
+    const minGpsY = Math.min(...clean.map((circle) => circle.gpsY));
+    const maxGpsY = Math.max(...clean.map((circle) => circle.gpsY));
+    const radius = Math.max(...clean.map((circle) => circle.radius));
+
+    return {
+        xPercent: Number((((minX + maxX) / 2)).toFixed(4)),
+        yPercent: Number((((minY + maxY) / 2)).toFixed(4)),
+        gpsX: Number((((minGpsX + maxGpsX) / 2)).toFixed(2)),
+        gpsY: Number((((minGpsY + maxGpsY) / 2)).toFixed(2)),
+        radius: Number(radius.toFixed(1)),
+    };
+}
+
 function cloneSelection(selection) {
     if (!selection) return null;
     const zonePoints = sanitizeZonePoints(selection.zonePoints);
     const shapeType = selection.shapeType === 'zone' && zonePoints.length >= 3 ? 'zone' : 'circle';
-    return {
-        shapeType,
-        xPercent: Number(selection.xPercent),
-        yPercent: Number(selection.yPercent),
-        gpsX: Number(selection.gpsX),
-        gpsY: Number(selection.gpsY),
-        radius: clampRadius(selection.radius),
-        zonePoints: shapeType === 'zone' ? zonePoints : [],
-    };
+    if (shapeType === 'zone') {
+        return {
+            shapeType,
+            xPercent: Number(selection.xPercent),
+            yPercent: Number(selection.yPercent),
+            gpsX: Number(selection.gpsX),
+            gpsY: Number(selection.gpsY),
+            radius: clampRadius(selection.radius),
+            zonePoints,
+            circles: [],
+            activeCircleIndex: -1,
+        };
+    }
+
+    return buildCircleSelection(
+        Array.isArray(selection.circles) && selection.circles.length ? selection.circles : [selection],
+        Number(selection.activeCircleIndex)
+    );
 }
 
 function buildCircleSelectionFromPercent(xPercent, yPercent, radius = getCurrentRadius()) {
-    const gps = percentageToGps(xPercent, yPercent);
-    return {
-        shapeType: 'circle',
-        xPercent: Number(Number(xPercent).toFixed(4)),
-        yPercent: Number(Number(yPercent).toFixed(4)),
-        gpsX: Number(gps.x.toFixed(2)),
-        gpsY: Number(gps.y.toFixed(2)),
-        radius: clampRadius(radius),
-        zonePoints: [],
-    };
+    return buildCircleSelection([{
+        xPercent,
+        yPercent,
+        radius,
+    }], 0);
 }
 
 function buildCircleSelectionFromGps(gpsX, gpsY, radius = getCurrentRadius()) {
-    const percent = gpsToPercentage(gpsX, gpsY);
-    return {
-        shapeType: 'circle',
-        xPercent: Number(percent.x.toFixed(4)),
-        yPercent: Number(percent.y.toFixed(4)),
-        gpsX: Number(Number(gpsX).toFixed(2)),
-        gpsY: Number(Number(gpsY).toFixed(2)),
-        radius: clampRadius(radius),
-        zonePoints: [],
-    };
+    return buildCircleSelection([{
+        gpsX,
+        gpsY,
+        radius,
+    }], 0);
 }
 
 function buildZoneSelection(points, radius = getCurrentRadius()) {
@@ -369,24 +569,132 @@ function setLockState(locked) {
     dom.accessOverlay.classList.toggle('is-hidden', !locked);
 }
 
+function closeContextMenu() {
+    if (!dom.contextMenu) return;
+    dom.contextMenu.classList.remove('visible');
+    state.contextMenuOpen = false;
+}
+
+function openContextMenu(clientX, clientY) {
+    if (!dom.contextMenu) return;
+    let x = clientX;
+    let y = clientY;
+    const menuWidth = 220;
+    const menuHeight = 130;
+
+    if (x + menuWidth > window.innerWidth) x -= menuWidth;
+    if (y + menuHeight > window.innerHeight) y -= menuHeight;
+
+    dom.contextMenu.style.left = `${x}px`;
+    dom.contextMenu.style.top = `${y}px`;
+    dom.contextMenu.classList.add('visible');
+    state.contextMenuOpen = true;
+}
+
+function stopDrawingMode(options = {}) {
+    state.drawMode = false;
+    state.drawType = '';
+    state.drawCircleDraft = null;
+    state.isFreeDrawing = false;
+    state.drawDraftPoints = [];
+    closeContextMenu();
+    if (options.clearBackup !== false) {
+        state.drawBackupSelection = null;
+    }
+    renderSelection();
+    renderBanner();
+    refreshStatusCards();
+}
+
+function startCircleDraw() {
+    closeContextMenu();
+    state.drawMode = true;
+    state.drawType = 'circle';
+    state.drawCircleDraft = null;
+    state.isFreeDrawing = false;
+    state.drawDraftPoints = [];
+    setStatusMessage('Mode zone actif. Clique puis glisse pour creer le cercle.', 'ok');
+    renderSelection();
+    renderBanner();
+    refreshStatusCards();
+}
+
+function startFreeDraw() {
+    closeContextMenu();
+    state.drawMode = true;
+    state.drawType = 'free';
+    state.drawCircleDraft = null;
+    state.isFreeDrawing = false;
+    state.drawDraftPoints = [];
+    setStatusMessage('Dessin libre actif. Maintiens clic gauche pour tracer la zone.', 'ok');
+    renderSelection();
+    renderBanner();
+    refreshStatusCards();
+}
+
+function finalizeCircleDraft() {
+    const draft = state.drawCircleDraft;
+    if (!draft) return;
+
+    if (!Number.isFinite(draft.r) || draft.r < 0.2) {
+        state.drawCircleDraft = null;
+        stopDrawingMode();
+        setStatusMessage('Zone trop petite.', 'warn');
+        return;
+    }
+
+    const baseCircles = state.selection?.shapeType === 'circle' ? getSelectionCircles() : [];
+    const nextSelection = buildCircleSelection([
+        ...baseCircles,
+        {
+            xPercent: draft.cx,
+            yPercent: draft.cy,
+            radius: draft.r,
+        },
+    ]);
+
+    state.drawCircleDraft = null;
+    setSelection(nextSelection, {
+        syncForm: true,
+        resetDraft: true,
+    });
+    state.drawMode = false;
+    state.drawType = '';
+    setStatusMessage('Zone ajoutee.', 'ok');
+}
+
+function finalizeFreeDraw() {
+    const pointCount = state.drawDraftPoints.length;
+    if (pointCount < 3) {
+        stopDrawingMode();
+        setStatusMessage('Trace trop court.', 'warn');
+        return;
+    }
+
+    const nextSelection = buildZoneSelection(state.drawDraftPoints, getCurrentRadius());
+    if (!nextSelection) {
+        stopDrawingMode();
+        setStatusMessage('Zone invalide.', 'error');
+        return;
+    }
+
+    setSelection(nextSelection, {
+        syncForm: true,
+        resetDraft: true,
+    });
+    state.drawMode = false;
+    state.drawType = '';
+    state.isFreeDrawing = false;
+    setStatusMessage(`Zone libre creee avec ${pointCount} points.`, 'ok');
+}
+
 function refreshModeControls() {
     const selection = state.selection;
     const isZoneSelection = selection?.shapeType === 'zone';
+    const circleCount = getSelectionCircles(selection).length;
 
-    dom.useMapBtn?.classList.toggle('is-active', !state.drawMode && !isZoneSelection);
-    dom.startZoneBtn?.classList.toggle('is-active', state.drawMode || isZoneSelection);
-
-    if (dom.finishZoneBtn) {
-        dom.finishZoneBtn.disabled = !state.drawMode || state.drawDraftPoints.length < 3;
-        dom.finishZoneBtn.hidden = !state.drawMode;
-    }
-    if (dom.undoZoneBtn) {
-        dom.undoZoneBtn.disabled = !state.drawMode || state.drawDraftPoints.length === 0;
-        dom.undoZoneBtn.hidden = !state.drawMode;
-    }
-    if (dom.cancelZoneBtn) {
-        dom.cancelZoneBtn.disabled = !state.drawMode;
-        dom.cancelZoneBtn.hidden = !state.drawMode;
+    if (dom.removeCircleBtn) {
+        dom.removeCircleBtn.disabled = circleCount === 0 || state.drawMode || isZoneSelection;
     }
 
     if (!state.mapSelectionEnabled) {
@@ -395,8 +703,12 @@ function refreshModeControls() {
     }
 
     if (state.drawMode) {
-        const count = state.drawDraftPoints.length;
-        setDrawStatus(`Mode zone. ${count} point${count > 1 ? 's' : ''}. Clique pour tracer, utilise "Retour point" si besoin, puis valide.`, 'zone');
+        if (state.drawType === 'circle') {
+            setDrawStatus('Nouvelle zone. Clique puis glisse pour regler le rayon.', 'circle');
+        } else {
+            const count = state.drawDraftPoints.length;
+            setDrawStatus(`Dessin libre. Maintiens clic gauche pour tracer. ${count} point${count > 1 ? 's' : ''} poses.`, 'zone');
+        }
         return;
     }
 
@@ -405,18 +717,37 @@ function refreshModeControls() {
         return;
     }
 
-    setDrawStatus('Mode cercle. Clique sur la carte pour placer l alerte, puis glisse le cercle pour l ajuster.', 'circle');
+    setDrawStatus(
+        circleCount > 0
+            ? 'Clic droit pour creer une zone ou un dessin libre. Glisse un cercle pour le deplacer.'
+            : 'Clic droit sur la carte pour creer une zone ou lancer un dessin libre.',
+        'circle'
+    );
 }
 
 function beginCircleDrag(event) {
     if (!state.mapSelectionEnabled || state.drawMode) return;
     if (!state.selection || state.selection.shapeType === 'zone') return;
+    const circles = getSelectionCircles();
+    if (!circles.length) return;
 
     event.preventDefault();
     event.stopPropagation();
 
+    const rawIndex = Number(event.currentTarget?.dataset.circleIndex);
+    const circleIndex = Number.isInteger(rawIndex) && rawIndex >= 0 && rawIndex < circles.length
+        ? rawIndex
+        : getActiveCircleIndex();
+    const circle = circles[circleIndex];
+    if (!circle) return;
+
+    setSelection(buildCircleSelection(circles, circleIndex), {
+        syncForm: true,
+        resetDraft: false,
+    });
     state.selectionDrag = {
-        radius: clampRadius(state.selection.radius || getCurrentRadius()),
+        radius: clampRadius(circle.radius || getCurrentRadius()),
+        circleIndex,
     };
     setStatusMessage('Deplacement du cercle en cours.', 'ok');
     renderSelection();
@@ -426,11 +757,15 @@ function moveCircleDrag(event) {
     if (!state.selectionDrag) return;
 
     const coords = getMapPercentCoords(event.clientX, event.clientY);
-    setSelection(buildCircleSelectionFromPercent(
-        coords.x,
-        coords.y,
-        state.selectionDrag.radius || getCurrentRadius()
-    ), {
+    const circles = getSelectionCircles();
+    const circleIndex = Math.min(circles.length - 1, Math.max(0, Number(state.selectionDrag.circleIndex || 0)));
+    circles[circleIndex] = {
+        xPercent: coords.x,
+        yPercent: coords.y,
+        radius: state.selectionDrag.radius || getCurrentRadius(),
+    };
+
+    setSelection(buildCircleSelection(circles, circleIndex), {
         syncForm: true,
         resetDraft: false,
     });
@@ -447,6 +782,20 @@ function renderSelection() {
     if (!dom.alertLayer) return;
     dom.alertLayer.innerHTML = '';
 
+    if (state.drawCircleDraft) {
+        const draftCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        draftCircle.setAttribute('cx', state.drawCircleDraft.cx);
+        draftCircle.setAttribute('cy', state.drawCircleDraft.cy);
+        draftCircle.setAttribute('r', String(Math.max(0, state.drawCircleDraft.r || 0)));
+        draftCircle.setAttribute('fill', '#ff4d67');
+        draftCircle.setAttribute('fill-opacity', '0.1');
+        draftCircle.setAttribute('stroke', '#ff4d67');
+        draftCircle.setAttribute('stroke-width', '0.18');
+        draftCircle.setAttribute('stroke-dasharray', '0.45 0.22');
+        draftCircle.setAttribute('class', 'staff-alert-ring');
+        dom.alertLayer.appendChild(draftCircle);
+    }
+
     if (state.drawDraftPoints.length > 0) {
         const draft = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
         draft.setAttribute('points', state.drawDraftPoints.map((point) => `${point.x},${point.y}`).join(' '));
@@ -457,6 +806,8 @@ function renderSelection() {
         draft.setAttribute('class', 'staff-alert-draft');
         dom.alertLayer.appendChild(draft);
     }
+
+    if (state.drawMode) return;
 
     const selection = state.selection;
     if (!selection) return;
@@ -473,49 +824,63 @@ function renderSelection() {
         return;
     }
 
-    const ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    ring.setAttribute('cx', selection.xPercent);
-    ring.setAttribute('cy', selection.yPercent);
-    ring.setAttribute('r', String(selection.radius || DEFAULT_RADIUS));
-    ring.setAttribute('fill', '#ff4d67');
-    ring.setAttribute('fill-opacity', '0.14');
-    ring.setAttribute('stroke', '#ff4d67');
-    ring.setAttribute('stroke-width', '0.18');
-    ring.setAttribute('class', 'staff-alert-ring');
-    if (state.selectionDrag) ring.classList.add('is-dragging');
-    ring.addEventListener('mousedown', beginCircleDrag);
-    dom.alertLayer.appendChild(ring);
+    const circles = getSelectionCircles(selection);
+    const activeIndex = getActiveCircleIndex(selection);
 
-    const center = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    center.setAttribute('cx', selection.xPercent);
-    center.setAttribute('cy', selection.yPercent);
-    center.setAttribute('r', String(Math.max(0.45, Math.min(0.9, (selection.radius || DEFAULT_RADIUS) * 0.18))));
-    center.setAttribute('class', 'staff-alert-center');
-    if (state.selectionDrag) center.classList.add('is-dragging');
-    center.addEventListener('mousedown', beginCircleDrag);
-    dom.alertLayer.appendChild(center);
+    circles.forEach((circle, index) => {
+        const ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        ring.setAttribute('cx', circle.xPercent);
+        ring.setAttribute('cy', circle.yPercent);
+        ring.setAttribute('r', String(circle.radius || DEFAULT_RADIUS));
+        ring.setAttribute('fill', '#ff4d67');
+        ring.setAttribute('fill-opacity', '0.14');
+        ring.setAttribute('stroke', '#ff4d67');
+        ring.setAttribute('stroke-width', '0.18');
+        ring.setAttribute('class', 'staff-alert-ring');
+        ring.dataset.circleIndex = String(index);
+        if (index === activeIndex) ring.classList.add('is-active');
+        if (state.selectionDrag && index === Number(state.selectionDrag.circleIndex)) {
+            ring.classList.add('is-dragging');
+        }
+        ring.addEventListener('mousedown', beginCircleDrag);
+        ring.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setSelection(buildCircleSelection(getSelectionCircles(), index), {
+                syncForm: true,
+                resetDraft: false,
+            });
+        });
+        dom.alertLayer.appendChild(ring);
+    });
 }
 
 function refreshStatusCards() {
     const selection = state.selection;
     const current = state.currentAlert;
+    const activeCircle = getActiveCircle(selection);
+    const circleCount = getSelectionCircles(selection).length;
 
     if (dom.statusState) {
         if (!state.unlocked) dom.statusState.textContent = 'Verrouille';
         else if (!current && (selection || String(dom.title?.value || '').trim() || String(dom.description?.value || '').trim())) dom.statusState.textContent = 'Pret';
         else if (!current) dom.statusState.textContent = 'Brouillon';
-        else dom.statusState.textContent = current.active === false ? 'Inactive' : 'Active';
+        else if (current.active === false) dom.statusState.textContent = 'Inactive';
+        else if (isAlertScheduled(current)) dom.statusState.textContent = 'Programmee';
+        else dom.statusState.textContent = 'Active';
     }
     const coordsLabel = selection
-        ? `${selection.gpsX.toFixed(2)} / ${selection.gpsY.toFixed(2)}`
+        ? `${(selection.shapeType === 'zone' ? selection.gpsX : activeCircle?.gpsX ?? selection.gpsX).toFixed(2)} / ${(selection.shapeType === 'zone' ? selection.gpsY : activeCircle?.gpsY ?? selection.gpsY).toFixed(2)}`
         : '--';
 
     if (dom.statusCoords) dom.statusCoords.textContent = coordsLabel;
 
     if (dom.selectionMode) {
         if (!state.mapSelectionEnabled) dom.selectionMode.textContent = 'Pause';
-        else if (state.drawMode) dom.selectionMode.textContent = `Dessin ${state.drawDraftPoints.length}`;
+        else if (state.drawMode && state.drawType === 'circle') dom.selectionMode.textContent = 'Nouvelle zone';
+        else if (state.drawMode) dom.selectionMode.textContent = 'Dessin libre';
         else if (selection?.shapeType === 'zone') dom.selectionMode.textContent = 'Zone';
+        else if (circleCount > 1) dom.selectionMode.textContent = `${circleCount} cercles`;
         else dom.selectionMode.textContent = 'Cercle';
     }
     if (dom.deleteBtn) {
@@ -531,20 +896,32 @@ function renderBanner() {
     const title = String(dom.title?.value || state.currentAlert?.title || '').trim();
     const description = String(dom.description?.value || state.currentAlert?.description || '').trim();
     const selection = state.selection;
+    const hasDraft = Boolean(state.drawCircleDraft) || state.drawDraftPoints.length > 0;
 
-    if (!title && !description && !selection && state.drawDraftPoints.length === 0) {
+    if (!title && !description && !selection && !hasDraft) {
         dom.mapBanner.hidden = true;
         dom.mapBanner.innerHTML = '';
         return;
     }
 
     let meta = 'Clique sur la carte pour choisir la position';
-    if (selection?.shapeType === 'zone') {
+    if (state.drawMode && state.drawType === 'circle') {
+        meta = 'Nouvelle zone en cours • Clique puis glisse pour regler le rayon';
+    }
+    const startDate = getDraftStartDate();
+    if (!state.drawMode && selection?.shapeType === 'zone') {
         meta = `Zone ${selection.zonePoints.length} points • GPS ${selection.gpsX.toFixed(2)} / ${selection.gpsY.toFixed(2)}`;
-    } else if (selection) {
-        meta = `GPS ${selection.gpsX.toFixed(2)} / ${selection.gpsY.toFixed(2)} • Rayon ${selection.radius.toFixed(1)} • Glisse pour ajuster`;
+    } else if (!state.drawMode && selection) {
+        const activeCircle = getActiveCircle(selection) || selection;
+        const circleCount = getSelectionCircles(selection).length;
+        meta = circleCount > 1
+            ? `${circleCount} cercles • Actif ${getActiveCircleIndex(selection) + 1} • GPS ${activeCircle.gpsX.toFixed(2)} / ${activeCircle.gpsY.toFixed(2)} • Rayon ${activeCircle.radius.toFixed(1)}`
+            : `GPS ${activeCircle.gpsX.toFixed(2)} / ${activeCircle.gpsY.toFixed(2)} • Rayon ${activeCircle.radius.toFixed(1)} • Glisse pour ajuster`;
     } else if (state.drawDraftPoints.length > 0) {
         meta = `Dessin en cours • ${state.drawDraftPoints.length} points`;
+    }
+    if (startDate) {
+        meta += ` • Diffusion ${formatAlertDateTime(startDate)}`;
     }
 
     dom.mapBanner.hidden = false;
@@ -561,6 +938,9 @@ function setSelection(selection, options = {}) {
         state.selection = null;
         if (options.resetDraft !== false) {
             state.drawMode = false;
+            state.drawType = '';
+            state.drawCircleDraft = null;
+            state.isFreeDrawing = false;
             state.drawDraftPoints = [];
             state.drawBackupSelection = null;
         }
@@ -573,16 +953,17 @@ function setSelection(selection, options = {}) {
     state.selection = cloneSelection(selection);
     if (options.resetDraft !== false) {
         state.drawMode = false;
+        state.drawType = '';
+        state.drawCircleDraft = null;
+        state.isFreeDrawing = false;
         state.drawDraftPoints = [];
         state.drawBackupSelection = null;
     }
 
     if (options.syncForm !== false) {
-        if (dom.gpsX) dom.gpsX.value = state.selection.gpsX.toFixed(2);
-        if (dom.gpsY) dom.gpsY.value = state.selection.gpsY.toFixed(2);
     }
 
-    updateRadiusUi(state.selection.radius);
+    updateRadiusUi(state.selection.shapeType === 'zone' ? state.selection.radius : (getActiveCircle(state.selection)?.radius || DEFAULT_RADIUS));
     renderSelection();
     renderBanner();
     refreshStatusCards();
@@ -595,21 +976,24 @@ function applyPickerSelection(payload) {
         return;
     }
 
-    setSelection({
-        shapeType: 'circle',
-        xPercent: safePayload.xPercent,
-        yPercent: safePayload.yPercent,
-        gpsX: safePayload.gpsX,
-        gpsY: safePayload.gpsY,
-        radius: getCurrentRadius(),
-        zonePoints: [],
-    }, {
+    const nextSelection = buildCircleSelection([
+        ...getSelectionCircles(),
+        {
+            xPercent: safePayload.xPercent,
+            yPercent: safePayload.yPercent,
+            gpsX: safePayload.gpsX,
+            gpsY: safePayload.gpsY,
+            radius: getCurrentRadius(),
+        },
+    ]);
+
+    setSelection(nextSelection, {
         syncForm: true,
         resetDraft: true,
     });
 
     focusSelection();
-    setStatusMessage('Position recue depuis la carte dediee.', 'ok');
+    setStatusMessage('Cercle ajoute depuis la carte dediee.', 'ok');
 }
 
 function finalizeZoneDraft(options = {}) {
@@ -642,27 +1026,31 @@ function finalizeZoneDraft(options = {}) {
 function readDraftAlert() {
     const title = String(dom.title?.value || '').trim();
     const description = String(dom.description?.value || '').trim();
+    const startsAt = readScheduledAtInput();
 
     if (!title) throw new Error('Titre requis.');
     if (!description) throw new Error('Description requise.');
 
-    if (state.drawMode && !finalizeZoneDraft({ silent: true })) {
-        throw new Error('Valide d’abord la zone dessinee.');
+    if (state.drawMode) {
+        throw new Error('Termine le dessin en cours avant de publier.');
     }
 
     let selection = cloneSelection(state.selection);
     if (!selection) {
-        const gpsX = Number(dom.gpsX?.value);
-        const gpsY = Number(dom.gpsY?.value);
-        if (!Number.isFinite(gpsX) || !Number.isFinite(gpsY)) {
-            throw new Error('Coordonnees GPS invalides.');
-        }
-        selection = buildCircleSelectionFromGps(gpsX, gpsY, getCurrentRadius());
+        throw new Error('Place au moins un cercle ou une zone.');
     }
 
     const radius = getCurrentRadius();
     if (selection.shapeType !== 'zone') {
-        selection.radius = radius;
+        const circles = getSelectionCircles(selection);
+        const activeIndex = getActiveCircleIndex(selection);
+        if (activeIndex >= 0 && circles[activeIndex]) {
+            circles[activeIndex] = {
+                ...circles[activeIndex],
+                radius,
+            };
+        }
+        selection = buildCircleSelection(circles, activeIndex);
     }
 
     const visibilityMode = state.audienceMode === 'whitelist' ? 'whitelist' : 'all';
@@ -671,27 +1059,39 @@ function readDraftAlert() {
         throw new Error('Ajoute au moins un utilisateur dans la whitelist.');
     }
 
+    const circles = selection.shapeType === 'zone' ? [] : getSelectionCircles(selection);
+    const circleSummary = circles.length ? summarizeCircles(circles) : null;
+
     return {
         id: state.currentAlert?.id || '',
         title,
         description,
-        gpsX: Number(selection.gpsX.toFixed(2)),
-        gpsY: Number(selection.gpsY.toFixed(2)),
-        xPercent: Number(selection.xPercent.toFixed(4)),
-        yPercent: Number(selection.yPercent.toFixed(4)),
-        radius,
+        gpsX: Number((selection.shapeType === 'zone' ? selection.gpsX : circleSummary?.gpsX || selection.gpsX).toFixed(2)),
+        gpsY: Number((selection.shapeType === 'zone' ? selection.gpsY : circleSummary?.gpsY || selection.gpsY).toFixed(2)),
+        xPercent: Number((selection.shapeType === 'zone' ? selection.xPercent : circleSummary?.xPercent || selection.xPercent).toFixed(4)),
+        yPercent: Number((selection.shapeType === 'zone' ? selection.yPercent : circleSummary?.yPercent || selection.yPercent).toFixed(4)),
+        radius: selection.shapeType === 'zone' ? radius : (circleSummary?.radius || radius),
         shapeType: selection.shapeType === 'zone' ? 'zone' : 'circle',
         zonePoints: selection.shapeType === 'zone'
             ? selection.zonePoints.map((point) => ({ x: point.x, y: point.y }))
             : [],
+        circles: circles.map((circle) => ({
+            xPercent: Number(circle.xPercent.toFixed(4)),
+            yPercent: Number(circle.yPercent.toFixed(4)),
+            gpsX: Number(circle.gpsX.toFixed(2)),
+            gpsY: Number(circle.gpsY.toFixed(2)),
+            radius: Number(circle.radius.toFixed(1)),
+        })),
+        activeCircleIndex: selection.shapeType === 'zone' ? -1 : getActiveCircleIndex(selection),
         visibilityMode,
         allowedUsers,
         active: Boolean(dom.active?.checked),
+        startsAt,
     };
 }
 
 function fillForm(alert) {
-    if (!dom.title || !dom.description || !dom.gpsX || !dom.gpsY || !dom.active) return;
+    if (!dom.title || !dom.description || !dom.active) return;
 
     state.drawMode = false;
     state.drawDraftPoints = [];
@@ -700,41 +1100,52 @@ function fillForm(alert) {
     if (!alert) {
         dom.title.value = '';
         dom.description.value = '';
-        dom.gpsX.value = '';
-        dom.gpsY.value = '';
         dom.active.checked = true;
+        if (dom.startAt) dom.startAt.value = '';
         state.audienceMode = 'all';
         state.allowedUsers = [];
-        if (dom.alertMode) dom.alertMode.textContent = 'Nouveau';
         if (dom.publishBtn) dom.publishBtn.textContent = 'Publier';
         updateRadiusUi(DEFAULT_RADIUS);
         setSelection(null, { syncForm: false, resetDraft: true });
         renderAudienceUi();
+        refreshAlertModePill();
         scheduleMapView(false);
         return;
     }
 
     dom.title.value = String(alert.title || '');
     dom.description.value = String(alert.description || '');
-    dom.gpsX.value = Number(alert.gpsX).toFixed(2);
-    dom.gpsY.value = Number(alert.gpsY).toFixed(2);
     dom.active.checked = alert.active !== false;
+    if (dom.startAt) dom.startAt.value = toLocalDateTimeInputValue(alert.startsAt || '');
     state.audienceMode = alert.visibilityMode === 'whitelist' ? 'whitelist' : 'all';
     state.allowedUsers = sanitizeAllowedUsers(alert.allowedUsers);
-    if (dom.alertMode) dom.alertMode.textContent = alert.active === false ? 'Brouillon' : 'Live';
     if (dom.publishBtn) dom.publishBtn.textContent = 'Mettre a jour';
     updateRadiusUi(alert.radius || DEFAULT_RADIUS);
     renderAudienceUi();
+    refreshAlertModePill();
 
-    setSelection({
-        shapeType: alert.shapeType === 'zone' ? 'zone' : 'circle',
-        xPercent: alert.xPercent,
-        yPercent: alert.yPercent,
-        gpsX: alert.gpsX,
-        gpsY: alert.gpsY,
-        radius: alert.radius || DEFAULT_RADIUS,
-        zonePoints: alert.zonePoints || [],
-    }, { resetDraft: true });
+    if (alert.shapeType === 'zone') {
+        setSelection({
+            shapeType: 'zone',
+            xPercent: alert.xPercent,
+            yPercent: alert.yPercent,
+            gpsX: alert.gpsX,
+            gpsY: alert.gpsY,
+            radius: alert.radius || DEFAULT_RADIUS,
+            zonePoints: alert.zonePoints || [],
+        }, { resetDraft: true });
+    } else {
+        const circles = Array.isArray(alert.circles) && alert.circles.length
+            ? alert.circles
+            : [{
+                xPercent: alert.xPercent,
+                yPercent: alert.yPercent,
+                gpsX: alert.gpsX,
+                gpsY: alert.gpsY,
+                radius: alert.radius || DEFAULT_RADIUS,
+            }];
+        setSelection(buildCircleSelection(circles, Number(alert.activeCircleIndex)), { resetDraft: true });
+    }
     scheduleMapView(true);
 }
 
@@ -799,6 +1210,20 @@ function focusSelection() {
                 (viewportHeight - 120) / heightPx
             );
             scale = Math.min(2.2, Math.max(0.8, fitScale));
+        }
+    } else {
+        const bounds = getCircleBounds(selection);
+        const activeCircle = getActiveCircle(selection);
+        if (bounds && activeCircle) {
+            focusX = (bounds.minX + bounds.maxX) / 2;
+            focusY = (bounds.minY + bounds.maxY) / 2;
+            const widthPx = Math.max(80, ((bounds.maxX - bounds.minX) / 100) * state.mapWidth);
+            const heightPx = Math.max(80, ((bounds.maxY - bounds.minY) / 100) * state.mapHeight);
+            const fitScale = Math.min(
+                (viewportWidth - 120) / widthPx,
+                (viewportHeight - 120) / heightPx
+            );
+            scale = Math.min(2.35, Math.max(0.8, fitScale));
         }
     }
 
@@ -906,7 +1331,13 @@ async function loadCurrentAlert() {
     fillForm(state.currentAlert);
     refreshStatusCards();
     if (state.currentAlert) {
-        setStatusMessage(state.currentAlert.active === false ? 'Alerte chargee en brouillon.' : 'Alerte active chargee.', state.currentAlert.active === false ? 'warn' : 'ok');
+        if (state.currentAlert.active === false) {
+            setStatusMessage('Alerte chargee en brouillon.', 'warn');
+        } else if (isAlertScheduled(state.currentAlert)) {
+            setStatusMessage(`Alerte programmee pour ${formatAlertDateTime(state.currentAlert.startsAt)}.`, 'warn');
+        } else {
+            setStatusMessage('Alerte active chargee.', 'ok');
+        }
     } else {
         setStatusMessage('Aucune alerte enregistree. Cree une nouvelle alerte.', 'idle');
     }
@@ -920,7 +1351,13 @@ async function saveAlert() {
         fillForm(state.currentAlert);
         refreshStatusCards();
         notifyPublicAlertRefresh();
-        setStatusMessage(state.currentAlert?.active === false ? 'Alerte sauvegardee en brouillon.' : 'Alerte publiee.', 'ok');
+        if (state.currentAlert?.active === false) {
+            setStatusMessage('Alerte sauvegardee en brouillon.', 'warn');
+        } else if (isAlertScheduled(state.currentAlert)) {
+            setStatusMessage(`Alerte programmee pour ${formatAlertDateTime(state.currentAlert.startsAt)}.`, 'ok');
+        } else {
+            setStatusMessage('Alerte publiee.', 'ok');
+        }
     } catch (error) {
         setStatusMessage(error.message || 'Impossible de publier l’alerte.', 'error');
     }
@@ -968,118 +1405,40 @@ async function deleteAlert() {
 
 function clearDraft() {
     state.currentAlert = null;
-    state.drawMode = false;
-    state.drawDraftPoints = [];
-    state.drawBackupSelection = null;
+    stopDrawingMode();
     fillForm(null);
     refreshStatusCards();
     renderBanner();
     setStatusMessage('Brouillon vide. L’alerte live reste inchangée tant que tu ne republies pas.', 'warn');
 }
 
-function undoZonePoint() {
-    if (!state.drawMode || state.drawDraftPoints.length === 0) {
-        setStatusMessage('Aucun point a retirer.', 'warn');
+function removeActiveCircle() {
+    const circles = getSelectionCircles();
+    if (!circles.length) {
+        setStatusMessage('Aucun cercle a retirer.', 'warn');
         return;
     }
 
-    state.drawDraftPoints = state.drawDraftPoints.slice(0, -1);
-    renderSelection();
-    renderBanner();
-    refreshStatusCards();
-    setStatusMessage('Dernier point retire.', 'warn');
-}
+    const activeIndex = getActiveCircleIndex();
+    const nextCircles = circles.filter((_, index) => index !== activeIndex);
+    if (!nextCircles.length) {
+        setSelection(null, { syncForm: false, resetDraft: false });
+        if (dom.gpsX) dom.gpsX.value = '';
+        if (dom.gpsY) dom.gpsY.value = '';
+        setStatusMessage('Dernier cercle retire.', 'warn');
+        return;
+    }
 
-function updateSelectionFromGpsInputs() {
-    const gpsX = Number(dom.gpsX?.value);
-    const gpsY = Number(dom.gpsY?.value);
-    if (!Number.isFinite(gpsX) || !Number.isFinite(gpsY)) return;
-
-    setSelection(buildCircleSelectionFromGps(gpsX, gpsY, getCurrentRadius()), {
-        syncForm: false,
-        resetDraft: true,
+    const nextIndex = Math.max(0, Math.min(activeIndex, nextCircles.length - 1));
+    setSelection(buildCircleSelection(nextCircles, nextIndex), {
+        syncForm: true,
+        resetDraft: false,
     });
-}
-
-function activateCircleMode() {
-    state.drawMode = false;
-    state.drawDraftPoints = [];
-    state.drawBackupSelection = null;
-
-    const gpsX = Number(dom.gpsX?.value);
-    const gpsY = Number(dom.gpsY?.value);
-
-    if (Number.isFinite(gpsX) && Number.isFinite(gpsY)) {
-        setSelection(buildCircleSelectionFromGps(gpsX, gpsY, getCurrentRadius()), {
-            syncForm: true,
-            resetDraft: true,
-        });
-    } else if (state.selection?.shapeType === 'zone') {
-        setSelection(buildCircleSelectionFromPercent(state.selection.xPercent, state.selection.yPercent, getCurrentRadius()), {
-            syncForm: true,
-            resetDraft: true,
-        });
-    } else {
-        renderSelection();
-        renderBanner();
-        refreshStatusCards();
-    }
-
-    setStatusMessage('Mode cercle actif. Clique sur la carte puis glisse le cercle si besoin.', 'ok');
-}
-
-function beginZoneDraw() {
-    state.drawMode = true;
-    state.drawBackupSelection = cloneSelection(state.selection);
-    state.drawDraftPoints = state.selection?.shapeType === 'zone'
-        ? sanitizeZonePoints(state.selection.zonePoints)
-        : [];
-    state.selection = null;
-    renderSelection();
-    renderBanner();
-    refreshStatusCards();
-    setStatusMessage('Mode zone actif. Clique pour poser des points, puis valide.', 'ok');
-}
-
-function cancelZoneDraw() {
-    const restore = cloneSelection(state.drawBackupSelection);
-    state.drawMode = false;
-    state.drawDraftPoints = [];
-    state.drawBackupSelection = null;
-
-    if (restore) {
-        setSelection(restore, { syncForm: true, resetDraft: true });
-    } else {
-        renderSelection();
-        renderBanner();
-        refreshStatusCards();
-    }
-
-    setStatusMessage('Dessin annule.', 'warn');
+    setStatusMessage('Cercle actif retire.', 'warn');
 }
 
 function choosePositionOnMap(event) {
-    if (!state.mapSelectionEnabled) return;
-
-    const coords = getMapPercentCoords(event.clientX, event.clientY);
-
-    if (state.drawMode) {
-        state.drawDraftPoints.push({
-            x: Number(coords.x.toFixed(4)),
-            y: Number(coords.y.toFixed(4)),
-        });
-        renderSelection();
-        renderBanner();
-        refreshStatusCards();
-        setStatusMessage(`Point ${state.drawDraftPoints.length} ajoute.`, 'ok');
-        return;
-    }
-
-    setSelection(buildCircleSelectionFromPercent(coords.x, coords.y, getCurrentRadius()), {
-        syncForm: true,
-        resetDraft: true,
-    });
-    setStatusMessage('Position mise a jour depuis la carte.', 'ok');
+    if (!state.mapSelectionEnabled || state.drawMode) return;
 }
 
 function initMap() {
@@ -1113,8 +1472,44 @@ function initMap() {
         updateTransform();
     }, { passive: false });
 
+    dom.viewport?.addEventListener('contextmenu', (event) => {
+        if (!state.unlocked) return;
+        if (state.drawMode || state.selectionDrag) return;
+        event.preventDefault();
+        openContextMenu(event.clientX, event.clientY);
+    });
+
     dom.viewport?.addEventListener('mousedown', (event) => {
         if (event.button !== 0) return;
+
+        closeContextMenu();
+
+        if (state.drawMode && state.drawType === 'circle') {
+            const coords = getMapPercentCoords(event.clientX, event.clientY);
+            state.drawCircleDraft = {
+                cx: coords.x,
+                cy: coords.y,
+                r: 0,
+            };
+            renderSelection();
+            renderBanner();
+            refreshStatusCards();
+            return;
+        }
+
+        if (state.drawMode && state.drawType === 'free') {
+            const coords = getMapPercentCoords(event.clientX, event.clientY);
+            state.isFreeDrawing = true;
+            state.drawDraftPoints = [{
+                x: Number(coords.x.toFixed(4)),
+                y: Number(coords.y.toFixed(4)),
+            }];
+            renderSelection();
+            renderBanner();
+            refreshStatusCards();
+            return;
+        }
+
         state.pointer.active = true;
         state.pointer.moved = false;
         state.pointer.startX = event.clientX;
@@ -1129,6 +1524,36 @@ function initMap() {
             moveCircleDrag(event);
             return;
         }
+
+        if (state.drawMode && state.drawType === 'circle' && state.drawCircleDraft) {
+            const coords = getMapPercentCoords(event.clientX, event.clientY);
+            const dx = coords.x - state.drawCircleDraft.cx;
+            const dy = coords.y - state.drawCircleDraft.cy;
+            state.drawCircleDraft.r = Math.sqrt((dx * dx) + (dy * dy));
+            renderSelection();
+            renderBanner();
+            refreshStatusCards();
+            return;
+        }
+
+        if (state.drawMode && state.drawType === 'free' && state.isFreeDrawing) {
+            const coords = getMapPercentCoords(event.clientX, event.clientY);
+            const lastPoint = state.drawDraftPoints[state.drawDraftPoints.length - 1];
+            const distance = lastPoint
+                ? ((coords.x - lastPoint.x) ** 2) + ((coords.y - lastPoint.y) ** 2)
+                : 1;
+            if (distance > 0.00002) {
+                state.drawDraftPoints.push({
+                    x: Number(coords.x.toFixed(4)),
+                    y: Number(coords.y.toFixed(4)),
+                });
+                renderSelection();
+                renderBanner();
+                refreshStatusCards();
+            }
+            return;
+        }
+
         if (!state.pointer.active) return;
 
         const deltaX = event.clientX - state.pointer.lastX;
@@ -1155,13 +1580,22 @@ function initMap() {
             endCircleDrag();
             return;
         }
+
+        if (state.drawMode && state.drawType === 'circle' && state.drawCircleDraft) {
+            finalizeCircleDraft();
+            return;
+        }
+
+        if (state.drawMode && state.drawType === 'free' && state.isFreeDrawing) {
+            state.isFreeDrawing = false;
+            finalizeFreeDraw();
+            return;
+        }
+
         if (!state.pointer.active) return;
         const moved = state.pointer.moved;
         state.pointer.active = false;
-
-        if (!moved && dom.viewport?.contains(event.target)) {
-            choosePositionOnMap(event);
-        }
+        if (!moved && dom.viewport?.contains(event.target)) choosePositionOnMap(event);
     });
 }
 
@@ -1182,10 +1616,6 @@ function lockConsole() {
 }
 
 function bindEvents() {
-    dom.homeBtn?.addEventListener('click', () => {
-        window.location.href = '../index.html';
-    });
-
     dom.accessSubmit?.addEventListener('click', () => {
         const code = String(dom.accessInput?.value || '').trim();
         if (code !== STAFF_CODE) {
@@ -1203,37 +1633,31 @@ function bindEvents() {
     dom.deleteBtn?.addEventListener('click', deleteAlert);
     dom.lockBtn?.addEventListener('click', lockConsole);
     dom.clearBtn?.addEventListener('click', clearDraft);
-    dom.useMapBtn?.addEventListener('click', activateCircleMode);
-    dom.startZoneBtn?.addEventListener('click', beginZoneDraw);
-    dom.openPickerBtn?.addEventListener('click', openPickerMapWindow);
-    dom.finishZoneBtn?.addEventListener('click', () => {
-        if (finalizeZoneDraft({ silent: false })) {
-            focusSelection();
-        }
-    });
-    dom.undoZoneBtn?.addEventListener('click', undoZonePoint);
-    dom.cancelZoneBtn?.addEventListener('click', cancelZoneDraw);
+    dom.removeCircleBtn?.addEventListener('click', removeActiveCircle);
+    dom.ctxNewZone?.addEventListener('click', startCircleDraw);
+    dom.ctxNewFreeZone?.addEventListener('click', startFreeDraw);
+    dom.ctxCancel?.addEventListener('click', closeContextMenu);
 
     dom.radius?.addEventListener('input', () => {
         const radius = getCurrentRadius();
         updateRadiusUi(radius);
         if (state.selection?.shapeType !== 'zone') {
-            const base = state.selection
-                ? cloneSelection(state.selection)
-                : (() => {
-                    const gpsX = Number(dom.gpsX?.value);
-                    const gpsY = Number(dom.gpsY?.value);
-                    return Number.isFinite(gpsX) && Number.isFinite(gpsY)
-                        ? buildCircleSelectionFromGps(gpsX, gpsY, radius)
-                        : null;
-                })();
-            if (base) {
-                setSelection({
-                    ...base,
+            const circles = getSelectionCircles();
+            if (circles.length) {
+                const activeIndex = getActiveCircleIndex();
+                circles[activeIndex] = {
+                    ...circles[activeIndex],
                     radius,
-                    shapeType: 'circle',
-                    zonePoints: [],
-                }, { syncForm: false, resetDraft: false });
+                };
+                setSelection(buildCircleSelection(circles, activeIndex), {
+                    syncForm: false,
+                    resetDraft: false,
+                });
+            } else if (state.drawCircleDraft) {
+                state.drawCircleDraft.r = radius;
+                renderSelection();
+                renderBanner();
+                refreshStatusCards();
             } else {
                 refreshStatusCards();
             }
@@ -1250,7 +1674,14 @@ function bindEvents() {
     dom.gpsX?.addEventListener('input', updateSelectionFromGpsInputs);
     dom.gpsY?.addEventListener('input', updateSelectionFromGpsInputs);
     dom.active?.addEventListener('change', () => {
-        if (dom.alertMode) dom.alertMode.textContent = state.currentAlert ? (dom.active.checked ? 'Live' : 'Brouillon') : 'Nouveau';
+        refreshAlertModePill();
+        renderBanner();
+        refreshStatusCards();
+    });
+    dom.startAt?.addEventListener('input', () => {
+        refreshAlertModePill();
+        renderBanner();
+        refreshStatusCards();
     });
     dom.audienceAllBtn?.addEventListener('click', () => {
         state.audienceMode = 'all';
@@ -1270,13 +1701,18 @@ function bindEvents() {
     });
 
     window.addEventListener('resize', () => {
+        closeContextMenu();
         scheduleMapView(Boolean(state.selection));
     });
 
-    window.addEventListener('message', handlePickerMessage);
-
     window.addEventListener('load', () => {
         scheduleMapView(Boolean(state.selection));
+    });
+
+    window.addEventListener('click', (event) => {
+        if (!state.contextMenuOpen) return;
+        if (dom.contextMenu?.contains(event.target)) return;
+        closeContextMenu();
     });
 }
 
@@ -1285,6 +1721,7 @@ document.addEventListener('DOMContentLoaded', () => {
     bindEvents();
     initMap();
     renderAudienceUi();
+    refreshAlertModePill();
     refreshStatusCards();
     renderBanner();
     if (dom.accessInput) dom.accessInput.focus();

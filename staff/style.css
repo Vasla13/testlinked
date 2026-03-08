@@ -12,7 +12,7 @@ body.staff-shell #sidebar-right {
 }
 
 body.staff-shell #sidebar-left {
-    width: 220px;
+    width: 250px;
 }
 
 body.staff-shell #sidebar-right {
@@ -157,7 +157,7 @@ body.staff-shell textarea.cyber-input {
 
 .staff-status-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
     gap: 8px;
 }
 
@@ -394,26 +394,22 @@ body.staff-shell textarea.cyber-input {
 }
 
 .staff-alert-ring,
-.staff-alert-zone,
-.staff-alert-center {
+.staff-alert-zone {
     filter: drop-shadow(0 0 10px rgba(255, 77, 103, 0.24));
 }
 
-.staff-alert-ring,
-.staff-alert-center {
+.staff-alert-ring {
     pointer-events: auto;
     cursor: grab;
 }
 
-.staff-alert-ring.is-dragging,
-.staff-alert-center.is-dragging {
-    cursor: grabbing;
+.staff-alert-ring.is-active {
+    fill-opacity: 0.18;
+    stroke-width: 0.22;
 }
 
-.staff-alert-center {
-    fill: #ffe5ea;
-    stroke: #ff4d67;
-    stroke-width: 0.14;
+.staff-alert-ring.is-dragging {
+    cursor: grabbing;
 }
 
 #staff-map-banner {
@@ -473,6 +469,13 @@ body.staff-shell textarea.cyber-input {
 
 .staff-toggle-row input {
     width: auto;
+}
+
+.staff-helper-copy {
+    margin-top: 8px;
+    color: #9bb4d0;
+    font-size: 0.78rem;
+    line-height: 1.4;
 }
 
 .staff-primary-actions {

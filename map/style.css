@@ -382,6 +382,45 @@ label { display: block; color: var(--text-dim); font-size: 0.8rem; margin-bottom
     z-index: 200; box-shadow: 0 5px 20px rgba(0,0,0,0.8);
 }
 #coords-display { font-family: monospace; color: var(--accent-cyan); font-size: 1rem; letter-spacing: 1px; min-width: 180px; text-align: center; }
+.zoom-display {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 124px;
+    padding: 6px 10px;
+    border: 1px solid rgba(115, 251, 247, 0.14);
+    border-radius: 12px;
+    background: rgba(7, 16, 32, 0.82);
+}
+.zoom-display-label {
+    color: var(--text-dim);
+    font-size: 0.72rem;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+}
+.zoom-display strong {
+    color: var(--accent-cyan);
+    font-family: var(--font-tactical);
+    font-size: 1.05rem;
+    line-height: 0.9;
+    min-width: 42px;
+}
+.zoom-display-bar {
+    position: relative;
+    flex: 1 1 auto;
+    height: 4px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: rgba(115, 251, 247, 0.12);
+}
+.zoom-display-bar span {
+    display: block;
+    height: 100%;
+    width: 0%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, rgba(115, 251, 247, 0.5), rgba(115, 251, 247, 0.96));
+    box-shadow: 0 0 10px rgba(115, 251, 247, 0.34);
+}
 .hud-btn { background: transparent; border: 1px solid transparent; color: var(--text-dim); font-weight: 700; text-transform: uppercase; font-size: 0.85rem; padding: 6px 12px; border-radius: 0px; cursor: pointer; transition: all 0.2s; }
 .hud-btn:hover, .hud-btn.active { color: #fff; border-color: var(--accent-cyan); background: rgba(115, 251, 247, 0.1); }
 .hud-toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.85rem; color: var(--text-dim); text-transform: uppercase; font-weight: 700; margin-left: 10px; padding-left: 10px; border-left: 1px solid rgba(255,255,255,0.2); }
@@ -1682,6 +1721,28 @@ body.map-shell #coords-display {
     font-size: 1.55rem;
     line-height: 0.8;
     letter-spacing: 1px;
+}
+
+body.map-shell .zoom-display {
+    min-width: 132px;
+    padding: 7px 10px;
+    border-color: rgba(102, 243, 255, 0.14);
+    background: rgba(8, 16, 34, 0.82);
+}
+
+body.map-shell .zoom-display-label {
+    color: #7f96b6;
+    font-size: 0.64rem;
+    letter-spacing: 1.4px;
+}
+
+body.map-shell .zoom-display strong {
+    color: #d7f6ff;
+    font-size: 1.35rem;
+}
+
+body.map-shell .zoom-display-bar {
+    background: rgba(102, 243, 255, 0.1);
 }
 
 body.map-shell .hud-btn {

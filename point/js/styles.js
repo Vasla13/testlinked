@@ -327,6 +327,46 @@ export function injectStyles() {
         #btnIntel.locked { opacity: 0.7; }
 
         .hud-sep { width: 1px; height: 20px; background: rgba(255,255,255,0.1); }
+        .hud-zoom {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 132px;
+            padding: 6px 10px;
+            border: 1px solid rgba(115, 251, 247, 0.18);
+            border-radius: 10px;
+            background: rgba(10, 18, 38, 0.82);
+        }
+        .hud-zoom-label {
+            color: #7f92ad;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 1.1px;
+            text-transform: uppercase;
+        }
+        .hud-zoom-value {
+            min-width: 44px;
+            color: var(--accent-cyan);
+            font-family: var(--font-tactical);
+            font-size: 1.55rem;
+            line-height: 0.8;
+        }
+        .hud-zoom-bar {
+            position: relative;
+            flex: 1 1 auto;
+            height: 4px;
+            border-radius: 999px;
+            overflow: hidden;
+            background: rgba(115, 251, 247, 0.12);
+        }
+        .hud-zoom-bar span {
+            display: block;
+            width: 0%;
+            height: 100%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, rgba(115, 251, 247, 0.42), rgba(115, 251, 247, 0.92));
+            box-shadow: 0 0 10px rgba(115, 251, 247, 0.32);
+        }
 
         /* --- HVT PANEL --- */
         #hvt-panel {
@@ -798,11 +838,50 @@ export function injectStyles() {
                 radial-gradient(circle at top right, rgba(102, 243, 255, 0.08), transparent 52%);
             box-shadow: inset 0 0 0 1px rgba(102, 243, 255, 0.04);
         }
-        .quick-create-columns {
+        .quick-create-tabs {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+        }
+        .quick-create-tab {
+            appearance: none;
+            padding: 14px 16px;
+            border: 1px solid rgba(102, 243, 255, 0.16);
+            border-radius: 12px;
+            background: rgba(3, 10, 24, 0.82);
+            color: #6d88aa;
+            font-family: var(--font-main);
+            font-size: clamp(1.35rem, 3vw, 1.9rem);
+            line-height: 0.92;
+            letter-spacing: 0.08em;
+            text-align: left;
+            text-transform: uppercase;
+            transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease, transform 0.18s ease;
+            box-shadow: none;
+        }
+        .quick-create-tab:hover {
+            border-color: rgba(102, 243, 255, 0.28);
+            color: #d5fcff;
+        }
+        .quick-create-tab.active {
+            border-color: rgba(102, 243, 255, 0.42);
+            background:
+                linear-gradient(180deg, rgba(8, 23, 48, 0.96), rgba(4, 12, 28, 0.92)),
+                radial-gradient(circle at top right, rgba(102, 243, 255, 0.12), transparent 60%);
+            color: var(--accent-cyan);
+            transform: translateY(-1px);
+        }
+        .quick-create-panels {
+            display: flex;
+            flex-direction: column;
+        }
+        .quick-create-panel {
+            display: flex;
+            flex-direction: column;
             gap: 12px;
-            align-items: start;
+        }
+        .quick-create-panel.is-hidden {
+            display: none;
         }
         .quick-create-title {
             margin: 0;
@@ -828,6 +907,23 @@ export function injectStyles() {
             font-size: 0.75rem;
             letter-spacing: 2px;
             text-transform: uppercase;
+        }
+        .quick-create-link-flow {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+            gap: 12px;
+            align-items: start;
+        }
+        .quick-create-link-arrow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 52px;
+            min-height: 54px;
+            color: var(--accent-cyan);
+            font-size: clamp(2.1rem, 4vw, 2.8rem);
+            line-height: 1;
+            text-shadow: 0 0 16px rgba(102, 243, 255, 0.2);
         }
         .quick-create-node-row {
             display: grid;
@@ -2225,7 +2321,8 @@ export function injectStyles() {
                 font-size: 0.82rem;
                 letter-spacing: 1.7px;
             }
-            .quick-create-columns,
+            .quick-create-tabs,
+            .quick-create-link-flow,
             .quick-create-node-row {
                 grid-template-columns: 1fr;
             }
@@ -2262,6 +2359,10 @@ export function injectStyles() {
             }
             .quick-create-kind-label {
                 min-width: 0;
+            }
+            .quick-create-link-arrow {
+                min-height: 28px;
+                transform: rotate(90deg);
             }
             #hud {
                 bottom: 132px;

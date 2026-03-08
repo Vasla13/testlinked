@@ -6,6 +6,23 @@ const canvas = document.getElementById('graph');
 const ctx = canvas.getContext('2d');
 const container = document.getElementById('center'); 
 
+function updateZoomDisplay(scale) {
+    const zoomValue = document.getElementById('zoomDisplay');
+    const zoomFill = document.getElementById('zoomDisplayFill');
+    const safeScale = Math.max(0.1, Number(scale || 1));
+    const percentText = `${Math.round(safeScale * 100)}%`;
+    const minScale = 0.1;
+    const maxScale = 5;
+    const ratio = Math.max(0, Math.min(1, Math.log(safeScale / minScale) / Math.log(maxScale / minScale)));
+
+    if (zoomValue && zoomValue.textContent !== percentText) {
+        zoomValue.textContent = percentText;
+    }
+    if (zoomFill) {
+        zoomFill.style.width = `${(ratio * 100).toFixed(1)}%`;
+    }
+}
+
 const degreeCache = new Map();
 const NODE_ICONS = { [TYPES.PERSON]: '👤', [TYPES.COMPANY]: '🏢', [TYPES.GROUP]: '👥' };
 
@@ -89,6 +106,7 @@ export function draw() {
     if (canvas.width === 0 || canvas.height === 0) return;
 
     const p = state.view;
+    updateZoomDisplay(p.scale);
     const r = window.devicePixelRatio || 1;
     const w = canvas.width / r;
     const h = canvas.height / r;

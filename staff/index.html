@@ -11,6 +11,13 @@
     <link rel="stylesheet" href="./style.css">
 </head>
 <body class="map-shell staff-shell">
+    <div id="context-menu" class="context-menu">
+        <button id="ctx-new-zone">Nouvelle zone</button>
+        <button id="ctx-new-free-zone">Dessin libre</button>
+        <div class="separator-h"></div>
+        <button id="ctx-cancel">Fermer</button>
+    </div>
+
     <div id="staff-access-overlay">
         <div class="staff-access-card">
             <div class="staff-access-kicker">Acces staff</div>
@@ -26,7 +33,6 @@
         <div id="sidebar-left">
             <div class="panel-section shell-section shell-section-brand">
                 <img src="../map/logo-bni-linked.png" alt="BNI LINKED" class="shell-logo">
-                <button id="btnStaffHome" class="btn-switch shell-mode-btn" type="button">Retour accueil</button>
             </div>
 
             <div class="panel-section shell-section staff-summary-panel">
@@ -39,13 +45,58 @@
                         <span class="data-shell-label">Etat</span>
                         <strong id="staffAlertState">Verrouille</strong>
                     </div>
-                    <div class="data-shell-card">
-                        <span class="data-shell-label">Console</span>
-                        <strong>Edition</strong>
-                    </div>
                 </div>
                 <div id="staffStatusMessage" class="staff-status-message">Console verrouillee.</div>
             </div>
+
+            <details class="panel-section shell-section staff-advanced-panel">
+                <summary>Plus d options</summary>
+                <div class="editor-section staff-advanced-section" style="--editor-accent:#dff7ff;">
+                    <div class="editor-section-title">
+                        <span>Cercles</span>
+                    </div>
+                    <div class="editor-actions-row">
+                        <button id="btnRemoveActiveCircle" class="btn-close-editor" type="button">Retirer cercle actif</button>
+                    </div>
+                </div>
+                <div class="editor-section staff-advanced-section" style="--editor-accent:#ffcc8a;">
+                    <div class="editor-section-title">
+                        <span>Audience</span>
+                        <span id="staffAudienceMode" class="editor-pill staff-mini-pill">Tous</span>
+                    </div>
+                    <div class="staff-action-grid staff-action-grid-compact">
+                        <button id="btnAudienceAll" class="action-btn" type="button">Tous</button>
+                        <button id="btnAudienceWhitelist" class="action-btn" type="button">Whitelist</button>
+                    </div>
+                    <div id="staffWhitelistPanel" class="staff-whitelist-panel" hidden>
+                        <div class="staff-whitelist-row">
+                            <input id="staffWhitelistInput" class="cyber-input" type="text" placeholder="username cloud">
+                            <button id="btnAddWhitelistUser" class="action-btn" type="button">Ajouter</button>
+                        </div>
+                        <div id="staffWhitelistSuggestions" class="staff-whitelist-suggestions"></div>
+                        <div id="staffWhitelistList" class="staff-whitelist-list"></div>
+                    </div>
+                </div>
+                <div class="editor-section staff-advanced-section" style="--editor-accent:#dff7ff;">
+                    <div class="editor-section-title">
+                        <span>Diffusion</span>
+                    </div>
+                    <label class="staff-toggle-row" for="alertActive">
+                        <input id="alertActive" type="checkbox" checked>
+                        <span>Alerte active</span>
+                    </label>
+                    <div class="editor-col">
+                        <label for="alertStartAt">Afficher a partir du</label>
+                        <input id="alertStartAt" class="cyber-input" type="datetime-local">
+                        <div class="staff-helper-copy">Laisse vide pour afficher tout de suite.</div>
+                    </div>
+                </div>
+                <div class="editor-actions-row staff-secondary-actions">
+                    <button id="btnDeleteAlert" class="action-btn btn-delete-zone" type="button">Supprimer</button>
+                    <button id="btnClearDraft" class="btn-close-editor" type="button">Repartir de zero</button>
+                    <button id="btnLockStaff" class="btn-close-editor" type="button">Verrouiller</button>
+                </div>
+            </details>
         </div>
 
         <div id="viewport">
@@ -88,11 +139,7 @@
                             <span>Position</span>
                             <span id="staffSelectionMode" class="editor-pill staff-mini-pill">Cercle</span>
                         </div>
-                        <div class="editor-actions-row">
-                            <button id="btnUseMapSelection" class="action-btn" type="button">Placer cercle</button>
-                            <button id="btnStartZoneDraw" class="action-btn" type="button">Tracer zone</button>
-                        </div>
-                        <div id="staffDrawStatus" class="staff-draw-status">Mode cercle. Clique sur la carte pour placer l’alerte.</div>
+                        <div id="staffDrawStatus" class="staff-draw-status">Clic droit sur la carte pour creer une zone ou lancer un dessin libre.</div>
                         <div class="staff-position-meta">Position: <strong id="staffAlertCoords">--</strong></div>
                         <div class="staff-radius-block">
                             <label for="alertRadius">Taille du cercle</label>
@@ -100,11 +147,6 @@
                                 <input id="alertRadius" type="range" min="0.8" max="12" step="0.2" value="2.6">
                                 <strong id="alertRadiusValue">2.6</strong>
                             </div>
-                        </div>
-                        <div class="editor-actions-row">
-                            <button id="btnFinishZoneDraw" class="action-btn" type="button">Valider zone</button>
-                            <button id="btnUndoZonePoint" class="action-btn" type="button">Retour point</button>
-                            <button id="btnCancelZoneDraw" class="btn-close-editor" type="button">Annuler zone</button>
                         </div>
                     </div>
 
@@ -116,53 +158,6 @@
                             <button id="btnPublishAlert" class="action-btn" type="button">Publier</button>
                         </div>
                     </div>
-
-                    <details class="staff-advanced-panel">
-                        <summary>Plus d options</summary>
-                        <div class="editor-section staff-advanced-section" style="--editor-accent:#ffcc8a;">
-                            <div class="editor-section-title">
-                                <span>Audience</span>
-                                <span id="staffAudienceMode" class="editor-pill staff-mini-pill">Tous</span>
-                            </div>
-                            <div class="staff-action-grid staff-action-grid-compact">
-                                <button id="btnAudienceAll" class="action-btn" type="button">Tous</button>
-                                <button id="btnAudienceWhitelist" class="action-btn" type="button">Whitelist</button>
-                            </div>
-                            <div id="staffWhitelistPanel" class="staff-whitelist-panel" hidden>
-                                <div class="staff-whitelist-row">
-                                    <input id="staffWhitelistInput" class="cyber-input" type="text" placeholder="username cloud">
-                                    <button id="btnAddWhitelistUser" class="action-btn" type="button">Ajouter</button>
-                                </div>
-                                <div id="staffWhitelistSuggestions" class="staff-whitelist-suggestions"></div>
-                                <div id="staffWhitelistList" class="staff-whitelist-list"></div>
-                            </div>
-                        </div>
-                        <div class="editor-section staff-advanced-section" style="--editor-accent:#dff7ff;">
-                            <div class="editor-section-title">
-                                <span>Position manuelle</span>
-                            </div>
-                            <label class="staff-toggle-row" for="alertActive">
-                                <input id="alertActive" type="checkbox" checked>
-                                <span>Rendre l’alerte visible maintenant</span>
-                            </label>
-                            <button id="btnOpenPickerMap" class="action-btn full-width" type="button">Ouvrir carte dediee</button>
-                            <div class="editor-row">
-                                <div class="editor-col">
-                                    <label for="alertGpsX">GPS X</label>
-                                    <input id="alertGpsX" class="cyber-input" type="number" step="0.01" placeholder="-1234.56">
-                                </div>
-                                <div class="editor-col">
-                                    <label for="alertGpsY">GPS Y</label>
-                                    <input id="alertGpsY" class="cyber-input" type="number" step="0.01" placeholder="789.12">
-                                </div>
-                            </div>
-                        </div>
-                        <div class="editor-actions-row staff-secondary-actions">
-                            <button id="btnDeleteAlert" class="action-btn btn-delete-zone" type="button">Supprimer</button>
-                            <button id="btnClearDraft" class="btn-close-editor" type="button">Repartir de zero</button>
-                            <button id="btnLockStaff" class="btn-close-editor" type="button">Verrouiller</button>
-                        </div>
-                    </details>
                 </div>
             </div>
         </div>

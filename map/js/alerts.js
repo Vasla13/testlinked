@@ -97,9 +97,51 @@ function sanitizeZonePoints(rawPoints) {
         .filter(Boolean);
 }
 
+function sanitizeCircle(rawCircle, fallbackRadius = 2.6) {
+    if (!rawCircle || typeof rawCircle !== 'object') return null;
+    const xPercent = Number(rawCircle.xPercent);
+    const yPercent = Number(rawCircle.yPercent);
+    const gpsX = Number(rawCircle.gpsX);
+    const gpsY = Number(rawCircle.gpsY);
+    const radius = Number(rawCircle.radius || fallbackRadius);
+
+    if (!Number.isFinite(xPercent) || !Number.isFinite(yPercent)) return null;
+    if (!Number.isFinite(gpsX) || !Number.isFinite(gpsY)) return null;
+
+    return {
+        xPercent: Number(xPercent.toFixed(4)),
+        yPercent: Number(yPercent.toFixed(4)),
+        gpsX: Number(gpsX.toFixed(2)),
+        gpsY: Number(gpsY.toFixed(2)),
+        radius: Number(Math.max(0.5, radius).toFixed(1)),
+    };
+}
+
+function sanitizeCircles(rawCircles, fallbackRadius = 2.6) {
+    if (!Array.isArray(rawCircles)) return [];
+    return rawCircles
+        .map((circle) => sanitizeCircle(circle, fallbackRadius))
+        .filter(Boolean);
+}
+
+function getCircleBounds(circles) {
+    if (!Array.isArray(circles) || !circles.length) return null;
+    return {
+        minX: Math.max(0, Math.min(...circles.map((circle) => circle.xPercent - circle.radius))),
+        maxX: Math.min(100, Math.max(...circles.map((circle) => circle.xPercent + circle.radius))),
+        minY: Math.max(0, Math.min(...circles.map((circle) => circle.yPercent - circle.radius))),
+        maxY: Math.min(100, Math.max(...circles.map((circle) => circle.yPercent + circle.radius))),
+    };
+}
+
 function sanitizeAlert(raw) {
     if (!raw || typeof raw !== 'object') return null;
     const zonePoints = sanitizeZonePoints(raw.zonePoints);
+    const circles = sanitizeCircles(raw.circles, raw.radius || 2.6);
+    if (!circles.length && raw.shapeType !== 'zone') {
+        const legacyCircle = sanitizeCircle(raw, raw.radius || 2.6);
+        if (legacyCircle) circles.push(legacyCircle);
+    }
     const alert = {
         id: String(raw.id || ''),
         title: String(raw.title || ''),
@@ -111,11 +153,17 @@ function sanitizeAlert(raw) {
         radius: Number(raw.radius || 2.6),
         shapeType: raw.shapeType === 'zone' && zonePoints.length >= 3 ? 'zone' : 'circle',
         zonePoints,
+        circles,
+        activeCircleIndex: Number.isInteger(Number(raw.activeCircleIndex)) ? Number(raw.activeCircleIndex) : (circles.length ? circles.length - 1 : -1),
         active: raw.active !== false,
         updatedAt: String(raw.updatedAt || ''),
     };
-    if (!Number.isFinite(alert.xPercent) || !Number.isFinite(alert.yPercent)) return null;
-    if (!Number.isFinite(alert.gpsX) || !Number.isFinite(alert.gpsY)) return null;
+    if (alert.shapeType === 'zone') {
+        if (!Number.isFinite(alert.xPercent) || !Number.isFinite(alert.yPercent)) return null;
+        if (!Number.isFinite(alert.gpsX) || !Number.isFinite(alert.gpsY)) return null;
+    } else if (!alert.circles.length) {
+        return null;
+    }
     return alert;
 }
 
@@ -151,6 +199,19 @@ function focusAlert(alert, attempt = 0) {
             (viewportHeight - 120) / heightPx
         );
         scale = Math.min(2.2, Math.max(0.8, fitScale));
+    } else if (Array.isArray(alert.circles) && alert.circles.length) {
+        const bounds = getCircleBounds(alert.circles);
+        if (bounds) {
+            focusX = (bounds.minX + bounds.maxX) / 2;
+            focusY = (bounds.minY + bounds.maxY) / 2;
+            const widthPx = Math.max(80, ((bounds.maxX - bounds.minX) / 100) * state.mapWidth);
+            const heightPx = Math.max(80, ((bounds.maxY - bounds.minY) / 100) * state.mapHeight);
+            const fitScale = Math.min(
+                (viewportWidth - 120) / widthPx,
+                (viewportHeight - 120) / heightPx
+            );
+            scale = Math.min(2.2, Math.max(0.8, fitScale));
+        }
     }
 
     state.view.scale = scale;

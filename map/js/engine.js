@@ -9,6 +9,23 @@ const mapImage = document.getElementById('map-image');
 const hudCoords = document.getElementById('coords-display');
 const markersLayer = document.getElementById('markers-layer');
 
+function updateZoomDisplay() {
+    const zoomValue = document.getElementById('zoom-display-value');
+    const zoomFill = document.getElementById('zoom-display-fill');
+    const scale = Math.max(0.05, Number(state.view.scale || 1));
+    const percentText = `${Math.round(scale * 100)}%`;
+    const minScale = 0.05;
+    const maxScale = 8;
+    const ratio = Math.max(0, Math.min(1, Math.log(scale / minScale) / Math.log(maxScale / minScale)));
+
+    if (zoomValue && zoomValue.textContent !== percentText) {
+        zoomValue.textContent = percentText;
+    }
+    if (zoomFill) {
+        zoomFill.style.width = `${(ratio * 100).toFixed(1)}%`;
+    }
+}
+
 function syncMapFrame() {
     if (!state.mapWidth || !state.mapHeight) return;
 
@@ -29,6 +46,7 @@ function syncMapFrame() {
 
 export function updateTransform() {
     syncMapFrame();
+    updateZoomDisplay();
 
     // 1. On applique le zoom UNIQUEMENT sur la carte (l'image de fond)
     mapWorld.style.transform = `translate(${state.view.x}px, ${state.view.y}px) scale(${state.view.scale})`;

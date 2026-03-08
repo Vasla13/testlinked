@@ -2453,38 +2453,48 @@ function openQuickCreateModal() {
     msgEl.innerHTML = `
         <div class="quick-create-shell">
             <h3 class="quick-create-title">Creer</h3>
-            <div class="quick-create-columns">
-                <div class="quick-create-block quick-create-block-create">
-                    <div class="quick-create-block-head">Nouvelle fiche</div>
+            <div class="quick-create-tabs" role="tablist" aria-label="Creation rapide">
+                <button type="button" class="quick-create-tab active" data-create-tab="node" aria-selected="true">Nouvelle fiche</button>
+                <button type="button" class="quick-create-tab" data-create-tab="link" aria-selected="false">Nouvelle liaison</button>
+            </div>
+            <div class="quick-create-panels">
+                <section class="quick-create-block quick-create-panel" data-panel="node">
+                    <div class="quick-create-block-head">Creer une nouvelle fiche</div>
                     <div class="quick-create-node-row">
                         <button type="button" class="mini-btn quick-create-node-btn active" data-create-type="${TYPES.PERSON}">Personne</button>
                         <button type="button" class="mini-btn quick-create-node-btn" data-create-type="${TYPES.GROUP}">Groupe</button>
                         <button type="button" class="mini-btn quick-create-node-btn" data-create-type="${TYPES.COMPANY}">Entreprise</button>
                     </div>
-                    <input id="quick-create-node-name" type="text" placeholder="Nom de la fiche" class="quick-create-target-input" />
-                    <div id="quick-create-node-context" class="quick-create-context"></div>
-                    <button type="button" id="quick-create-node-apply" class="mini-btn primary quick-create-panel-action">Creer</button>
-                </div>
-
-                <div class="quick-create-block quick-create-block-link">
-                    <div class="quick-create-block-head">Nouvelle liaison</div>
                     <div class="quick-create-field-stack">
-                        <label class="quick-create-field-label" for="quick-link-source">Source</label>
-                        <input id="quick-link-source" type="text" value="${escapeHtml(prefilledSourceNode?.name || '')}" placeholder="Choisir une fiche existante" class="quick-create-target-input" />
-                        <div id="quick-link-source-suggestions" class="quick-create-suggestions"></div>
+                        <label class="quick-create-field-label" for="quick-create-node-name">Nom</label>
+                        <input id="quick-create-node-name" type="text" placeholder="Nom de la fiche" class="quick-create-target-input" />
                     </div>
-                    <div class="quick-create-field-stack">
-                        <label class="quick-create-field-label" for="quick-link-target">Cible</label>
-                        <input id="quick-link-target" type="text" placeholder="Choisir une fiche existante" class="quick-create-target-input" />
-                        <div id="quick-link-target-suggestions" class="quick-create-suggestions"></div>
+                    <div id="quick-create-node-context" class="quick-create-context"></div>
+                    <button type="button" id="quick-create-node-apply" class="mini-btn primary quick-create-panel-action">Creer la fiche</button>
+                </section>
+
+                <section class="quick-create-block quick-create-panel is-hidden" data-panel="link">
+                    <div class="quick-create-block-head">Relier deux fiches existantes</div>
+                    <div class="quick-create-link-flow">
+                        <div class="quick-create-field-stack">
+                            <label class="quick-create-field-label" for="quick-link-source">Source</label>
+                            <input id="quick-link-source" type="text" value="${escapeHtml(prefilledSourceNode?.name || '')}" placeholder="Choisir une fiche existante" class="quick-create-target-input" />
+                            <div id="quick-link-source-suggestions" class="quick-create-suggestions"></div>
+                        </div>
+                        <div class="quick-create-link-arrow" aria-hidden="true">&rarr;</div>
+                        <div class="quick-create-field-stack">
+                            <label class="quick-create-field-label" for="quick-link-target">Cible</label>
+                            <input id="quick-link-target" type="text" placeholder="Choisir une fiche existante" class="quick-create-target-input" />
+                            <div id="quick-link-target-suggestions" class="quick-create-suggestions"></div>
+                        </div>
                     </div>
                     <div class="flex-row-force quick-create-kind-row">
-                        <label class="quick-create-kind-label">Lien</label>
+                        <label class="quick-create-kind-label" for="quick-link-kind">Lien</label>
                         <select id="quick-link-kind" class="flex-grow-input"></select>
                     </div>
                     <div id="quick-link-context" class="quick-create-context"></div>
                     <button type="button" id="quick-link-apply" class="mini-btn primary quick-create-panel-action">Lier</button>
-                </div>
+                </section>
             </div>
         </div>
     `;
@@ -2503,6 +2513,8 @@ function openQuickCreateModal() {
     const linkTargetSuggestionsEl = document.getElementById('quick-link-target-suggestions');
     const linkKindSelect = document.getElementById('quick-link-kind');
     const linkApplyBtn = document.getElementById('quick-link-apply');
+    const tabButtons = Array.from(document.querySelectorAll('.quick-create-tab'));
+    const panelEls = Array.from(document.querySelectorAll('.quick-create-panel'));
 
     const defaultBaseName = () => (
         draftTargetType === TYPES.COMPANY
@@ -2514,6 +2526,11 @@ function openQuickCreateModal() {
         const targetName = String(value || '').trim().toLowerCase();
         if (!targetName) return null;
         return state.nodes.find((node) => String(node.name || '').trim().toLowerCase() === targetName) || null;
+    };
+    const findNodeByRef = (value) => {
+        const targetId = String(value || '').trim();
+        if (!targetId) return null;
+        return state.nodes.find((node) => String(node.id) === targetId) || null;
     };
 
     const resolveLinkSource = () => findNodeByName(linkSourceInput?.value);
@@ -2529,6 +2546,7 @@ function openQuickCreateModal() {
         if (!linkKindSelect) return;
         const source = resolveLinkSource();
         const target = resolveLinkTarget();
+        const currentKind = String(linkKindSelect.value || '').trim();
         if (!source || !target) {
             setLinkKindPlaceholder();
             return;
@@ -2537,24 +2555,32 @@ function openQuickCreateModal() {
             setLinkKindPlaceholder('Source et cible identiques');
             return;
         }
-        const allowedKinds = getAllowedKinds(source.type, target.type);
+        const allowedKinds = Array.from(getAllowedKinds(source.type, target.type));
         linkKindSelect.innerHTML = Array.from(allowedKinds).map((kind) => `
             <option value="${kind}">${linkKindEmoji(kind)} ${kindToLabel(kind)}</option>
         `).join('');
         linkKindSelect.disabled = false;
+        if (allowedKinds.includes(currentKind)) {
+            linkKindSelect.value = currentKind;
+        } else if (allowedKinds.length) {
+            linkKindSelect.value = allowedKinds[0];
+        }
     };
 
-    const renderSuggestions = (inputEl, suggestionsEl, options = {}) => {
-        if (!inputEl || !suggestionsEl) return;
-        const query = String(inputEl.value || '').trim().toLowerCase();
-        const excludeId = options.excludeId ? String(options.excludeId) : '';
-        const visible = searchableNodes
-            .filter((node) => !query || String(node.name || '').toLowerCase().includes(query))
-            .filter((node) => !excludeId || String(node.id) !== excludeId)
-            .slice(0, 10);
+    const queryNodes = (query, options = {}) => {
+        const normalizedQuery = String(query || '').trim().toLowerCase();
+        const excludeIds = new Set((options.excludeIds || []).map((value) => String(value)));
+        const limit = Number(options.limit || 8);
+        return searchableNodes
+            .filter((node) => !normalizedQuery || String(node.name || '').toLowerCase().includes(normalizedQuery))
+            .filter((node) => !excludeIds.has(String(node.id)))
+            .slice(0, limit);
+    };
 
-        suggestionsEl.innerHTML = visible.map((node) => `
-            <button type="button" class="quick-create-suggestion" data-name="${escapeHtml(String(node.name || ''))}">
+    const renderSuggestions = (suggestionsEl, nodes, onPick) => {
+        if (!suggestionsEl) return;
+        suggestionsEl.innerHTML = nodes.map((node) => `
+            <button type="button" class="quick-create-suggestion" data-id="${escapeHtml(String(node.id || ''))}">
                 <span>${escapeHtml(String(node.name || ''))}</span>
                 <span class="quick-create-suggestion-type">${escapeHtml(TYPE_LABEL[node.type] || node.type)}</span>
             </button>
@@ -2562,11 +2588,27 @@ function openQuickCreateModal() {
 
         Array.from(suggestionsEl.querySelectorAll('.quick-create-suggestion')).forEach((btn) => {
             btn.onclick = () => {
-                const targetName = btn.getAttribute('data-name') || '';
-                inputEl.value = targetName;
-                if (typeof options.onPick === 'function') options.onPick();
+                const pickedNode = findNodeByRef(btn.getAttribute('data-id') || '');
+                if (pickedNode && typeof onPick === 'function') onPick(pickedNode);
             };
         });
+    };
+
+    const setActiveCreateTab = (tab) => {
+        const nextTab = tab === 'link' ? 'link' : 'node';
+        tabButtons.forEach((btn) => {
+            const isActive = btn.getAttribute('data-create-tab') === nextTab;
+            btn.classList.toggle('active', isActive);
+            btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        });
+        panelEls.forEach((panel) => {
+            panel.classList.toggle('is-hidden', panel.getAttribute('data-panel') !== nextTab);
+        });
+        if (nextTab === 'link') {
+            linkSourceInput?.focus();
+        } else {
+            nodeInput?.focus();
+        }
     };
 
     const updateNodeState = () => {
@@ -2588,7 +2630,7 @@ function openQuickCreateModal() {
         }
 
         if (nodeApplyBtn) {
-            nodeApplyBtn.textContent = existingNode ? 'Ouvrir la fiche' : 'Creer';
+            nodeApplyBtn.textContent = existingNode ? 'Ouvrir la fiche' : 'Creer la fiche';
         }
     };
 
@@ -2598,7 +2640,7 @@ function openQuickCreateModal() {
 
         if (linkContextEl) {
             if (source && target && String(source.id) !== String(target.id)) {
-                linkContextEl.textContent = `Relier ${source.name} avec ${target.name}.`;
+                linkContextEl.textContent = `Relier ${source.name} vers ${target.name}.`;
             } else if (source && target) {
                 linkContextEl.textContent = 'Choisis deux fiches differentes.';
             } else if (source) {
@@ -2625,6 +2667,9 @@ function openQuickCreateModal() {
             updateNodeState();
         };
     });
+    tabButtons.forEach((btn) => {
+        btn.onclick = () => setActiveCreateTab(btn.getAttribute('data-create-tab') || 'node');
+    });
 
     if (nodeInput) {
         nodeInput.oninput = () => updateNodeState();
@@ -2638,20 +2683,38 @@ function openQuickCreateModal() {
 
     if (linkSourceInput) {
         linkSourceInput.oninput = () => {
-            renderSuggestions(linkSourceInput, linkSourceSuggestionsEl, {
-                excludeId: resolveLinkTarget()?.id,
-                onPick: () => {
-                    renderSuggestions(linkTargetInput, linkTargetSuggestionsEl, {
-                        excludeId: resolveLinkSource()?.id,
-                        onPick: () => updateLinkState()
-                    });
+            renderSuggestions(
+                linkSourceSuggestionsEl,
+                queryNodes(linkSourceInput.value, {
+                    excludeIds: [resolveLinkTarget()?.id].filter(Boolean)
+                }),
+                (pickedNode) => {
+                    linkSourceInput.value = pickedNode.name;
+                    renderSuggestions(
+                        linkTargetSuggestionsEl,
+                        queryNodes(linkTargetInput?.value, {
+                            excludeIds: [resolveLinkSource()?.id].filter(Boolean)
+                        }),
+                        (targetNode) => {
+                            if (!linkTargetInput) return;
+                            linkTargetInput.value = targetNode.name;
+                            updateLinkState();
+                        }
+                    );
                     updateLinkState();
                 }
-            });
-            renderSuggestions(linkTargetInput, linkTargetSuggestionsEl, {
-                excludeId: resolveLinkSource()?.id,
-                onPick: () => updateLinkState()
-            });
+            );
+            renderSuggestions(
+                linkTargetSuggestionsEl,
+                queryNodes(linkTargetInput?.value, {
+                    excludeIds: [resolveLinkSource()?.id].filter(Boolean)
+                }),
+                (pickedNode) => {
+                    if (!linkTargetInput) return;
+                    linkTargetInput.value = pickedNode.name;
+                    updateLinkState();
+                }
+            );
             updateLinkState();
         };
         linkSourceInput.onkeydown = (event) => {
@@ -2664,20 +2727,38 @@ function openQuickCreateModal() {
 
     if (linkTargetInput) {
         linkTargetInput.oninput = () => {
-            renderSuggestions(linkTargetInput, linkTargetSuggestionsEl, {
-                excludeId: resolveLinkSource()?.id,
-                onPick: () => updateLinkState()
-            });
-            renderSuggestions(linkSourceInput, linkSourceSuggestionsEl, {
-                excludeId: resolveLinkTarget()?.id,
-                onPick: () => {
-                    renderSuggestions(linkTargetInput, linkTargetSuggestionsEl, {
-                        excludeId: resolveLinkSource()?.id,
-                        onPick: () => updateLinkState()
-                    });
+            renderSuggestions(
+                linkTargetSuggestionsEl,
+                queryNodes(linkTargetInput.value, {
+                    excludeIds: [resolveLinkSource()?.id].filter(Boolean)
+                }),
+                (pickedNode) => {
+                    linkTargetInput.value = pickedNode.name;
                     updateLinkState();
                 }
-            });
+            );
+            renderSuggestions(
+                linkSourceSuggestionsEl,
+                queryNodes(linkSourceInput?.value, {
+                    excludeIds: [resolveLinkTarget()?.id].filter(Boolean)
+                }),
+                (pickedNode) => {
+                    if (!linkSourceInput) return;
+                    linkSourceInput.value = pickedNode.name;
+                    renderSuggestions(
+                        linkTargetSuggestionsEl,
+                        queryNodes(linkTargetInput?.value, {
+                            excludeIds: [resolveLinkSource()?.id].filter(Boolean)
+                        }),
+                        (targetNode) => {
+                            if (!linkTargetInput) return;
+                            linkTargetInput.value = targetNode.name;
+                            updateLinkState();
+                        }
+                    );
+                    updateLinkState();
+                }
+            );
             updateLinkState();
         };
         linkTargetInput.onkeydown = (event) => {
@@ -2737,22 +2818,31 @@ function openQuickCreateModal() {
         };
     }
 
-    renderSuggestions(linkSourceInput, linkSourceSuggestionsEl, {
-        excludeId: resolveLinkTarget()?.id,
-        onPick: () => {
-            renderSuggestions(linkTargetInput, linkTargetSuggestionsEl, {
-                excludeId: resolveLinkSource()?.id,
-                onPick: () => updateLinkState()
-            });
+    renderSuggestions(
+        linkSourceSuggestionsEl,
+        queryNodes(linkSourceInput?.value, {
+            excludeIds: [resolveLinkTarget()?.id].filter(Boolean)
+        }),
+        (pickedNode) => {
+            if (!linkSourceInput) return;
+            linkSourceInput.value = pickedNode.name;
             updateLinkState();
         }
-    });
-    renderSuggestions(linkTargetInput, linkTargetSuggestionsEl, {
-        excludeId: resolveLinkSource()?.id,
-        onPick: () => updateLinkState()
-    });
+    );
+    renderSuggestions(
+        linkTargetSuggestionsEl,
+        queryNodes(linkTargetInput?.value, {
+            excludeIds: [resolveLinkSource()?.id].filter(Boolean)
+        }),
+        (pickedNode) => {
+            if (!linkTargetInput) return;
+            linkTargetInput.value = pickedNode.name;
+            updateLinkState();
+        }
+    );
     updateNodeState();
     updateLinkState();
+    setActiveCreateTab('node');
 
     const closeBtn = document.getElementById('quick-create-close');
     if (closeBtn) closeBtn.onclick = () => { modalOverlay.style.display = 'none'; };
@@ -3490,6 +3580,15 @@ function setupHudButtons() {
     btnRelayout.innerHTML = `<svg style="width:16px;height:16px;fill:currentColor;margin-right:5px;" viewBox="0 0 24 24"><path d="M5 5h5v2H5v5H3V5h2zm10 0h5v5h-2V7h-3V5zm5 14h-5v2h5v-5h2v5h-2zm-14 0H3v-5h2v5h3v2z"/></svg> RECENTRER`;
     btnRelayout.onclick = () => { state.view = {x:0, y:0, scale: 0.5}; restartSim(); };
     hud.appendChild(btnRelayout);
+
+    const zoomBadge = document.createElement('div');
+    zoomBadge.className = 'hud-zoom';
+    zoomBadge.innerHTML = `
+        <span class="hud-zoom-label">Zoom</span>
+        <strong id="zoomDisplay" class="hud-zoom-value">100%</strong>
+        <span class="hud-zoom-bar"><span id="zoomDisplayFill"></span></span>
+    `;
+    hud.appendChild(zoomBadge);
 
     hud.insertAdjacentHTML('beforeend', '<div class="hud-divider"></div>');
 
