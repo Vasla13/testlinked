@@ -29,57 +29,22 @@
                 <button id="btnStaffHome" class="btn-switch shell-mode-btn" type="button">Retour accueil</button>
             </div>
 
-            <div class="panel-section shell-section">
-                <span class="section-title shell-title">Alerte</span>
+            <div class="panel-section shell-section staff-summary-panel">
+                <div class="staff-panel-head">
+                    <span class="section-title shell-title">Etat</span>
+                    <span id="staffAlertMode" class="editor-pill staff-mini-pill">Brouillon</span>
+                </div>
                 <div class="staff-status-grid">
                     <div class="data-shell-card">
                         <span class="data-shell-label">Etat</span>
                         <strong id="staffAlertState">Verrouille</strong>
                     </div>
                     <div class="data-shell-card">
-                        <span class="data-shell-label">Position</span>
-                        <strong id="staffAlertCoords">--</strong>
+                        <span class="data-shell-label">Console</span>
+                        <strong>Edition</strong>
                     </div>
                 </div>
                 <div id="staffStatusMessage" class="staff-status-message">Console verrouillee.</div>
-                <div class="staff-action-grid">
-                    <button id="btnPublishAlert" class="action-btn" type="button">Enregistrer</button>
-                    <button id="btnDeleteAlert" class="action-btn btn-delete-zone" type="button">Supprimer</button>
-                </div>
-            </div>
-
-            <div class="panel-section shell-section">
-                <div class="staff-panel-head">
-                    <span class="section-title shell-title">Audience</span>
-                    <span id="staffAudienceMode" class="editor-pill staff-mini-pill">Tous</span>
-                </div>
-                <div class="staff-audience-value" id="staffAlertAudience">Tous</div>
-                <div class="staff-action-grid staff-action-grid-compact">
-                    <button id="btnAudienceAll" class="action-btn" type="button">Tous</button>
-                    <button id="btnAudienceWhitelist" class="action-btn" type="button">Whitelist</button>
-                </div>
-                <div id="staffWhitelistPanel" class="staff-whitelist-panel" hidden>
-                    <div class="staff-whitelist-row">
-                        <input id="staffWhitelistInput" class="cyber-input" type="text" placeholder="username cloud">
-                        <button id="btnAddWhitelistUser" class="action-btn" type="button">Ajouter</button>
-                    </div>
-                    <div id="staffWhitelistSuggestions" class="staff-whitelist-suggestions"></div>
-                    <div id="staffWhitelistList" class="staff-whitelist-list"></div>
-                </div>
-            </div>
-
-            <div class="panel-section shell-section">
-                <span class="section-title shell-title">Carte</span>
-                <div class="staff-status-grid">
-                    <div class="data-shell-card">
-                        <span class="data-shell-label">GPS</span>
-                        <strong id="staffGpsPreview">--</strong>
-                    </div>
-                    <div class="data-shell-card">
-                        <span class="data-shell-label">Carte</span>
-                        <strong id="staffPercentPreview">--</strong>
-                    </div>
-                </div>
             </div>
         </div>
 
@@ -95,7 +60,6 @@
                 <div id="coords-display" class="desktop-only">GPS: -- | --</div>
                 <div class="separator desktop-only"></div>
                 <button id="btnResetView" class="hud-btn" type="button">Recentrer</button>
-                <button id="btnToggleSelection" class="hud-btn active" type="button">Selection carte</button>
             </div>
         </div>
 
@@ -105,17 +69,16 @@
                 <div class="editor-shell">
                     <div class="editor-section" style="--editor-accent:var(--accent-cyan);">
                         <div class="editor-section-title">
-                            <span>Diffusion</span>
-                            <span class="editor-pill" id="staffAlertMode">Brouillon</span>
+                            <span>Message</span>
                         </div>
                         <div class="editor-meta-grid">
                             <div class="editor-col">
                                 <label for="alertTitle">Titre</label>
-                                <input id="alertTitle" class="cyber-input" type="text" maxlength="120" placeholder="Titre de l'alerte">
+                                <input id="alertTitle" class="cyber-input" type="text" maxlength="120" placeholder="Ex: Intervention BNI secteur nord">
                             </div>
                             <div class="editor-col">
                                 <label for="alertDescription">Description</label>
-                                <textarea id="alertDescription" class="cyber-input" rows="4" placeholder="Description visible sur la home"></textarea>
+                                <textarea id="alertDescription" class="cyber-input" rows="4" placeholder="Message affiche sur la home et sur la carte"></textarea>
                             </div>
                         </div>
                     </div>
@@ -123,51 +86,83 @@
                     <div class="editor-section" style="--editor-accent:#dff7ff;">
                         <div class="editor-section-title">
                             <span>Position</span>
-                            <span class="editor-pill" id="staffSelectionMode">Carte</span>
+                            <span id="staffSelectionMode" class="editor-pill staff-mini-pill">Cercle</span>
                         </div>
                         <div class="editor-actions-row">
-                            <button id="btnUseMapSelection" class="action-btn" type="button">Cercle</button>
-                            <button id="btnStartZoneDraw" class="action-btn" type="button">Dessiner zone</button>
+                            <button id="btnUseMapSelection" class="action-btn" type="button">Placer cercle</button>
+                            <button id="btnStartZoneDraw" class="action-btn" type="button">Tracer zone</button>
                         </div>
-                        <button id="btnOpenPickerMap" class="action-btn full-width" type="button">Ouvrir carte dediee</button>
-                        <div class="editor-row">
-                            <div class="editor-col">
-                                <label for="alertGpsX">GPS X</label>
-                                <input id="alertGpsX" class="cyber-input" type="number" step="0.01" placeholder="-1234.56">
-                            </div>
-                            <div class="editor-col">
-                                <label for="alertGpsY">GPS Y</label>
-                                <input id="alertGpsY" class="cyber-input" type="number" step="0.01" placeholder="789.12">
-                            </div>
-                        </div>
+                        <div id="staffDrawStatus" class="staff-draw-status">Mode cercle. Clique sur la carte pour placer l’alerte.</div>
+                        <div class="staff-position-meta">Position: <strong id="staffAlertCoords">--</strong></div>
                         <div class="staff-radius-block">
-                            <label for="alertRadius">Taille cercle</label>
+                            <label for="alertRadius">Taille du cercle</label>
                             <div class="staff-radius-row">
                                 <input id="alertRadius" type="range" min="0.8" max="12" step="0.2" value="2.6">
                                 <strong id="alertRadiusValue">2.6</strong>
                             </div>
                         </div>
-                        <div id="staffDrawStatus" class="staff-draw-status">Mode cercle. Clique sur la carte pour placer l’alerte.</div>
                         <div class="editor-actions-row">
                             <button id="btnFinishZoneDraw" class="action-btn" type="button">Valider zone</button>
+                            <button id="btnUndoZonePoint" class="action-btn" type="button">Retour point</button>
                             <button id="btnCancelZoneDraw" class="btn-close-editor" type="button">Annuler zone</button>
                         </div>
                     </div>
 
                     <div class="editor-section" style="--editor-accent:#ffcc8a;">
                         <div class="editor-section-title">
-                            <span>Activation</span>
+                            <span>Publication</span>
                         </div>
-                        <label class="staff-toggle-row" for="alertActive">
-                            <input id="alertActive" type="checkbox" checked>
-                            <span>Rendre l’alerte visible maintenant</span>
-                        </label>
+                        <div class="editor-actions-row staff-primary-actions">
+                            <button id="btnPublishAlert" class="action-btn" type="button">Publier</button>
+                        </div>
                     </div>
 
-                    <div class="editor-actions-row">
-                        <button id="btnClearDraft" class="btn-close-editor" type="button">Vider brouillon</button>
-                        <button id="btnLockStaff" class="btn-close-editor" type="button">Verrouiller</button>
-                    </div>
+                    <details class="staff-advanced-panel">
+                        <summary>Plus d options</summary>
+                        <div class="editor-section staff-advanced-section" style="--editor-accent:#ffcc8a;">
+                            <div class="editor-section-title">
+                                <span>Audience</span>
+                                <span id="staffAudienceMode" class="editor-pill staff-mini-pill">Tous</span>
+                            </div>
+                            <div class="staff-action-grid staff-action-grid-compact">
+                                <button id="btnAudienceAll" class="action-btn" type="button">Tous</button>
+                                <button id="btnAudienceWhitelist" class="action-btn" type="button">Whitelist</button>
+                            </div>
+                            <div id="staffWhitelistPanel" class="staff-whitelist-panel" hidden>
+                                <div class="staff-whitelist-row">
+                                    <input id="staffWhitelistInput" class="cyber-input" type="text" placeholder="username cloud">
+                                    <button id="btnAddWhitelistUser" class="action-btn" type="button">Ajouter</button>
+                                </div>
+                                <div id="staffWhitelistSuggestions" class="staff-whitelist-suggestions"></div>
+                                <div id="staffWhitelistList" class="staff-whitelist-list"></div>
+                            </div>
+                        </div>
+                        <div class="editor-section staff-advanced-section" style="--editor-accent:#dff7ff;">
+                            <div class="editor-section-title">
+                                <span>Position manuelle</span>
+                            </div>
+                            <label class="staff-toggle-row" for="alertActive">
+                                <input id="alertActive" type="checkbox" checked>
+                                <span>Rendre l’alerte visible maintenant</span>
+                            </label>
+                            <button id="btnOpenPickerMap" class="action-btn full-width" type="button">Ouvrir carte dediee</button>
+                            <div class="editor-row">
+                                <div class="editor-col">
+                                    <label for="alertGpsX">GPS X</label>
+                                    <input id="alertGpsX" class="cyber-input" type="number" step="0.01" placeholder="-1234.56">
+                                </div>
+                                <div class="editor-col">
+                                    <label for="alertGpsY">GPS Y</label>
+                                    <input id="alertGpsY" class="cyber-input" type="number" step="0.01" placeholder="789.12">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="editor-actions-row staff-secondary-actions">
+                            <button id="btnDeleteAlert" class="action-btn btn-delete-zone" type="button">Supprimer</button>
+                            <button id="btnClearDraft" class="btn-close-editor" type="button">Repartir de zero</button>
+                            <button id="btnLockStaff" class="btn-close-editor" type="button">Verrouiller</button>
+                        </div>
+                    </details>
                 </div>
             </div>
         </div>

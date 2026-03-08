@@ -19,16 +19,14 @@ const dom = {
     startZoneBtn: document.getElementById('btnStartZoneDraw'),
     openPickerBtn: document.getElementById('btnOpenPickerMap'),
     finishZoneBtn: document.getElementById('btnFinishZoneDraw'),
+    undoZoneBtn: document.getElementById('btnUndoZonePoint'),
     cancelZoneBtn: document.getElementById('btnCancelZoneDraw'),
     radius: document.getElementById('alertRadius'),
     radiusValue: document.getElementById('alertRadiusValue'),
     drawStatus: document.getElementById('staffDrawStatus'),
     statusState: document.getElementById('staffAlertState'),
     statusCoords: document.getElementById('staffAlertCoords'),
-    statusAudience: document.getElementById('staffAlertAudience'),
     statusMessage: document.getElementById('staffStatusMessage'),
-    gpsPreview: document.getElementById('staffGpsPreview'),
-    percentPreview: document.getElementById('staffPercentPreview'),
     alertMode: document.getElementById('staffAlertMode'),
     selectionMode: document.getElementById('staffSelectionMode'),
     audienceMode: document.getElementById('staffAudienceMode'),
@@ -51,7 +49,6 @@ const dom = {
     mapBanner: document.getElementById('staff-map-banner'),
     coords: document.getElementById('coords-display'),
     resetView: document.getElementById('btnResetView'),
-    toggleSelection: document.getElementById('btnToggleSelection'),
 };
 
 const state = {
@@ -77,6 +74,7 @@ const state = {
     allowedUsers: [],
     userDirectory: [],
     pickerWindow: null,
+    selectionDrag: null,
 };
 
 function escapeText(value) {
@@ -382,28 +380,67 @@ function refreshModeControls() {
         dom.finishZoneBtn.disabled = !state.drawMode || state.drawDraftPoints.length < 3;
         dom.finishZoneBtn.hidden = !state.drawMode;
     }
+    if (dom.undoZoneBtn) {
+        dom.undoZoneBtn.disabled = !state.drawMode || state.drawDraftPoints.length === 0;
+        dom.undoZoneBtn.hidden = !state.drawMode;
+    }
     if (dom.cancelZoneBtn) {
         dom.cancelZoneBtn.disabled = !state.drawMode;
         dom.cancelZoneBtn.hidden = !state.drawMode;
     }
 
     if (!state.mapSelectionEnabled) {
-        setDrawStatus('Selection en pause. Reactive le bouton du HUD pour modifier la carte.', 'circle');
+        setDrawStatus('Placement en pause. Reactive le bouton du HUD pour modifier la carte.', 'circle');
         return;
     }
 
     if (state.drawMode) {
         const count = state.drawDraftPoints.length;
-        setDrawStatus(`Mode dessin. ${count} point${count > 1 ? 's' : ''}. Clique pour tracer, puis valide pour fermer la zone.`, 'zone');
+        setDrawStatus(`Mode zone. ${count} point${count > 1 ? 's' : ''}. Clique pour tracer, utilise "Retour point" si besoin, puis valide.`, 'zone');
         return;
     }
 
     if (isZoneSelection) {
-        setDrawStatus(`Zone validee. ${selection.zonePoints.length} points enregistres.`, 'zone');
+        setDrawStatus(`Zone prete. ${selection.zonePoints.length} points enregistres.`, 'zone');
         return;
     }
 
-    setDrawStatus('Mode cercle. Clique sur la carte pour placer l’alerte.', 'circle');
+    setDrawStatus('Mode cercle. Clique sur la carte pour placer l alerte, puis glisse le cercle pour l ajuster.', 'circle');
+}
+
+function beginCircleDrag(event) {
+    if (!state.mapSelectionEnabled || state.drawMode) return;
+    if (!state.selection || state.selection.shapeType === 'zone') return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    state.selectionDrag = {
+        radius: clampRadius(state.selection.radius || getCurrentRadius()),
+    };
+    setStatusMessage('Deplacement du cercle en cours.', 'ok');
+    renderSelection();
+}
+
+function moveCircleDrag(event) {
+    if (!state.selectionDrag) return;
+
+    const coords = getMapPercentCoords(event.clientX, event.clientY);
+    setSelection(buildCircleSelectionFromPercent(
+        coords.x,
+        coords.y,
+        state.selectionDrag.radius || getCurrentRadius()
+    ), {
+        syncForm: true,
+        resetDraft: false,
+    });
+}
+
+function endCircleDrag() {
+    if (!state.selectionDrag) return;
+    state.selectionDrag = null;
+    renderSelection();
+    setStatusMessage('Position du cercle mise a jour.', 'ok');
 }
 
 function renderSelection() {
@@ -445,7 +482,18 @@ function renderSelection() {
     ring.setAttribute('stroke', '#ff4d67');
     ring.setAttribute('stroke-width', '0.18');
     ring.setAttribute('class', 'staff-alert-ring');
+    if (state.selectionDrag) ring.classList.add('is-dragging');
+    ring.addEventListener('mousedown', beginCircleDrag);
     dom.alertLayer.appendChild(ring);
+
+    const center = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    center.setAttribute('cx', selection.xPercent);
+    center.setAttribute('cy', selection.yPercent);
+    center.setAttribute('r', String(Math.max(0.45, Math.min(0.9, (selection.radius || DEFAULT_RADIUS) * 0.18))));
+    center.setAttribute('class', 'staff-alert-center');
+    if (state.selectionDrag) center.classList.add('is-dragging');
+    center.addEventListener('mousedown', beginCircleDrag);
+    dom.alertLayer.appendChild(center);
 }
 
 function refreshStatusCards() {
@@ -454,23 +502,15 @@ function refreshStatusCards() {
 
     if (dom.statusState) {
         if (!state.unlocked) dom.statusState.textContent = 'Verrouille';
+        else if (!current && (selection || String(dom.title?.value || '').trim() || String(dom.description?.value || '').trim())) dom.statusState.textContent = 'Pret';
         else if (!current) dom.statusState.textContent = 'Brouillon';
         else dom.statusState.textContent = current.active === false ? 'Inactive' : 'Active';
     }
-    if (dom.statusAudience) {
-        dom.statusAudience.textContent = audienceSummary();
-    }
-
     const coordsLabel = selection
         ? `${selection.gpsX.toFixed(2)} / ${selection.gpsY.toFixed(2)}`
         : '--';
-    const percentLabel = selection
-        ? `${selection.xPercent.toFixed(2)} / ${selection.yPercent.toFixed(2)}`
-        : '--';
 
     if (dom.statusCoords) dom.statusCoords.textContent = coordsLabel;
-    if (dom.gpsPreview) dom.gpsPreview.textContent = coordsLabel;
-    if (dom.percentPreview) dom.percentPreview.textContent = percentLabel;
 
     if (dom.selectionMode) {
         if (!state.mapSelectionEnabled) dom.selectionMode.textContent = 'Pause';
@@ -502,7 +542,7 @@ function renderBanner() {
     if (selection?.shapeType === 'zone') {
         meta = `Zone ${selection.zonePoints.length} points • GPS ${selection.gpsX.toFixed(2)} / ${selection.gpsY.toFixed(2)}`;
     } else if (selection) {
-        meta = `GPS ${selection.gpsX.toFixed(2)} / ${selection.gpsY.toFixed(2)} • Rayon ${selection.radius.toFixed(1)}`;
+        meta = `GPS ${selection.gpsX.toFixed(2)} / ${selection.gpsY.toFixed(2)} • Rayon ${selection.radius.toFixed(1)} • Glisse pour ajuster`;
     } else if (state.drawDraftPoints.length > 0) {
         meta = `Dessin en cours • ${state.drawDraftPoints.length} points`;
     }
@@ -665,8 +705,8 @@ function fillForm(alert) {
         dom.active.checked = true;
         state.audienceMode = 'all';
         state.allowedUsers = [];
-        if (dom.alertMode) dom.alertMode.textContent = 'Brouillon';
-        if (dom.publishBtn) dom.publishBtn.textContent = 'Enregistrer';
+        if (dom.alertMode) dom.alertMode.textContent = 'Nouveau';
+        if (dom.publishBtn) dom.publishBtn.textContent = 'Publier';
         updateRadiusUi(DEFAULT_RADIUS);
         setSelection(null, { syncForm: false, resetDraft: true });
         renderAudienceUi();
@@ -681,7 +721,7 @@ function fillForm(alert) {
     dom.active.checked = alert.active !== false;
     state.audienceMode = alert.visibilityMode === 'whitelist' ? 'whitelist' : 'all';
     state.allowedUsers = sanitizeAllowedUsers(alert.allowedUsers);
-    if (dom.alertMode) dom.alertMode.textContent = alert.active === false ? 'Inactive' : 'Active';
+    if (dom.alertMode) dom.alertMode.textContent = alert.active === false ? 'Brouillon' : 'Live';
     if (dom.publishBtn) dom.publishBtn.textContent = 'Mettre a jour';
     updateRadiusUi(alert.radius || DEFAULT_RADIUS);
     renderAudienceUi();
@@ -795,9 +835,11 @@ function scheduleMapView(preferFocus = true, attempt = 0) {
 
 function getMapPercentCoords(clientX, clientY) {
     const rect = dom.mapWorld.getBoundingClientRect();
+    const x = rect.width > 0 ? ((clientX - rect.left) / rect.width) * 100 : 50;
+    const y = rect.height > 0 ? ((clientY - rect.top) / rect.height) * 100 : 50;
     return {
-        x: ((clientX - rect.left) / rect.width) * 100,
-        y: ((clientY - rect.top) / rect.height) * 100,
+        x: Math.min(100, Math.max(0, x)),
+        y: Math.min(100, Math.max(0, y)),
     };
 }
 
@@ -935,6 +977,19 @@ function clearDraft() {
     setStatusMessage('Brouillon vide. L’alerte live reste inchangée tant que tu ne republies pas.', 'warn');
 }
 
+function undoZonePoint() {
+    if (!state.drawMode || state.drawDraftPoints.length === 0) {
+        setStatusMessage('Aucun point a retirer.', 'warn');
+        return;
+    }
+
+    state.drawDraftPoints = state.drawDraftPoints.slice(0, -1);
+    renderSelection();
+    renderBanner();
+    refreshStatusCards();
+    setStatusMessage('Dernier point retire.', 'warn');
+}
+
 function updateSelectionFromGpsInputs() {
     const gpsX = Number(dom.gpsX?.value);
     const gpsY = Number(dom.gpsY?.value);
@@ -970,7 +1025,7 @@ function activateCircleMode() {
         refreshStatusCards();
     }
 
-    setStatusMessage('Mode cercle actif.', 'ok');
+    setStatusMessage('Mode cercle actif. Clique sur la carte puis glisse le cercle si besoin.', 'ok');
 }
 
 function beginZoneDraw() {
@@ -983,7 +1038,7 @@ function beginZoneDraw() {
     renderSelection();
     renderBanner();
     refreshStatusCards();
-    setStatusMessage('Mode dessin actif. Clique pour poser des points, puis valide la zone.', 'ok');
+    setStatusMessage('Mode zone actif. Clique pour poser des points, puis valide.', 'ok');
 }
 
 function cancelZoneDraw() {
@@ -1070,6 +1125,10 @@ function initMap() {
 
     window.addEventListener('mousemove', (event) => {
         updateHudCoords(event);
+        if (state.selectionDrag) {
+            moveCircleDrag(event);
+            return;
+        }
         if (!state.pointer.active) return;
 
         const deltaX = event.clientX - state.pointer.lastX;
@@ -1092,6 +1151,10 @@ function initMap() {
     });
 
     window.addEventListener('mouseup', (event) => {
+        if (state.selectionDrag) {
+            endCircleDrag();
+            return;
+        }
         if (!state.pointer.active) return;
         const moved = state.pointer.moved;
         state.pointer.active = false;
@@ -1148,6 +1211,7 @@ function bindEvents() {
             focusSelection();
         }
     });
+    dom.undoZoneBtn?.addEventListener('click', undoZonePoint);
     dom.cancelZoneBtn?.addEventListener('click', cancelZoneDraw);
 
     dom.radius?.addEventListener('input', () => {
@@ -1180,19 +1244,13 @@ function bindEvents() {
     });
 
     dom.resetView?.addEventListener('click', centerMap);
-    dom.toggleSelection?.addEventListener('click', () => {
-        state.mapSelectionEnabled = !state.mapSelectionEnabled;
-        dom.toggleSelection.classList.toggle('active', state.mapSelectionEnabled);
-        dom.toggleSelection.textContent = state.mapSelectionEnabled ? 'Selection carte' : 'Selection pause';
-        refreshStatusCards();
-    });
 
     dom.title?.addEventListener('input', renderBanner);
     dom.description?.addEventListener('input', renderBanner);
     dom.gpsX?.addEventListener('input', updateSelectionFromGpsInputs);
     dom.gpsY?.addEventListener('input', updateSelectionFromGpsInputs);
     dom.active?.addEventListener('change', () => {
-        if (dom.alertMode) dom.alertMode.textContent = dom.active.checked ? 'Active' : 'Inactive';
+        if (dom.alertMode) dom.alertMode.textContent = state.currentAlert ? (dom.active.checked ? 'Live' : 'Brouillon') : 'Nouveau';
     });
     dom.audienceAllBtn?.addEventListener('click', () => {
         state.audienceMode = 'all';

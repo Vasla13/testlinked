@@ -8,7 +8,11 @@ body.staff-shell #app-container {
 
 body.staff-shell #sidebar-left,
 body.staff-shell #sidebar-right {
-    width: 296px;
+    width: 320px;
+}
+
+body.staff-shell #sidebar-left {
+    width: 220px;
 }
 
 body.staff-shell #sidebar-right {
@@ -48,6 +52,10 @@ body.staff-shell .editor-section {
 
 body.staff-shell .editor-actions-row {
     gap: 8px;
+}
+
+body.staff-shell .editor-actions-row > * {
+    flex: 1 1 0;
 }
 
 body.staff-shell .editor-meta-grid,
@@ -233,10 +241,15 @@ body.staff-shell textarea.cyber-input {
     box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) inset, 0 0 18px rgba(102, 243, 255, 0.18);
 }
 
-.staff-helper-copy {
-    color: #91abc8;
+.staff-position-meta {
+    margin-top: 8px;
+    color: #9bb4d0;
     font-size: 0.82rem;
     line-height: 1.45;
+}
+
+.staff-position-meta strong {
+    color: #effaff;
 }
 
 .staff-whitelist-panel {
@@ -344,17 +357,63 @@ body.staff-shell textarea.cyber-input {
     background: rgba(38, 10, 18, 0.68);
 }
 
+.staff-advanced-panel {
+    margin-top: 10px;
+    border: 1px solid rgba(102, 243, 255, 0.14);
+    background: rgba(3, 10, 24, 0.54);
+}
+
+.staff-advanced-panel summary {
+    padding: 10px 12px;
+    cursor: pointer;
+    color: #cde8f7;
+    font-size: 0.78rem;
+    letter-spacing: 1.1px;
+    text-transform: uppercase;
+    user-select: none;
+}
+
+.staff-advanced-panel[open] summary {
+    border-bottom: 1px solid rgba(102, 243, 255, 0.12);
+}
+
+.staff-advanced-panel > *:not(summary) {
+    margin: 10px 12px 12px;
+}
+
+.staff-advanced-section {
+    margin: 0 0 12px !important;
+}
+
 #staff-alert-layer {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
-    pointer-events: none;
+    pointer-events: auto;
 }
 
 .staff-alert-ring,
-.staff-alert-zone {
+.staff-alert-zone,
+.staff-alert-center {
     filter: drop-shadow(0 0 10px rgba(255, 77, 103, 0.24));
+}
+
+.staff-alert-ring,
+.staff-alert-center {
+    pointer-events: auto;
+    cursor: grab;
+}
+
+.staff-alert-ring.is-dragging,
+.staff-alert-center.is-dragging {
+    cursor: grabbing;
+}
+
+.staff-alert-center {
+    fill: #ffe5ea;
+    stroke: #ff4d67;
+    stroke-width: 0.14;
 }
 
 #staff-map-banner {
@@ -414,6 +473,14 @@ body.staff-shell textarea.cyber-input {
 
 .staff-toggle-row input {
     width: auto;
+}
+
+.staff-primary-actions {
+    margin-top: 12px;
+}
+
+.staff-secondary-actions {
+    margin-top: 2px;
 }
 
 @media (max-width: 960px) {
