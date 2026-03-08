@@ -92,19 +92,6 @@
 
             </nav>
 
-            <div class="module-tools" aria-label="Acces operateur">
-                <a href="./database/" class="module-tool-link" id="module-database">
-                    <span class="module-tool-kicker">Archives</span>
-                    <strong class="module-tool-title">DATABASE</strong>
-                    <span class="module-tool-desc">Historique cloud point et map</span>
-                </a>
-                <a href="./staff/" class="module-tool-link" id="module-staff">
-                    <span class="module-tool-kicker">Pilotage</span>
-                    <strong class="module-tool-title">STAFF ALERTES</strong>
-                    <span class="module-tool-desc">Console de diffusion home et carte</span>
-                </a>
-            </div>
-
             <div class="welcome-link-block">
                 <span class="welcome-link-label">Lien copiable</span>
                 <input id="welcome-link-input" class="welcome-link-input" type="text" readonly value="https://bni-linked.netlify.app/">
@@ -462,9 +449,7 @@
 
                 const links = [
                     document.getElementById('module-reticule'),
-                    document.getElementById('module-tactique'),
-                    document.getElementById('module-database'),
-                    document.getElementById('module-staff')
+                    document.getElementById('module-tactique')
                 ].filter(Boolean);
 
                 links.forEach((link) => {

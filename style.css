@@ -295,55 +295,6 @@ body.app-loading .help-overlay {
     padding-bottom: 10px;
 }
 
-.module-tools {
-    width: min(860px, 95vw);
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-    margin-top: 6px;
-}
-
-.module-tool-link {
-    position: relative;
-    display: grid;
-    gap: 4px;
-    padding: 14px 16px;
-    text-decoration: none;
-    border: 1px solid rgba(115, 251, 247, 0.22);
-    background:
-        linear-gradient(140deg, rgba(7, 14, 25, 0.92), rgba(10, 22, 34, 0.86)),
-        radial-gradient(circle at top right, rgba(115, 251, 247, 0.08), transparent 60%);
-    box-shadow: 0 12px 34px rgba(0,0,0,0.34);
-    transition: border-color 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
-}
-
-.module-tool-link:hover {
-    transform: translateY(-2px);
-    border-color: rgba(115, 251, 247, 0.56);
-    box-shadow: 0 18px 42px rgba(0,0,0,0.42), 0 0 22px rgba(115, 251, 247, 0.12);
-}
-
-.module-tool-kicker {
-    font-size: 0.66rem;
-    letter-spacing: 1.4px;
-    text-transform: uppercase;
-    font-weight: 700;
-    color: rgba(168, 214, 228, 0.72);
-}
-
-.module-tool-title {
-    font-size: 1rem;
-    letter-spacing: 2px;
-    font-weight: 800;
-    color: #effaff;
-}
-
-.module-tool-desc {
-    font-size: 0.74rem;
-    line-height: 1.35;
-    color: rgba(220, 237, 244, 0.78);
-}
-
 .welcome-link-block {
     margin-top: 14px;
     width: min(860px, 95vw);
@@ -1306,7 +1257,6 @@ body.help-active .help-fab {
 /* Mobile */
 @media (max-width: 768px) {
     .modules-grid { flex-direction: column; width: 90%; }
-    .module-tools { grid-template-columns: 1fr; width: 90%; }
     .module-card { width: 100%; height: 130px; flex-direction: row; padding: 0 30px; justify-content: flex-start; gap: 20px; }
     .card-title { margin-top: 0; font-size: 1.4rem; }
     .card-icon svg { width: 50px; height: 50px; }

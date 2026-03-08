@@ -973,7 +973,19 @@ export function injectStyles() {
         .cloud-inline-select {
             min-width: 110px;
         }
+        .cloud-board-manage-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 10px;
+        }
         .cloud-share-line {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 8px;
             color: #8faac8;
             font-size: 0.74rem;
             line-height: 1.5;
@@ -987,6 +999,9 @@ export function injectStyles() {
             max-height: 330px;
             overflow: auto;
             padding-right: 4px;
+        }
+        .cloud-panel-shell {
+            min-height: 280px;
         }
         .cloud-scroll {
             max-height: 260px;
@@ -1009,6 +1024,18 @@ export function injectStyles() {
         }
         .cloud-board-row-local {
             background: rgba(4, 10, 22, 0.82);
+        }
+        .cloud-local-badge {
+            align-self: center;
+            padding: 6px 10px;
+            border: 1px solid rgba(102, 243, 255, 0.18);
+            border-radius: 999px;
+            background: rgba(102, 243, 255, 0.08);
+            color: var(--accent-cyan);
+            font-size: 0.7rem;
+            letter-spacing: 1.2px;
+            text-transform: uppercase;
+            white-space: nowrap;
         }
         .cloud-row-main {
             min-width: 0;
@@ -1057,6 +1084,28 @@ export function injectStyles() {
             padding-bottom: 10px;
             border-bottom: 2px solid rgba(102, 243, 255, 0.42);
         }
+        .cloud-home-tab-group {
+            display: flex;
+            align-items: center;
+            gap: 22px;
+            min-width: 0;
+        }
+        .cloud-home-tab {
+            border: 0;
+            background: transparent;
+            padding: 0;
+            cursor: pointer;
+            opacity: 0.58;
+            transition: opacity 0.2s ease, transform 0.2s ease, color 0.2s ease;
+            clip-path: none;
+        }
+        .cloud-home-tab:hover {
+            opacity: 0.86;
+            transform: translateY(-1px);
+        }
+        .cloud-home-tab.is-active {
+            opacity: 1;
+        }
         .cloud-home-word {
             color: var(--accent-cyan);
             font-family: var(--font-main);
@@ -1067,6 +1116,9 @@ export function injectStyles() {
         }
         .cloud-home-word-alt {
             color: #3d8b90;
+        }
+        .cloud-home-tab.is-active.cloud-home-word-alt {
+            color: #7bd8df;
         }
         .cloud-close-btn {
             min-width: 38px;
@@ -1087,6 +1139,31 @@ export function injectStyles() {
         }
         .cloud-status-active {
             color: var(--accent-cyan);
+        }
+        .cloud-local-hint,
+        .cloud-local-note {
+            margin-top: 8px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px dashed rgba(102, 243, 255, 0.14);
+            background: rgba(3, 10, 24, 0.6);
+            color: #8faac8;
+            font-size: 0.74rem;
+            line-height: 1.45;
+        }
+        .cloud-local-note {
+            border-color: rgba(255, 204, 138, 0.18);
+            color: #ffd8a4;
+            margin-top: 0;
+            margin-bottom: 8px;
+        }
+        .cloud-local-panel {
+            margin-top: 10px;
+        }
+        .cloud-local-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
         }
         #cloudModalSyncInfo[data-state="saving"],
         #cloudModalSyncInfo[data-state="pending"] {
@@ -2164,10 +2241,12 @@ export function injectStyles() {
                 flex-direction: column;
             }
             .cloud-inline-form,
-            .cloud-grid {
+            .cloud-grid,
+            .cloud-local-grid {
                 grid-template-columns: 1fr;
             }
             .cloud-home-head,
+            .cloud-board-manage-head,
             .cloud-status-bar,
             .cloud-member-row,
             .cloud-board-row {

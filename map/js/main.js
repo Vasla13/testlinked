@@ -1,7 +1,7 @@
 import { state, setGroups, generateID, loadLocalState, saveLocalState, pushHistory, undo, getMapData } from './state.js';
 import { initEngine, updateTransform } from './engine.js'; 
 import { renderGroupsList, initUI, selectItem } from './ui.js';
-import { customAlert, customConfirm, openSaveOptionsModal, openMapDataHubModal } from './ui-modals.js';
+import { customAlert, customConfirm, openSaveOptionsModal } from './ui-modals.js';
 import { gpsToPercentage } from './utils.js';
 import { renderAll } from './render.js';
 import { ICONS } from './constants.js';
@@ -311,24 +311,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const btnDataFileToggle = document.getElementById('btnDataFileToggle');
     if (btnDataFileToggle) {
-        btnDataFileToggle.onclick = () => {
-            const saveOptions = getCloudSaveModalOptions();
-            const localSummary = saveOptions.localExportLocked ? 'Local verrouille' : 'Local actif';
-            const cloudSummary = saveOptions.cloudActive
-                ? `${saveOptions.boardTitle || 'Board actif'} · ${saveOptions.cloudEditable ? 'edition' : 'lecture'}`
-                : 'Cloud hors ligne';
-
-            openMapDataHubModal({
-                localSummary,
-                cloudSummary,
-                syncSummary: 'Map tactique',
-                onSave: openSaveHub,
-                onOpen: () => fileImport?.click(),
-                onMerge: () => fileMerge?.click(),
-                onCloud: () => openCloudMenu(),
-                onReset: () => document.getElementById('btnResetMap')?.click()
-            });
-        };
+        btnDataFileToggle.onclick = () => openCloudMenu();
     }
 
     // --- IMPORT ---

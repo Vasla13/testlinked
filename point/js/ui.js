@@ -68,7 +68,8 @@ const collab = {
     syncLabel: 'Local',
     sessionTimer: null,
     sessionLoopToken: 0,
-    sessionInFlight: false
+    sessionInFlight: false,
+    homePanel: 'cloud'
 };
 
 const COLLAB_AUTOSAVE_DEBOUNCE_MS = 380;
@@ -1451,8 +1452,16 @@ async function renderCloudMembers(boardId) {
 
     msgEl.innerHTML = `
         <div class="modal-tool">
-            <h3 class="modal-tool-title">Membres cloud</h3>
-            <div class="modal-note">Board: ${escapeHtml(board.title || 'Sans nom')}</div>
+            <div class="cloud-board-manage-head">
+                <div>
+                    <h3 class="modal-tool-title">Gestion du board</h3>
+                    <div class="modal-note">Board: ${escapeHtml(board.title || 'Sans nom')}</div>
+                </div>
+                <div class="cloud-row-actions">
+                    <button type="button" id="cloud-rename-board" class="mini-btn">Renommer</button>
+                    <button type="button" id="cloud-delete-board" class="mini-btn">Supprimer</button>
+                </div>
+            </div>
             <div class="cloud-inline-form">
                 <input id="cloud-share-username" type="text" placeholder="username" class="modal-input-standalone" />
                 <select id="cloud-share-role" class="compact-select cloud-inline-select">
@@ -1462,7 +1471,10 @@ async function renderCloudMembers(boardId) {
                 </select>
                 <button type="button" id="cloud-share-add" class="mini-btn">Ajouter</button>
             </div>
-            <div class="cloud-share-line">Lien partage: <span id="cloud-share-link" class="cloud-share-link">${escapeHtml(shareUrl)}</span></div>
+            <div class="cloud-share-line">
+                <span>Lien partage: <span id="cloud-share-link" class="cloud-share-link">${escapeHtml(shareUrl)}</span></span>
+                <button type="button" id="cloud-copy-link" class="mini-btn">Copier</button>
+            </div>
             <div class="cloud-scroll">${membersHtml || '<div class="modal-empty-state">Aucun membre.</div>'}</div>
             <div class="cloud-board-log">
                 <div class="cloud-board-log-head">
@@ -1475,10 +1487,53 @@ async function renderCloudMembers(boardId) {
     `;
 
     actEl.innerHTML = `
-        <button type="button" id="cloud-copy-link">Copier lien</button>
         <button type="button" id="cloud-members-back">Retour</button>
         <button type="button" id="cloud-members-close">Fermer</button>
     `;
+
+    document.getElementById('cloud-rename-board').onclick = async () => {
+        const defaultTitle = String(board.title || 'Board cloud');
+        const nextTitleRaw = await new Promise((resolve) => {
+            showCustomPrompt(
+                'Renommer le board',
+                defaultTitle,
+                (value) => resolve(value),
+                () => resolve(null)
+            );
+        });
+        if (nextTitleRaw === null) return;
+
+        const nextTitle = String(nextTitleRaw || '').trim();
+        if (!nextTitle || nextTitle === defaultTitle) return;
+
+        try {
+            await collabBoardRequest('rename_board', { boardId, title: nextTitle });
+            if (String(collab.activeBoardId) === String(boardId)) {
+                collab.activeBoardTitle = nextTitle;
+                state.projectName = nextTitle;
+                persistCollabState();
+                syncCloudStatus();
+            }
+            await renderCloudMembers(boardId);
+        } catch (e) {
+            showCustomAlert(`Erreur renommage: ${escapeHtml(e.message || 'inconnue')}`);
+        }
+    };
+
+    document.getElementById('cloud-delete-board').onclick = () => {
+        showCustomConfirm('Supprimer ce board cloud ?', async () => {
+            try {
+                await collabBoardRequest('delete_board', { boardId });
+                if (String(boardId) === String(collab.activeBoardId)) {
+                    setActiveCloudBoardFromSummary(null);
+                    setBoardQueryParam('');
+                }
+                await renderCloudHome();
+            } catch (e) {
+                showCustomAlert(`Erreur suppression: ${escapeHtml(e.message || 'inconnue')}`);
+            }
+        });
+    };
 
     document.getElementById('cloud-share-add').onclick = async () => {
         const usernameInput = document.getElementById('cloud-share-username');
@@ -1606,12 +1661,10 @@ async function renderCloudHome() {
         return;
     }
 
-    let activeBoardDetails = null;
     if (collab.activeBoardId) {
         try {
             const activeRes = await collabBoardRequest('get_board', { boardId: collab.activeBoardId });
             if (activeRes && activeRes.board) {
-                activeBoardDetails = activeRes.board;
                 if (Array.isArray(activeRes.presence)) updateCollabPresence(activeRes.presence);
             }
         } catch (e) {}
@@ -1628,85 +1681,180 @@ async function renderCloudHome() {
                 </div>
                 <div class="cloud-row-actions">
                     <button type="button" class="mini-btn cloud-open-board" data-board="${escapeHtml(b.id)}">Ouvrir</button>
-                    ${role === 'owner' ? `<button type="button" class="mini-btn cloud-manage-board" data-board="${escapeHtml(b.id)}">Membres</button>` : ''}
-                    ${role === 'owner' ? `<button type="button" class="mini-btn cloud-rename-board" data-board="${escapeHtml(b.id)}">Renommer</button>` : ''}
-                    ${role === 'owner' ? `<button type="button" class="mini-btn cloud-delete-board" data-board="${escapeHtml(b.id)}">Supprimer</button>` : ''}
+                    ${role === 'owner' ? `<button type="button" class="mini-btn cloud-manage-board" data-board="${escapeHtml(b.id)}">Gerer</button>` : ''}
                     ${role !== 'owner' ? `<button type="button" class="mini-btn cloud-leave-board" data-board="${escapeHtml(b.id)}">Quitter</button>` : ''}
                 </div>
             </div>
         `;
     }).join('');
 
+    const localSaveLocked = isLocalSaveLocked();
+    const localPanel = collab.homePanel === 'local' ? 'local' : 'cloud';
     const localRows = `
-        <div class="cloud-board-row cloud-board-row-local">
+        <div class="cloud-board-row cloud-board-row-local is-active">
             <div class="cloud-row-main">
                 <div class="cloud-row-title">${escapeHtml(state.projectName || 'Session locale')}</div>
                 <div class="cloud-row-sub">local · point</div>
             </div>
-            <div class="cloud-row-actions">
-                <button type="button" class="mini-btn" id="cloud-open-local">Ouvrir</button>
+            <div class="cloud-local-badge">Actions locales</div>
+        </div>
+        <div class="cloud-local-panel">
+            ${localSaveLocked ? '<div class="cloud-local-note">Mode partage: les exports locaux sont bloques pour les membres non lead.</div>' : ''}
+            <div class="cloud-local-grid">
+                <button type="button" class="data-hub-card data-hub-card-local" data-local-action="open-file">
+                    <span class="data-hub-card-title">Ouvrir</span>
+                    <span class="data-hub-card-meta">JSON</span>
+                </button>
+                <button type="button" class="data-hub-card data-hub-card-local ${localSaveLocked ? 'is-disabled-visual' : ''}" data-local-action="save-file">
+                    <span class="data-hub-card-title">Sauvegarder</span>
+                    <span class="data-hub-card-meta">JSON</span>
+                </button>
+                <button type="button" class="data-hub-card data-hub-card-local ${localSaveLocked ? 'is-disabled-visual' : ''}" data-local-action="save-text">
+                    <span class="data-hub-card-title">Copier JSON</span>
+                    <span class="data-hub-card-meta">Texte</span>
+                </button>
+                <button type="button" class="data-hub-card data-hub-card-local" data-local-action="open-text">
+                    <span class="data-hub-card-title">Coller JSON</span>
+                    <span class="data-hub-card-meta">Texte</span>
+                </button>
+                <button type="button" class="data-hub-card data-hub-card-local" data-local-action="merge-file">
+                    <span class="data-hub-card-title">Fusionner</span>
+                    <span class="data-hub-card-meta">Fichier</span>
+                </button>
+                <button type="button" class="data-hub-card data-hub-card-local" data-local-action="merge-text">
+                    <span class="data-hub-card-title">Fusion texte</span>
+                    <span class="data-hub-card-meta">JSON</span>
+                </button>
+                <button type="button" class="data-hub-card data-hub-card-danger" data-local-action="reset-all">
+                    <span class="data-hub-card-title">Reset</span>
+                </button>
             </div>
         </div>
     `;
+    const panelBody = localPanel === 'local'
+        ? localRows
+        : (boardRows || '<div class="modal-empty-state">Aucun board cloud.</div>');
 
     msgEl.innerHTML = `
         <div class="cloud-home-head">
-            <div class="cloud-home-word">cloud</div>
-            <div class="cloud-home-word cloud-home-word-alt">local</div>
+            <div class="cloud-home-tab-group">
+                <button type="button" id="cloud-home-tab-cloud" class="cloud-home-tab cloud-home-word ${localPanel === 'cloud' ? 'is-active' : ''}">cloud</button>
+                <button type="button" id="cloud-home-tab-local" class="cloud-home-tab cloud-home-word cloud-home-word-alt ${localPanel === 'local' ? 'is-active' : ''}">local</button>
+            </div>
             <button type="button" id="cloud-modal-close-x" class="mini-btn cloud-close-btn">×</button>
         </div>
-        <div class="cloud-grid">
-            <div class="cloud-column">${boardRows || '<div class="modal-empty-state">Aucun board cloud.</div>'}</div>
-            <div class="cloud-column">${localRows}</div>
-        </div>
+        <div class="cloud-column cloud-panel-shell">${panelBody}</div>
         <div class="cloud-status-bar">
             <span>Connecte: ${escapeHtml(collab.user.username)}</span>
             <span id="cloudModalSyncInfo" class="${isCloudBoardActive() ? 'cloud-status-active' : ''}">
                 ${isCloudBoardActive() ? `Board actif: ${escapeHtml(collab.activeBoardTitle || collab.activeBoardId)} (${escapeHtml(collab.activeRole || '')})` : 'Aucun board cloud actif'}
             </span>
         </div>
-        <div id="cloudModalPresence" class="cloud-modal-presence"></div>
-        ${activeBoardDetails ? `
-            <div class="cloud-board-log cloud-board-log-home">
-                <div class="cloud-board-log-head">
-                    <span>Journal actif</span>
-                    <span>${escapeHtml(activeBoardDetails.title || collab.activeBoardTitle || 'Board')}</span>
-                </div>
-                <div class="cloud-board-log-list">${renderBoardActivityRows(activeBoardDetails.activity, { limit: 8, emptyLabel: 'Aucune action recente sur ce board.' })}</div>
-            </div>
-        ` : ''}
     `;
 
-    actEl.innerHTML = `
-        <button type="button" id="cloud-create-board" class="primary">Creer board</button>
-        <button type="button" id="cloud-save-active">Sauver board actif</button>
-        <button type="button" id="cloud-refresh">Rafraichir</button>
-        <button type="button" id="cloud-logout">Deconnexion</button>
-    `;
+    actEl.innerHTML = localPanel === 'cloud'
+        ? `
+            <button type="button" id="cloud-create-board" class="primary">Nouveau</button>
+            <button type="button" id="cloud-save-active">Sauver</button>
+            <button type="button" id="cloud-logout">Deconnexion</button>
+        `
+        : `<button type="button" id="cloud-logout">Deconnexion</button>`;
 
-    document.getElementById('cloud-create-board').onclick = async () => {
-        try {
-            await createCloudBoardFromCurrent();
-            showCustomAlert(`Board cree: ${escapeHtml(collab.activeBoardTitle || '')}`);
+    const runLockedLocalAction = () => {
+        showCustomAlert('Export local interdit pour les membres partages.');
+    };
+
+    const createBtn = document.getElementById('cloud-create-board');
+    if (createBtn) {
+        createBtn.onclick = async () => {
+            try {
+                await createCloudBoardFromCurrent();
+                showCustomAlert(`Board cree: ${escapeHtml(collab.activeBoardTitle || '')}`);
+                await renderCloudHome();
+            } catch (e) {
+                showCustomAlert(`Erreur creation cloud: ${escapeHtml(e.message || 'inconnue')}`);
+            }
+        };
+    }
+
+    const saveBtn = document.getElementById('cloud-save-active');
+    if (saveBtn) {
+        saveBtn.onclick = async () => {
+            await saveActiveCloudBoard({ manual: true, quiet: false });
             await renderCloudHome();
-        } catch (e) {
-            showCustomAlert(`Erreur creation cloud: ${escapeHtml(e.message || 'inconnue')}`);
-        }
-    };
-
-    document.getElementById('cloud-save-active').onclick = async () => {
-        await saveActiveCloudBoard({ manual: true, quiet: false });
-        await renderCloudHome();
-    };
-    document.getElementById('cloud-refresh').onclick = () => renderCloudHome();
-    document.getElementById('cloud-logout').onclick = async () => {
+        };
+    }
+    const logoutBtn = document.getElementById('cloud-logout');
+    logoutBtn.onclick = async () => {
         await logoutCollab();
         await renderCloudHome();
     };
+    if (saveBtn && (!isCloudBoardActive() || !canEditCloudBoard())) {
+        saveBtn.disabled = true;
+        saveBtn.title = isCloudBoardActive() ? 'Droits insuffisants' : 'Aucun board actif';
+    }
     const closeX = document.getElementById('cloud-modal-close-x');
     if (closeX) closeX.onclick = () => { modalOverlay.style.display = 'none'; };
-    const openLocal = document.getElementById('cloud-open-local');
-    if (openLocal) openLocal.onclick = () => { modalOverlay.style.display = 'none'; };
+    const tabCloud = document.getElementById('cloud-home-tab-cloud');
+    if (tabCloud) {
+        tabCloud.onclick = () => {
+            collab.homePanel = 'cloud';
+            renderCloudHome().catch(() => {});
+        };
+    }
+    const tabLocal = document.getElementById('cloud-home-tab-local');
+    if (tabLocal) {
+        tabLocal.onclick = () => {
+            collab.homePanel = 'local';
+            renderCloudHome().catch(() => {});
+        };
+    }
+
+    Array.from(document.querySelectorAll('[data-local-action]')).forEach((btn) => {
+        btn.onclick = () => {
+            const action = btn.getAttribute('data-local-action') || '';
+
+            if (action === 'save-file') {
+                if (localSaveLocked) return runLockedLocalAction();
+                modalOverlay.style.display = 'none';
+                downloadJSON();
+                return;
+            }
+            if (action === 'save-text') {
+                if (localSaveLocked) return runLockedLocalAction();
+                const data = generateExportData();
+                navigator.clipboard.writeText(JSON.stringify(data, null, 2))
+                    .then(() => {
+                        modalOverlay.style.display = 'none';
+                        showCustomAlert('JSON copie dans le presse-papier.');
+                    })
+                    .catch(() => showCustomAlert('Erreur copie clipboard'));
+                return;
+            }
+            if (action === 'open-file') {
+                modalOverlay.style.display = 'none';
+                document.getElementById('fileImport')?.click();
+                return;
+            }
+            if (action === 'open-text') {
+                showRawDataInput('load');
+                return;
+            }
+            if (action === 'merge-file') {
+                modalOverlay.style.display = 'none';
+                document.getElementById('fileMerge')?.click();
+                return;
+            }
+            if (action === 'merge-text') {
+                showRawDataInput('merge');
+                return;
+            }
+            if (action === 'reset-all') {
+                modalOverlay.style.display = 'none';
+                resetAllPointData();
+            }
+        };
+    });
 
     Array.from(document.querySelectorAll('.cloud-open-board')).forEach((btn) => {
         btn.onclick = async () => {
@@ -1726,49 +1874,6 @@ async function renderCloudHome() {
             const boardId = btn.getAttribute('data-board') || '';
             if (!boardId) return;
             await renderCloudMembers(boardId);
-        };
-    });
-
-    Array.from(document.querySelectorAll('.cloud-rename-board')).forEach((btn) => {
-        btn.onclick = async () => {
-            const boardId = btn.getAttribute('data-board') || '';
-            if (!boardId) return;
-            const board = boards.find((item) => String(item.id) === String(boardId));
-            const defaultTitle = String(board?.title || 'Tableau cloud');
-            const nextTitle = await new Promise((resolve) => {
-                showCustomPrompt('Renommer le board', defaultTitle, (value) => resolve(String(value || '').trim()), () => resolve(''));
-            });
-            if (!nextTitle) return;
-            try {
-                await collabBoardRequest('rename_board', { boardId, title: nextTitle });
-                if (String(collab.activeBoardId) === String(boardId)) {
-                    collab.activeBoardTitle = nextTitle;
-                    state.projectName = nextTitle;
-                    persistCollabState();
-                }
-                await renderCloudHome();
-            } catch (e) {
-                showCustomAlert(`Erreur renommage: ${escapeHtml(e.message || 'inconnue')}`);
-            }
-        };
-    });
-
-    Array.from(document.querySelectorAll('.cloud-delete-board')).forEach((btn) => {
-        btn.onclick = async () => {
-            const boardId = btn.getAttribute('data-board') || '';
-            if (!boardId) return;
-            showCustomConfirm('Supprimer ce board cloud ?', async () => {
-                try {
-                    await collabBoardRequest('delete_board', { boardId });
-                    if (String(collab.activeBoardId) === String(boardId)) {
-                        setActiveCloudBoardFromSummary(null);
-                        setBoardQueryParam('');
-                    }
-                    await renderCloudHome();
-                } catch (e) {
-                    showCustomAlert(`Erreur suppression: ${escapeHtml(e.message || 'inconnue')}`);
-                }
-            });
         };
     });
 
@@ -1797,6 +1902,7 @@ async function renderCloudHome() {
 function showCloudMenu() {
     if (!modalOverlay) createModal();
     setModalMode('cloud');
+    collab.homePanel = 'cloud';
     modalOverlay.style.display = 'flex';
     renderCloudHome();
 }
@@ -2260,7 +2366,7 @@ function setupTopButtons() {
     document.getElementById('createCompany').onclick = () => createNode(TYPES.COMPANY, 'Nouvelle entreprise', { actor: collab.user?.username || '' });
 
     const btnDataFileToggle = document.getElementById('btnDataFileToggle');
-    if (btnDataFileToggle) btnDataFileToggle.onclick = () => openDataHubModal();
+    if (btnDataFileToggle) btnDataFileToggle.onclick = () => showCloudMenu();
 
     document.getElementById('fileImport').onchange = (e) => handleFileProcess(e.target.files[0], 'load');
     document.getElementById('fileMerge').onchange = (e) => handleFileProcess(e.target.files[0], 'merge');
