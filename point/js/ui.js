@@ -2411,9 +2411,9 @@ function openQuickCreateModal() {
     if (!msgEl || !actEl) return;
 
     const prefilledSourceNode = nodeById(state.selection);
-    const searchableNodes = state.nodes
-        .filter((node) => String(node.name || '').trim())
-        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+    const searchableNodes = [...state.nodes]
+        .filter((node) => String(node?.name || '').trim())
+        .sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || '')));
 
     msgEl.innerHTML = `
         <div class="quick-create-shell">
@@ -2443,14 +2443,14 @@ function openQuickCreateModal() {
                     <div class="quick-create-link-flow">
                         <div class="quick-create-field-stack">
                             <label class="quick-create-field-label" for="quick-link-source">Source</label>
-                            <input id="quick-link-source" type="text" value="${escapeHtml(prefilledSourceNode?.name || '')}" placeholder="Choisir une fiche existante" class="quick-create-target-input" />
-                            <div id="quick-link-source-suggestions" class="quick-create-suggestions"></div>
+                            <input id="quick-link-source" type="text" value="${escapeHtml(prefilledSourceNode?.name || '')}" placeholder="Nom exact de la fiche" class="quick-create-target-input" />
+                            <div id="quick-link-source-result" class="quick-create-search-result" hidden></div>
                         </div>
                         <div class="quick-create-link-arrow" aria-hidden="true">&rarr;</div>
                         <div class="quick-create-field-stack">
                             <label class="quick-create-field-label" for="quick-link-target">Cible</label>
-                            <input id="quick-link-target" type="text" placeholder="Choisir une fiche existante" class="quick-create-target-input" />
-                            <div id="quick-link-target-suggestions" class="quick-create-suggestions"></div>
+                            <input id="quick-link-target" type="text" placeholder="Nom exact de la fiche" class="quick-create-target-input" />
+                            <div id="quick-link-target-result" class="quick-create-search-result" hidden></div>
                         </div>
                     </div>
                     <div class="flex-row-force quick-create-kind-row">
@@ -2472,10 +2472,10 @@ function openQuickCreateModal() {
     const nodeInput = document.getElementById('quick-create-node-name');
     const nodeApplyBtn = document.getElementById('quick-create-node-apply');
     const linkSourceInput = document.getElementById('quick-link-source');
+    const linkSourceResultEl = document.getElementById('quick-link-source-result');
     const linkContextEl = document.getElementById('quick-link-context');
     const linkTargetInput = document.getElementById('quick-link-target');
-    const linkSourceSuggestionsEl = document.getElementById('quick-link-source-suggestions');
-    const linkTargetSuggestionsEl = document.getElementById('quick-link-target-suggestions');
+    const linkTargetResultEl = document.getElementById('quick-link-target-result');
     const linkKindSelect = document.getElementById('quick-link-kind');
     const linkApplyBtn = document.getElementById('quick-link-apply');
     const tabButtons = Array.from(document.querySelectorAll('.quick-create-tab'));
@@ -2492,14 +2492,59 @@ function openQuickCreateModal() {
         if (!targetName) return null;
         return state.nodes.find((node) => String(node.name || '').trim().toLowerCase() === targetName) || null;
     };
-    const findNodeByRef = (value) => {
-        const targetId = String(value || '').trim();
-        if (!targetId) return null;
-        return state.nodes.find((node) => String(node.id) === targetId) || null;
-    };
 
     const resolveLinkSource = () => findNodeByName(linkSourceInput?.value);
     const resolveLinkTarget = () => findNodeByName(linkTargetInput?.value);
+
+    const hideLinkResults = (resultsEl) => {
+        if (!resultsEl) return;
+        resultsEl.hidden = true;
+        resultsEl.innerHTML = '';
+    };
+
+    const queryLinkNodes = (query, options = {}) => {
+        const normalizedQuery = String(query || '').trim().toLowerCase();
+        const excludeIds = new Set((options.excludeIds || []).map((value) => String(value)));
+        if (!normalizedQuery) return [];
+        return searchableNodes
+            .filter((node) => String(node?.name || '').toLowerCase().includes(normalizedQuery))
+            .filter((node) => !excludeIds.has(String(node?.id || '')))
+            .slice(0, 10);
+    };
+
+    const renderLinkResults = (resultsEl, query, nodes, onPick) => {
+        if (!resultsEl) return;
+        const cleanQuery = String(query || '').trim();
+        if (!cleanQuery) {
+            hideLinkResults(resultsEl);
+            return;
+        }
+
+        if (!nodes.length) {
+            resultsEl.hidden = false;
+            resultsEl.innerHTML = '<span class="quick-create-search-empty">Aucun resultat</span>';
+            return;
+        }
+
+        resultsEl.hidden = false;
+        resultsEl.innerHTML = nodes.map((node) => `
+            <button type="button" class="quick-create-search-hit" data-id="${escapeHtml(String(node.id || ''))}">
+                <span class="quick-create-search-name">${escapeHtml(String(node.name || 'Sans nom'))}</span>
+                <span class="quick-create-search-meta">${escapeHtml(TYPE_LABEL[node.type] || node.type || '')}</span>
+            </button>
+        `).join('');
+
+        Array.from(resultsEl.querySelectorAll('.quick-create-search-hit')).forEach((btn) => {
+            btn.onmousedown = (event) => {
+                event.preventDefault();
+            };
+            btn.onclick = () => {
+                const nodeId = btn.getAttribute('data-id') || '';
+                const pickedNode = state.nodes.find((node) => String(node.id) === String(nodeId)) || null;
+                if (pickedNode && typeof onPick === 'function') onPick(pickedNode);
+            };
+        });
+    };
 
     const setLinkKindPlaceholder = (label = 'Choisir source et cible') => {
         if (!linkKindSelect) return;
@@ -2530,33 +2575,6 @@ function openQuickCreateModal() {
         } else if (allowedKinds.length) {
             linkKindSelect.value = allowedKinds[0];
         }
-    };
-
-    const queryNodes = (query, options = {}) => {
-        const normalizedQuery = String(query || '').trim().toLowerCase();
-        const excludeIds = new Set((options.excludeIds || []).map((value) => String(value)));
-        const limit = Number(options.limit || 8);
-        return searchableNodes
-            .filter((node) => !normalizedQuery || String(node.name || '').toLowerCase().includes(normalizedQuery))
-            .filter((node) => !excludeIds.has(String(node.id)))
-            .slice(0, limit);
-    };
-
-    const renderSuggestions = (suggestionsEl, nodes, onPick) => {
-        if (!suggestionsEl) return;
-        suggestionsEl.innerHTML = nodes.map((node) => `
-            <button type="button" class="quick-create-suggestion" data-id="${escapeHtml(String(node.id || ''))}">
-                <span>${escapeHtml(String(node.name || ''))}</span>
-                <span class="quick-create-suggestion-type">${escapeHtml(TYPE_LABEL[node.type] || node.type)}</span>
-            </button>
-        `).join('') || '<span class="quick-create-empty">Aucune proposition</span>';
-
-        Array.from(suggestionsEl.querySelectorAll('.quick-create-suggestion')).forEach((btn) => {
-            btn.onclick = () => {
-                const pickedNode = findNodeByRef(btn.getAttribute('data-id') || '');
-                if (pickedNode && typeof onPick === 'function') onPick(pickedNode);
-            };
-        });
     };
 
     const setActiveCreateTab = (tab) => {
@@ -2648,39 +2666,38 @@ function openQuickCreateModal() {
 
     if (linkSourceInput) {
         linkSourceInput.oninput = () => {
-            renderSuggestions(
-                linkSourceSuggestionsEl,
-                queryNodes(linkSourceInput.value, {
+            renderLinkResults(
+                linkSourceResultEl,
+                linkSourceInput.value,
+                queryLinkNodes(linkSourceInput.value, {
                     excludeIds: [resolveLinkTarget()?.id].filter(Boolean)
                 }),
                 (pickedNode) => {
                     linkSourceInput.value = pickedNode.name;
-                    renderSuggestions(
-                        linkTargetSuggestionsEl,
-                        queryNodes(linkTargetInput?.value, {
-                            excludeIds: [resolveLinkSource()?.id].filter(Boolean)
-                        }),
-                        (targetNode) => {
-                            if (!linkTargetInput) return;
-                            linkTargetInput.value = targetNode.name;
-                            updateLinkState();
-                        }
-                    );
+                    hideLinkResults(linkSourceResultEl);
                     updateLinkState();
-                }
-            );
-            renderSuggestions(
-                linkTargetSuggestionsEl,
-                queryNodes(linkTargetInput?.value, {
-                    excludeIds: [resolveLinkSource()?.id].filter(Boolean)
-                }),
-                (pickedNode) => {
-                    if (!linkTargetInput) return;
-                    linkTargetInput.value = pickedNode.name;
-                    updateLinkState();
+                    linkTargetInput?.focus();
                 }
             );
             updateLinkState();
+        };
+        linkSourceInput.onfocus = () => {
+            renderLinkResults(
+                linkSourceResultEl,
+                linkSourceInput.value,
+                queryLinkNodes(linkSourceInput.value, {
+                    excludeIds: [resolveLinkTarget()?.id].filter(Boolean)
+                }),
+                (pickedNode) => {
+                    linkSourceInput.value = pickedNode.name;
+                    hideLinkResults(linkSourceResultEl);
+                    updateLinkState();
+                    linkTargetInput?.focus();
+                }
+            );
+        };
+        linkSourceInput.onblur = () => {
+            window.setTimeout(() => hideLinkResults(linkSourceResultEl), 120);
         };
         linkSourceInput.onkeydown = (event) => {
             if (event.key === 'Enter') {
@@ -2692,39 +2709,36 @@ function openQuickCreateModal() {
 
     if (linkTargetInput) {
         linkTargetInput.oninput = () => {
-            renderSuggestions(
-                linkTargetSuggestionsEl,
-                queryNodes(linkTargetInput.value, {
+            renderLinkResults(
+                linkTargetResultEl,
+                linkTargetInput.value,
+                queryLinkNodes(linkTargetInput.value, {
                     excludeIds: [resolveLinkSource()?.id].filter(Boolean)
                 }),
                 (pickedNode) => {
                     linkTargetInput.value = pickedNode.name;
-                    updateLinkState();
-                }
-            );
-            renderSuggestions(
-                linkSourceSuggestionsEl,
-                queryNodes(linkSourceInput?.value, {
-                    excludeIds: [resolveLinkTarget()?.id].filter(Boolean)
-                }),
-                (pickedNode) => {
-                    if (!linkSourceInput) return;
-                    linkSourceInput.value = pickedNode.name;
-                    renderSuggestions(
-                        linkTargetSuggestionsEl,
-                        queryNodes(linkTargetInput?.value, {
-                            excludeIds: [resolveLinkSource()?.id].filter(Boolean)
-                        }),
-                        (targetNode) => {
-                            if (!linkTargetInput) return;
-                            linkTargetInput.value = targetNode.name;
-                            updateLinkState();
-                        }
-                    );
+                    hideLinkResults(linkTargetResultEl);
                     updateLinkState();
                 }
             );
             updateLinkState();
+        };
+        linkTargetInput.onfocus = () => {
+            renderLinkResults(
+                linkTargetResultEl,
+                linkTargetInput.value,
+                queryLinkNodes(linkTargetInput.value, {
+                    excludeIds: [resolveLinkSource()?.id].filter(Boolean)
+                }),
+                (pickedNode) => {
+                    linkTargetInput.value = pickedNode.name;
+                    hideLinkResults(linkTargetResultEl);
+                    updateLinkState();
+                }
+            );
+        };
+        linkTargetInput.onblur = () => {
+            window.setTimeout(() => hideLinkResults(linkTargetResultEl), 120);
         };
         linkTargetInput.onkeydown = (event) => {
             if (event.key === 'Enter') {
@@ -2778,33 +2792,13 @@ function openQuickCreateModal() {
                 return;
             }
 
+            hideLinkResults(linkSourceResultEl);
+            hideLinkResults(linkTargetResultEl);
             modalOverlay.style.display = 'none';
             zoomToNode(sourceNode.id);
         };
     }
 
-    renderSuggestions(
-        linkSourceSuggestionsEl,
-        queryNodes(linkSourceInput?.value, {
-            excludeIds: [resolveLinkTarget()?.id].filter(Boolean)
-        }),
-        (pickedNode) => {
-            if (!linkSourceInput) return;
-            linkSourceInput.value = pickedNode.name;
-            updateLinkState();
-        }
-    );
-    renderSuggestions(
-        linkTargetSuggestionsEl,
-        queryNodes(linkTargetInput?.value, {
-            excludeIds: [resolveLinkSource()?.id].filter(Boolean)
-        }),
-        (pickedNode) => {
-            if (!linkTargetInput) return;
-            linkTargetInput.value = pickedNode.name;
-            updateLinkState();
-        }
-    );
     updateNodeState();
     updateLinkState();
     setActiveCreateTab('node');

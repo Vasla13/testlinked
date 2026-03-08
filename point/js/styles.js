@@ -956,6 +956,52 @@ export function injectStyles() {
             letter-spacing: 1.8px;
             text-transform: uppercase;
         }
+        .quick-create-search-result {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            min-height: 18px;
+        }
+        .quick-create-search-hit {
+            margin: 0;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            width: auto;
+            padding: 7px 10px;
+            border: 1px solid rgba(102, 243, 255, 0.14);
+            border-radius: 999px;
+            background: rgba(4, 12, 28, 0.78);
+            color: #cfefff;
+            font-family: var(--font-main);
+            font-size: 0.82rem;
+            line-height: 1;
+            text-transform: none;
+            box-shadow: none;
+        }
+        .quick-create-search-hit:hover {
+            border-color: rgba(102, 243, 255, 0.34);
+            background: rgba(8, 20, 40, 0.92);
+            color: #fff;
+            box-shadow: none;
+        }
+        .quick-create-search-name {
+            max-width: 180px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .quick-create-search-meta {
+            color: #89a6c5;
+            font-size: 0.64rem;
+            letter-spacing: 1.2px;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+        .quick-create-search-empty {
+            color: var(--text-faded);
+            font-size: 0.76rem;
+        }
         .quick-create-context {
             color: #7aa6b9;
             font-size: 0.76rem;

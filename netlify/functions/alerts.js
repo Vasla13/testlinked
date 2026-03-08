@@ -112,6 +112,10 @@ function normalizeCircles(rawCircles, fallbackCircles = []) {
     .filter(Boolean);
 }
 
+function normalizeStrokeWidth(value, fallback = 0.06) {
+  return Number(clampNumber(value, fallback, 0.02, 0.5).toFixed(2));
+}
+
 function summarizeCircles(circles) {
   if (!Array.isArray(circles) || !circles.length) return null;
   const minX = Math.min(...circles.map((circle) => circle.xPercent - circle.radius));
@@ -171,11 +175,16 @@ function timeValue(value) {
   return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
+function alertDisplayTimeValue(alert) {
+  if (!alert || typeof alert !== "object") return 0;
+  return timeValue(alert.startsAt || alert.updatedAt || alert.createdAt || "");
+}
+
 function sortAlerts(alerts) {
   return (Array.isArray(alerts) ? alerts : [])
     .filter((alert) => alert && typeof alert === "object")
     .sort((a, b) => {
-      const startDelta = timeValue(b?.startsAt || "") - timeValue(a?.startsAt || "");
+      const startDelta = alertDisplayTimeValue(b) - alertDisplayTimeValue(a);
       if (startDelta !== 0) return startDelta;
       const updateDelta = timeValue(b?.updatedAt || b?.createdAt || "") - timeValue(a?.updatedAt || a?.createdAt || "");
       if (updateDelta !== 0) return updateDelta;
@@ -193,6 +202,7 @@ function normalizeAlert(raw, previous = null) {
   const xPercent = clampNumber(source.xPercent, NaN, -1000, 1000);
   const yPercent = clampNumber(source.yPercent, NaN, -1000, 1000);
   const radius = clampNumber(source.radius, previous?.radius || 2.5, 0.4, 18);
+  const strokeWidth = normalizeStrokeWidth(source.strokeWidth, previous?.strokeWidth || 0.06);
   const zonePoints = normalizeZonePoints(source.zonePoints);
   const shapeType = source.shapeType === "zone" && zonePoints.length >= 3 ? "zone" : "circle";
   const visibilityMode = source.visibilityMode === "whitelist" ? "whitelist" : "all";
@@ -229,6 +239,7 @@ function normalizeAlert(raw, previous = null) {
       xPercent,
       yPercent,
       radius,
+      strokeWidth,
       shapeType,
       zonePoints,
       circles: [],
@@ -265,6 +276,7 @@ function normalizeAlert(raw, previous = null) {
     xPercent: Number(summary.xPercent),
     yPercent: Number(summary.yPercent),
     radius: Number(summary.radius),
+    strokeWidth,
     shapeType: "circle",
     zonePoints: [],
     circles,
@@ -307,6 +319,12 @@ function pickPublicAlert(alerts, viewer = null, preferredId = "") {
   return visible[0] || null;
 }
 
+function listPublicAlerts(alerts, viewer = null) {
+  return sortAlerts(alerts)
+    .map((alert) => toPublicAlert(alert, viewer))
+    .filter(Boolean);
+}
+
 async function saveAlertList(store, alerts) {
   const nextAlerts = sortAlerts(alerts);
   await store.setJSON(ALERTS_KEY, nextAlerts);
@@ -343,6 +361,7 @@ function toPublicAlert(alert, viewer = null) {
     xPercent: Number(alert.xPercent),
     yPercent: Number(alert.yPercent),
     radius: Number(alert.radius || 2.5),
+    strokeWidth: normalizeStrokeWidth(alert.strokeWidth, 0.06),
     shapeType: String(alert.shapeType || "circle"),
     zonePoints: Array.isArray(alert.zonePoints) ? alert.zonePoints : [],
     circles: normalizeCircles(alert.circles || []),
@@ -389,16 +408,19 @@ exports.handler = async (event) => {
     const id = String(event.queryStringParameters?.id || "").trim();
     const alerts = await getAlertList(store);
     const viewer = await resolveViewer(event);
-    const publicAlert = toPublicAlert(pickPublicAlert(alerts, viewer, id), viewer);
+    const publicAlerts = listPublicAlerts(alerts, viewer);
+    const publicAlert = id
+      ? (publicAlerts.find((alert) => String(alert?.id || "") === id) || null)
+      : (publicAlerts[0] || null);
 
     if (id) {
       if (!publicAlert || String(publicAlert.id) !== id) {
-        return jsonResponse(200, { ok: true, alert: null });
+        return jsonResponse(200, { ok: true, alert: null, alerts: publicAlerts });
       }
-      return jsonResponse(200, { ok: true, alert: publicAlert });
+      return jsonResponse(200, { ok: true, alert: publicAlert, alerts: publicAlerts });
     }
 
-    return jsonResponse(200, { ok: true, alert: publicAlert });
+    return jsonResponse(200, { ok: true, alert: publicAlert, alerts: publicAlerts });
   }
 
   if (event.httpMethod !== "POST") {

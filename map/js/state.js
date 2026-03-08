@@ -33,6 +33,7 @@ export const state = {
     searchTerm: '',
     labelMode: 'auto',
     activeAlert: null,
+    activeAlerts: [],
 
     currentFileName: null,
 

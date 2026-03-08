@@ -3,7 +3,9 @@ import { gpsToPercentage, percentageToGps } from '../map/js/utils.js';
 const STAFF_CODE = 'staff';
 const ALERTS_ENDPOINT = '/.netlify/functions/alerts';
 const ALERT_REFRESH_EVENT_KEY = 'bniAlertRefresh_v1';
+const ALERT_REFRESH_CHANNEL = 'bni-alert-refresh';
 const DEFAULT_RADIUS = 2.6;
+const DEFAULT_STROKE_WIDTH = 0.06;
 
 const dom = {
     contextMenu: document.getElementById('context-menu'),
@@ -29,6 +31,8 @@ const dom = {
     description: document.getElementById('alertDescription'),
     active: document.getElementById('alertActive'),
     startAt: document.getElementById('alertStartAt'),
+    strokeWidth: document.getElementById('alertStrokeWidth'),
+    strokeWidthValue: document.getElementById('alertStrokeWidthValue'),
     audienceAllBtn: document.getElementById('btnAudienceAll'),
     audienceWhitelistBtn: document.getElementById('btnAudienceWhitelist'),
     whitelistPanel: document.getElementById('staffWhitelistPanel'),
@@ -425,6 +429,8 @@ function renderAlertsList() {
             deleteAlert(alertId).catch(() => {});
         };
     });
+
+    renderSelection();
 }
 
 function clampRadius(value) {
@@ -433,8 +439,18 @@ function clampRadius(value) {
     return Math.min(12, Math.max(0.8, num));
 }
 
+function clampStrokeWidth(value) {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return DEFAULT_STROKE_WIDTH;
+    return Math.min(0.5, Math.max(0.02, Number(num.toFixed(2))));
+}
+
 function getCurrentRadius() {
     return clampRadius(dom.radius?.value || state.selection?.radius || state.currentAlert?.radius || DEFAULT_RADIUS);
+}
+
+function getCurrentStrokeWidth() {
+    return clampStrokeWidth(dom.strokeWidth?.value || state.selection?.strokeWidth || state.currentAlert?.strokeWidth || DEFAULT_STROKE_WIDTH);
 }
 
 function sanitizeZonePoints(rawPoints) {
@@ -550,7 +566,7 @@ function sanitizeCircles(rawCircles, fallbackRadius = DEFAULT_RADIUS) {
         .filter(Boolean);
 }
 
-function buildCircleSelection(circles, activeCircleIndex = null) {
+function buildCircleSelection(circles, activeCircleIndex = null, options = {}) {
     const clean = sanitizeCircles(circles, getCurrentRadius());
     if (!clean.length) return null;
 
@@ -566,6 +582,12 @@ function buildCircleSelection(circles, activeCircleIndex = null) {
         gpsX: activeCircle.gpsX,
         gpsY: activeCircle.gpsY,
         radius: activeCircle.radius,
+        strokeWidth: clampStrokeWidth(
+            options.strokeWidth
+            ?? state.selection?.strokeWidth
+            ?? state.currentAlert?.strokeWidth
+            ?? getCurrentStrokeWidth()
+        ),
         circles: clean,
         activeCircleIndex: index,
         zonePoints: [],
@@ -649,6 +671,7 @@ function cloneSelection(selection) {
             gpsX: Number(selection.gpsX),
             gpsY: Number(selection.gpsY),
             radius: clampRadius(selection.radius),
+            strokeWidth: clampStrokeWidth(selection.strokeWidth),
             zonePoints,
             circles: [],
             activeCircleIndex: -1,
@@ -657,8 +680,38 @@ function cloneSelection(selection) {
 
     return buildCircleSelection(
         Array.isArray(selection.circles) && selection.circles.length ? selection.circles : [selection],
-        Number(selection.activeCircleIndex)
+        Number(selection.activeCircleIndex),
+        { strokeWidth: selection.strokeWidth }
     );
+}
+
+function buildSelectionFromAlert(alert) {
+    if (!alert || typeof alert !== 'object') return null;
+    if (alert.shapeType === 'zone') {
+        return cloneSelection({
+            shapeType: 'zone',
+            xPercent: Number(alert.xPercent),
+            yPercent: Number(alert.yPercent),
+            gpsX: Number(alert.gpsX),
+            gpsY: Number(alert.gpsY),
+            radius: clampRadius(alert.radius || DEFAULT_RADIUS),
+            strokeWidth: clampStrokeWidth(alert.strokeWidth),
+            zonePoints: Array.isArray(alert.zonePoints) ? alert.zonePoints : [],
+        });
+    }
+
+    const circles = Array.isArray(alert.circles) && alert.circles.length
+        ? alert.circles
+        : [{
+            xPercent: alert.xPercent,
+            yPercent: alert.yPercent,
+            gpsX: alert.gpsX,
+            gpsY: alert.gpsY,
+            radius: alert.radius || DEFAULT_RADIUS,
+        }];
+    return buildCircleSelection(circles, Number(alert.activeCircleIndex), {
+        strokeWidth: alert.strokeWidth,
+    });
 }
 
 function buildCircleSelectionFromPercent(xPercent, yPercent, radius = getCurrentRadius()) {
@@ -666,7 +719,7 @@ function buildCircleSelectionFromPercent(xPercent, yPercent, radius = getCurrent
         xPercent,
         yPercent,
         radius,
-    }], 0);
+    }], 0, { strokeWidth: getCurrentStrokeWidth() });
 }
 
 function buildCircleSelectionFromGps(gpsX, gpsY, radius = getCurrentRadius()) {
@@ -674,7 +727,7 @@ function buildCircleSelectionFromGps(gpsX, gpsY, radius = getCurrentRadius()) {
         gpsX,
         gpsY,
         radius,
-    }], 0);
+    }], 0, { strokeWidth: getCurrentStrokeWidth() });
 }
 
 function buildZoneSelection(points, radius = getCurrentRadius()) {
@@ -689,6 +742,7 @@ function buildZoneSelection(points, radius = getCurrentRadius()) {
         gpsX: Number(gps.x.toFixed(2)),
         gpsY: Number(gps.y.toFixed(2)),
         radius: clampRadius(radius),
+        strokeWidth: getCurrentStrokeWidth(),
         zonePoints,
     };
 }
@@ -718,6 +772,12 @@ function updateRadiusUi(radius = getCurrentRadius()) {
     if (dom.radiusValue) dom.radiusValue.textContent = value.toFixed(1);
 }
 
+function updateStrokeWidthUi(strokeWidth = getCurrentStrokeWidth()) {
+    const value = clampStrokeWidth(strokeWidth);
+    if (dom.strokeWidth) dom.strokeWidth.value = value.toFixed(2);
+    if (dom.strokeWidthValue) dom.strokeWidthValue.textContent = value.toFixed(2);
+}
+
 function setStatusMessage(text, stateName = 'idle') {
     if (!dom.statusMessage) return;
     dom.statusMessage.textContent = text;
@@ -733,6 +793,13 @@ function setDrawStatus(text, mode = 'circle') {
 function notifyPublicAlertRefresh() {
     try {
         localStorage.setItem(ALERT_REFRESH_EVENT_KEY, String(Date.now()));
+    } catch (e) {}
+    try {
+        if (typeof BroadcastChannel === 'function') {
+            const channel = new BroadcastChannel(ALERT_REFRESH_CHANNEL);
+            channel.postMessage({ type: 'refresh', at: Date.now() });
+            channel.close();
+        }
     } catch (e) {}
 }
 
@@ -982,48 +1049,26 @@ function endCircleDrag() {
     setStatusMessage('Position du cercle mise a jour.', 'ok');
 }
 
-function renderSelection() {
-    if (!dom.alertLayer) return;
-    dom.alertLayer.innerHTML = '';
+function appendSelectionToLayer(selection, options = {}) {
+    if (!dom.alertLayer || !selection) return;
 
-    if (state.drawCircleDraft) {
-        const draftCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        draftCircle.setAttribute('cx', state.drawCircleDraft.cx);
-        draftCircle.setAttribute('cy', state.drawCircleDraft.cy);
-        draftCircle.setAttribute('r', String(Math.max(0, state.drawCircleDraft.r || 0)));
-        draftCircle.setAttribute('fill', '#ff4d67');
-        draftCircle.setAttribute('fill-opacity', '0.1');
-        draftCircle.setAttribute('stroke', '#ff4d67');
-        draftCircle.setAttribute('stroke-width', '0.18');
-        draftCircle.setAttribute('stroke-dasharray', '0.45 0.22');
-        draftCircle.setAttribute('class', 'staff-alert-ring');
-        dom.alertLayer.appendChild(draftCircle);
-    }
-
-    if (state.drawDraftPoints.length > 0) {
-        const draft = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-        draft.setAttribute('points', state.drawDraftPoints.map((point) => `${point.x},${point.y}`).join(' '));
-        draft.setAttribute('fill', 'none');
-        draft.setAttribute('stroke', '#ff4d67');
-        draft.setAttribute('stroke-width', '0.18');
-        draft.setAttribute('stroke-dasharray', '0.5 0.26');
-        draft.setAttribute('class', 'staff-alert-draft');
-        dom.alertLayer.appendChild(draft);
-    }
-
-    if (state.drawMode) return;
-
-    const selection = state.selection;
-    if (!selection) return;
+    const isBackground = Boolean(options.background);
+    const isInteractive = Boolean(options.interactive);
+    const selectionId = String(options.selectionId || '').trim();
+    const strokeWidth = clampStrokeWidth(selection.strokeWidth);
+    const displayStrokeWidth = isBackground
+        ? Math.max(0.02, Number((strokeWidth * 0.92).toFixed(2)))
+        : strokeWidth;
 
     if (selection.shapeType === 'zone' && selection.zonePoints.length >= 3) {
         const zone = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
         zone.setAttribute('points', selection.zonePoints.map((point) => `${point.x},${point.y}`).join(' '));
         zone.setAttribute('fill', '#ff4d67');
-        zone.setAttribute('fill-opacity', '0.16');
+        zone.setAttribute('fill-opacity', isBackground ? '0.08' : '0.16');
         zone.setAttribute('stroke', '#ff4d67');
-        zone.setAttribute('stroke-width', '0.18');
-        zone.setAttribute('class', 'staff-alert-zone');
+        zone.setAttribute('stroke-width', displayStrokeWidth.toFixed(2));
+        zone.setAttribute('class', `staff-alert-zone${isBackground ? ' is-background' : ' is-active'}`);
+        if (selectionId) zone.dataset.alertId = selectionId;
         dom.alertLayer.appendChild(zone);
         return;
     }
@@ -1037,25 +1082,80 @@ function renderSelection() {
         ring.setAttribute('cy', circle.yPercent);
         ring.setAttribute('r', String(circle.radius || DEFAULT_RADIUS));
         ring.setAttribute('fill', '#ff4d67');
-        ring.setAttribute('fill-opacity', '0.14');
+        ring.setAttribute('fill-opacity', isBackground ? '0.08' : '0.14');
         ring.setAttribute('stroke', '#ff4d67');
-        ring.setAttribute('stroke-width', '0.18');
-        ring.setAttribute('class', 'staff-alert-ring');
+        ring.setAttribute('stroke-width', displayStrokeWidth.toFixed(2));
+        ring.setAttribute('class', `staff-alert-ring${isBackground ? ' is-background' : ''}`);
         ring.dataset.circleIndex = String(index);
-        if (index === activeIndex) ring.classList.add('is-active');
-        if (state.selectionDrag && index === Number(state.selectionDrag.circleIndex)) {
+        if (selectionId) ring.dataset.alertId = selectionId;
+        if (!isBackground && index === activeIndex) ring.classList.add('is-active');
+        if (!isBackground && state.selectionDrag && index === Number(state.selectionDrag.circleIndex)) {
             ring.classList.add('is-dragging');
         }
-        ring.addEventListener('mousedown', beginCircleDrag);
-        ring.addEventListener('click', (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            setSelection(buildCircleSelection(getSelectionCircles(), index), {
-                syncForm: true,
-                resetDraft: false,
+        if (isInteractive) {
+            ring.addEventListener('mousedown', beginCircleDrag);
+            ring.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setSelection(buildCircleSelection(getSelectionCircles(), index), {
+                    syncForm: true,
+                    resetDraft: false,
+                });
             });
-        });
+        }
         dom.alertLayer.appendChild(ring);
+    });
+}
+
+function renderSelection() {
+    if (!dom.alertLayer) return;
+    dom.alertLayer.innerHTML = '';
+
+    const selectedAlertId = getAlertId();
+    (Array.isArray(state.alerts) ? state.alerts : []).forEach((alert) => {
+        const alertId = getAlertId(alert);
+        if (alertId && selectedAlertId && alertId === selectedAlertId) return;
+        const alertSelection = buildSelectionFromAlert(alert);
+        appendSelectionToLayer(alertSelection, {
+            background: true,
+            interactive: false,
+            selectionId: alertId,
+        });
+    });
+
+    if (state.drawCircleDraft) {
+        const draftCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        draftCircle.setAttribute('cx', state.drawCircleDraft.cx);
+        draftCircle.setAttribute('cy', state.drawCircleDraft.cy);
+        draftCircle.setAttribute('r', String(Math.max(0, state.drawCircleDraft.r || 0)));
+        draftCircle.setAttribute('fill', '#ff4d67');
+        draftCircle.setAttribute('fill-opacity', '0.1');
+        draftCircle.setAttribute('stroke', '#ff4d67');
+        draftCircle.setAttribute('stroke-width', getCurrentStrokeWidth().toFixed(2));
+        draftCircle.setAttribute('stroke-dasharray', '0.45 0.22');
+        draftCircle.setAttribute('class', 'staff-alert-ring');
+        dom.alertLayer.appendChild(draftCircle);
+    }
+
+    if (state.drawDraftPoints.length > 0) {
+        const draft = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+        draft.setAttribute('points', state.drawDraftPoints.map((point) => `${point.x},${point.y}`).join(' '));
+        draft.setAttribute('fill', 'none');
+        draft.setAttribute('stroke', '#ff4d67');
+        draft.setAttribute('stroke-width', getCurrentStrokeWidth().toFixed(2));
+        draft.setAttribute('stroke-dasharray', '0.5 0.26');
+        draft.setAttribute('class', 'staff-alert-draft');
+        dom.alertLayer.appendChild(draft);
+    }
+
+    if (state.drawMode) return;
+
+    const selection = state.selection;
+    if (!selection) return;
+    appendSelectionToLayer(selection, {
+        background: false,
+        interactive: selection.shapeType !== 'zone',
+        selectionId: selectedAlertId,
     });
 }
 
@@ -1112,13 +1212,13 @@ function renderBanner() {
     }
     const startDate = getDraftStartDate();
     if (!state.drawMode && selection?.shapeType === 'zone') {
-        meta = `Zone ${selection.zonePoints.length} points • GPS ${selection.gpsX.toFixed(2)} / ${selection.gpsY.toFixed(2)}`;
+        meta = `Zone ${selection.zonePoints.length} points • GPS ${selection.gpsX.toFixed(2)} / ${selection.gpsY.toFixed(2)} • Trait ${getCurrentStrokeWidth().toFixed(2)}`;
     } else if (!state.drawMode && selection) {
         const activeCircle = getActiveCircle(selection) || selection;
         const circleCount = getSelectionCircles(selection).length;
         meta = circleCount > 1
-            ? `${circleCount} cercles • Actif ${getActiveCircleIndex(selection) + 1} • GPS ${activeCircle.gpsX.toFixed(2)} / ${activeCircle.gpsY.toFixed(2)} • Rayon ${activeCircle.radius.toFixed(1)}`
-            : `GPS ${activeCircle.gpsX.toFixed(2)} / ${activeCircle.gpsY.toFixed(2)} • Rayon ${activeCircle.radius.toFixed(1)} • Glisse pour ajuster`;
+            ? `${circleCount} cercles • Actif ${getActiveCircleIndex(selection) + 1} • GPS ${activeCircle.gpsX.toFixed(2)} / ${activeCircle.gpsY.toFixed(2)} • Rayon ${activeCircle.radius.toFixed(1)} • Trait ${getCurrentStrokeWidth().toFixed(2)}`
+            : `GPS ${activeCircle.gpsX.toFixed(2)} / ${activeCircle.gpsY.toFixed(2)} • Rayon ${activeCircle.radius.toFixed(1)} • Trait ${getCurrentStrokeWidth().toFixed(2)} • Glisse pour ajuster`;
     } else if (state.drawDraftPoints.length > 0) {
         meta = `Dessin en cours • ${state.drawDraftPoints.length} points`;
     }
@@ -1166,6 +1266,7 @@ function setSelection(selection, options = {}) {
     }
 
     updateRadiusUi(state.selection.shapeType === 'zone' ? state.selection.radius : (getActiveCircle(state.selection)?.radius || DEFAULT_RADIUS));
+    updateStrokeWidthUi(state.selection.strokeWidth || DEFAULT_STROKE_WIDTH);
     renderSelection();
     renderBanner();
     refreshStatusCards();
@@ -1273,6 +1374,7 @@ function readDraftAlert() {
         xPercent: Number((selection.shapeType === 'zone' ? selection.xPercent : circleSummary?.xPercent || selection.xPercent).toFixed(4)),
         yPercent: Number((selection.shapeType === 'zone' ? selection.yPercent : circleSummary?.yPercent || selection.yPercent).toFixed(4)),
         radius: selection.shapeType === 'zone' ? radius : (circleSummary?.radius || radius),
+        strokeWidth: getCurrentStrokeWidth(),
         shapeType: selection.shapeType === 'zone' ? 'zone' : 'circle',
         zonePoints: selection.shapeType === 'zone'
             ? selection.zonePoints.map((point) => ({ x: point.x, y: point.y }))
@@ -1310,6 +1412,7 @@ function fillForm(alert, options = {}) {
         state.allowedUsers = [];
         if (dom.publishBtn) dom.publishBtn.textContent = 'Publier';
         updateRadiusUi(DEFAULT_RADIUS);
+        updateStrokeWidthUi(preserveSelection && state.selection ? state.selection.strokeWidth : DEFAULT_STROKE_WIDTH);
         if (!preserveSelection) {
             setSelection(null, { syncForm: false, resetDraft: true });
         } else {
@@ -1334,32 +1437,12 @@ function fillForm(alert, options = {}) {
     state.allowedUsers = sanitizeAllowedUsers(alert.allowedUsers);
     if (dom.publishBtn) dom.publishBtn.textContent = 'Mettre a jour';
     updateRadiusUi(alert.radius || DEFAULT_RADIUS);
+    updateStrokeWidthUi(alert.strokeWidth || DEFAULT_STROKE_WIDTH);
     renderAudienceUi();
     refreshAlertModePill();
     updateAlertModalTitle();
 
-    if (alert.shapeType === 'zone') {
-        setSelection({
-            shapeType: 'zone',
-            xPercent: alert.xPercent,
-            yPercent: alert.yPercent,
-            gpsX: alert.gpsX,
-            gpsY: alert.gpsY,
-            radius: alert.radius || DEFAULT_RADIUS,
-            zonePoints: alert.zonePoints || [],
-        }, { resetDraft: true });
-    } else {
-        const circles = Array.isArray(alert.circles) && alert.circles.length
-            ? alert.circles
-            : [{
-                xPercent: alert.xPercent,
-                yPercent: alert.yPercent,
-                gpsX: alert.gpsX,
-                gpsY: alert.gpsY,
-                radius: alert.radius || DEFAULT_RADIUS,
-            }];
-        setSelection(buildCircleSelection(circles, Number(alert.activeCircleIndex)), { resetDraft: true });
-    }
+    setSelection(buildSelectionFromAlert(alert), { resetDraft: true });
     if (shouldFocus) {
         scheduleMapView(true);
     }
@@ -1892,6 +1975,24 @@ function bindEvents() {
         }
     });
 
+    dom.strokeWidth?.addEventListener('input', () => {
+        const strokeWidth = getCurrentStrokeWidth();
+        updateStrokeWidthUi(strokeWidth);
+        if (state.selection) {
+            setSelection({
+                ...cloneSelection(state.selection),
+                strokeWidth,
+            }, {
+                syncForm: false,
+                resetDraft: false,
+            });
+        } else {
+            renderSelection();
+            renderBanner();
+            refreshStatusCards();
+        }
+    });
+
     dom.resetView?.addEventListener('click', centerMap);
 
     dom.title?.addEventListener('input', renderBanner);
@@ -1953,6 +2054,7 @@ function bindEvents() {
 
 document.addEventListener('DOMContentLoaded', () => {
     updateRadiusUi(DEFAULT_RADIUS);
+    updateStrokeWidthUi(DEFAULT_STROKE_WIDTH);
     bindEvents();
     initMap();
     renderAudienceUi();

@@ -1,6 +1,7 @@
 const ALERTS_ENDPOINT = '/.netlify/functions/alerts';
 const DISMISS_STORAGE_KEY = 'bniAlertDismissed_v1';
 const ALERT_REFRESH_EVENT_KEY = 'bniAlertRefresh_v1';
+const ALERT_REFRESH_CHANNEL = 'bni-alert-refresh';
 const ALERT_POLL_MS = 6000;
 const COLLAB_SESSION_STORAGE_KEY = 'bniLinkedCollabSession_v1';
 
@@ -170,4 +171,13 @@ document.addEventListener('DOMContentLoaded', () => {
             refreshAlert();
         }
     });
+
+    try {
+        if (typeof BroadcastChannel === 'function') {
+            const channel = new BroadcastChannel(ALERT_REFRESH_CHANNEL);
+            channel.onmessage = () => {
+                refreshAlert();
+            };
+        }
+    } catch (e) {}
 });

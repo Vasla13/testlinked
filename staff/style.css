@@ -437,6 +437,11 @@ body.staff-shell textarea.cyber-input {
     margin-bottom: 8px;
 }
 
+.staff-slider {
+    width: 100%;
+    accent-color: #66f3ff;
+}
+
 .staff-shell .action-btn.is-active {
     background: rgba(115, 251, 247, 0.18);
     box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) inset, 0 0 18px rgba(102, 243, 255, 0.18);
@@ -531,7 +536,18 @@ body.staff-shell textarea.cyber-input {
     cursor: grab;
 }
 
+.staff-alert-ring.is-background,
+.staff-alert-zone.is-background {
+    opacity: 0.7;
+    filter: drop-shadow(0 0 7px rgba(255, 77, 103, 0.16));
+}
+
 .staff-alert-ring.is-active {
+    fill-opacity: 0.18;
+    stroke-width: 0.22;
+}
+
+.staff-alert-zone.is-active {
     fill-opacity: 0.18;
     stroke-width: 0.22;
 }

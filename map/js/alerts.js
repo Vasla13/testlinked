@@ -6,6 +6,7 @@ import { customAlert } from './ui-modals.js';
 
 const ALERTS_ENDPOINT = '/.netlify/functions/alerts';
 const ALERT_REFRESH_EVENT_KEY = 'bniAlertRefresh_v1';
+const ALERT_REFRESH_CHANNEL = 'bni-alert-refresh';
 const ALERT_POLL_MS = 6000;
 const COLLAB_SESSION_STORAGE_KEY = 'bniLinkedCollabSession_v1';
 const MAP_ALERT_SEEN_STORAGE_KEY = 'bniMapAlertSeen_v2';
@@ -124,6 +125,12 @@ function sanitizeCircles(rawCircles, fallbackRadius = 2.6) {
         .filter(Boolean);
 }
 
+function sanitizeStrokeWidth(value, fallback = 0.06) {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return Number(fallback) || 0.06;
+    return Math.min(0.5, Math.max(0.02, Number(num.toFixed(2))));
+}
+
 function getCircleBounds(circles) {
     if (!Array.isArray(circles) || !circles.length) return null;
     return {
@@ -151,6 +158,7 @@ function sanitizeAlert(raw) {
         xPercent: Number(raw.xPercent),
         yPercent: Number(raw.yPercent),
         radius: Number(raw.radius || 2.6),
+        strokeWidth: sanitizeStrokeWidth(raw.strokeWidth, 0.06),
         shapeType: raw.shapeType === 'zone' && zonePoints.length >= 3 ? 'zone' : 'circle',
         zonePoints,
         circles,
@@ -273,25 +281,18 @@ function bindAlertClickListener() {
     });
 }
 
-async function fetchAlertById(id) {
-    const session = readViewerSession();
-    const response = await fetch(`${ALERTS_ENDPOINT}?id=${encodeURIComponent(id)}`, {
-        method: 'GET',
-        cache: 'no-store',
-        headers: {
-            ...(session.token ? { 'x-collab-token': session.token } : {})
-        }
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok || !data.ok) {
-        throw new Error(data.error || `Erreur alerte (${response.status})`);
-    }
-    return sanitizeAlert(data.alert);
+function sanitizeAlertList(rawAlerts = []) {
+    return (Array.isArray(rawAlerts) ? rawAlerts : [])
+        .map((entry) => sanitizeAlert(entry))
+        .filter(Boolean);
 }
 
-async function fetchCurrentAlert() {
+async function fetchAlertPayload(id = '') {
     const session = readViewerSession();
-    const response = await fetch(`${ALERTS_ENDPOINT}?t=${Date.now()}`, {
+    const query = id
+        ? `id=${encodeURIComponent(id)}&t=${Date.now()}`
+        : `t=${Date.now()}`;
+    const response = await fetch(`${ALERTS_ENDPOINT}?${query}`, {
         method: 'GET',
         cache: 'no-store',
         headers: {
@@ -302,7 +303,10 @@ async function fetchCurrentAlert() {
     if (!response.ok || !data.ok) {
         throw new Error(data.error || `Erreur alerte (${response.status})`);
     }
-    return sanitizeAlert(data.alert);
+    return {
+        alert: sanitizeAlert(data.alert),
+        alerts: sanitizeAlertList(data.alerts),
+    };
 }
 
 async function refreshMapAlert(options = {}) {
@@ -311,7 +315,12 @@ async function refreshMapAlert(options = {}) {
     const shouldFocus = Boolean(options.focus) || (Boolean(alertId) && Boolean(options.initialLoad));
 
     try {
-        const alert = alertId ? await fetchAlertById(alertId) : await fetchCurrentAlert();
+        const payload = await fetchAlertPayload(alertId);
+        const alerts = payload.alerts.length
+            ? payload.alerts
+            : (payload.alert ? [payload.alert] : []);
+        const alert = payload.alert || alerts[0] || null;
+        state.activeAlerts = alerts;
         state.activeAlert = alert;
         const alertKey = getAlertKey(alert);
 
@@ -333,6 +342,7 @@ async function refreshMapAlert(options = {}) {
         }
     } catch (error) {
         console.error('[ALERT MAP]', error);
+        state.activeAlerts = [];
         state.activeAlert = null;
         renderAlertBanner(null);
         renderAll();
@@ -357,10 +367,27 @@ function startAlertRefreshLoop() {
         }
     });
 
+    try {
+        if (typeof BroadcastChannel === 'function') {
+            const channel = new BroadcastChannel(ALERT_REFRESH_CHANNEL);
+            channel.onmessage = () => {
+                refreshMapAlert({ silent: true }).catch(() => {});
+            };
+        }
+    } catch (e) {}
+
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
             refreshMapAlert({ silent: true }).catch(() => {});
         }
+    });
+
+    window.addEventListener('focus', () => {
+        refreshMapAlert({ silent: true }).catch(() => {});
+    });
+
+    window.addEventListener('pageshow', () => {
+        refreshMapAlert({ silent: true }).catch(() => {});
     });
 }
 

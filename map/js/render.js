@@ -319,67 +319,74 @@ function renderAlertOverlay() {
     if (!alertLayer) return;
     alertLayer.innerHTML = '';
 
-    const alert = state.activeAlert;
-    if (!alert || !alert.active) return;
+    const alerts = Array.isArray(state.activeAlerts) && state.activeAlerts.length
+        ? state.activeAlerts
+        : (state.activeAlert ? [state.activeAlert] : []);
+    if (!alerts.length) return;
 
-    if (alert.shapeType === 'zone' && Array.isArray(alert.zonePoints) && alert.zonePoints.length >= 3) {
-        const zone = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
-        zone.setAttribute("points", alert.zonePoints.map((point) => `${point.x},${point.y}`).join(" "));
-        zone.setAttribute("fill", "#ff4d67");
-        zone.setAttribute("fill-opacity", "0.16");
-        zone.setAttribute("stroke", "#ff4d67");
-        zone.setAttribute("stroke-width", "0.18");
-        zone.setAttribute("class", "map-alert-zone");
-        zone.style.pointerEvents = 'auto';
-        zone.style.cursor = 'pointer';
-        zone.onmousedown = (event) => {
-            event.stopPropagation();
-        };
-        zone.onclick = (event) => {
-            event.stopPropagation();
-            window.dispatchEvent(new CustomEvent('bni:map-alert-click', {
-                detail: { alert }
-            }));
-        };
-        alertLayer.appendChild(zone);
-        return;
-    }
+    alerts.forEach((alert) => {
+        if (!alert || !alert.active) return;
+        const alertStrokeWidth = Math.min(0.5, Math.max(0.02, Number(alert.strokeWidth || 0.06)));
 
-    const circles = Array.isArray(alert.circles) && alert.circles.length
-        ? alert.circles
-        : [{
-            xPercent: Number(alert.xPercent),
-            yPercent: Number(alert.yPercent),
-            radius: Math.max(0.5, Number(alert.radius || 2.6)),
-        }];
+        if (alert.shapeType === 'zone' && Array.isArray(alert.zonePoints) && alert.zonePoints.length >= 3) {
+            const zone = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+            zone.setAttribute("points", alert.zonePoints.map((point) => `${point.x},${point.y}`).join(" "));
+            zone.setAttribute("fill", "#ff4d67");
+            zone.setAttribute("fill-opacity", "0.16");
+            zone.setAttribute("stroke", "#ff4d67");
+            zone.setAttribute("stroke-width", alertStrokeWidth.toFixed(2));
+            zone.setAttribute("class", "map-alert-zone");
+            zone.style.pointerEvents = 'auto';
+            zone.style.cursor = 'pointer';
+            zone.onmousedown = (event) => {
+                event.stopPropagation();
+            };
+            zone.onclick = (event) => {
+                event.stopPropagation();
+                window.dispatchEvent(new CustomEvent('bni:map-alert-click', {
+                    detail: { alert }
+                }));
+            };
+            alertLayer.appendChild(zone);
+            return;
+        }
 
-    circles.forEach((entry) => {
-        const x = Number(entry.xPercent);
-        const y = Number(entry.yPercent);
-        const radius = Math.max(0.5, Number(entry.radius || alert.radius || 2.6));
-        if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+        const circles = Array.isArray(alert.circles) && alert.circles.length
+            ? alert.circles
+            : [{
+                xPercent: Number(alert.xPercent),
+                yPercent: Number(alert.yPercent),
+                radius: Math.max(0.5, Number(alert.radius || 2.6)),
+            }];
 
-        const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-        circle.setAttribute("cx", x);
-        circle.setAttribute("cy", y);
-        circle.setAttribute("r", radius.toFixed(2));
-        circle.setAttribute("fill", "#ff4d67");
-        circle.setAttribute("fill-opacity", "0.14");
-        circle.setAttribute("stroke", "#ff4d67");
-        circle.setAttribute("stroke-width", "0.18");
-        circle.setAttribute("class", "map-alert-ring");
-        circle.style.pointerEvents = 'auto';
-        circle.style.cursor = 'pointer';
-        circle.onmousedown = (event) => {
-            event.stopPropagation();
-        };
-        circle.onclick = (event) => {
-            event.stopPropagation();
-            window.dispatchEvent(new CustomEvent('bni:map-alert-click', {
-                detail: { alert }
-            }));
-        };
-        alertLayer.appendChild(circle);
+        circles.forEach((entry) => {
+            const x = Number(entry.xPercent);
+            const y = Number(entry.yPercent);
+            const radius = Math.max(0.5, Number(entry.radius || alert.radius || 2.6));
+            if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+
+            const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            circle.setAttribute("cx", x);
+            circle.setAttribute("cy", y);
+            circle.setAttribute("r", radius.toFixed(2));
+            circle.setAttribute("fill", "#ff4d67");
+            circle.setAttribute("fill-opacity", "0.14");
+            circle.setAttribute("stroke", "#ff4d67");
+            circle.setAttribute("stroke-width", alertStrokeWidth.toFixed(2));
+            circle.setAttribute("class", "map-alert-ring");
+            circle.style.pointerEvents = 'auto';
+            circle.style.cursor = 'pointer';
+            circle.onmousedown = (event) => {
+                event.stopPropagation();
+            };
+            circle.onclick = (event) => {
+                event.stopPropagation();
+                window.dispatchEvent(new CustomEvent('bni:map-alert-click', {
+                    detail: { alert }
+                }));
+            };
+            alertLayer.appendChild(circle);
+        });
     });
 }
 

@@ -124,6 +124,7 @@
             const COLLAB_AUTH_ENDPOINT = '/.netlify/functions/collab-auth';
             const COLLAB_SESSION_STORAGE_KEY = 'bniLinkedCollabSession_v1';
             const MODULE_GUEST_STORAGE_KEY = 'bniLinkedGuestMode_v1';
+            const DAILY_BOOT_STORAGE_KEY = 'bniLinkedBootSeenDay_v1';
             const moduleGate = {
                 token: '',
                 user: null,
@@ -489,14 +490,39 @@
                 });
             }
 
+            function getBootDayStamp() {
+                const now = new Date();
+                const year = now.getFullYear();
+                const month = String(now.getMonth() + 1).padStart(2, '0');
+                const day = String(now.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            }
+
+            function hasSeenBootToday() {
+                try {
+                    return localStorage.getItem(DAILY_BOOT_STORAGE_KEY) === getBootDayStamp();
+                } catch (e) {
+                    return false;
+                }
+            }
+
+            function markBootSeenToday() {
+                try {
+                    localStorage.setItem(DAILY_BOOT_STORAGE_KEY, getBootDayStamp());
+                } catch (e) {}
+            }
+
             setupModuleAccessGate();
             setupWelcomeLinkCopy();
 
             // Horloge Temps Réel
-            setInterval(() => {
+            function updateRealtimeClock() {
                 const now = new Date();
                 document.getElementById('realtime-clock').innerText = now.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
-            }, 1000);
+            }
+
+            updateRealtimeClock();
+            setInterval(updateRealtimeClock, 1000);
 
             // --- SEQUENCE DE BOOT (CINEMATIQUE TABLETTE 2035) ---
             const bootConfig = {
@@ -626,8 +652,28 @@
                 }, bootConfig.bioFadeOut);
             }
 
+            function skipBootSequence() {
+                if (bootLayer) {
+                    bootLayer.style.opacity = '0';
+                    bootLayer.style.display = 'none';
+                }
+                if (bioLayer) {
+                    bioLayer.classList.remove('active');
+                    bioLayer.style.opacity = '0';
+                    bioLayer.style.display = 'none';
+                }
+                if (fingerprintSvg) fingerprintSvg.classList.remove('active');
+                if (tabletInterface) tabletInterface.style.opacity = '1';
+                document.body.classList.remove('app-loading');
+            }
+
             // Démarrage
-            setTimeout(typeNextLine, bootConfig.startDelay);
+            if (hasSeenBootToday()) {
+                skipBootSequence();
+            } else {
+                markBootSeenToday();
+                setTimeout(typeNextLine, bootConfig.startDelay);
+            }
         });
     </script>
     <script type="module" src="./home-alerts.js"></script>
