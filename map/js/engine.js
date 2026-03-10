@@ -66,6 +66,16 @@ export function updateTransform() {
             document.body.classList.remove('view-zoomed-out');
         }
     }
+
+    try {
+        window.dispatchEvent(new CustomEvent('bni:map-transform-changed', {
+            detail: {
+                x: state.view.x,
+                y: state.view.y,
+                scale: state.view.scale,
+            }
+        }));
+    } catch (e) {}
 }
 
 export function startMarkerDrag(e, gIndex, pIndex) {

@@ -64,6 +64,7 @@ const state = {
     drawCircleDraft: null,
     isFreeDrawing: false,
     drawDraftPoints: [],
+    drawBackupAlert: null,
     drawBackupSelection: null,
     mapWidth: 0,
     mapHeight: 0,
@@ -778,6 +779,19 @@ function updateStrokeWidthUi(strokeWidth = getCurrentStrokeWidth()) {
     if (dom.strokeWidthValue) dom.strokeWidthValue.textContent = value.toFixed(2);
 }
 
+function renderInteractivePreview() {
+    renderSelection();
+    renderBanner();
+    refreshStatusCards();
+}
+
+function getDraftCircleDisplayRadius(draft = state.drawCircleDraft) {
+    if (!draft) return 0;
+    const rawRadius = Number(draft.r || 0);
+    if (rawRadius > 0.08) return rawRadius;
+    return Math.min(2.4, Math.max(0.55, getCurrentRadius() * 0.32));
+}
+
 function setStatusMessage(text, stateName = 'idle') {
     if (!dom.statusMessage) return;
     dom.statusMessage.textContent = text;
@@ -833,6 +847,7 @@ function openContextMenu(clientX, clientY) {
 
 function stopDrawingMode(options = {}) {
     const shouldRestore = Boolean(options.restoreBackup);
+    const backupAlert = cloneAlertRecord(state.drawBackupAlert);
     const backupSelection = cloneSelection(state.drawBackupSelection);
     state.drawMode = false;
     state.drawType = '';
@@ -841,55 +856,58 @@ function stopDrawingMode(options = {}) {
     state.drawDraftPoints = [];
     closeContextMenu();
     if (options.clearBackup !== false) {
+        state.drawBackupAlert = null;
         state.drawBackupSelection = null;
     }
-    if (shouldRestore && backupSelection) {
-        setSelection(backupSelection, {
-            syncForm: false,
-            resetDraft: true,
-        });
-        return;
+    if (shouldRestore) {
+        state.currentAlert = backupAlert;
+        if (backupAlert) {
+            fillForm(backupAlert, { focus: false });
+            return;
+        }
+        if (backupSelection) {
+            fillForm(null, { preserveSelection: false, focus: false });
+            setSelection(backupSelection, {
+                syncForm: false,
+                resetDraft: true,
+            });
+            return;
+        }
     }
     renderSelection();
     renderBanner();
     refreshStatusCards();
 }
 
-function startCircleDraw() {
+function beginNewAlertDraw(type) {
+    const backupAlert = cloneAlertRecord(state.currentAlert);
+    const backupSelection = cloneSelection(state.selection);
+
     closeContextMenu();
     if (isAlertModalOpen()) closeAlertModal({ restore: false });
+
+    state.currentAlert = null;
+    fillForm(null, { preserveSelection: false, focus: false });
     state.drawMode = true;
-    state.drawType = 'circle';
+    state.drawType = type;
     state.drawCircleDraft = null;
     state.isFreeDrawing = false;
     state.drawDraftPoints = [];
-    state.drawBackupSelection = cloneSelection(state.selection);
-    setStatusMessage(
-        state.currentAlert
-            ? 'Redessine la forme puis valide la fenetre pour mettre a jour l alerte.'
-            : 'Clique puis glisse pour creer le cercle de la nouvelle alerte.',
-        'ok'
-    );
+    state.drawBackupAlert = backupAlert;
+    state.drawBackupSelection = backupSelection;
+}
+
+function startCircleDraw() {
+    beginNewAlertDraw('circle');
+    setStatusMessage('Clique puis glisse pour creer le cercle de la nouvelle alerte.', 'ok');
     renderSelection();
     renderBanner();
     refreshStatusCards();
 }
 
 function startFreeDraw() {
-    closeContextMenu();
-    if (isAlertModalOpen()) closeAlertModal({ restore: false });
-    state.drawMode = true;
-    state.drawType = 'free';
-    state.drawCircleDraft = null;
-    state.isFreeDrawing = false;
-    state.drawDraftPoints = [];
-    state.drawBackupSelection = cloneSelection(state.selection);
-    setStatusMessage(
-        state.currentAlert
-            ? 'Trace la nouvelle zone puis valide la fenetre pour mettre a jour l alerte.'
-            : 'Maintiens clic gauche pour dessiner la zone de la nouvelle alerte.',
-        'ok'
-    );
+    beginNewAlertDraw('free');
+    setStatusMessage('Maintiens clic gauche pour dessiner la zone de la nouvelle alerte.', 'ok');
     renderSelection();
     renderBanner();
     refreshStatusCards();
@@ -898,7 +916,7 @@ function startFreeDraw() {
 function finalizeCircleDraft() {
     const draft = state.drawCircleDraft;
     if (!draft) return;
-    const originAlert = cloneAlertRecord(state.currentAlert);
+    const originAlert = cloneAlertRecord(state.drawBackupAlert || state.currentAlert);
     const originSelection = cloneSelection(state.drawBackupSelection);
 
     if (!Number.isFinite(draft.r) || draft.r < 0.2) {
@@ -932,7 +950,7 @@ function finalizeCircleDraft() {
 
 function finalizeFreeDraw() {
     const pointCount = state.drawDraftPoints.length;
-    const originAlert = cloneAlertRecord(state.currentAlert);
+    const originAlert = cloneAlertRecord(state.drawBackupAlert || state.currentAlert);
     const originSelection = cloneSelection(state.drawBackupSelection);
     if (pointCount < 3) {
         stopDrawingMode({ restoreBackup: true });
@@ -1124,17 +1142,25 @@ function renderSelection() {
     });
 
     if (state.drawCircleDraft) {
+        const displayRadius = getDraftCircleDisplayRadius(state.drawCircleDraft);
         const draftCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
         draftCircle.setAttribute('cx', state.drawCircleDraft.cx);
         draftCircle.setAttribute('cy', state.drawCircleDraft.cy);
-        draftCircle.setAttribute('r', String(Math.max(0, state.drawCircleDraft.r || 0)));
+        draftCircle.setAttribute('r', String(displayRadius));
         draftCircle.setAttribute('fill', '#ff4d67');
         draftCircle.setAttribute('fill-opacity', '0.1');
         draftCircle.setAttribute('stroke', '#ff4d67');
         draftCircle.setAttribute('stroke-width', getCurrentStrokeWidth().toFixed(2));
         draftCircle.setAttribute('stroke-dasharray', '0.45 0.22');
-        draftCircle.setAttribute('class', 'staff-alert-ring');
+        draftCircle.setAttribute('class', 'staff-alert-ring is-draft');
         dom.alertLayer.appendChild(draftCircle);
+
+        const anchor = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        anchor.setAttribute('cx', state.drawCircleDraft.cx);
+        anchor.setAttribute('cy', state.drawCircleDraft.cy);
+        anchor.setAttribute('r', '0.32');
+        anchor.setAttribute('class', 'staff-alert-anchor');
+        dom.alertLayer.appendChild(anchor);
     }
 
     if (state.drawDraftPoints.length > 0) {
@@ -1208,7 +1234,13 @@ function renderBanner() {
 
     let meta = 'Clique sur la carte pour choisir la position';
     if (state.drawMode && state.drawType === 'circle') {
-        meta = 'Nouvelle zone en cours • Clique puis glisse pour regler le rayon';
+        const draft = state.drawCircleDraft;
+        const draftGps = draft ? percentageToGps(draft.cx, draft.cy) : null;
+        const draftRadius = draft ? Number((draft.r || 0).toFixed(2)) : 0;
+        const displayRadius = draft ? getDraftCircleDisplayRadius(draft) : getCurrentRadius();
+        meta = draft && draftGps
+            ? `Nouvelle zone • GPS ${draftGps.x.toFixed(2)} / ${draftGps.y.toFixed(2)} • Rayon ${Math.max(draftRadius, displayRadius).toFixed(1)} • Trait ${getCurrentStrokeWidth().toFixed(2)}`
+            : `Nouvelle zone • Clique puis glisse • Rayon ${getCurrentRadius().toFixed(1)} • Trait ${getCurrentStrokeWidth().toFixed(2)}`;
     }
     const startDate = getDraftStartDate();
     if (!state.drawMode && selection?.shapeType === 'zone') {
@@ -1244,6 +1276,7 @@ function setSelection(selection, options = {}) {
             state.drawCircleDraft = null;
             state.isFreeDrawing = false;
             state.drawDraftPoints = [];
+            state.drawBackupAlert = null;
             state.drawBackupSelection = null;
         }
         renderSelection();
@@ -1259,6 +1292,7 @@ function setSelection(selection, options = {}) {
         state.drawCircleDraft = null;
         state.isFreeDrawing = false;
         state.drawDraftPoints = [];
+        state.drawBackupAlert = null;
         state.drawBackupSelection = null;
     }
 
@@ -1401,6 +1435,7 @@ function fillForm(alert, options = {}) {
 
     state.drawMode = false;
     state.drawDraftPoints = [];
+    state.drawBackupAlert = null;
     state.drawBackupSelection = null;
 
     if (!alert) {
@@ -1799,9 +1834,7 @@ function initMap() {
                 cy: coords.y,
                 r: 0,
             };
-            renderSelection();
-            renderBanner();
-            refreshStatusCards();
+            renderInteractivePreview();
             return;
         }
 
@@ -1812,9 +1845,7 @@ function initMap() {
                 x: Number(coords.x.toFixed(4)),
                 y: Number(coords.y.toFixed(4)),
             }];
-            renderSelection();
-            renderBanner();
-            refreshStatusCards();
+            renderInteractivePreview();
             return;
         }
 
@@ -1826,7 +1857,14 @@ function initMap() {
         state.pointer.lastY = event.clientY;
     });
 
-    window.addEventListener('mousemove', (event) => {
+    let pendingMouseMoveFrame = false;
+    let latestMouseMoveEvent = null;
+
+    const processMouseMove = () => {
+        pendingMouseMoveFrame = false;
+        const event = latestMouseMoveEvent;
+        if (!event) return;
+
         updateHudCoords(event);
         if (state.selectionDrag) {
             moveCircleDrag(event);
@@ -1838,9 +1876,7 @@ function initMap() {
             const dx = coords.x - state.drawCircleDraft.cx;
             const dy = coords.y - state.drawCircleDraft.cy;
             state.drawCircleDraft.r = Math.sqrt((dx * dx) + (dy * dy));
-            renderSelection();
-            renderBanner();
-            refreshStatusCards();
+            renderInteractivePreview();
             return;
         }
 
@@ -1855,9 +1891,7 @@ function initMap() {
                     x: Number(coords.x.toFixed(4)),
                     y: Number(coords.y.toFixed(4)),
                 });
-                renderSelection();
-                renderBanner();
-                refreshStatusCards();
+                renderInteractivePreview();
             }
             return;
         }
@@ -1881,6 +1915,13 @@ function initMap() {
 
         state.pointer.lastX = event.clientX;
         state.pointer.lastY = event.clientY;
+    };
+
+    window.addEventListener('mousemove', (event) => {
+        latestMouseMoveEvent = event;
+        if (pendingMouseMoveFrame) return;
+        pendingMouseMoveFrame = true;
+        requestAnimationFrame(processMouseMove);
     });
 
     window.addEventListener('mouseup', (event) => {
@@ -1963,9 +2004,7 @@ function bindEvents() {
                 });
             } else if (state.drawCircleDraft) {
                 state.drawCircleDraft.r = radius;
-                renderSelection();
-                renderBanner();
-                refreshStatusCards();
+                renderInteractivePreview();
             } else {
                 refreshStatusCards();
             }
@@ -1987,9 +2026,7 @@ function bindEvents() {
                 resetDraft: false,
             });
         } else {
-            renderSelection();
-            renderBanner();
-            refreshStatusCards();
+            renderInteractivePreview();
         }
     });
 

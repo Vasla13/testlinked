@@ -11,11 +11,13 @@ const ALERT_POLL_MS = 6000;
 const COLLAB_SESSION_STORAGE_KEY = 'bniLinkedCollabSession_v1';
 const MAP_ALERT_SEEN_STORAGE_KEY = 'bniMapAlertSeen_v2';
 const MAP_ALERT_CLICK_EVENT = 'bni:map-alert-click';
+const MAP_TRANSFORM_EVENT = 'bni:map-transform-changed';
 let alertRefreshStarted = false;
 const alertUiState = {
     activeBannerIndex: 0,
     activeBannerKey: '',
     clickListenerBound: false,
+    positionFrame: 0,
 };
 
 function escapeText(value) {
@@ -71,6 +73,14 @@ function writeSeenAlertKeys(values) {
         }
         localStorage.setItem(MAP_ALERT_SEEN_STORAGE_KEY, JSON.stringify(next));
     } catch (e) {}
+}
+
+function unmarkAlertSeen(alert) {
+    const alertKey = getAlertKey(alert);
+    if (!alertKey) return;
+    const next = readSeenAlertKeys();
+    next.delete(alertKey);
+    writeSeenAlertKeys(next);
 }
 
 function markAlertSeen(alert) {
@@ -256,6 +266,108 @@ function focusAlert(alert, attempt = 0) {
     updateTransform();
 }
 
+function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+}
+
+function getAlertAnchor(alert) {
+    if (!alert || typeof alert !== 'object') return null;
+
+    if (alert.shapeType === 'zone' && Array.isArray(alert.zonePoints) && alert.zonePoints.length >= 3) {
+        const xs = alert.zonePoints.map((point) => Number(point.x));
+        const ys = alert.zonePoints.map((point) => Number(point.y));
+        return {
+            xPercent: (Math.min(...xs) + Math.max(...xs)) / 2,
+            yPercent: (Math.min(...ys) + Math.max(...ys)) / 2,
+        };
+    }
+
+    if (Array.isArray(alert.circles) && alert.circles.length) {
+        const bounds = getCircleBounds(alert.circles);
+        if (bounds) {
+            return {
+                xPercent: (bounds.minX + bounds.maxX) / 2,
+                yPercent: (bounds.minY + bounds.maxY) / 2,
+            };
+        }
+    }
+
+    if (Number.isFinite(Number(alert.xPercent)) && Number.isFinite(Number(alert.yPercent))) {
+        return {
+            xPercent: Number(alert.xPercent),
+            yPercent: Number(alert.yPercent),
+        };
+    }
+
+    return null;
+}
+
+function scheduleAlertCalloutPosition(alert = null) {
+    if (alertUiState.positionFrame) {
+        cancelAnimationFrame(alertUiState.positionFrame);
+        alertUiState.positionFrame = 0;
+    }
+
+    alertUiState.positionFrame = requestAnimationFrame(() => {
+        alertUiState.positionFrame = 0;
+        positionAlertCallout(alert || getCurrentBannerAlert(state.activeAlerts));
+    });
+}
+
+function positionAlertCallout(alert) {
+    const banner = getAlertBanner();
+    const viewport = document.getElementById('viewport');
+    const card = banner?.querySelector('.map-alert-callout-card');
+    const pointer = banner?.querySelector('.map-alert-callout-pointer');
+    const dot = banner?.querySelector('.map-alert-callout-dot');
+    const anchor = getAlertAnchor(alert);
+
+    if (!banner || !viewport || !card || !pointer || !dot || !anchor || !state.mapWidth || !state.mapHeight) {
+        return;
+    }
+
+    const viewportWidth = viewport.clientWidth;
+    const viewportHeight = viewport.clientHeight;
+    if (viewportWidth < 40 || viewportHeight < 40) return;
+
+    const rawX = state.view.x + (anchor.xPercent / 100) * state.mapWidth * state.view.scale;
+    const rawY = state.view.y + (anchor.yPercent / 100) * state.mapHeight * state.view.scale;
+    const anchorX = clamp(rawX, 12, viewportWidth - 12);
+    const anchorY = clamp(rawY, 12, viewportHeight - 12);
+
+    const cardWidth = card.offsetWidth || 340;
+    const cardHeight = card.offsetHeight || 180;
+    const side = anchorX < viewportWidth * 0.54 ? 'right' : 'left';
+
+    let cardLeft = side === 'right'
+        ? anchorX + 34
+        : anchorX - cardWidth - 34;
+    cardLeft = clamp(cardLeft, 14, viewportWidth - cardWidth - 14);
+
+    const cardTop = clamp(anchorY - (cardHeight * 0.5), 14, viewportHeight - cardHeight - 14);
+
+    banner.style.left = `${cardLeft}px`;
+    banner.style.top = `${cardTop}px`;
+    banner.dataset.side = side;
+
+    const startX = side === 'right' ? 0 : cardWidth;
+    const startY = clamp(anchorY - cardTop, 24, cardHeight - 24);
+    const endX = anchorX - cardLeft;
+    const endY = anchorY - cardTop;
+    const dx = endX - startX;
+    const dy = endY - startY;
+    const length = Math.max(8, Math.sqrt((dx * dx) + (dy * dy)));
+    const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+
+    pointer.style.left = `${startX}px`;
+    pointer.style.top = `${startY}px`;
+    pointer.style.width = `${length}px`;
+    pointer.style.transform = `rotate(${angle}deg)`;
+
+    dot.style.left = `${endX}px`;
+    dot.style.top = `${endY}px`;
+}
+
 function getBannerAlerts(alerts = []) {
     return (Array.isArray(alerts) ? alerts : []).filter((alert) => {
         const alertKey = getAlertKey(alert);
@@ -323,19 +435,25 @@ function renderAlertBanner(alerts) {
 
     banner.hidden = false;
     banner.innerHTML = `
-        <div class="map-alert-head">
-            <div class="map-alert-kicker">Alertes BNI</div>
-            <div class="map-alert-counter">${visibleAlerts.length > 1 ? `${visibleAlerts.length} actives` : '1 active'}</div>
+        <div class="map-alert-callout-card">
+            <div class="map-alert-head">
+                <div class="map-alert-kicker">Alertes BNI</div>
+                <div class="map-alert-counter">${visibleAlerts.length > 1 ? `${visibleAlerts.length} actives` : '1 active'}</div>
+            </div>
+            <div class="map-alert-title">${escapeText(alert.title)}</div>
+            <div class="map-alert-desc">${escapeText(alert.description)}</div>
+            <div class="map-alert-meta">GPS ${alert.gpsX.toFixed(2)} / ${alert.gpsY.toFixed(2)}</div>
+            <div id="map-alert-nav" class="map-alert-nav" ${visibleAlerts.length > 1 ? '' : 'hidden'}>
+                <button type="button" id="map-alert-prev" class="mini-btn map-alert-nav-btn" aria-label="Alerte precedente">‹</button>
+                <div class="map-alert-nav-label">${alertUiState.activeBannerIndex + 1} / ${visibleAlerts.length}</div>
+                <button type="button" id="map-alert-next" class="mini-btn map-alert-nav-btn" aria-label="Alerte suivante">›</button>
+            </div>
+            <div class="map-alert-actions">
+                <button type="button" id="map-alert-dismiss" class="mini-btn">Masquer</button>
+            </div>
         </div>
-        <div class="map-alert-title">${escapeText(alert.title)}</div>
-        <div class="map-alert-desc">${escapeText(alert.description)}</div>
-        <div class="map-alert-meta">GPS ${alert.gpsX.toFixed(2)} / ${alert.gpsY.toFixed(2)}</div>
-        <div id="map-alert-nav" class="map-alert-nav" ${visibleAlerts.length > 1 ? '' : 'hidden'}>
-            <button type="button" id="map-alert-prev" class="mini-btn map-alert-nav-btn" aria-label="Alerte precedente">‹</button>
-            <div class="map-alert-nav-label">${alertUiState.activeBannerIndex + 1} / ${visibleAlerts.length}</div>
-            <button type="button" id="map-alert-next" class="mini-btn map-alert-nav-btn" aria-label="Alerte suivante">›</button>
-        </div>
-        <button type="button" id="map-alert-dismiss" class="mini-btn">Masquer</button>
+        <div class="map-alert-callout-pointer"></div>
+        <div class="map-alert-callout-dot"></div>
     `;
 
     const dismissBtn = document.getElementById('map-alert-dismiss');
@@ -358,19 +476,7 @@ function renderAlertBanner(alerts) {
 
     prevBtn?.addEventListener('click', showPreviousBannerAlert);
     nextBtn?.addEventListener('click', showNextBannerAlert);
-}
-
-async function openAlertDetails(alert) {
-    if (!alert) return;
-    await customAlert(
-        'ALERTE BNI',
-        `
-            <div class="map-alert-kicker">Zone signalee</div>
-            <div class="map-alert-title">${escapeText(alert.title || 'Alerte')}</div>
-            <div class="map-alert-desc">${escapeText(alert.description || 'Aucune precision')}</div>
-            <div class="map-alert-meta">GPS ${alert.gpsX.toFixed(2)} / ${alert.gpsY.toFixed(2)}</div>
-        `
-    );
+    scheduleAlertCalloutPosition(alert);
 }
 
 function bindAlertClickListener() {
@@ -379,7 +485,13 @@ function bindAlertClickListener() {
 
     window.addEventListener(MAP_ALERT_CLICK_EVENT, (event) => {
         const alert = event?.detail?.alert || getCurrentBannerAlert(state.activeAlerts) || state.activeAlert;
-        openAlertDetails(alert).catch(() => {});
+        if (!alert) return;
+        unmarkAlertSeen(alert);
+        alertUiState.activeBannerKey = getAlertKey(alert);
+        const visibleAlerts = getBannerAlerts(state.activeAlerts);
+        const nextIndex = visibleAlerts.findIndex((entry) => getAlertKey(entry) === alertUiState.activeBannerKey);
+        alertUiState.activeBannerIndex = nextIndex >= 0 ? nextIndex : 0;
+        renderAlertBanner(state.activeAlerts);
     });
 }
 
@@ -428,7 +540,7 @@ async function refreshMapAlert(options = {}) {
 
         const currentBanner = getCurrentBannerAlert(alerts);
         const preferredBanner = alertId
-            ? getBannerAlerts(alerts).find((entry) => String(entry.id || '') === alertId)
+            ? alerts.find((entry) => String(entry.id || '') === alertId)
             : null;
         const initialBanner = options.initialLoad
             ? getBannerAlerts(alerts).find((entry) => isAlertNewForViewer(entry))
@@ -436,6 +548,9 @@ async function refreshMapAlert(options = {}) {
         const nextBanner = preferredBanner || currentBanner || initialBanner || getBannerAlerts(alerts)[0] || null;
 
         if (nextBanner) {
+            if (preferredBanner) {
+                unmarkAlertSeen(nextBanner);
+            }
             alertUiState.activeBannerKey = getAlertKey(nextBanner);
             const nextIndex = getBannerAlerts(alerts).findIndex((entry) => getAlertKey(entry) === alertUiState.activeBannerKey);
             alertUiState.activeBannerIndex = nextIndex >= 0 ? nextIndex : 0;
@@ -491,6 +606,14 @@ function startAlertRefreshLoop() {
         if (document.visibilityState === 'visible') {
             refreshMapAlert({ silent: true }).catch(() => {});
         }
+    });
+
+    window.addEventListener(MAP_TRANSFORM_EVENT, () => {
+        scheduleAlertCalloutPosition();
+    });
+
+    window.addEventListener('resize', () => {
+        scheduleAlertCalloutPosition();
     });
 
     window.addEventListener('focus', () => {

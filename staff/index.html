@@ -62,6 +62,23 @@
                     2. Trace un cercle ou une zone.<br>
                     3. Termine puis remplis la fenetre d’alerte.
                 </div>
+                <div class="staff-draw-controls">
+                    <div class="staff-draw-control">
+                        <label class="staff-control-label" for="alertRadius">
+                            Rayon cercle
+                            <span id="alertRadiusValue">2.6</span>
+                        </label>
+                        <input id="alertRadius" class="staff-slider" type="range" min="0.8" max="12" step="0.1" value="2.6">
+                    </div>
+                    <div class="staff-draw-control">
+                        <label class="staff-control-label" for="alertStrokeWidth">
+                            Epaisseur trait
+                            <span id="alertStrokeWidthValue">0.06</span>
+                        </label>
+                        <input id="alertStrokeWidth" class="staff-slider" type="range" min="0.02" max="0.5" step="0.01" value="0.06">
+                    </div>
+                    <div class="staff-control-hint">Les changements s appliquent en direct pendant le trace.</div>
+                </div>
                 <button id="btnNewAlert" class="action-btn" type="button">Nouvelle alerte</button>
             </div>
         </div>
@@ -119,9 +136,10 @@
                     <textarea id="alertDescription" class="cyber-input" rows="5" placeholder="Message affiche sur la home et sur la carte"></textarea>
                 </div>
                 <div class="editor-col staff-modal-grid-wide">
-                    <label for="alertStrokeWidth">Epaisseur du trait <span id="alertStrokeWidthValue">0.06</span></label>
-                    <input id="alertStrokeWidth" class="staff-slider" type="range" min="0.02" max="0.5" step="0.01" value="0.06">
-                    <div class="staff-helper-copy">Ajuste l epaisseur du contour pour le cercle ou le dessin libre.</div>
+                    <div class="staff-modal-inline-note">
+                        Reglages dessin: utilise Rayon cercle et Epaisseur trait dans la colonne gauche.
+                        Les valeurs sont appliquees en direct sur la forme active.
+                    </div>
                 </div>
             </div>
 
