@@ -1,4 +1,5 @@
 const { getStore, connectLambda } = require("@netlify/blobs");
+const { MAX_SCAN_FILES, normalizePage, parseKey, removeIndexEntry } = require("../lib/db-index");
 
 const STORE_NAME = "bni-linked-db";
 const API_KEY = process.env.BNI_LINKED_KEY;
@@ -60,7 +61,11 @@ exports.handler = async (event) => {
 
   try {
     const store = getStore(STORE_NAME);
+    const parsed = parseKey(key);
     await store.delete(key);
+    if (parsed && normalizePage(parsed.page)) {
+      await removeIndexEntry(store, parsed.page, key, { maxScanFiles: MAX_SCAN_FILES });
+    }
     return jsonResponse(200, { ok: true });
   } catch (e) {
     console.error("db-delete error:", e);

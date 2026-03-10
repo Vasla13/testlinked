@@ -136,6 +136,25 @@ body {
   gap: 20px;
 }
 
+.panel-footer {
+  display: flex;
+  justify-content: center;
+  padding-top: 24px;
+}
+
+.btn-load-more {
+  min-width: 220px;
+}
+
+.btn-load-more[hidden] {
+  display: none !important;
+}
+
+.btn-load-more:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
 .data-card {
   background: rgba(0, 0, 0, 0.4);
   border: 1px solid var(--border-color);

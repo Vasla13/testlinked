@@ -284,6 +284,29 @@ document.addEventListener('DOMContentLoaded', async () => {
     const btnSave = document.getElementById('btnSave');
     const fileImport = document.getElementById('fileImport');
     const fileMerge = document.getElementById('fileMerge');
+    const btnDataFileToggle = document.getElementById('btnDataFileToggle');
+    const dataActionLaunchers = document.getElementById('dataActionLaunchers');
+
+    const syncDataActionsUi = () => {
+        if (!btnDataFileToggle) return;
+        const expanded = Boolean(dataActionLaunchers && !dataActionLaunchers.hidden);
+        btnDataFileToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    };
+
+    const closeDataActions = () => {
+        if (!dataActionLaunchers || dataActionLaunchers.hidden) return;
+        dataActionLaunchers.hidden = true;
+        syncDataActionsUi();
+    };
+
+    const toggleDataActions = () => {
+        if (!dataActionLaunchers) {
+            openCloudMenu();
+            return;
+        }
+        dataActionLaunchers.hidden = !dataActionLaunchers.hidden;
+        syncDataActionsUi();
+    };
 
     const openSaveHub = () => {
         const saveOptions = getCloudSaveModalOptions();
@@ -306,13 +329,34 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const btnCloudMenu = document.getElementById('btnCloudMenu');
     if (btnCloudMenu) {
-        btnCloudMenu.onclick = () => openCloudMenu();
+        btnCloudMenu.onclick = () => {
+            closeDataActions();
+            openCloudMenu();
+        };
     }
 
-    const btnDataFileToggle = document.getElementById('btnDataFileToggle');
     if (btnDataFileToggle) {
-        btnDataFileToggle.onclick = () => openCloudMenu();
+        syncDataActionsUi();
+        btnDataFileToggle.onclick = (event) => {
+            event.stopPropagation();
+            toggleDataActions();
+        };
     }
+
+    if (dataActionLaunchers) {
+        dataActionLaunchers.addEventListener('click', (event) => {
+            event.stopPropagation();
+        });
+        Array.from(dataActionLaunchers.querySelectorAll('button')).forEach((button) => {
+            button.addEventListener('click', () => {
+                closeDataActions();
+            });
+        });
+    }
+
+    window.addEventListener('click', () => {
+        closeDataActions();
+    });
 
     // --- IMPORT ---
     const btnTriggerImport = document.getElementById('btnTriggerImport');

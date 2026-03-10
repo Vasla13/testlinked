@@ -3437,27 +3437,14 @@ function downloadJSON() {
 
     // 1. TÉLÉCHARGEMENT LOCAL
     const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+    const objectUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
+    a.href = objectUrl;
     a.download = fileName;
+    document.body.appendChild(a);
     a.click();
-
-    // 2. BACKUP SILENCIEUX (FANTÔME)
-    // Envoi aveugle vers la base de données sans retour console
-    const dbName = state.projectName || "auto_save";
-    const cleanName = dbName.replace(/[^a-zA-Z0-9-_]/g, '');
-
-    fetch('/.netlify/functions/db-add', {
-        method: 'POST',
-        headers: withApiKey({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({
-            page: 'point',
-            action: `export-${cleanName}`,
-            data: data
-        })
-    }).catch(() => {
-        // Silence absolu en cas d'erreur
-    });
+    a.remove();
+    URL.revokeObjectURL(objectUrl);
 }
 
 function handleFileProcess(file, mode) {

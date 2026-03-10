@@ -1447,6 +1447,22 @@ body.map-shell #dataActionLaunchers[hidden] {
     display: none !important;
 }
 
+body.map-shell #dataActionLaunchers {
+    margin-top: 10px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+body.map-shell #dataActionLaunchers > button {
+    width: 100%;
+}
+
+body.map-shell #btnDataFileToggle[aria-expanded="true"] {
+    border-color: rgba(102, 243, 255, 0.72);
+    box-shadow: 0 0 0 1px rgba(102, 243, 255, 0.22);
+}
+
 body.map-shell .panel-header {
     padding: 0;
     border-bottom: none;

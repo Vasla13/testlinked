@@ -1,5 +1,6 @@
 const { getStore, connectLambda } = require("@netlify/blobs");
 const crypto = require("crypto");
+const { MAX_SCAN_FILES, appendIndexEntry, normalizePage } = require("../lib/db-index");
 
 const STORE_NAME = "bni-linked-db";
 const API_KEY = process.env.BNI_LINKED_KEY;
@@ -54,14 +55,14 @@ exports.handler = async (event) => {
     return jsonResponse(400, { ok: false, error: "Invalid JSON body" });
   }
 
-  const page = String(body.page || "").toLowerCase();
+  const page = normalizePage(body.page);
   // On passe tout en minuscule pour éviter les problèmes de nommage de fichiers
   const action = String(body.action || "")
     .toLowerCase()
     .replace(/[^a-z0-9-_]/g, "");
   const data = body.data;
 
-  if (!["point", "map"].includes(page)) {
+  if (!page) {
     return jsonResponse(400, { ok: false, error: "Invalid page" });
   }
 
@@ -80,6 +81,7 @@ exports.handler = async (event) => {
     await store.setJSON(key, data, {
       metadata: { page, action, ts },
     });
+    await appendIndexEntry(store, page, { key }, { maxScanFiles: MAX_SCAN_FILES });
 
     return jsonResponse(200, { ok: true, key, ts });
   } catch (e) {
