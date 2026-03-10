@@ -13,6 +13,7 @@ const MAP_ALERT_SEEN_STORAGE_KEY = 'bniMapAlertSeen_v2';
 const MAP_ALERT_CLICK_EVENT = 'bni:map-alert-click';
 let alertRefreshStarted = false;
 const alertUiState = {
+    activeBannerIndex: 0,
     activeBannerKey: '',
     clickListenerBound: false,
 };
@@ -47,25 +48,52 @@ function getAlertKey(alert) {
     ].join('::');
 }
 
-function readSeenAlertKey() {
+function readSeenAlertKeys() {
     try {
-        return String(localStorage.getItem(MAP_ALERT_SEEN_STORAGE_KEY) || '');
+        const raw = String(localStorage.getItem(MAP_ALERT_SEEN_STORAGE_KEY) || '');
+        if (!raw) return new Set();
+        if (raw.startsWith('[')) {
+            const parsed = JSON.parse(raw);
+            return new Set(Array.isArray(parsed) ? parsed.map((value) => String(value || '')).filter(Boolean) : []);
+        }
+        return new Set([raw]);
     } catch (e) {
-        return '';
+        return new Set();
     }
+}
+
+function writeSeenAlertKeys(values) {
+    try {
+        const next = [...new Set(Array.from(values || []).map((value) => String(value || '')).filter(Boolean))].slice(-120);
+        if (!next.length) {
+            localStorage.removeItem(MAP_ALERT_SEEN_STORAGE_KEY);
+            return;
+        }
+        localStorage.setItem(MAP_ALERT_SEEN_STORAGE_KEY, JSON.stringify(next));
+    } catch (e) {}
 }
 
 function markAlertSeen(alert) {
     const alertKey = getAlertKey(alert);
     if (!alertKey) return;
-    try {
-        localStorage.setItem(MAP_ALERT_SEEN_STORAGE_KEY, alertKey);
-    } catch (e) {}
+    const next = readSeenAlertKeys();
+    next.add(alertKey);
+    writeSeenAlertKeys(next);
 }
 
 function isAlertNewForViewer(alert) {
     const alertKey = getAlertKey(alert);
-    return Boolean(alertKey) && alertKey !== readSeenAlertKey();
+    return Boolean(alertKey) && !readSeenAlertKeys().has(alertKey);
+}
+
+function pruneSeenAlertKeys(alerts) {
+    const activeKeys = new Set((Array.isArray(alerts) ? alerts : []).map((alert) => getAlertKey(alert)).filter(Boolean));
+    const current = readSeenAlertKeys();
+    const next = new Set();
+    current.forEach((value) => {
+        if (activeKeys.has(value)) next.add(value);
+    });
+    writeSeenAlertKeys(next);
 }
 
 function readViewerSession() {
@@ -228,12 +256,66 @@ function focusAlert(alert, attempt = 0) {
     updateTransform();
 }
 
-function renderAlertBanner(alert) {
+function getBannerAlerts(alerts = []) {
+    return (Array.isArray(alerts) ? alerts : []).filter((alert) => {
+        const alertKey = getAlertKey(alert);
+        return Boolean(alertKey) && !readSeenAlertKeys().has(alertKey);
+    });
+}
+
+function getCurrentBannerAlert(alerts = []) {
+    const visibleAlerts = getBannerAlerts(alerts);
+    if (!visibleAlerts.length) {
+        alertUiState.activeBannerIndex = 0;
+        alertUiState.activeBannerKey = '';
+        return null;
+    }
+
+    const preferredKey = String(alertUiState.activeBannerKey || '');
+    if (preferredKey) {
+        const preferredIndex = visibleAlerts.findIndex((alert) => getAlertKey(alert) === preferredKey);
+        if (preferredIndex >= 0) {
+            alertUiState.activeBannerIndex = preferredIndex;
+        }
+    }
+
+    if (alertUiState.activeBannerIndex >= visibleAlerts.length) {
+        alertUiState.activeBannerIndex = visibleAlerts.length - 1;
+    }
+    if (alertUiState.activeBannerIndex < 0) {
+        alertUiState.activeBannerIndex = 0;
+    }
+
+    const current = visibleAlerts[alertUiState.activeBannerIndex] || null;
+    alertUiState.activeBannerKey = current ? getAlertKey(current) : '';
+    return current;
+}
+
+function showPreviousBannerAlert(event) {
+    event?.stopPropagation?.();
+    const visibleAlerts = getBannerAlerts(state.activeAlerts);
+    if (visibleAlerts.length <= 1) return;
+    alertUiState.activeBannerIndex = (alertUiState.activeBannerIndex - 1 + visibleAlerts.length) % visibleAlerts.length;
+    alertUiState.activeBannerKey = getAlertKey(visibleAlerts[alertUiState.activeBannerIndex]);
+    renderAlertBanner(state.activeAlerts);
+}
+
+function showNextBannerAlert(event) {
+    event?.stopPropagation?.();
+    const visibleAlerts = getBannerAlerts(state.activeAlerts);
+    if (visibleAlerts.length <= 1) return;
+    alertUiState.activeBannerIndex = (alertUiState.activeBannerIndex + 1) % visibleAlerts.length;
+    alertUiState.activeBannerKey = getAlertKey(visibleAlerts[alertUiState.activeBannerIndex]);
+    renderAlertBanner(state.activeAlerts);
+}
+
+function renderAlertBanner(alerts) {
     const banner = getAlertBanner();
     if (!banner) return;
-    const alertKey = getAlertKey(alert);
+    const visibleAlerts = getBannerAlerts(alerts);
+    const alert = getCurrentBannerAlert(alerts);
 
-    if (!alert || !alertKey || alertUiState.activeBannerKey !== alertKey) {
+    if (!alert || !visibleAlerts.length) {
         banner.hidden = true;
         banner.innerHTML = '';
         return;
@@ -241,21 +323,41 @@ function renderAlertBanner(alert) {
 
     banner.hidden = false;
     banner.innerHTML = `
-        <div class="map-alert-kicker">Alerte BNI</div>
+        <div class="map-alert-head">
+            <div class="map-alert-kicker">Alertes BNI</div>
+            <div class="map-alert-counter">${visibleAlerts.length > 1 ? `${visibleAlerts.length} actives` : '1 active'}</div>
+        </div>
         <div class="map-alert-title">${escapeText(alert.title)}</div>
         <div class="map-alert-desc">${escapeText(alert.description)}</div>
         <div class="map-alert-meta">GPS ${alert.gpsX.toFixed(2)} / ${alert.gpsY.toFixed(2)}</div>
-        <button type="button" id="map-alert-dismiss" class="mini-btn">Fermer</button>
+        <div id="map-alert-nav" class="map-alert-nav" ${visibleAlerts.length > 1 ? '' : 'hidden'}>
+            <button type="button" id="map-alert-prev" class="mini-btn map-alert-nav-btn" aria-label="Alerte precedente">‹</button>
+            <div class="map-alert-nav-label">${alertUiState.activeBannerIndex + 1} / ${visibleAlerts.length}</div>
+            <button type="button" id="map-alert-next" class="mini-btn map-alert-nav-btn" aria-label="Alerte suivante">›</button>
+        </div>
+        <button type="button" id="map-alert-dismiss" class="mini-btn">Masquer</button>
     `;
 
     const dismissBtn = document.getElementById('map-alert-dismiss');
+    const prevBtn = document.getElementById('map-alert-prev');
+    const nextBtn = document.getElementById('map-alert-next');
     if (dismissBtn) {
-        dismissBtn.onclick = () => {
-            alertUiState.activeBannerKey = '';
+        dismissBtn.onclick = (event) => {
+            event.stopPropagation();
             markAlertSeen(alert);
-            banner.hidden = true;
+            const remainingAlerts = getBannerAlerts(state.activeAlerts);
+            if (alertUiState.activeBannerIndex >= remainingAlerts.length) {
+                alertUiState.activeBannerIndex = Math.max(0, remainingAlerts.length - 1);
+            }
+            alertUiState.activeBannerKey = remainingAlerts[alertUiState.activeBannerIndex]
+                ? getAlertKey(remainingAlerts[alertUiState.activeBannerIndex])
+                : '';
+            renderAlertBanner(state.activeAlerts);
         };
     }
+
+    prevBtn?.addEventListener('click', showPreviousBannerAlert);
+    nextBtn?.addEventListener('click', showNextBannerAlert);
 }
 
 async function openAlertDetails(alert) {
@@ -276,7 +378,7 @@ function bindAlertClickListener() {
     alertUiState.clickListenerBound = true;
 
     window.addEventListener(MAP_ALERT_CLICK_EVENT, (event) => {
-        const alert = event?.detail?.alert || state.activeAlert;
+        const alert = event?.detail?.alert || getCurrentBannerAlert(state.activeAlerts) || state.activeAlert;
         openAlertDetails(alert).catch(() => {});
     });
 }
@@ -322,20 +424,27 @@ async function refreshMapAlert(options = {}) {
         const alert = payload.alert || alerts[0] || null;
         state.activeAlerts = alerts;
         state.activeAlert = alert;
-        const alertKey = getAlertKey(alert);
+        pruneSeenAlertKeys(alerts);
 
-        if (!alert || !alertKey) {
-            alertUiState.activeBannerKey = '';
-        } else if (alertUiState.activeBannerKey && alertUiState.activeBannerKey === alertKey) {
-            // Keep current banner visible until user closes it.
-        } else if (options.initialLoad && isAlertNewForViewer(alert)) {
-            alertUiState.activeBannerKey = alertKey;
-            markAlertSeen(alert);
+        const currentBanner = getCurrentBannerAlert(alerts);
+        const preferredBanner = alertId
+            ? getBannerAlerts(alerts).find((entry) => String(entry.id || '') === alertId)
+            : null;
+        const initialBanner = options.initialLoad
+            ? getBannerAlerts(alerts).find((entry) => isAlertNewForViewer(entry))
+            : null;
+        const nextBanner = preferredBanner || currentBanner || initialBanner || getBannerAlerts(alerts)[0] || null;
+
+        if (nextBanner) {
+            alertUiState.activeBannerKey = getAlertKey(nextBanner);
+            const nextIndex = getBannerAlerts(alerts).findIndex((entry) => getAlertKey(entry) === alertUiState.activeBannerKey);
+            alertUiState.activeBannerIndex = nextIndex >= 0 ? nextIndex : 0;
         } else {
             alertUiState.activeBannerKey = '';
+            alertUiState.activeBannerIndex = 0;
         }
 
-        renderAlertBanner(alert);
+        renderAlertBanner(alerts);
         renderAll();
         if (alert && shouldFocus) {
             focusAlert(alert);
@@ -344,7 +453,9 @@ async function refreshMapAlert(options = {}) {
         console.error('[ALERT MAP]', error);
         state.activeAlerts = [];
         state.activeAlert = null;
-        renderAlertBanner(null);
+        alertUiState.activeBannerKey = '';
+        alertUiState.activeBannerIndex = 0;
+        renderAlertBanner([]);
         renderAll();
         if (alertId && !options.silent) {
             await customAlert('ALERTE', 'Alerte indisponible.');

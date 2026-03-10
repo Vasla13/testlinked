@@ -5,7 +5,10 @@ const ALERT_REFRESH_CHANNEL = 'bni-alert-refresh';
 const ALERT_POLL_MS = 6000;
 const COLLAB_SESSION_STORAGE_KEY = 'bniLinkedCollabSession_v1';
 
-let currentAlert = null;
+let homeReady = false;
+let pendingRefresh = false;
+let currentAlerts = [];
+let currentAlertIndex = 0;
 
 function readViewerSession() {
     try {
@@ -26,33 +29,127 @@ function signature(alert) {
     return `${String(alert.id || '')}:${String(alert.updatedAt || '')}`;
 }
 
-function getDismissedSignature() {
+function readDismissedSignatures() {
     try {
-        return sessionStorage.getItem(DISMISS_STORAGE_KEY) || '';
+        const raw = sessionStorage.getItem(DISMISS_STORAGE_KEY) || '';
+        if (!raw) return new Set();
+        if (raw.startsWith('[')) {
+            const parsed = JSON.parse(raw);
+            return new Set(Array.isArray(parsed) ? parsed.map((value) => String(value || '')).filter(Boolean) : []);
+        }
+        return new Set([raw]);
     } catch (e) {
-        return '';
+        return new Set();
     }
 }
 
-function setDismissedSignature(value) {
+function writeDismissedSignatures(values) {
     try {
-        if (value) sessionStorage.setItem(DISMISS_STORAGE_KEY, value);
-        else sessionStorage.removeItem(DISMISS_STORAGE_KEY);
+        const next = [...new Set(Array.from(values || []).map((value) => String(value || '')).filter(Boolean))].slice(-80);
+        if (!next.length) {
+            sessionStorage.removeItem(DISMISS_STORAGE_KEY);
+            return;
+        }
+        sessionStorage.setItem(DISMISS_STORAGE_KEY, JSON.stringify(next));
     } catch (e) {}
 }
 
+function dismissSignature(value) {
+    const next = readDismissedSignatures();
+    if (value) next.add(String(value));
+    writeDismissedSignatures(next);
+}
+
+function pruneDismissedSignatures(alerts) {
+    const active = new Set((Array.isArray(alerts) ? alerts : []).map((alert) => signature(alert)).filter(Boolean));
+    const current = readDismissedSignatures();
+    const next = new Set();
+    current.forEach((value) => {
+        if (active.has(value)) next.add(value);
+    });
+    writeDismissedSignatures(next);
+}
+
+function isHomeReady() {
+    if (!document.body || document.body.classList.contains('app-loading')) return false;
+
+    const bootLayer = document.getElementById('boot-layer');
+    const bioLayer = document.getElementById('bio-layer');
+    const isHidden = (element) => {
+        if (!element) return true;
+        if (element.hidden) return true;
+        const style = window.getComputedStyle(element);
+        return style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0;
+    };
+
+    return isHidden(bootLayer) && isHidden(bioLayer);
+}
+
 function waitForHomeReady(callback) {
-    if (!document.body.classList.contains('app-loading')) {
+    if (isHomeReady()) {
+        homeReady = true;
         callback();
         return;
     }
 
     const timer = window.setInterval(() => {
-        if (!document.body.classList.contains('app-loading')) {
-            window.clearInterval(timer);
-            callback();
+        if (!isHomeReady()) return;
+        window.clearInterval(timer);
+        homeReady = true;
+        callback();
+    }, 140);
+}
+
+function getVisibleAlerts() {
+    const dismissed = readDismissedSignatures();
+    return currentAlerts.filter((alert) => {
+        const alertSignature = signature(alert);
+        return Boolean(alertSignature) && alert.active !== false && !dismissed.has(alertSignature);
+    });
+}
+
+function getCurrentAlert() {
+    const visibleAlerts = getVisibleAlerts();
+    if (!visibleAlerts.length) return null;
+    if (currentAlertIndex >= visibleAlerts.length) currentAlertIndex = visibleAlerts.length - 1;
+    if (currentAlertIndex < 0) currentAlertIndex = 0;
+    return visibleAlerts[currentAlertIndex] || null;
+}
+
+function syncCurrentAlertIndex(preferredSignature = '') {
+    const visibleAlerts = getVisibleAlerts();
+    if (!visibleAlerts.length) {
+        currentAlertIndex = 0;
+        return null;
+    }
+
+    if (preferredSignature) {
+        const preferredIndex = visibleAlerts.findIndex((alert) => signature(alert) === preferredSignature);
+        if (preferredIndex >= 0) {
+            currentAlertIndex = preferredIndex;
+            return visibleAlerts[currentAlertIndex];
         }
-    }, 160);
+    }
+
+    if (currentAlertIndex >= visibleAlerts.length) currentAlertIndex = visibleAlerts.length - 1;
+    if (currentAlertIndex < 0) currentAlertIndex = 0;
+    return visibleAlerts[currentAlertIndex];
+}
+
+function showPreviousAlert(event) {
+    event?.stopPropagation?.();
+    const visibleAlerts = getVisibleAlerts();
+    if (visibleAlerts.length <= 1) return;
+    currentAlertIndex = (currentAlertIndex - 1 + visibleAlerts.length) % visibleAlerts.length;
+    renderPopup();
+}
+
+function showNextAlert(event) {
+    event?.stopPropagation?.();
+    const visibleAlerts = getVisibleAlerts();
+    if (visibleAlerts.length <= 1) return;
+    currentAlertIndex = (currentAlertIndex + 1) % visibleAlerts.length;
+    renderPopup();
 }
 
 function injectPopup() {
@@ -62,11 +159,21 @@ function injectPopup() {
     wrapper.innerHTML = `
         <div id="site-alert-popup" class="site-alert-popup" hidden>
             <button id="site-alert-close" class="site-alert-close" type="button" aria-label="Fermer">×</button>
-            <div class="site-alert-kicker">Alerte BNI</div>
+            <div class="site-alert-head">
+                <div class="site-alert-kicker">Alertes BNI</div>
+                <div id="site-alert-counter" class="site-alert-counter" hidden></div>
+            </div>
             <div id="site-alert-title" class="site-alert-title"></div>
             <div id="site-alert-desc" class="site-alert-desc"></div>
             <div id="site-alert-meta" class="site-alert-meta"></div>
-            <button id="site-alert-open" class="site-alert-open" type="button">Voir sur carte</button>
+            <div id="site-alert-nav" class="site-alert-nav" hidden>
+                <button id="site-alert-prev" class="site-alert-nav-btn" type="button" aria-label="Alerte precedente">‹</button>
+                <div id="site-alert-nav-label" class="site-alert-nav-label"></div>
+                <button id="site-alert-next" class="site-alert-nav-btn" type="button" aria-label="Alerte suivante">›</button>
+            </div>
+            <div class="site-alert-actions">
+                <button id="site-alert-open" class="site-alert-open" type="button">Voir sur carte</button>
+            </div>
         </div>
     `;
 
@@ -75,17 +182,22 @@ function injectPopup() {
     const popup = document.getElementById('site-alert-popup');
     const closeBtn = document.getElementById('site-alert-close');
     const openBtn = document.getElementById('site-alert-open');
+    const prevBtn = document.getElementById('site-alert-prev');
+    const nextBtn = document.getElementById('site-alert-next');
 
     const openAlert = () => {
-        if (!currentAlert) return;
-        const alertId = String(currentAlert.id || '').trim();
+        const alert = getCurrentAlert();
+        if (!alert) return;
+        const alertId = String(alert.id || '').trim();
         window.location.href = alertId ? `./map/?alert=${encodeURIComponent(alertId)}` : './map/';
     };
 
     closeBtn?.addEventListener('click', (event) => {
         event.stopPropagation();
-        if (!currentAlert) return;
-        setDismissedSignature(signature(currentAlert));
+        const alert = getCurrentAlert();
+        if (!alert) return;
+        dismissSignature(signature(alert));
+        syncCurrentAlertIndex();
         renderPopup();
     });
 
@@ -94,6 +206,8 @@ function injectPopup() {
         openAlert();
     });
 
+    prevBtn?.addEventListener('click', showPreviousAlert);
+    nextBtn?.addEventListener('click', showNextAlert);
     popup?.addEventListener('click', openAlert);
 }
 
@@ -102,20 +216,38 @@ function renderPopup() {
     const title = document.getElementById('site-alert-title');
     const desc = document.getElementById('site-alert-desc');
     const meta = document.getElementById('site-alert-meta');
-    if (!popup || !title || !desc || !meta) return;
+    const counter = document.getElementById('site-alert-counter');
+    const nav = document.getElementById('site-alert-nav');
+    const navLabel = document.getElementById('site-alert-nav-label');
+    if (!popup || !title || !desc || !meta || !counter || !nav || !navLabel) return;
 
-    if (!currentAlert || !currentAlert.active || getDismissedSignature() === signature(currentAlert)) {
+    if (!homeReady) {
         popup.hidden = true;
         return;
     }
 
-    title.textContent = String(currentAlert.title || 'Alerte BNI');
-    desc.textContent = String(currentAlert.description || '');
-    meta.textContent = `GPS ${Number(currentAlert.gpsX || 0).toFixed(2)} / ${Number(currentAlert.gpsY || 0).toFixed(2)}`;
+    const visibleAlerts = getVisibleAlerts();
+    const alert = getCurrentAlert();
+
+    if (!alert || !visibleAlerts.length) {
+        popup.hidden = true;
+        return;
+    }
+
+    title.textContent = String(alert.title || 'Alerte BNI');
+    desc.textContent = String(alert.description || '');
+    meta.textContent = `GPS ${Number(alert.gpsX || 0).toFixed(2)} / ${Number(alert.gpsY || 0).toFixed(2)}`;
+
+    counter.hidden = false;
+    counter.textContent = visibleAlerts.length > 1 ? `${visibleAlerts.length} actives` : '1 active';
+
+    nav.hidden = visibleAlerts.length <= 1;
+    navLabel.textContent = `${currentAlertIndex + 1} / ${visibleAlerts.length}`;
+
     popup.hidden = false;
 }
 
-async function fetchPublicAlert() {
+async function fetchPublicAlerts() {
     const cacheBust = `t=${Date.now()}`;
     const session = readViewerSession();
     const response = await fetch(`${ALERTS_ENDPOINT}?${cacheBust}`, {
@@ -130,45 +262,67 @@ async function fetchPublicAlert() {
     if (!response.ok || !data.ok) {
         throw new Error(data.error || `Erreur alerte (${response.status})`);
     }
-    return data.alert || null;
+
+    const alerts = Array.isArray(data.alerts)
+        ? data.alerts
+        : (data.alert ? [data.alert] : []);
+    return alerts.filter((alert) => alert && typeof alert === 'object');
 }
 
 async function refreshAlert() {
+    if (!homeReady) {
+        pendingRefresh = true;
+        return;
+    }
+
     try {
-        const nextAlert = await fetchPublicAlert();
-        const previousSignature = signature(currentAlert);
-        currentAlert = nextAlert;
-        const nextSignature = signature(nextAlert);
-        if (nextSignature && previousSignature !== nextSignature && getDismissedSignature() !== nextSignature) {
-            setDismissedSignature('');
-        }
+        const previousSignature = signature(getCurrentAlert());
+        currentAlerts = await fetchPublicAlerts();
+        pruneDismissedSignatures(currentAlerts);
+        syncCurrentAlertIndex(previousSignature);
         renderPopup();
     } catch (error) {
         console.error('[HOME ALERT]', error);
     }
 }
 
+function requestRefresh() {
+    if (!homeReady) {
+        pendingRefresh = true;
+        return;
+    }
+    refreshAlert().catch(() => {});
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     injectPopup();
 
     waitForHomeReady(() => {
-        refreshAlert();
-        window.setInterval(refreshAlert, ALERT_POLL_MS);
+        renderPopup();
+        refreshAlert().catch(() => {});
+        window.setInterval(() => {
+            requestRefresh();
+        }, ALERT_POLL_MS);
+
+        if (pendingRefresh) {
+            pendingRefresh = false;
+            requestRefresh();
+        }
     });
 
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
-            refreshAlert();
+            requestRefresh();
         }
     });
 
     window.addEventListener('pageshow', () => {
-        refreshAlert();
+        requestRefresh();
     });
 
     window.addEventListener('storage', (event) => {
         if (event.key === ALERT_REFRESH_EVENT_KEY) {
-            refreshAlert();
+            requestRefresh();
         }
     });
 
@@ -176,7 +330,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (typeof BroadcastChannel === 'function') {
             const channel = new BroadcastChannel(ALERT_REFRESH_CHANNEL);
             channel.onmessage = () => {
-                refreshAlert();
+                requestRefresh();
             };
         }
     } catch (e) {}

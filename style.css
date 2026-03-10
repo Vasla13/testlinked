@@ -986,6 +986,19 @@ body.help-active .help-fab {
     animation: alertPopupIn 0.28s ease;
 }
 
+body.app-loading .site-alert-popup {
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+
+.site-alert-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
 .site-alert-kicker {
     color: #ffb4c1;
     font-size: 0.72rem;
@@ -993,6 +1006,17 @@ body.help-active .help-fab {
     text-transform: uppercase;
     font-weight: 700;
     margin-bottom: 8px;
+}
+
+.site-alert-counter {
+    padding: 4px 8px;
+    border: 1px solid rgba(255, 214, 222, 0.24);
+    background: rgba(255, 255, 255, 0.05);
+    color: #ffe2b5;
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
 }
 
 .site-alert-title {
@@ -1033,8 +1057,43 @@ body.help-active .help-fab {
 
 .site-alert-open {
     min-height: 40px;
-    margin-top: 12px;
     padding: 0 14px;
+}
+
+.site-alert-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.site-alert-actions .site-alert-open {
+    flex: 1;
+}
+
+.site-alert-nav {
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.site-alert-nav-btn {
+    width: 34px;
+    height: 34px;
+    border: 1px solid rgba(255, 214, 222, 0.22);
+    background: rgba(255, 255, 255, 0.04);
+    color: #fff2f4;
+    font-size: 1rem;
+    cursor: pointer;
+}
+
+.site-alert-nav-label {
+    flex: 1;
+    color: rgba(255, 235, 239, 0.78);
+    font-size: 0.72rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    text-align: center;
 }
 
 .site-alert-close {

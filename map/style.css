@@ -2735,6 +2735,13 @@ body.map-shell #map-alert-banner {
     clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px));
 }
 
+body.map-shell .map-alert-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
 body.map-shell .map-alert-kicker {
     color: #ffb8c6;
     font-size: 0.72rem;
@@ -2742,6 +2749,17 @@ body.map-shell .map-alert-kicker {
     letter-spacing: 2px;
     text-transform: uppercase;
     margin-bottom: 8px;
+}
+
+body.map-shell .map-alert-counter {
+    padding: 4px 8px;
+    border: 1px solid rgba(255, 214, 222, 0.18);
+    background: rgba(255, 255, 255, 0.04);
+    color: #ffd79b;
+    font-size: 0.64rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
 }
 
 body.map-shell .map-alert-title {
@@ -2764,6 +2782,32 @@ body.map-shell .map-alert-meta {
     font-size: 0.72rem;
     letter-spacing: 1px;
     text-transform: uppercase;
+}
+
+body.map-shell .map-alert-nav {
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+body.map-shell .map-alert-nav[hidden] {
+    display: none !important;
+}
+
+body.map-shell .map-alert-nav-btn {
+    min-width: 34px;
+    min-height: 34px;
+    padding: 0;
+}
+
+body.map-shell .map-alert-nav-label {
+    flex: 1;
+    color: rgba(255, 234, 239, 0.76);
+    font-size: 0.72rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    text-align: center;
 }
 
 body.map-shell #map-alert-dismiss {
