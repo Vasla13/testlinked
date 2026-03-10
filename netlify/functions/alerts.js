@@ -205,6 +205,8 @@ function normalizeAlert(raw, previous = null) {
   const strokeWidth = normalizeStrokeWidth(source.strokeWidth, previous?.strokeWidth || 0.06);
   const zonePoints = normalizeZonePoints(source.zonePoints);
   const shapeType = source.shapeType === "zone" && zonePoints.length >= 3 ? "zone" : "circle";
+  const visibilityMode = source.visibilityMode === "whitelist" ? "whitelist" : "all";
+  const allowedUsers = normalizeAllowedUsers(source.allowedUsers);
   const startsAt = normalizeStartsAt(
     Object.prototype.hasOwnProperty.call(source, "startsAt") ? source.startsAt : previous?.startsAt,
     previous?.startsAt || ""
@@ -242,8 +244,8 @@ function normalizeAlert(raw, previous = null) {
       zonePoints,
       circles: [],
       activeCircleIndex: -1,
-      visibilityMode: "all",
-      allowedUsers: [],
+      visibilityMode,
+      allowedUsers: visibilityMode === "whitelist" ? allowedUsers : [],
       active: source.active !== false,
       startsAt,
       createdAt: String(previous?.createdAt || now),
@@ -279,8 +281,8 @@ function normalizeAlert(raw, previous = null) {
     zonePoints: [],
     circles,
     activeCircleIndex,
-    visibilityMode: "all",
-    allowedUsers: [],
+    visibilityMode,
+    allowedUsers: visibilityMode === "whitelist" ? allowedUsers : [],
     active: source.active !== false,
     startsAt,
     createdAt: String(previous?.createdAt || now),
@@ -340,7 +342,11 @@ async function saveAlertList(store, alerts) {
 function isViewerAllowed(alert, viewer) {
   if (!alert || typeof alert !== "object" || !alert.active) return false;
   if (!isAlertStarted(alert)) return false;
-  return true;
+  if (String(alert.visibilityMode || "all") !== "whitelist") return true;
+  const normalized = normalizeUsername(viewer?.username || "");
+  if (!normalized.ok) return false;
+  const allow = new Set(normalizeAllowedUsers(alert.allowedUsers));
+  return allow.has(normalized.username);
 }
 
 function toPublicAlert(alert, viewer = null) {
@@ -362,7 +368,7 @@ function toPublicAlert(alert, viewer = null) {
     activeCircleIndex: Number.isInteger(Number(alert.activeCircleIndex))
       ? Number(alert.activeCircleIndex)
       : -1,
-    visibilityMode: "all",
+    visibilityMode: String(alert.visibilityMode || "all"),
     active: true,
     startsAt: String(alert.startsAt || ""),
     createdAt: String(alert.createdAt || ""),

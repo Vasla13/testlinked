@@ -143,6 +143,25 @@
                 </div>
             </div>
 
+            <div class="staff-modal-section">
+                <div class="staff-modal-section-head">
+                    <span>Audience</span>
+                    <span id="staffAudienceMode" class="editor-pill staff-mini-pill">Tous</span>
+                </div>
+                <div class="staff-action-grid staff-action-grid-compact">
+                    <button id="btnAudienceAll" class="action-btn" type="button">Tous</button>
+                    <button id="btnAudienceWhitelist" class="action-btn" type="button">Whitelist</button>
+                </div>
+                <div id="staffWhitelistPanel" class="staff-whitelist-panel" hidden>
+                    <div class="staff-whitelist-row">
+                        <input id="staffWhitelistInput" class="cyber-input" type="text" placeholder="username cloud">
+                        <button id="btnAddWhitelistUser" class="action-btn" type="button">Ajouter</button>
+                    </div>
+                    <div id="staffWhitelistSuggestions" class="staff-whitelist-suggestions"></div>
+                    <div id="staffWhitelistList" class="staff-whitelist-list"></div>
+                </div>
+            </div>
+
             <input id="alertActive" type="checkbox" checked hidden>
 
             <div class="staff-alert-modal-actions">
