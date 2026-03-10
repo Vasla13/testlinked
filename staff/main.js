@@ -26,20 +26,12 @@ const dom = {
     statusMessage: document.getElementById('staffStatusMessage'),
     alertMode: document.getElementById('staffAlertMode'),
     selectionMode: document.getElementById('staffSelectionMode'),
-    audienceMode: document.getElementById('staffAudienceMode'),
     title: document.getElementById('alertTitle'),
     description: document.getElementById('alertDescription'),
     active: document.getElementById('alertActive'),
     startAt: document.getElementById('alertStartAt'),
     strokeWidth: document.getElementById('alertStrokeWidth'),
     strokeWidthValue: document.getElementById('alertStrokeWidthValue'),
-    audienceAllBtn: document.getElementById('btnAudienceAll'),
-    audienceWhitelistBtn: document.getElementById('btnAudienceWhitelist'),
-    whitelistPanel: document.getElementById('staffWhitelistPanel'),
-    whitelistInput: document.getElementById('staffWhitelistInput'),
-    whitelistAddBtn: document.getElementById('btnAddWhitelistUser'),
-    whitelistSuggestions: document.getElementById('staffWhitelistSuggestions'),
-    whitelistList: document.getElementById('staffWhitelistList'),
     viewport: document.getElementById('viewport'),
     mapWorld: document.getElementById('map-world'),
     mapImage: document.getElementById('map-image'),
@@ -78,9 +70,6 @@ const state = {
         lastY: 0,
     },
     mapSelectionEnabled: true,
-    audienceMode: 'all',
-    allowedUsers: [],
-    userDirectory: [],
     selectionDrag: null,
     contextMenuOpen: false,
     modalSession: {
@@ -201,106 +190,6 @@ function refreshAlertModePill() {
     }
 
     dom.alertMode.textContent = state.currentAlert ? 'Live' : 'Nouveau';
-}
-
-function normalizeAudienceUsername(value) {
-    const raw = String(value || '').trim().toLowerCase();
-    const clean = raw.replace(/[^a-z0-9._-]/g, '');
-    return clean.length >= 3 ? clean : '';
-}
-
-function sanitizeAllowedUsers(list) {
-    if (!Array.isArray(list)) return [];
-    const seen = new Set();
-    const clean = [];
-    list.forEach((value) => {
-        const username = normalizeAudienceUsername(value);
-        if (!username || seen.has(username)) return;
-        seen.add(username);
-        clean.push(username);
-    });
-    return clean;
-}
-
-function audienceSummary() {
-    if (state.audienceMode !== 'whitelist') return 'Tous';
-    if (!state.allowedUsers.length) return 'Whitelist vide';
-    return `${state.allowedUsers.length} user${state.allowedUsers.length > 1 ? 's' : ''}`;
-}
-
-function renderWhitelistSuggestions() {
-    if (!dom.whitelistSuggestions) return;
-    const query = normalizeAudienceUsername(dom.whitelistInput?.value || '');
-    const visible = state.userDirectory
-        .filter((username) => !query || username.includes(query))
-        .filter((username) => !state.allowedUsers.includes(username))
-        .slice(0, 10);
-
-    dom.whitelistSuggestions.innerHTML = visible.map((username) => `
-        <button type="button" class="staff-whitelist-suggestion" data-user="${escapeText(username)}">${escapeText(username)}</button>
-    `).join('') || '<div class="staff-whitelist-empty">Aucune suggestion</div>';
-
-    Array.from(dom.whitelistSuggestions.querySelectorAll('[data-user]')).forEach((button) => {
-        button.onclick = () => {
-            const username = button.getAttribute('data-user') || '';
-            addWhitelistUser(username);
-        };
-    });
-}
-
-function renderWhitelistList() {
-    if (!dom.whitelistList) return;
-    dom.whitelistList.innerHTML = state.allowedUsers.map((username) => `
-        <div class="staff-whitelist-chip">
-            <span>${escapeText(username)}</span>
-            <button type="button" data-remove-user="${escapeText(username)}">×</button>
-        </div>
-    `).join('') || '<div class="staff-whitelist-empty">Aucun utilisateur ajoute</div>';
-
-    Array.from(dom.whitelistList.querySelectorAll('[data-remove-user]')).forEach((button) => {
-        button.onclick = () => {
-            const username = button.getAttribute('data-remove-user') || '';
-            state.allowedUsers = state.allowedUsers.filter((entry) => entry !== username);
-            renderAudienceUi();
-        };
-    });
-}
-
-function renderAudienceUi() {
-    if (dom.audienceMode) {
-        dom.audienceMode.textContent = state.audienceMode === 'whitelist' ? 'Whitelist' : 'Tous';
-    }
-    dom.audienceAllBtn?.classList.toggle('is-active', state.audienceMode === 'all');
-    dom.audienceWhitelistBtn?.classList.toggle('is-active', state.audienceMode === 'whitelist');
-    if (dom.whitelistPanel) {
-        dom.whitelistPanel.hidden = state.audienceMode !== 'whitelist';
-    }
-    renderWhitelistSuggestions();
-    renderWhitelistList();
-}
-
-function addWhitelistUser(value) {
-    const username = normalizeAudienceUsername(value);
-    if (!username) {
-        setStatusMessage('Username invalide.', 'warn');
-        return;
-    }
-    if (!state.allowedUsers.includes(username)) {
-        state.allowedUsers = [...state.allowedUsers, username];
-    }
-    if (dom.whitelistInput) dom.whitelistInput.value = '';
-    renderAudienceUi();
-}
-
-async function loadUserDirectory() {
-    try {
-        const data = await requestAdmin('list_users');
-        state.userDirectory = Array.isArray(data.users) ? sanitizeAllowedUsers(data.users) : [];
-        renderAudienceUi();
-    } catch (error) {
-        state.userDirectory = [];
-        renderAudienceUi();
-    }
 }
 
 function isAlertModalOpen() {
@@ -1390,12 +1279,6 @@ function readDraftAlert() {
         selection = buildCircleSelection(circles, activeIndex);
     }
 
-    const visibilityMode = state.audienceMode === 'whitelist' ? 'whitelist' : 'all';
-    const allowedUsers = visibilityMode === 'whitelist' ? sanitizeAllowedUsers(state.allowedUsers) : [];
-    if (visibilityMode === 'whitelist' && allowedUsers.length === 0) {
-        throw new Error('Ajoute au moins un utilisateur dans la whitelist.');
-    }
-
     const circles = selection.shapeType === 'zone' ? [] : getSelectionCircles(selection);
     const circleSummary = circles.length ? summarizeCircles(circles) : null;
 
@@ -1421,8 +1304,8 @@ function readDraftAlert() {
             radius: Number(circle.radius.toFixed(1)),
         })),
         activeCircleIndex: selection.shapeType === 'zone' ? -1 : getActiveCircleIndex(selection),
-        visibilityMode,
-        allowedUsers,
+        visibilityMode: 'all',
+        allowedUsers: [],
         active: Boolean(dom.active?.checked),
         startsAt,
     };
@@ -1443,8 +1326,6 @@ function fillForm(alert, options = {}) {
         dom.description.value = '';
         dom.active.checked = true;
         if (dom.startAt) dom.startAt.value = '';
-        state.audienceMode = 'all';
-        state.allowedUsers = [];
         if (dom.publishBtn) dom.publishBtn.textContent = 'Publier';
         updateRadiusUi(DEFAULT_RADIUS);
         updateStrokeWidthUi(preserveSelection && state.selection ? state.selection.strokeWidth : DEFAULT_STROKE_WIDTH);
@@ -1455,7 +1336,6 @@ function fillForm(alert, options = {}) {
             renderBanner();
             refreshStatusCards();
         }
-        renderAudienceUi();
         refreshAlertModePill();
         updateAlertModalTitle();
         if (!preserveSelection && shouldFocus) {
@@ -1468,12 +1348,9 @@ function fillForm(alert, options = {}) {
     dom.description.value = String(alert.description || '');
     dom.active.checked = alert.active !== false;
     if (dom.startAt) dom.startAt.value = toLocalDateTimeInputValue(alert.startsAt || '');
-    state.audienceMode = alert.visibilityMode === 'whitelist' ? 'whitelist' : 'all';
-    state.allowedUsers = sanitizeAllowedUsers(alert.allowedUsers);
     if (dom.publishBtn) dom.publishBtn.textContent = 'Mettre a jour';
     updateRadiusUi(alert.radius || DEFAULT_RADIUS);
     updateStrokeWidthUi(alert.strokeWidth || DEFAULT_STROKE_WIDTH);
-    renderAudienceUi();
     refreshAlertModePill();
     updateAlertModalTitle();
 
@@ -1955,7 +1832,6 @@ function unlockConsole() {
     loadCurrentAlert().catch((error) => {
         setStatusMessage(error.message || 'Impossible de charger les alertes.', 'error');
     });
-    loadUserDirectory().catch(() => {});
     scheduleMapView(Boolean(state.selection));
 }
 
@@ -2044,23 +1920,6 @@ function bindEvents() {
         renderBanner();
         refreshStatusCards();
     });
-    dom.audienceAllBtn?.addEventListener('click', () => {
-        state.audienceMode = 'all';
-        renderAudienceUi();
-    });
-    dom.audienceWhitelistBtn?.addEventListener('click', () => {
-        state.audienceMode = 'whitelist';
-        renderAudienceUi();
-    });
-    dom.whitelistAddBtn?.addEventListener('click', () => addWhitelistUser(dom.whitelistInput?.value || ''));
-    dom.whitelistInput?.addEventListener('input', () => renderWhitelistSuggestions());
-    dom.whitelistInput?.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter') {
-            event.preventDefault();
-            addWhitelistUser(dom.whitelistInput?.value || '');
-        }
-    });
-
     window.addEventListener('resize', () => {
         closeContextMenu();
         scheduleMapView(Boolean(state.selection));
@@ -2094,7 +1953,6 @@ document.addEventListener('DOMContentLoaded', () => {
     updateStrokeWidthUi(DEFAULT_STROKE_WIDTH);
     bindEvents();
     initMap();
-    renderAudienceUi();
     renderAlertsList();
     updateAlertModalTitle();
     refreshAlertModePill();
