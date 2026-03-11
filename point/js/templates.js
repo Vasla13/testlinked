@@ -122,7 +122,6 @@ export function renderEditorHTML(n, state) {
     const typeLabel = n.type === TYPES.PERSON
         ? 'personne'
         : (n.type === TYPES.COMPANY ? 'entreprise' : 'groupe');
-    const identifier = n.id || '----------';
 
     return `
     <div class="editor-panel-layout">
@@ -144,7 +143,6 @@ export function renderEditorHTML(n, state) {
                     <div class="editor-sheet-name">${escapeHtml(n.name)}</div>
                     <div class="editor-sheet-type">${escapeHtml(typeLabel)}</div>
                     ${personStatusBadge}
-                    <div class="editor-sheet-id">${escapeHtml(identifier)}</div>
                 </div>
 
                 <div class="editor-priority-grid">
