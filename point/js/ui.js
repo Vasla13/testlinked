@@ -59,6 +59,8 @@ const collab = {
     syncInFlight: false,
     saveInFlight: false,
     lastSavedFingerprint: '',
+    localChangeSeq: 0,
+    lastSavedChangeSeq: 0,
     shadowData: null,
     suppressAutosave: 0,
     presence: [],
@@ -797,7 +799,7 @@ function applyCloudBoardData(rawData, options = {}) {
     if (typeof options.projectName === 'string') {
         state.projectName = options.projectName;
     }
-    captureCloudSavedFingerprint();
+    captureCloudSavedState();
     if (state.selection && !nodeById(state.selection)) state.selection = null;
     renderEditor();
     updatePathfindingPanel();
@@ -818,26 +820,19 @@ function fingerprintFromPointPayload(payload) {
     });
 }
 
-function computeCloudFingerprint() {
-    try {
-        if (!isCloudBoardActive()) return '';
-        const payload = generateExportData();
-        return fingerprintFromPointPayload(payload);
-    } catch (e) {
-        return '';
-    }
-}
-
-function captureCloudSavedFingerprint() {
-    const fp = computeCloudFingerprint();
-    collab.lastSavedFingerprint = fp;
-    return fp;
+function captureCloudSavedState(changeSeq = collab.localChangeSeq) {
+    const targetSeq = Math.max(0, Number(changeSeq) || 0);
+    collab.lastSavedFingerprint = '';
+    collab.lastSavedChangeSeq = Math.max(
+        collab.lastSavedChangeSeq,
+        Math.min(collab.localChangeSeq, targetSeq)
+    );
+    return collab.lastSavedChangeSeq;
 }
 
 function hasLocalCloudChanges() {
     if (!isCloudBoardActive()) return false;
-    const current = computeCloudFingerprint();
-    return Boolean(current) && current !== String(collab.lastSavedFingerprint || '');
+    return collab.localChangeSeq !== collab.lastSavedChangeSeq;
 }
 
 function stopCollabAutosave() {
@@ -879,6 +874,7 @@ function queueCloudAutosave(delayMs = COLLAB_AUTOSAVE_DEBOUNCE_MS) {
 
 function onPointLocalChange() {
     if (collab.suppressAutosave > 0) return;
+    collab.localChangeSeq += 1;
     queueCloudAutosave();
 }
 
@@ -1192,6 +1188,8 @@ function setActiveCloudBoardFromSummary(summary = null) {
         collab.ownerId = '';
         collab.activeBoardUpdatedAt = '';
         collab.lastSavedFingerprint = '';
+        collab.localChangeSeq = 0;
+        collab.lastSavedChangeSeq = 0;
         collab.shadowData = null;
         updateCollabPresence([]);
     } else {
@@ -1277,6 +1275,7 @@ async function saveActiveCloudBoard(options = {}) {
         const plainData = generateExportData();
         const data = buildCloudBoardPayload();
         const localFingerprint = fingerprintFromPointPayload(plainData);
+        const savedChangeSeq = collab.localChangeSeq;
         const result = await collabBoardRequest('save_board', {
             boardId: collab.activeBoardId,
             title,
@@ -1292,14 +1291,17 @@ async function saveActiveCloudBoard(options = {}) {
             if (result.board.data) {
                 setCloudShadowData(result.board.data);
                 const serverPlain = extractPlainPointPayloadFromCloud(result.board.data);
-                const shouldApplyServerData = fingerprintFromPointPayload(serverPlain) !== fingerprintFromPointPayload(plainData);
+                const serverFingerprint = fingerprintFromPointPayload(serverPlain);
+                const shouldApplyServerData = serverFingerprint !== localFingerprint;
                 if (shouldApplyServerData) {
                     applyCloudBoardData(result.board.data, { quiet: true, projectName: collab.activeBoardTitle });
                 } else {
-                    collab.lastSavedFingerprint = fingerprintFromPointPayload(serverPlain);
+                    collab.lastSavedFingerprint = serverFingerprint;
+                    captureCloudSavedState(savedChangeSeq);
                 }
             } else {
                 collab.lastSavedFingerprint = localFingerprint;
+                captureCloudSavedState(savedChangeSeq);
             }
         }
         setCloudSyncState(result?.mergedConflict ? 'merged' : 'live', result?.mergedConflict ? 'Fusion auto appliquee' : 'Synchronise');
@@ -1349,7 +1351,7 @@ async function createCloudBoardFromCurrent() {
     state.projectName = collab.activeBoardTitle;
     updateCollabPresence(result?.presence || []);
     if (result.board.data) setCloudShadowData(result.board.data);
-    captureCloudSavedFingerprint();
+    captureCloudSavedState();
     setBoardQueryParam(result.board.id);
     setCloudSyncState('live', 'Synchro live active');
 }
@@ -1627,15 +1629,6 @@ async function renderCloudHome() {
     } catch (e) {
         showCustomAlert(`Erreur cloud: ${escapeHtml(e.message || 'inconnue')}`);
         return;
-    }
-
-    if (collab.activeBoardId) {
-        try {
-            const activeRes = await collabBoardRequest('get_board', { boardId: collab.activeBoardId });
-            if (activeRes && activeRes.board) {
-                if (Array.isArray(activeRes.presence)) updateCollabPresence(activeRes.presence);
-            }
-        } catch (e) {}
     }
 
     const boardRows = boards.map((b) => {

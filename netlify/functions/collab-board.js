@@ -12,6 +12,10 @@ const {
   newId,
   resolveAuth,
   listKeysByPrefix,
+  getUserBoardIndex,
+  setUserBoardIndex,
+  addUserBoardRef,
+  removeUserBoardRef,
   boardKey,
   getUserByUsername,
   getUserById,
@@ -973,17 +977,33 @@ exports.handler = async (event) => {
   const { store, user } = auth;
 
   if (action === "list_boards") {
-    const keys = await listKeysByPrefix(store, "boards/", 1000);
-    const loadedBoards = await Promise.all(
-      keys.map((key) => store.get(key, { type: "json" }).catch(() => null))
-    );
-    const boards = loadedBoards
-      .filter((board) => board && board.id)
-      .map((board) => {
-        const role = getRoleForUser(board, user.id);
-        if (!role) return null;
-        return boardSummary(board, role);
-      })
+    const index = await getUserBoardIndex(store, user.id);
+    let loadedBoards = [];
+
+    if (index.hydrated) {
+      loadedBoards = await Promise.all(
+        index.boardIds.map((boardId) => loadBoard(store, boardId).catch(() => null))
+      );
+    } else {
+      const keys = await listKeysByPrefix(store, "boards/", 1000);
+      loadedBoards = await Promise.all(
+        keys.map((key) => store.get(key, { type: "json" }).catch(() => null))
+      );
+    }
+
+    const accessibleBoards = loadedBoards.filter((board) => board && board.id && getRoleForUser(board, user.id));
+    const accessibleIds = accessibleBoards.map((board) => String(board.id));
+    if (!index.hydrated) {
+      await setUserBoardIndex(store, user.id, accessibleIds, { hydrated: true });
+    } else {
+      const shouldHealIndex = accessibleIds.length !== index.boardIds.length || loadedBoards.some((board) => !board || !getRoleForUser(board, user.id));
+      if (shouldHealIndex) {
+        await setUserBoardIndex(store, user.id, accessibleIds, { hydrated: true });
+      }
+    }
+
+    const boards = accessibleBoards
+      .map((board) => boardSummary(board, getRoleForUser(board, user.id)))
       .filter(Boolean);
 
     boards.sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
@@ -1051,6 +1071,7 @@ exports.handler = async (event) => {
     appendBoardActivity(board, user, "board", "a cree le board");
 
     await saveBoard(store, board);
+    await addUserBoardRef(store, user.id, boardId);
     return jsonResponse(200, {
       ok: true,
       board: {
@@ -1328,7 +1349,12 @@ exports.handler = async (event) => {
     const role = getRoleForUser(board, user.id);
     if (role !== ROLE_OWNER) return errorResponse(403, "Seul le lead peut supprimer.");
 
+    const memberIds = new Set([
+      String(board.ownerId || ""),
+      ...(Array.isArray(board.members) ? board.members.map((member) => String(member.userId || "")) : []),
+    ].filter(Boolean));
     await store.delete(boardKey(boardId));
+    await Promise.all([...memberIds].map((memberId) => removeUserBoardRef(store, memberId, boardId)));
     return jsonResponse(200, { ok: true, deleted: true, boardId });
   }
 
@@ -1363,6 +1389,7 @@ exports.handler = async (event) => {
     appendBoardActivity(board, user, "member", `a ajoute ${targetUser.username} (${targetUser.id === board.ownerId ? ROLE_OWNER : memberRole})`);
 
     await saveBoard(store, board);
+    await addUserBoardRef(store, targetUser.id, boardId);
     return jsonResponse(200, {
       ok: true,
       members: board.members,
@@ -1391,6 +1418,7 @@ exports.handler = async (event) => {
     };
     appendBoardActivity(board, user, "member", `a retire ${removedMember?.username || "un membre"}`);
     await saveBoard(store, board);
+    await removeUserBoardRef(store, targetUserId, boardId);
 
     return jsonResponse(200, { ok: true, members: board.members });
   }
@@ -1434,6 +1462,7 @@ exports.handler = async (event) => {
     appendBoardActivity(board, user, "member", `a donne le lead a ${targetUser.username}`);
 
     await saveBoard(store, board);
+    await addUserBoardRef(store, targetUser.id, boardId);
     return jsonResponse(200, {
       ok: true,
       board: {
@@ -1463,6 +1492,7 @@ exports.handler = async (event) => {
     };
     appendBoardActivity(board, user, "member", "a quitte le board");
     await saveBoard(store, board);
+    await removeUserBoardRef(store, user.id, boardId);
     return jsonResponse(200, { ok: true });
   }
 

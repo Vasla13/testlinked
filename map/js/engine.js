@@ -205,14 +205,14 @@ export function initEngine() {
                 state.groups[gIdx].points[pIdx].x = coords.x + state.draggingMarker.offsetX;
                 state.groups[gIdx].points[pIdx].y = coords.y + state.draggingMarker.offsetY;
                 
-                renderAll(); 
+                renderAll({ fast: true });
             }
         }
         // 3. Outil Mesure (étape intermédiaire)
         else if (state.measuringMode && state.measureStep === 1) {
             const coords = getMapPercentCoords(e.clientX, e.clientY);
             state.measurePoints[1] = coords;
-            renderAll(); 
+            renderAll({ fast: true });
         }
         // 4. Drag de la carte
         else if (state.isDragging && !state.drawingMode) {

@@ -117,6 +117,10 @@ function boardKey(boardId) {
   return `boards/${boardId}`;
 }
 
+function userBoardsKey(userId) {
+  return `users/${userId}/boards`;
+}
+
 function getStoreClient() {
   return getStore(STORE_NAME);
 }
@@ -208,6 +212,58 @@ async function listKeysByPrefix(store, prefix, maxItems = 1000) {
   return keys;
 }
 
+async function getUserBoardIndex(store, userId) {
+  if (!userId) return { boardIds: [], hydrated: false };
+  const rawIndex = await store.get(userBoardsKey(userId), { type: "json" });
+  const seen = new Set();
+  const boardIds = (Array.isArray(rawIndex?.boardIds) ? rawIndex.boardIds : [])
+    .map((boardId) => String(boardId || "").trim())
+    .filter((boardId) => {
+      if (!boardId || seen.has(boardId)) return false;
+      seen.add(boardId);
+      return true;
+    });
+  return {
+    boardIds,
+    hydrated: Boolean(rawIndex?.hydrated),
+  };
+}
+
+async function setUserBoardIndex(store, userId, boardIds = [], options = {}) {
+  if (!userId) return;
+  const seen = new Set();
+  const normalizedBoardIds = boardIds
+    .map((boardId) => String(boardId || "").trim())
+    .filter((boardId) => {
+      if (!boardId || seen.has(boardId)) return false;
+      seen.add(boardId);
+      return true;
+    });
+  await store.setJSON(userBoardsKey(userId), {
+    boardIds: normalizedBoardIds,
+    hydrated: options.hydrated !== undefined ? Boolean(options.hydrated) : true,
+    updatedAt: nowIso(),
+  });
+}
+
+async function addUserBoardRef(store, userId, boardId) {
+  const cleanBoardId = String(boardId || "").trim();
+  if (!userId || !cleanBoardId) return;
+  const index = await getUserBoardIndex(store, userId);
+  if (!index.boardIds.includes(cleanBoardId)) {
+    index.boardIds.push(cleanBoardId);
+  }
+  await setUserBoardIndex(store, userId, index.boardIds, { hydrated: index.hydrated });
+}
+
+async function removeUserBoardRef(store, userId, boardId) {
+  const cleanBoardId = String(boardId || "").trim();
+  if (!userId || !cleanBoardId) return;
+  const index = await getUserBoardIndex(store, userId);
+  const nextBoardIds = index.boardIds.filter((currentId) => currentId !== cleanBoardId);
+  await setUserBoardIndex(store, userId, nextBoardIds, { hydrated: index.hydrated });
+}
+
 function getRoleForUser(board, userId) {
   if (!board || !userId) return null;
   if (String(board.ownerId) === String(userId)) return ROLE_OWNER;
@@ -280,6 +336,10 @@ module.exports = {
   deleteSession,
   resolveAuth,
   listKeysByPrefix,
+  getUserBoardIndex,
+  setUserBoardIndex,
+  addUserBoardRef,
+  removeUserBoardRef,
   boardKey,
   userKey,
   usernameKey,

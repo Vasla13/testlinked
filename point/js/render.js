@@ -25,6 +25,35 @@ function updateZoomDisplay(scale) {
 
 const degreeCache = new Map();
 const NODE_ICONS = { [TYPES.PERSON]: '👤', [TYPES.COMPANY]: '🏢', [TYPES.GROUP]: '👥' };
+const LABEL_METRICS_CACHE = new Map();
+const LABEL_METRICS_CACHE_MAX = 1600;
+
+function getLinkEndpointId(endpoint) {
+    return (typeof endpoint === 'object') ? endpoint?.id : endpoint;
+}
+
+function pruneCache(map, maxEntries) {
+    if (map.size <= maxEntries) return;
+    const overflow = map.size - maxEntries;
+    let removed = 0;
+    for (const key of map.keys()) {
+        map.delete(key);
+        removed += 1;
+        if (removed >= overflow) break;
+    }
+}
+
+function getLabelMetrics(label, fontSize) {
+    const roundedFontSize = Math.round(Number(fontSize || 0) * 10) / 10;
+    const key = `${roundedFontSize}|${label}`;
+    let cached = LABEL_METRICS_CACHE.get(key);
+    if (!cached) {
+        cached = { width: ctx.measureText(label).width };
+        LABEL_METRICS_CACHE.set(key, cached);
+        pruneCache(LABEL_METRICS_CACHE, LABEL_METRICS_CACHE_MAX);
+    }
+    return cached;
+}
 
 function getPersonStatusVisual(node) {
     const status = normalizePersonStatus(node?.personStatus, node?.type);
@@ -128,7 +157,6 @@ export function draw() {
     const showTypes = state.showLinkTypes; 
     const labelMode = state.labelMode; 
     const activeFilter = state.activeFilter; 
-    const nodeMap = new Map(state.nodes.map(n => [String(n.id), n]));
 
     // NETTOYAGE
     ctx.save();
@@ -158,16 +186,22 @@ export function draw() {
     const visibleLinks = new Set();
     const activeNodes = new Set(); 
     const pairCounts = new Map();
+    const focusNeighborIds = new Set();
+    const pathPreviewOnly = state.pathfinding.startId !== null && !state.pathfinding.active;
 
     // Pré-calcul de visibilité
     for (const l of state.links) {
+        const sId = getLinkEndpointId(l.source);
+        const tId = getLinkEndpointId(l.target);
         if (allowedKinds && !allowedKinds.has(l.kind)) continue;
         visibleLinks.add(l);
-        activeNodes.add(l.source.id || l.source);
-        activeNodes.add(l.target.id || l.target);
+        activeNodes.add(sId);
+        activeNodes.add(tId);
+        if (hasFocus) {
+            if (String(sId) === String(focusId)) focusNeighborIds.add(String(tId));
+            else if (String(tId) === String(focusId)) focusNeighborIds.add(String(sId));
+        }
         if (l.kind !== KINDS.ENNEMI) {
-            const sId = l.source.id || l.source;
-            const tId = l.target.id || l.target;
             const key = pairKey(sId, tId);
             pairCounts.set(key, (pairCounts.get(key) || 0) + 1);
         }
@@ -183,6 +217,24 @@ export function draw() {
             predictedCounts.set(key, (predictedCounts.get(key) || 0) + 1);
         });
     }
+
+    const nodeMap = predictedLinks.length
+        ? new Map(state.nodes.map((n) => [String(n.id), n]))
+        : null;
+    const nonPersonNodes = [];
+    const personNodes = [];
+    for (const node of state.nodes) {
+        if (node.type === TYPES.PERSON) personNodes.push(node);
+        else nonPersonNodes.push(node);
+    }
+    const sortedNodes = nonPersonNodes.concat(personNodes);
+    const renderableNodes = [];
+    for (const node of sortedNodes) {
+        if (activeFilter !== FILTERS.ALL && node.type === TYPES.PERSON && !activeNodes.has(node.id)) continue;
+        if (isFocus && !state.focusSet.has(node.id)) continue;
+        renderableNodes.push(node);
+    }
+    const nodeDimCache = new Map();
 
     const getCurve = (sx, sy, tx, ty, offset) => {
         const dx = tx - sx;
@@ -209,30 +261,35 @@ export function draw() {
         return slot * base * (1 + degreeBoost);
     };
 
-    // Helper pour griser ce qui n'est pas focus
-    function isDimmed(objType, obj) {
-        if (isHVT) return false; // En HVT, on gère la transparence différemment
-        if (state.pathfinding.startId !== null && !state.pathfinding.active) return false;
-        if (state.pathfinding.active) {
-            if (objType === 'node') return !state.pathfinding.pathNodes.has(obj.id);
-            if (objType === 'link') {
-                const s = obj.source.id || obj.source;
-                const t = obj.target.id || obj.target;
-                const k1 = `${s}-${t}`, k2 = `${t}-${s}`;
-                return !(state.pathfinding.pathLinks.has(k1) || state.pathfinding.pathLinks.has(k2));
+    function isNodeDimmed(node) {
+        const cacheKey = String(node.id);
+        if (nodeDimCache.has(cacheKey)) return nodeDimCache.get(cacheKey);
+        let dimmed = false;
+        if (!isHVT && !pathPreviewOnly) {
+            if (state.pathfinding.active) {
+                dimmed = !state.pathfinding.pathNodes.has(node.id);
+            } else if (hasFocus) {
+                dimmed = String(node.id) !== String(focusId) && !focusNeighborIds.has(String(node.id));
             }
         }
-        if (!hasFocus) return false;
-        if (objType === 'node') {
-            if (obj.id === focusId) return false;
-            return !state.links.some(l => 
-                visibleLinks.has(l) &&
-                ((l.source.id === focusId && l.target.id === obj.id) || 
-                 (l.target.id === focusId && l.source.id === obj.id))
-            );
+        nodeDimCache.set(cacheKey, dimmed);
+        return dimmed;
+    }
+
+    function isLinkDimmed(link) {
+        if (isHVT) return false;
+        if (pathPreviewOnly) return false;
+        if (state.pathfinding.active) {
+            const s = getLinkEndpointId(link.source);
+            const t = getLinkEndpointId(link.target);
+            const k1 = `${s}-${t}`;
+            const k2 = `${t}-${s}`;
+            return !(state.pathfinding.pathLinks.has(k1) || state.pathfinding.pathLinks.has(k2));
         }
-        if (objType === 'link') return (obj.source.id !== focusId && obj.target.id !== focusId);
-        return false;
+        if (!hasFocus) return false;
+        const s = getLinkEndpointId(link.source);
+        const t = getLinkEndpointId(link.target);
+        return (String(s) !== String(focusId) && String(t) !== String(focusId));
     }
 
     // 0. LIENS PREDITS (IA)
@@ -243,8 +300,8 @@ export function draw() {
         for (const pl of predictedLinks) {
             if (!pl || !pl.aId || !pl.bId) continue;
             if (allowedKinds && pl.kind && !allowedKinds.has(pl.kind)) continue;
-            const a = nodeMap.get(String(pl.aId));
-            const b = nodeMap.get(String(pl.bId));
+            const a = nodeMap?.get(String(pl.aId));
+            const b = nodeMap?.get(String(pl.bId));
             if (!a || !b) continue;
             const key = pairKey(pl.aId, pl.bId);
             const total = predictedCounts.get(key) || 1;
@@ -281,9 +338,11 @@ export function draw() {
     for (const l of state.links) {
         if (!visibleLinks.has(l)) continue;
         if (l.kind === KINDS.ENNEMI) continue; 
-        if (isFocus && (!state.focusSet.has(l.source.id) || !state.focusSet.has(l.target.id))) continue;
+        const sId = getLinkEndpointId(l.source);
+        const tId = getLinkEndpointId(l.target);
+        if (isFocus && (!state.focusSet.has(sId) || !state.focusSet.has(tId))) continue;
         
-        let dimmed = isDimmed('link', l);
+        let dimmed = isLinkDimmed(l);
         let globalAlpha = dimmed ? 0.2 : 0.8;
 
         // Optimisation HVT : On rend très transparents les liens faibles
@@ -294,8 +353,6 @@ export function draw() {
             else globalAlpha = 0.4;
         }
 
-        const sId = l.source.id || l.source;
-        const tId = l.target.id || l.target;
         const key = pairKey(sId, tId);
         const total = pairCounts.get(key) || 1;
         const idx = pairIndex.get(key) || 0;
@@ -397,15 +454,8 @@ export function draw() {
     }
 
     // 3. NOEUDS
-    const sortedNodes = state.nodes.filter(n => n.type !== TYPES.PERSON).concat(state.nodes.filter(n => n.type === TYPES.PERSON));
-
-    for (const n of sortedNodes) {
-        if (activeFilter !== FILTERS.ALL) {
-            if (n.type === TYPES.PERSON && !activeNodes.has(n.id)) continue;
-        }
-        if (isFocus && !state.focusSet.has(n.id)) continue;
-        
-        const dimmed = isDimmed('node', n);
+    for (const n of renderableNodes) {
+        const dimmed = isNodeDimmed(n);
         let rad = nodeRadius(n); 
         let alpha = dimmed ? 0.4 : 1.0;
         let nodeColor = sanitizeNodeColor(n.color);
@@ -514,17 +564,14 @@ export function draw() {
         const candidates = [];
         const drawnBoxes = [];
 
-        for (const n of sortedNodes) {
-            if (activeFilter !== FILTERS.ALL) { if (n.type === TYPES.PERSON && !activeNodes.has(n.id)) continue; }
-            if (isFocus && !state.focusSet.has(n.id)) continue;
-            
+        for (const n of renderableNodes) {
             if (isHVT) {
                 if (topSet && !topSet.has(n.id)) continue;
                 if (!topSet && (n.hvtScore || 0) < 0.5) continue;
             }
 
             const rad = nodeRadius(n);
-            const dimmed = isDimmed('node', n);
+            const dimmed = isNodeDimmed(n);
             if (dimmed) continue;
             
             const isImportant = (n.type === TYPES.COMPANY || n.type === TYPES.GROUP);
@@ -556,7 +603,7 @@ export function draw() {
             const statusVisual = getPersonStatusVisual(n);
             const compactLabel = compactNodeLabel(n, p.scale);
             const label = statusVisual ? `${compactLabel} · ${statusVisual.label}` : compactLabel;
-            const metrics = ctx.measureText(label);
+            const metrics = getLabelMetrics(label, fontSize);
             const textW = metrics.width;
             const textH = fontSize * 1.18;
             const padding = Math.max(8, targetScreenFont * 0.72) / Math.max(p.scale, 0.22);
