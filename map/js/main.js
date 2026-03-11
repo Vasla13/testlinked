@@ -1,5 +1,5 @@
 import { state, applyMapBoardData, generateID, loadLocalState, saveLocalState, pushHistory, undo, getMapData } from './state.js';
-import { initEngine, updateTransform } from './engine.js'; 
+import { initEngine, updateTransform, centerMap, stepMapZoom } from './engine.js'; 
 import { renderGroupsList, initUI, selectItem } from './ui.js';
 import { customAlert, customConfirm, openSaveOptionsModal } from './ui-modals.js';
 import { gpsToPercentage } from './utils.js';
@@ -319,6 +319,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     const fileMerge = document.getElementById('fileMerge');
     const btnDataFileToggle = document.getElementById('btnDataFileToggle');
     const dataActionLaunchers = document.getElementById('dataActionLaunchers');
+    const btnZoomOut = document.getElementById('btnZoomOut');
+    const btnZoomIn = document.getElementById('btnZoomIn');
+    const btnResetView = document.getElementById('btnResetView');
+
+    if (btnZoomOut) {
+        btnZoomOut.onclick = () => stepMapZoom(-1);
+    }
+    if (btnZoomIn) {
+        btnZoomIn.onclick = () => stepMapZoom(1);
+    }
+    if (btnResetView) {
+        btnResetView.onclick = () => centerMap();
+    }
 
     const syncDataActionsUi = () => {
         if (!btnDataFileToggle) return;

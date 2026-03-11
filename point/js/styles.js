@@ -256,18 +256,18 @@ export function injectStyles() {
             left: auto;
             bottom: auto;
             transform: none;
-            width: min(224px, calc(100vw - 22px));
-            max-width: 224px;
+            width: min(148px, calc(100vw - 22px));
+            max-width: 148px;
             margin-top: 0;
-            padding: 8px;
-            border-radius: 18px;
+            padding: 6px;
+            border-radius: 16px;
             background:
                 linear-gradient(180deg, rgba(5, 11, 28, 0.96), rgba(3, 8, 20, 0.94)),
                 radial-gradient(circle at top right, rgba(115, 251, 247, 0.12), transparent 55%);
             border: 1px solid rgba(115, 251, 247, 0.22);
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 5px;
             z-index: 70;
             backdrop-filter: blur(14px);
             box-shadow:
@@ -295,7 +295,7 @@ export function injectStyles() {
 
         #hud .hud-btn {
             background: transparent; border: none; color: #8b9bb4; cursor: pointer;
-            display: flex; align-items: center; gap: 10px; font-family: var(--font-main);
+            display: flex; align-items: center; gap: 8px; font-family: var(--font-main);
             font-size: 0.88rem; text-transform: uppercase; font-weight: 700;
             width: 100%;
             padding: 0; transition: all 0.2s; border-radius: 4px;
@@ -306,10 +306,10 @@ export function injectStyles() {
         #hud .hud-btn.active { color: var(--accent-cyan); text-shadow: none; }
         #hud .hud-stack-btn,
         #hud .hud-mode-btn {
-            min-height: 50px;
-            padding: 10px 11px;
+            min-height: 48px;
+            padding: 7px 8px;
             border: 1px solid rgba(115, 251, 247, 0.14);
-            border-radius: 14px;
+            border-radius: 11px;
             background: linear-gradient(180deg, rgba(8, 16, 34, 0.9), rgba(4, 10, 22, 0.96));
             clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
             justify-content: flex-start;
@@ -339,10 +339,10 @@ export function injectStyles() {
             border-color: rgba(123, 144, 171, 0.14);
         }
         #hud .hud-btn-icon {
-            flex: 0 0 30px;
-            width: 30px;
-            height: 30px;
-            border-radius: 10px;
+            flex: 0 0 25px;
+            width: 25px;
+            height: 25px;
+            border-radius: 7px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
@@ -360,27 +360,34 @@ export function injectStyles() {
             min-width: 0;
         }
         #hud .hud-btn-label {
-            color: #d8eeff;
-            font-size: 0.8rem;
-            line-height: 1;
-            letter-spacing: 1.8px;
+            color: #7f96b0;
+            font-size: 0.48rem;
+            line-height: 1.05;
+            letter-spacing: 1.3px;
             text-transform: uppercase;
             font-weight: 700;
-            white-space: nowrap;
+            white-space: normal;
         }
         #hud .hud-btn-value {
             flex: 0 0 auto;
-            color: #89a5be;
-            font-size: 0.54rem;
-            line-height: 1.15;
-            letter-spacing: 1.8px;
+            color: #d8eeff;
+            font-size: 0.75rem;
+            line-height: 1;
+            letter-spacing: 1px;
             text-transform: uppercase;
-            font-weight: 700;
-            white-space: nowrap;
+            font-weight: 800;
+            white-space: normal;
             padding: 0;
             border-radius: 0;
             border: none;
             background: transparent;
+        }
+        #hud .hud-stack-btn.no-meta .hud-btn-label,
+        #hud .hud-mode-btn.no-meta .hud-btn-label {
+            color: #d8eeff;
+            font-size: 0.7rem;
+            line-height: 1;
+            letter-spacing: 1.1px;
         }
         #hud .hud-stack-btn.no-meta .hud-btn-copy,
         #hud .hud-mode-btn.no-meta .hud-btn-copy {
@@ -413,18 +420,50 @@ export function injectStyles() {
             border-color: rgba(115, 251, 247, 0.24);
         }
         #hud .hud-action-btn .hud-btn-label {
-            letter-spacing: 2px;
+            letter-spacing: 1.6px;
+        }
+        #hud .hud-action-btn .hud-btn-value {
+            font-size: 0.82rem;
         }
         #hud .hud-filter-card {
             display: flex;
             flex-direction: column;
             gap: 4px;
-            padding: 8px;
+            padding: 6px;
             border: 1px solid rgba(115, 251, 247, 0.16);
             border-radius: 16px;
             background: linear-gradient(180deg, rgba(8, 16, 34, 0.9), rgba(4, 10, 22, 0.96));
             clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
             box-shadow: inset 0 0 0 1px rgba(115, 251, 247, 0.03);
+        }
+        #hud .hud-filter-drawer {
+            overflow: hidden;
+        }
+        #hud .hud-filter-trigger {
+            width: 100%;
+            position: relative;
+        }
+        #hud .hud-filter-trigger::after {
+            content: '▾';
+            color: #7f96b0;
+            font-size: 0.62rem;
+            line-height: 1;
+            margin-left: auto;
+            transition: transform 0.18s ease, color 0.18s ease;
+        }
+        #hud .hud-filter-card.expanded .hud-filter-trigger::after {
+            transform: rotate(180deg);
+            color: #d8eeff;
+        }
+        #hud .hud-filter-options {
+            display: none;
+            flex-direction: column;
+            gap: 4px;
+            padding-top: 5px;
+            border-top: 1px solid rgba(115, 251, 247, 0.1);
+        }
+        #hud .hud-filter-card.expanded .hud-filter-options {
+            display: flex;
         }
         #hud .hud-filter-title {
             display: flex;
@@ -456,17 +495,17 @@ export function injectStyles() {
             width: 100%;
             display: flex;
             align-items: center;
-            gap: 10px;
-            padding: 8px 9px;
+            gap: 7px;
+            padding: 7px;
             border: 1px solid transparent;
-            border-radius: 12px;
+            border-radius: 10px;
             background: transparent;
             color: #93a6bf;
             cursor: pointer;
             font-family: var(--font-main);
-            font-size: 0.72rem;
+            font-size: 0.6rem;
             font-weight: 700;
-            letter-spacing: 1.4px;
+            letter-spacing: 1px;
             text-transform: uppercase;
             transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
         }
@@ -481,9 +520,9 @@ export function injectStyles() {
             box-shadow: inset 0 0 0 1px rgba(115, 251, 247, 0.12);
         }
         #hud .hud-filter-option-icon {
-            flex: 0 0 18px;
-            width: 18px;
-            height: 18px;
+            flex: 0 0 15px;
+            width: 15px;
+            height: 15px;
         }
         #hud .hud-filter-option-label {
             flex: 1 1 auto;
@@ -491,10 +530,10 @@ export function injectStyles() {
             text-align: left;
         }
         #hud .hud-settings-btn .hud-btn-icon {
-            flex-basis: 34px;
-            width: 34px;
-            height: 34px;
-            border-radius: 12px;
+            flex-basis: 26px;
+            width: 26px;
+            height: 26px;
+            border-radius: 7px;
             background: rgba(115, 251, 247, 0.1);
             border-color: rgba(115, 251, 247, 0.22);
         }
@@ -691,21 +730,60 @@ export function injectStyles() {
         /* --- PANNEAU REGLAGES (HAUT GAUCHE) --- */
         #settings-panel {
             position: fixed; top: 20px; left: 20px;
-            width: 380px;
+            width: min(430px, calc(100vw - 28px));
+            max-height: min(82vh, 820px);
             background: rgba(5, 7, 20, 0.98);
             border: 1px solid var(--accent-cyan); border-radius: 12px;
-            padding: 20px; z-index: 10001;
+            padding: 16px; z-index: 10001;
             display: none;
             box-shadow: 0 0 50px rgba(0,0,0,0.9);
             backdrop-filter: blur(15px);
+            overflow: auto;
         }
-        .settings-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; }
+        #settings-panel.dragging { cursor: grabbing; user-select: none; }
+        .settings-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 16px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            padding-bottom: 10px;
+            cursor: grab;
+        }
         .settings-header h3 { margin: 0; color: var(--accent-cyan); text-transform: uppercase; font-size: 1rem; letter-spacing: 1px; }
-        .settings-close { cursor: pointer; color: #fff; font-weight: bold; font-size: 1.2rem; }
-        .settings-close:hover { color: #ff5555; }
+        .settings-header-copy {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .settings-header-sub {
+            color: #88a2bc;
+            font-size: 0.68rem;
+            line-height: 1.4;
+            letter-spacing: 1.1px;
+            text-transform: uppercase;
+        }
+        .settings-close {
+            appearance: none;
+            min-width: 88px;
+            min-height: 34px;
+            padding: 7px 12px;
+            border: 1px solid rgba(102, 243, 255, 0.18);
+            border-radius: 10px;
+            background: rgba(4, 11, 26, 0.86);
+            color: #dff9ff;
+            font-family: var(--font-main);
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            cursor: pointer;
+        }
+        .settings-close:hover { color: #ff5555; border-color: rgba(255, 85, 85, 0.3); }
 
         .setting-row { margin-bottom: 15px; }
-        .setting-row label { display: block; font-size: 0.8rem; color: #aaa; margin-bottom: 5px; text-transform: uppercase; font-weight: 600; }
+        .setting-row label { display: block; font-size: 0.72rem; color: #aaa; margin-bottom: 7px; text-transform: uppercase; font-weight: 600; letter-spacing: 1.2px; }
         .setting-row input[type="range"] { width: 100%; cursor: pointer; accent-color: var(--accent-cyan); margin-top: 5px; }
         .setting-val { float: right; color: var(--accent-cyan); font-family: monospace; font-size: 0.9rem; }
 
@@ -2056,12 +2134,37 @@ export function injectStyles() {
             min-width: 132px;
         }
 
-        .settings-mode-card {
+        .settings-hero {
             display: flex;
-            align-items: center;
-            justify-content: space-between;
+            flex-direction: column;
+            gap: 4px;
+            margin-bottom: 12px;
+        }
+        .settings-hero-title {
+            color: var(--text-light);
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 1.7px;
+            text-transform: uppercase;
+        }
+        .settings-hero-sub {
+            color: #8aa4bc;
+            font-size: 0.7rem;
+            line-height: 1.45;
+        }
+        .settings-quick-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 10px;
-            margin-bottom: 15px;
+            margin-bottom: 16px;
+        }
+        .settings-mode-card,
+        .settings-quick-card {
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            justify-content: flex-start;
+            gap: 10px;
             padding: 12px;
             border: 1px solid rgba(102, 243, 255, 0.18);
             border-radius: 12px;
@@ -2073,6 +2176,29 @@ export function injectStyles() {
             gap: 10px;
             color: var(--text-light);
             font-weight: 700;
+        }
+        .settings-quick-card {
+            gap: 8px;
+        }
+        .settings-quick-label {
+            color: #9eb8d4;
+            font-size: 0.68rem;
+            letter-spacing: 1.4px;
+            text-transform: uppercase;
+        }
+        .settings-quick-value {
+            color: var(--accent-cyan);
+            font-size: 1.12rem;
+            line-height: 1;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+        .settings-quick-help {
+            color: #6f8ea6;
+            font-size: 0.64rem;
+            letter-spacing: 1.1px;
+            text-transform: uppercase;
         }
         .settings-mode-icon {
             width: 22px;
@@ -2165,6 +2291,47 @@ export function injectStyles() {
             margin-top: 20px;
             padding-top: 12px;
             border-top: 1px solid rgba(102, 243, 255, 0.12);
+        }
+        .settings-advanced-shell {
+            margin: 0;
+            border: 1px solid rgba(102, 243, 255, 0.14);
+            border-radius: 14px;
+            background: rgba(3, 10, 24, 0.6);
+            overflow: hidden;
+        }
+        .settings-advanced-toggle {
+            list-style: none;
+            cursor: pointer;
+            padding: 12px 14px;
+            color: var(--text-light);
+            font-size: 0.74rem;
+            font-weight: 700;
+            letter-spacing: 1.7px;
+            text-transform: uppercase;
+            user-select: none;
+        }
+        .settings-advanced-toggle::-webkit-details-marker {
+            display: none;
+        }
+        .settings-advanced-toggle::after {
+            content: '▾';
+            float: right;
+            color: #8aa4bc;
+            transition: transform 0.18s ease;
+        }
+        .settings-advanced-shell[open] .settings-advanced-toggle::after {
+            transform: rotate(180deg);
+        }
+        .settings-advanced-body {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px 12px;
+            padding: 0 14px 14px;
+            border-top: 1px solid rgba(102, 243, 255, 0.1);
+        }
+        .settings-advanced-body .setting-row {
+            margin-bottom: 0;
+            padding-top: 10px;
         }
         .settings-reset-btn {
             width: 100%;
@@ -2330,28 +2497,32 @@ export function injectStyles() {
 
         .editor-panel-layout {
             display: grid;
-            grid-template-columns: 72px minmax(0, 1fr);
-            gap: 10px;
-            align-items: stretch;
+            grid-template-columns: 52px minmax(0, 1fr);
+            gap: 8px;
+            align-items: start;
         }
         .editor-side-rail {
             display: flex;
             flex-direction: column;
-            justify-content: space-between;
-            gap: 10px;
+            gap: 8px;
+            align-self: start;
         }
         .editor-side-group {
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 6px;
+        }
+        .editor-side-group-bottom {
+            margin-top: 2px;
         }
         .editor-side-group .mini-btn {
             width: 100%;
-            min-height: 38px;
-            font-size: 0.68rem;
+            min-height: 34px;
+            padding: 6px 4px;
+            font-size: 0.58rem;
             line-height: 1.15;
             font-family: var(--font-main);
-            letter-spacing: 1.3px;
+            letter-spacing: 1.15px;
             text-transform: uppercase;
             background: linear-gradient(90deg, rgba(16, 34, 52, 0.9), rgba(8, 17, 30, 0.92));
             color: var(--accent-cyan);
@@ -2365,32 +2536,174 @@ export function injectStyles() {
         }
         .editor-main-card {
             min-width: 0;
-            padding: 10px;
+            padding: 8px;
             border: 1px solid rgba(102, 243, 255, 0.14);
             border-radius: 14px;
             background: linear-gradient(180deg, rgba(5, 12, 28, 0.92), rgba(3, 9, 22, 0.84));
             box-shadow: inset 0 0 0 1px rgba(102, 243, 255, 0.04);
+            overflow: hidden;
         }
         .editor-sheet {
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 8px;
             color: var(--text-main);
         }
         .editor-sheet-head {
-            grid-template-columns: minmax(0, 1fr) auto auto auto;
-            align-items: center;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
             gap: 6px;
-            padding-bottom: 8px;
-            border-bottom: 1px solid rgba(102, 243, 255, 0.14);
+            margin: -8px -8px 2px;
+            padding: 10px 12px 8px;
+            border-bottom: 1px solid rgba(102, 243, 255, 0.18);
+            background: linear-gradient(90deg, rgba(102, 243, 255, 0.16), rgba(7, 18, 39, 0.96) 28%, rgba(3, 9, 24, 0.98));
+            box-shadow: inset 0 1px 0 rgba(140, 250, 255, 0.08);
+        }
+        .editor-sheet-head-main {
+            display: flex;
+            align-items: stretch;
+            min-width: 0;
+        }
+        .editor-sheet-identity-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            width: 100%;
+            min-width: 0;
+            flex-wrap: wrap;
+        }
+        .editor-sheet-title-block {
+            min-width: 0;
+            flex: 1 1 280px;
         }
         .editor-sheet-name {
             font-family: var(--font-main);
-            font-size: clamp(1.04rem, 1.5vw, 1.28rem);
-            line-height: 0.98;
+            font-size: clamp(1.18rem, 1.65vw, 1.46rem);
+            line-height: 1;
             color: var(--text-light);
             letter-spacing: 0.06em;
             text-transform: uppercase;
+        }
+        .editor-sheet-name-input {
+            width: 100%;
+            padding: 2px 0;
+            border: none;
+            background: transparent;
+            box-shadow: none;
+            outline: none;
+        }
+        .editor-sheet-name-input::placeholder {
+            color: #6c84a0;
+        }
+        .editor-sheet-topbar {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+            padding-top: 0;
+        }
+        .editor-type-select,
+        .editor-inline-phone,
+        .editor-color-pill {
+            min-height: 38px;
+            border: 1px solid rgba(102, 243, 255, 0.2);
+            border-radius: 11px;
+            background: rgba(4, 11, 27, 0.88);
+            box-shadow: inset 0 0 0 1px rgba(102, 243, 255, 0.04);
+        }
+        .editor-type-select {
+            flex: 0 0 116px;
+            width: 116px;
+            min-width: 116px;
+            padding: 7px 28px 7px 10px;
+            color: var(--accent-cyan);
+            font-family: var(--font-main);
+            font-size: 0.68rem;
+            letter-spacing: 1.15px;
+            text-transform: uppercase;
+            cursor: pointer;
+        }
+        .editor-type-select:focus {
+            outline: none;
+            border-color: rgba(102, 243, 255, 0.38);
+            box-shadow: 0 0 0 3px rgba(102, 243, 255, 0.08);
+        }
+        .editor-inline-phone,
+        .editor-color-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 6px 9px;
+        }
+        .editor-inline-phone {
+            flex: 0 0 100px;
+            min-width: 100px;
+        }
+        .editor-inline-phone-head {
+            flex: 0 0 96px;
+            min-width: 96px;
+        }
+        .editor-inline-label {
+            color: #7f9ab7;
+            font-size: 0.56rem;
+            letter-spacing: 1.2px;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+        .editor-inline-phone-head .editor-inline-label,
+        .editor-color-pill-head .editor-inline-label {
+            display: none;
+        }
+        .editor-inline-phone input {
+            min-width: 0;
+            width: 100%;
+            border: none;
+            background: transparent;
+            color: var(--text-light);
+            font-family: var(--font-main);
+            font-size: 0.84rem;
+            line-height: 1;
+            padding: 0;
+            box-shadow: none;
+            outline: none;
+        }
+        .editor-inline-phone input::placeholder {
+            color: #637996;
+        }
+        .editor-status-inline {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            flex-wrap: wrap;
+        }
+        .editor-color-pill {
+            margin-left: auto;
+            flex: 0 0 auto;
+        }
+        .editor-color-pill-head {
+            margin-left: 0;
+            width: 40px;
+            min-width: 40px;
+            padding: 4px;
+            justify-content: center;
+        }
+        .editor-color-input-inline {
+            width: 100%;
+            min-width: 0;
+            height: 30px;
+            padding: 0;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+        }
+        .editor-color-input-inline::-webkit-color-swatch-wrapper {
+            padding: 0;
+        }
+        .editor-color-input-inline::-webkit-color-swatch {
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            border-radius: 9px;
         }
         .editor-sheet-type {
             min-width: auto;
@@ -2462,15 +2775,15 @@ export function injectStyles() {
             flex-wrap: wrap;
         }
         .editor-status-btn {
-            min-height: 30px;
-            padding: 6px 10px;
+            min-height: 24px;
+            padding: 3px 7px;
             border: 1px solid rgba(102, 243, 255, 0.14);
             border-radius: 999px;
             background: rgba(2, 8, 20, 0.92);
             color: #9bb0c7;
             font-family: var(--font-main);
-            font-size: 0.66rem;
-            letter-spacing: 1.1px;
+            font-size: 0.5rem;
+            letter-spacing: 0.8px;
             text-transform: uppercase;
             clip-path: none;
             box-shadow: none;
@@ -2532,21 +2845,21 @@ export function injectStyles() {
         .editor-sheet-note {
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 5px;
             border-bottom: none;
             margin: 0;
         }
         .editor-section-label {
             color: #8ba4c0;
             letter-spacing: 1.3px;
-            font-size: 0.62rem;
+            font-size: 0.58rem;
             text-transform: uppercase;
         }
         .editor-sheet-note textarea {
-            min-height: 60px;
+            min-height: 52px;
             border: 1px solid rgba(102, 243, 255, 0.16);
             border-radius: 8px;
-            padding: 8px 10px;
+            padding: 7px 9px;
             background: rgba(2, 8, 20, 0.92);
             color: var(--text-main);
             font-family: var(--font-main);
@@ -2560,14 +2873,14 @@ export function injectStyles() {
         .editor-meta-strip {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 8px;
+            gap: 7px;
         }
         .editor-meta-pill {
             min-width: 0;
             display: flex;
             flex-direction: column;
             gap: 4px;
-            padding: 8px 10px;
+            padding: 7px 8px;
             border: 1px solid rgba(102, 243, 255, 0.12);
             border-radius: 9px;
             background: rgba(4, 11, 27, 0.68);
@@ -2579,10 +2892,10 @@ export function injectStyles() {
             text-transform: uppercase;
         }
         .editor-meta-pill input {
-            min-height: 34px;
+            min-height: 32px;
             border: 1px solid rgba(102, 243, 255, 0.14);
             border-radius: 8px;
-            padding: 7px 9px;
+            padding: 6px 8px;
             background: rgba(2, 8, 20, 0.92);
             color: var(--text-light);
             font-family: var(--font-main);
@@ -2613,23 +2926,23 @@ export function injectStyles() {
             letter-spacing: 1.2px;
         }
         #chipsLinks {
-            min-height: 96px;
-            max-height: 228px;
+            min-height: 80px;
+            max-height: 196px;
             overflow-y: auto;
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 7px;
             border: 1px dashed rgba(102, 243, 255, 0.22);
             border-radius: 10px;
             background: rgba(3, 10, 24, 0.74);
-            padding: 8px;
+            padding: 7px;
             margin-bottom: 0;
         }
         .editor-link-strip {
             display: flex;
             flex-direction: column;
-            gap: 6px;
-            padding: 8px 10px;
+            gap: 5px;
+            padding: 7px 8px;
             border: 1px solid rgba(102, 243, 255, 0.12);
             border-radius: 10px;
             background: rgba(4, 11, 27, 0.66);
@@ -2704,18 +3017,21 @@ export function injectStyles() {
             color: #ff9aa7;
         }
         .editor-advanced {
-            margin-top: 4px;
+            margin-top: 2px;
             border: 1px solid rgba(102, 243, 255, 0.14);
             border-radius: 12px;
             background: linear-gradient(180deg, rgba(5, 12, 28, 0.94), rgba(3, 9, 22, 0.86));
-            padding: 8px;
+            padding: 6px;
+        }
+        .editor-advanced-open {
+            display: block;
         }
         .editor-adv-section {
             display: flex;
             flex-direction: column;
-            gap: 6px;
-            margin-bottom: 8px;
-            padding: 8px;
+            gap: 5px;
+            margin-bottom: 0;
+            padding: 7px;
             border: 1px solid rgba(102, 243, 255, 0.12);
             border-radius: 10px;
             background: rgba(3, 10, 24, 0.54);
@@ -2758,17 +3074,15 @@ export function injectStyles() {
         }
         .editor-adv-row {
             gap: 8px;
-            margin-bottom: 8px;
-        }
-        .editor-adv-row-utility {
-            justify-content: flex-end;
             margin-bottom: 0;
         }
         .editor-merge-row {
-            flex-wrap: wrap;
+            display: flex;
+            align-items: center;
+            flex-wrap: nowrap;
         }
         .editor-merge-row .flex-grow-input {
-            min-width: 180px;
+            min-width: 0;
         }
         .editor-adv-links {
             gap: 6px;
@@ -2777,6 +3091,17 @@ export function injectStyles() {
         .editor-link-composer {
             display: flex;
             gap: 8px;
+            align-items: center;
+        }
+        .editor-link-composer-primary {
+            align-items: stretch;
+        }
+        .editor-link-composer-primary .editor-autocomplete-field {
+            width: 100%;
+        }
+        .editor-link-composer-secondary {
+            display: grid;
+            grid-template-columns: 118px minmax(0, 1fr) auto;
             align-items: center;
         }
         .editor-autocomplete-field {
@@ -2850,22 +3175,31 @@ export function injectStyles() {
         }
         .editor-link-hint {
             color: var(--text-muted);
-            font-size: 0.72rem;
-            line-height: 1.4;
+            font-size: 0.68rem;
+            line-height: 1.35;
         }
         .flex-row-force {
             gap: 8px !important;
         }
         .compact-select {
-            min-height: 42px !important;
+            min-height: 36px !important;
             font-size: 0.72rem !important;
-            padding: 8px 10px !important;
+            padding: 6px 9px !important;
         }
         .editor-compact-select {
             width: 112px;
         }
+        .editor-link-kind-select {
+            min-width: 0;
+        }
         .editor-name-input {
             max-width: 220px;
+        }
+        .editor-inline-action {
+            min-height: 30px;
+            padding: 5px 9px;
+            font-size: 0.6rem;
+            white-space: nowrap;
         }
         .editor-color-input {
             height: 38px;
@@ -2883,10 +3217,10 @@ export function injectStyles() {
             left: auto;
             bottom: auto;
             transform: none;
-            width: min(224px, calc(100vw - 20px));
-            max-width: 224px;
+            width: min(148px, calc(100vw - 20px));
+            max-width: 148px;
             margin-top: 0;
-            padding: 8px;
+            padding: 6px;
             background: rgba(5, 12, 28, 0.82);
             border: 1px solid rgba(102, 243, 255, 0.18);
             border-radius: 14px;
@@ -2894,7 +3228,7 @@ export function injectStyles() {
             flex-direction: column;
             align-items: stretch;
             justify-content: flex-start;
-            gap: 6px;
+            gap: 5px;
             box-shadow: inset 0 0 0 1px rgba(102, 243, 255, 0.04);
         }
         .hud-panel-title {
@@ -2908,28 +3242,31 @@ export function injectStyles() {
         #hud .hud-stack-btn,
         #hud .hud-mode-btn {
             width: 100%;
-            min-height: 46px;
+            min-height: 48px;
             justify-content: flex-start;
             border-radius: 10px;
-            padding: 8px 9px;
+            padding: 7px 8px;
             gap: 8px;
         }
         #hud .hud-btn-icon {
-            flex-basis: 26px;
-            width: 26px;
-            height: 26px;
-            border-radius: 8px;
+            flex-basis: 25px;
+            width: 25px;
+            height: 25px;
+            border-radius: 7px;
         }
         #hud .hud-btn-label {
-            color: var(--text-light);
-            font-size: 0.74rem;
-            letter-spacing: 1.5px;
+            color: #7f96b0;
+            font-size: 0.48rem;
+            line-height: 1.05;
+            letter-spacing: 1.3px;
         }
         #hud .hud-btn-value {
             flex: 0 0 auto;
-            font-size: 0.5rem;
+            color: var(--text-light);
+            font-size: 0.75rem;
             line-height: 1;
-            letter-spacing: 1.6px;
+            letter-spacing: 1px;
+            font-weight: 800;
             padding: 0;
             border-radius: 0;
             border: none;
@@ -2940,26 +3277,26 @@ export function injectStyles() {
             flex-direction: column;
             align-items: flex-start;
             justify-content: center;
-            gap: 2px;
+            gap: 3px;
         }
         #hud .hud-filter-card {
-            padding: 7px;
-            gap: 3px;
+            padding: 6px;
+            gap: 4px;
         }
         #hud .hud-filter-title {
             padding: 1px 1px 4px;
             font-size: 0.5rem;
         }
         #hud .hud-filter-option {
-            padding: 7px 8px;
-            font-size: 0.68rem;
-            letter-spacing: 1.3px;
+            padding: 7px;
+            font-size: 0.6rem;
+            letter-spacing: 1px;
         }
         #hud .hud-settings-btn .hud-btn-icon {
-            flex-basis: 30px;
-            width: 30px;
-            height: 30px;
-            border-radius: 10px;
+            flex-basis: 26px;
+            width: 26px;
+            height: 26px;
+            border-radius: 7px;
             background: rgba(102, 243, 255, 0.12);
             border-color: rgba(102, 243, 255, 0.22);
         }
@@ -3059,25 +3396,25 @@ export function injectStyles() {
             #hud {
                 top: max(10px, env(safe-area-inset-top));
                 right: max(10px, env(safe-area-inset-right));
-                width: min(206px, calc(100vw - 16px));
-                max-width: 206px;
+                width: min(148px, calc(100vw - 16px));
+                max-width: 148px;
                 padding: 6px;
                 gap: 5px;
             }
             #hud .hud-stack-btn,
             #hud .hud-mode-btn {
-                min-height: 42px;
-                padding: 7px 8px;
+                min-height: 45px;
+                padding: 7px;
             }
             #hud .hud-btn-label {
-                font-size: 0.68rem;
+                font-size: 0.45rem;
             }
             #hud .hud-btn-value {
-                font-size: 0.48rem;
+                font-size: 0.7rem;
             }
             #hud .hud-filter-option {
-                padding: 6px 7px;
-                font-size: 0.64rem;
+                padding: 5px;
+                font-size: 0.58rem;
             }
             #hud .hud-filter-title {
                 font-size: 0.48rem;
@@ -3098,23 +3435,23 @@ export function injectStyles() {
 
         @media (min-width: 1024px) and (min-height: 821px) and (max-width: 1439px) {
             #hud {
-                width: min(218px, calc(100vw - 18px));
-                max-width: 218px;
+                width: min(152px, calc(100vw - 18px));
+                max-width: 152px;
             }
         }
 
         @media (min-width: 1920px) {
             #hud {
-                width: min(236px, calc(100vw - 28px));
-                max-width: 236px;
+                width: min(160px, calc(100vw - 28px));
+                max-width: 160px;
                 padding: 9px;
             }
             #hud .hud-stack-btn,
             #hud .hud-mode-btn {
-                min-height: 52px;
+                min-height: 50px;
             }
             #hud .hud-filter-option {
-                padding: 9px 10px;
+                padding: 7px;
             }
             .editor-sheet-name {
                 font-size: 1.22rem;
@@ -3129,8 +3466,8 @@ export function injectStyles() {
 
         @media (min-width: 2560px), (min-width: 1920px) and (min-aspect-ratio: 21/9) {
             #hud {
-                width: min(244px, calc(100vw - 32px));
-                max-width: 244px;
+                width: min(165px, calc(100vw - 32px));
+                max-width: 165px;
             }
             .editor-sheet-name {
                 font-size: 1.3rem;
@@ -3213,6 +3550,19 @@ export function injectStyles() {
                 max-height: none;
                 overflow: visible;
             }
+            #settings-panel {
+                width: min(100vw - 18px, 430px);
+                max-height: 86vh;
+                padding: 14px;
+            }
+            .settings-quick-grid,
+            .settings-advanced-body {
+                grid-template-columns: 1fr;
+            }
+            .settings-close {
+                min-width: 0;
+                width: auto;
+            }
             #hud {
                 margin-top: 8px;
                 padding: 8px;
@@ -3231,8 +3581,28 @@ export function injectStyles() {
                 grid-template-columns: 1fr;
             }
             .editor-sheet-head {
-                grid-template-columns: minmax(0, 1fr);
                 align-items: start;
+            }
+            .editor-sheet-head-main,
+            .editor-sheet-identity-row,
+            .editor-sheet-topbar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .editor-sheet-head-main {
+                gap: 6px;
+            }
+            .editor-type-select,
+            .editor-inline-phone {
+                width: 100%;
+                min-width: 0;
+            }
+            .editor-color-pill {
+                margin-left: 0;
+                justify-content: space-between;
+            }
+            .editor-status-inline {
+                width: 100%;
             }
             .editor-status-strip {
                 align-items: flex-start;
@@ -3247,7 +3617,8 @@ export function injectStyles() {
                 align-items: start;
             }
             .editor-adv-primary-row,
-            .editor-adv-row-utility,
+            .editor-merge-row,
+            .editor-link-composer-secondary,
             .editor-link-composer {
                 display: flex;
                 flex-direction: column;
@@ -3286,7 +3657,7 @@ export function injectStyles() {
                 right: max(12px, env(safe-area-inset-right));
                 left: auto;
                 bottom: auto;
-                width: min(252px, calc(100vw - 18px));
+                width: min(158px, calc(100vw - 18px));
                 margin-top: 0;
                 justify-content: flex-start;
                 flex-wrap: nowrap;

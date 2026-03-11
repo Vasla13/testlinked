@@ -2863,6 +2863,8 @@ export function initUI() {
 
     window.zoomToNode = zoomToNode;
     window.recenterGraphView = recenterGraphView;
+    window.graphZoomIn = () => stepGraphZoom(1);
+    window.graphZoomOut = () => stepGraphZoom(-1);
     window.updateHvtPanel = updateHvtPanel;
 }
 
@@ -4348,27 +4350,23 @@ function setupHudButtons() {
         { value: 2, short: 'Tous', title: 'Toujours afficher tous les noms' },
         { value: 0, short: 'Off', title: 'Masquer tous les noms' }
     ];
-    const filterModes = [
+    const modeOptions = [
         { value: FILTERS.ALL, short: 'Global', icon: 'global', title: 'Voir tout le reseau' },
         { value: FILTERS.BUSINESS, short: 'Business', icon: 'business', title: 'Favorise les liens business' },
         { value: FILTERS.ILLEGAL, short: 'Conflit', icon: 'conflict', title: 'Favorise les tensions et conflits' },
         { value: FILTERS.SOCIAL, short: 'Social', icon: 'social', title: 'Favorise les liens sociaux' }
     ];
+    let modeDrawerOpen = false;
 
     const iconMarkup = {
         labels: `
             <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v11a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5zM7 8h10v2H7zm0 4h6v2H7z"/>
+                <path d="M6 4h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3v-1.2c0-2.1-1.8-3.8-4-3.8s-4 1.7-4 3.8V20H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm6 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6zm0 10c-1.65 0-3 .93-3 2.08V19h6v-.92C15 17.93 13.65 17 12 17z"/>
             </svg>
         `,
         links: `
             <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M10.59 13.41a1.99 1.99 0 0 0 2.82 0l3.59-3.59a2 2 0 1 0-2.83-2.82l-1.17 1.17-1.41-1.41 1.17-1.17a4 4 0 0 1 5.66 5.66l-3.59 3.59a4 4 0 0 1-5.66 0l-.59-.59 1.41-1.41zm2.82-2.82-2.82 2.82-1.41-1.41 2.82-2.82zm-4.24 6.24a4 4 0 0 1-5.66 0 4 4 0 0 1 0-5.66l3.59-3.59a4 4 0 0 1 5.66 0l.59.59-1.41 1.41-.59-.59a2 2 0 1 0-2.83 2.82l-3.59 3.59a2 2 0 1 0 2.83 2.82l1.17-1.17 1.41 1.41z"/>
-            </svg>
-        `,
-        filter: `
-            <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M4 5h16l-6.5 7.43V19l-3-1.6v-4.97z"/>
+                <path d="M8.7 15.3a3 3 0 0 1 0-4.24l2.12-2.12 1.42 1.42-2.12 2.12a1 1 0 0 0 1.42 1.42l2.12-2.12 1.42 1.42-2.12 2.12a3 3 0 0 1-4.24 0zm6.6-6.6a3 3 0 0 1 0 4.24l-2.12 2.12-1.42-1.42 2.12-2.12a1 1 0 1 0-1.42-1.42l-2.12 2.12-1.42-1.42 2.12-2.12a3 3 0 0 1 4.24 0z"/>
             </svg>
         `,
         recenter: `
@@ -4388,7 +4386,7 @@ function setupHudButtons() {
         `,
         global: `
             <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm6.92 9h-3.04a15.7 15.7 0 0 0-1.21-5.02A8.03 8.03 0 0 1 18.92 11zm-6.92 9c-.78 0-2.18-2.04-2.63-5h5.26c-.45 2.96-1.85 5-2.63 5zm-2.88-7a13.9 13.9 0 0 1 0-2h5.76a13.9 13.9 0 0 1 0 2zm.25-4c.45-2.96 1.85-5 2.63-5s2.18 2.04 2.63 5zM9.33 5.98A15.7 15.7 0 0 0 8.12 11H5.08a8.03 8.03 0 0 1 4.25-5.02zM5.08 13h3.04a15.7 15.7 0 0 0 1.21 5.02A8.03 8.03 0 0 1 5.08 13zm9.59 5.02A15.7 15.7 0 0 0 15.88 13h3.04a8.03 8.03 0 0 1-4.25 5.02z"/>
+                <path d="M12 2c5.52 0 10 4.48 10 10s-4.48 10-10 10S2 17.52 2 12 6.48 2 12 2zm6.93 9h-3.06a15.4 15.4 0 0 0-1.18-4.96A8.03 8.03 0 0 1 18.93 11zM12 4c.72 0 2.01 1.87 2.5 5h-5C9.99 5.87 11.28 4 12 4zm-4.5 7a13.38 13.38 0 0 0 0 2h5v-2zm0 4a15.4 15.4 0 0 0 1.18 4.96A8.03 8.03 0 0 1 5.07 15zm4.5 5c-.72 0-2.01-1.87-2.5-5h5c-.49 3.13-1.78 5-2.5 5zm2.69-.04A15.4 15.4 0 0 0 15.87 15h3.06a8.03 8.03 0 0 1-4.24 4.96zM15 13h-6v-2h6a13.38 13.38 0 0 1 0 2zM8.13 9H5.07a8.03 8.03 0 0 1 4.24-4.96A15.4 15.4 0 0 0 8.13 9z"/>
             </svg>
         `,
         business: `
@@ -4404,6 +4402,16 @@ function setupHudButtons() {
         social: `
             <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M12 21s-6.72-4.34-9.19-8.08C.63 9.6 2.2 5.5 6.12 5.08 8.1 4.87 9.69 5.78 10.7 7.2 11.71 5.78 13.3 4.87 15.28 5.08c3.92.42 5.49 4.52 3.31 7.84C18.72 16.66 12 21 12 21z"/>
+            </svg>
+        `,
+        zoomIn: `
+            <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M10 4a6 6 0 1 1 0 12 6 6 0 0 1 0-12zm0 2a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm8.71 11.29L16.4 15l-1.4 1.4 2.3 2.31zM9 9V7h2v2h2v2h-2v2H9v-2H7V9z"/>
+            </svg>
+        `,
+        zoomOut: `
+            <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M10 4a6 6 0 1 1 0 12 6 6 0 0 1 0-12zm0 2a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm8.71 11.29L16.4 15l-1.4 1.4 2.3 2.31zM7 9h6v2H7z"/>
             </svg>
         `
     };
@@ -4439,9 +4447,21 @@ function setupHudButtons() {
     btnRecenter.onclick = () => recenterGraphView();
     hud.appendChild(btnRecenter);
 
+    const btnZoomOut = createHudButton('hud-btn hud-stack-btn hud-action-btn');
+    setHudButtonContent(btnZoomOut, 'zoomOut', 'Zoom', '-');
+    btnZoomOut.title = 'Zoom arriere';
+    btnZoomOut.onclick = () => stepGraphZoom(-1);
+    hud.appendChild(btnZoomOut);
+
+    const btnZoomIn = createHudButton('hud-btn hud-stack-btn hud-action-btn');
+    setHudButtonContent(btnZoomIn, 'zoomIn', 'Zoom', '+');
+    btnZoomIn.title = 'Zoom avant';
+    btnZoomIn.onclick = () => stepGraphZoom(1);
+    hud.appendChild(btnZoomIn);
+
     const btnLinkTypes = createHudButton('hud-btn hud-stack-btn');
     const updateLinkTypesBtn = () => {
-        setHudButtonContent(btnLinkTypes, 'links', 'Liens', state.showLinkTypes ? 'Types' : 'Base');
+        setHudButtonContent(btnLinkTypes, 'links', 'Liens', state.showLinkTypes ? 'Types' : 'Normal');
         btnLinkTypes.classList.toggle('active', !!state.showLinkTypes);
     };
     updateLinkTypesBtn();
@@ -4455,7 +4475,7 @@ function setupHudButtons() {
     const btnLabels = createHudButton('hud-btn hud-stack-btn');
     const updateLabelBtn = () => {
         const current = labelModes.find((entry) => entry.value === state.labelMode) || labelModes[0];
-        setHudButtonContent(btnLabels, 'labels', current.short, 'Noms');
+        setHudButtonContent(btnLabels, 'labels', 'Noms', current.short);
         btnLabels.title = current.title;
         btnLabels.classList.toggle('active', state.labelMode !== 1);
         btnLabels.classList.toggle('is-off', state.labelMode === 0);
@@ -4472,16 +4492,37 @@ function setupHudButtons() {
     hud.appendChild(btnLabels);
 
     const filterCard = document.createElement('div');
-    filterCard.className = 'hud-filter-card';
+    filterCard.className = 'hud-filter-card hud-filter-drawer';
+    const btnModeFilter = createHudButton('hud-btn hud-stack-btn hud-filter-trigger');
+    btnModeFilter.type = 'button';
+    btnModeFilter.onclick = (event) => {
+        event.stopPropagation();
+        modeDrawerOpen = !modeDrawerOpen;
+        updateFilterControls();
+    };
+    filterCard.appendChild(btnModeFilter);
+
+    const filterOptionsWrap = document.createElement('div');
+    filterOptionsWrap.className = 'hud-filter-options';
+    filterOptionsWrap.addEventListener('click', (event) => event.stopPropagation());
+
     const filterOptionButtons = [];
-    const updateFilterButtons = () => {
+    const updateFilterControls = () => {
+        const selectedEntry = modeOptions.find((entry) => entry.value === state.activeFilter) || modeOptions[0];
+
+        setHudButtonContent(btnModeFilter, selectedEntry.icon, 'Mode', selectedEntry.short);
+        btnModeFilter.title = selectedEntry.title;
+        btnModeFilter.classList.toggle('active', state.activeFilter !== FILTERS.ALL);
+        btnModeFilter.setAttribute('aria-expanded', modeDrawerOpen ? 'true' : 'false');
+        filterCard.classList.toggle('expanded', modeDrawerOpen);
+
         filterOptionButtons.forEach(({ button, entry }) => {
             const active = state.activeFilter === entry.value;
             button.classList.toggle('active', active);
             button.setAttribute('aria-pressed', active ? 'true' : 'false');
         });
     };
-    filterModes.forEach((entry) => {
+    modeOptions.forEach((entry) => {
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'hud-filter-option';
@@ -4490,19 +4531,29 @@ function setupHudButtons() {
             <span class="hud-filter-option-icon">${iconMarkup[entry.icon] || ''}</span>
             <span class="hud-filter-option-label">${escapeHtml(entry.short)}</span>
         `;
-        button.onclick = () => {
+        button.onclick = (event) => {
+            event.stopPropagation();
             state.activeFilter = entry.value;
-            updateFilterButtons();
+            modeDrawerOpen = false;
+            updateFilterControls();
             updateHudView();
         };
-        filterCard.appendChild(button);
+        filterOptionsWrap.appendChild(button);
         filterOptionButtons.push({ button, entry });
     });
-    updateFilterButtons();
+    filterCard.appendChild(filterOptionsWrap);
+    updateFilterControls();
     hud.appendChild(filterCard);
 
+    document.addEventListener('click', (event) => {
+        if (!modeDrawerOpen) return;
+        if (hud.contains(event.target)) return;
+        modeDrawerOpen = false;
+        updateFilterControls();
+    });
+
     const btnSettings = createHudButton('hud-btn hud-stack-btn hud-settings-btn');
-    btnSettings.innerHTML = `<span class="hud-btn-icon">${iconMarkup.settings}</span>`;
+    setHudButtonContent(btnSettings, 'settings', 'Parametres', 'Vision');
     btnSettings.setAttribute('aria-label', 'Ouvrir les parametres et presets de vision reseau');
     btnSettings.title = 'Ouvrir les parametres et presets de vision reseau';
     btnSettings.onclick = () => showSettings();
@@ -5016,6 +5067,35 @@ function centerOnPair(aId, bId) {
     state.selection = a.id;
     renderEditor();
     draw();
+}
+
+function setGraphZoom(nextScale, options = {}) {
+    const canvas = document.getElementById('graph');
+    if (!canvas) return;
+
+    const viewportWidth = Number(canvas.clientWidth || canvas.width || 0);
+    const viewportHeight = Number(canvas.clientHeight || canvas.height || 0);
+    const previousScale = clamp(Number(state.view.scale || 1), 0.1, 5.0);
+    const targetScale = clamp(Number(nextScale || previousScale), 0.1, 5.0);
+    if (!viewportWidth || !viewportHeight || !Number.isFinite(targetScale)) return;
+    if (Math.abs(targetScale - previousScale) < 0.0001) return;
+
+    const anchorX = Number.isFinite(Number(options.anchorX)) ? Number(options.anchorX) : (viewportWidth / 2);
+    const anchorY = Number.isFinite(Number(options.anchorY)) ? Number(options.anchorY) : (viewportHeight / 2);
+    const worldX = (anchorX - (viewportWidth / 2) - state.view.x) / previousScale;
+    const worldY = (anchorY - (viewportHeight / 2) - state.view.y) / previousScale;
+
+    state.view.scale = targetScale;
+    state.view.x = anchorX - (viewportWidth / 2) - (worldX * targetScale);
+    state.view.y = anchorY - (viewportHeight / 2) - (worldY * targetScale);
+    draw();
+
+    if (options.save === true) scheduleSave();
+}
+
+function stepGraphZoom(direction = 1, options = {}) {
+    const factor = direction > 0 ? 1.1 : 0.9;
+    setGraphZoom(Number(state.view.scale || 1) * factor, options);
 }
 
 function recenterGraphView(options = {}) {

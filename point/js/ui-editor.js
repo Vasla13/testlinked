@@ -18,7 +18,6 @@ const editorDragState = {
     offsetX: 0,
     offsetY: 0
 };
-let editorAdvancedOpen = false;
 
 function nodeTypeLabel(type) {
     if (type === TYPES.COMPANY) return 'Entreprise';
@@ -434,26 +433,7 @@ function setupEditorListeners(n) {
         editHistoryTimer = setTimeout(() => { editHistoryArmed = false; }, 800);
     };
 
-    const advancedPanel = document.getElementById('editorAdvanced');
-    const btnToggleEdit = document.getElementById('btnToggleEdit');
     const btnMergeLaunch = document.getElementById('btnMergeLaunch');
-    const syncAdvancedButtons = () => {
-        const isOpen = !!advancedPanel?.classList.contains('open');
-        if (btnToggleEdit) btnToggleEdit.textContent = isOpen ? 'Fermer' : 'Modifier';
-    };
-    if (advancedPanel && editorAdvancedOpen) advancedPanel.classList.add('open');
-    syncAdvancedButtons();
-    const setAdvancedOpen = (isOpen) => {
-        if (!advancedPanel) return;
-        advancedPanel.classList.toggle('open', !!isOpen);
-        editorAdvancedOpen = advancedPanel.classList.contains('open');
-        syncAdvancedButtons();
-        const editorPanel = document.getElementById('editor');
-        requestAnimationFrame(() => clampEditorInViewport(editorPanel));
-        setTimeout(() => clampEditorInViewport(editorPanel), 40);
-    };
-    const toggleAdvanced = () => setAdvancedOpen(!advancedPanel?.classList.contains('open'));
-    if (btnToggleEdit) btnToggleEdit.onclick = toggleAdvanced;
 
     document.getElementById('btnCenterNode').onclick = () => { state.view.x = -n.x * state.view.scale; state.view.y = -n.y * state.view.scale; restartSim(); };
 
@@ -484,10 +464,8 @@ function setupEditorListeners(n) {
 
     const syncEditorNameDisplays = (nextName) => {
         const safeName = String(nextName || '').trim();
-        const headName = document.querySelector('.editor-sheet-name');
-        if (headName) headName.textContent = safeName || 'Sans nom';
-        const quickName = document.getElementById('edQuickName');
-        if (quickName && quickName.value !== safeName) quickName.value = safeName;
+        const headName = document.getElementById('edQuickNameInline');
+        if (headName && headName.value !== safeName) headName.value = safeName;
     };
 
     const syncEditorPhoneDisplays = (nextPhone) => {
@@ -523,11 +501,7 @@ function setupEditorListeners(n) {
         scheduleSave();
     };
 
-    const inpName = document.getElementById('edName');
-    if (inpName) inpName.oninput = (e) => {
-        applyNodeName(e.target.value);
-    };
-    const edQuickName = document.getElementById('edQuickName');
+    const edQuickName = document.getElementById('edQuickNameInline');
     if (edQuickName) {
         if (!bindRealtimePointField(n, 'name', edQuickName)) {
             edQuickName.oninput = (e) => applyNodeName(e.target.value);
@@ -539,7 +513,8 @@ function setupEditorListeners(n) {
             edQuickNum.oninput = (e) => applyNodePhone(e.target.value);
         }
     }
-    document.getElementById('edType').onchange = (e) => {
+    const quickType = document.getElementById('edQuickType');
+    if (quickType) quickType.onchange = (e) => {
         queueHistory();
         n.type = e.target.value;
         n.personStatus = normalizePersonStatus(n.personStatus, n.type);
@@ -550,7 +525,7 @@ function setupEditorListeners(n) {
         renderEditor();
         scheduleSave();
     };
-    const inpColor = document.getElementById('edColor');
+    const inpColor = document.getElementById('edColorQuick');
     if(inpColor) inpColor.oninput = (e) => {
         queueHistory();
         const nextColor = sanitizeNodeColor(e.target.value);
@@ -719,7 +694,6 @@ function setupEditorListeners(n) {
 
     if (btnMergeLaunch) {
         btnMergeLaunch.onclick = () => {
-            setAdvancedOpen(true);
             requestAnimationFrame(() => {
                 mergeSection?.scrollIntoView({ block: 'nearest' });
                 mergeInput?.focus();

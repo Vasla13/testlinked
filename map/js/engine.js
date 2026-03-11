@@ -44,6 +44,33 @@ function syncMapFrame() {
     }
 }
 
+export function setMapZoom(nextScale, options = {}) {
+    const currentScale = Math.max(0.05, Number(state.view.scale || 1));
+    const targetScale = Math.max(0.05, Math.min(8, Number(nextScale || currentScale)));
+    if (!Number.isFinite(targetScale) || Math.abs(targetScale - currentScale) < 0.0001) return;
+
+    const rect = viewport?.getBoundingClientRect?.();
+    const anchorX = Number.isFinite(Number(options.anchorX))
+        ? Number(options.anchorX)
+        : Number(rect?.width || viewport?.clientWidth || 0) / 2;
+    const anchorY = Number.isFinite(Number(options.anchorY))
+        ? Number(options.anchorY)
+        : Number(rect?.height || viewport?.clientHeight || 0) / 2;
+    const ratio = targetScale / currentScale;
+
+    state.view.x = anchorX - ((anchorX - state.view.x) * ratio);
+    state.view.y = anchorY - ((anchorY - state.view.y) * ratio);
+    state.view.scale = targetScale;
+
+    renderAll();
+    updateTransform();
+}
+
+export function stepMapZoom(direction = 1, options = {}) {
+    const factor = direction > 0 ? 1.1 : 0.9;
+    setMapZoom(Number(state.view.scale || 1) * factor, options);
+}
+
 export function updateTransform() {
     syncMapFrame();
     updateZoomDisplay();
@@ -118,23 +145,12 @@ export function initEngine() {
     // Gestion du ZOOM (Wheel)
     viewport.addEventListener('wheel', (e) => {
         e.preventDefault();
-        const delta = e.deltaY > 0 ? -1 : 1;
-        const newScale = state.view.scale * (1 + delta * 0.1);
-        
-        // Limites de zoom
-        if (newScale < 0.05 || newScale > 8) return;
-
         const rect = viewport.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
-
-        state.view.x = mouseX - (mouseX - state.view.x) * (newScale / state.view.scale);
-        state.view.y = mouseY - (mouseY - state.view.y) * (newScale / state.view.scale);
-        state.view.scale = newScale;
-        
-        // On rend direct pour le zoom car c'est critique pour l'œil
-        renderAll();
-        updateTransform();
+        const delta = e.deltaY > 0 ? -1 : 1;
+        const factor = 1 + (delta * 0.1);
+        setMapZoom(Number(state.view.scale || 1) * factor, { anchorX: mouseX, anchorY: mouseY });
     }, { passive: false });
 
     // Gestion du CLIC (Drag Map start)

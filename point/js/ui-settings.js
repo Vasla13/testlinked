@@ -150,6 +150,44 @@ function applyPhysicsPreset(presetId) {
     scheduleSave();
 }
 
+function attachDraggablePanel(panel, handle, closeSelector = '') {
+    if (!panel || !handle) return;
+
+    let isDragging = false;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    handle.addEventListener('mousedown', (event) => {
+        if (event.button !== 0) return;
+        if (closeSelector && event.target && event.target.closest(closeSelector)) return;
+        const rect = panel.getBoundingClientRect();
+        isDragging = true;
+        offsetX = event.clientX - rect.left;
+        offsetY = event.clientY - rect.top;
+        panel.classList.add('dragging');
+        event.preventDefault();
+    });
+
+    window.addEventListener('mousemove', (event) => {
+        if (!isDragging) return;
+        let nextX = event.clientX - offsetX;
+        let nextY = event.clientY - offsetY;
+        const maxX = window.innerWidth - panel.offsetWidth - 10;
+        const maxY = window.innerHeight - panel.offsetHeight - 10;
+        nextX = Math.max(10, Math.min(nextX, maxX));
+        nextY = Math.max(10, Math.min(nextY, maxY));
+        panel.style.left = `${nextX}px`;
+        panel.style.top = `${nextY}px`;
+        panel.style.right = 'auto';
+    });
+
+    window.addEventListener('mouseup', () => {
+        if (!isDragging) return;
+        isDragging = false;
+        panel.classList.remove('dragging');
+    });
+}
+
 // --- GESTION DU PANNEAU REGLAGES ---
 export function showSettings() {
     if (!settingsPanel) createSettingsPanel();
@@ -170,18 +208,16 @@ function createSettingsPanel() {
 
     settingsPanel.innerHTML = `
         <div class="settings-header">
-            <h3>Vision reseau</h3>
-            <div class="settings-close" id="btnCloseSettings">✕</div>
-        </div>
-        
-        <div class="settings-mode-card">
-            <div class="settings-mode-label">
-                ${ICON_GLOBE} <span>Mode Planète (Globe)</span>
+            <div class="settings-header-copy">
+                <h3>Vision reseau</h3>
+                <div class="settings-header-sub">Glisse la barre pour deplacer le panneau</div>
             </div>
-            <label class="hud-toggle">
-                <input type="checkbox" id="chkGlobeInner"/>
-                <div class="toggle-track"><div class="toggle-thumb"></div></div>
-            </label>
+            <button type="button" class="settings-close" id="btnCloseSettings">Fermer</button>
+        </div>
+
+        <div class="settings-hero">
+            <div class="settings-hero-title">Reglages rapides</div>
+            <div class="settings-hero-sub">Commence par le preset, puis ajuste seulement si besoin.</div>
         </div>
 
         <div class="settings-preset-shell">
@@ -193,20 +229,38 @@ function createSettingsPanel() {
             <div id="settingsPresetHint" class="settings-preset-hint"></div>
         </div>
 
-        <div class="setting-row"><label>Répulsion Globale <span id="val-repulsion" class="setting-val"></span></label><input type="range" id="sl-repulsion" min="100" max="5000" step="50"></div>
-        <div class="setting-row"><label>Force Repousse Ennemis <span id="val-enemyForce" class="setting-val"></span></label><input type="range" id="sl-enemyForce" min="50" max="1000" step="10"></div>
-        <div class="setting-row"><label>Force Repousse Entreprise <span id="val-structureRepulsion" class="setting-val"></span></label><input type="range" id="sl-structureRepulsion" min="0.01" max="0.5" step="0.01"></div>
-        <div class="setting-row"><label>Gravité Centrale <span id="val-gravity" class="setting-val"></span></label><input type="range" id="sl-gravity" min="0" max="0.1" step="0.001"></div>
-        <div class="setting-row"><label>Longueur Liens <span id="val-linkLength" class="setting-val"></span></label><input type="range" id="sl-linkLength" min="50" max="600" step="10"></div>
-        <div class="setting-row"><label>Collision <span id="val-collision" class="setting-val"></span></label><input type="range" id="sl-collision" min="0" max="200" step="5"></div>
-        <div class="setting-row"><label>Friction <span id="val-friction" class="setting-val"></span></label><input type="range" id="sl-friction" min="0.1" max="0.9" step="0.05"></div>
-        <div class="setting-row"><label>Courbure Liens <span id="val-curveStrength" class="setting-val"></span></label><input type="range" id="sl-curveStrength" min="0" max="3" step="0.1"></div>
-        
-        <div class="setting-row settings-section-break">
-            <label>Top HVT <span id="val-hvtTop" class="setting-val"></span></label>
-            <input type="range" id="sl-hvtTop" min="0" max="30" step="1">
+        <div class="settings-quick-grid">
+            <div class="settings-mode-card">
+                <div class="settings-mode-label">
+                    ${ICON_GLOBE} <span>Mode planete</span>
+                </div>
+                <label class="hud-toggle">
+                    <input type="checkbox" id="chkGlobeInner"/>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            <div class="settings-quick-card">
+                <div class="settings-quick-label">Top HVT</div>
+                <div class="settings-quick-value" id="val-hvtTop">OFF</div>
+                <input type="range" id="sl-hvtTop" min="0" max="30" step="1">
+                <div class="settings-quick-help">0 = OFF</div>
+            </div>
         </div>
-        
+
+        <details class="settings-advanced-shell">
+            <summary class="settings-advanced-toggle">Reglages avances</summary>
+            <div class="settings-advanced-body">
+                <div class="setting-row"><label>Repulsion globale <span id="val-repulsion" class="setting-val"></span></label><input type="range" id="sl-repulsion" min="100" max="5000" step="50"></div>
+                <div class="setting-row"><label>Force ennemis <span id="val-enemyForce" class="setting-val"></span></label><input type="range" id="sl-enemyForce" min="50" max="1000" step="10"></div>
+                <div class="setting-row"><label>Force entreprises <span id="val-structureRepulsion" class="setting-val"></span></label><input type="range" id="sl-structureRepulsion" min="0.01" max="0.5" step="0.01"></div>
+                <div class="setting-row"><label>Gravite centrale <span id="val-gravity" class="setting-val"></span></label><input type="range" id="sl-gravity" min="0" max="0.1" step="0.001"></div>
+                <div class="setting-row"><label>Longueur liens <span id="val-linkLength" class="setting-val"></span></label><input type="range" id="sl-linkLength" min="50" max="600" step="10"></div>
+                <div class="setting-row"><label>Collision <span id="val-collision" class="setting-val"></span></label><input type="range" id="sl-collision" min="0" max="200" step="5"></div>
+                <div class="setting-row"><label>Friction <span id="val-friction" class="setting-val"></span></label><input type="range" id="sl-friction" min="0.1" max="0.9" step="0.05"></div>
+                <div class="setting-row"><label>Courbure liens <span id="val-curveStrength" class="setting-val"></span></label><input type="range" id="sl-curveStrength" min="0" max="3" step="0.1"></div>
+            </div>
+        </details>
+
         <div class="settings-actions">
             <button class="primary settings-reset-btn" id="btnResetPhysics">Rétablir défaut</button>
         </div>
@@ -220,6 +274,7 @@ function createSettingsPanel() {
     settingsPanel.querySelectorAll('[data-preset-id]').forEach((btn) => {
         btn.onclick = () => applyPhysicsPreset(btn.getAttribute('data-preset-id') || '');
     });
+    attachDraggablePanel(settingsPanel, settingsPanel.querySelector('.settings-header'), '#btnCloseSettings');
 
     bindSlider('sl-repulsion', 'repulsion');
     bindSlider('sl-gravity', 'gravity');

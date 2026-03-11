@@ -94,21 +94,15 @@ export function renderPathfindingSidebar(state, selectedNode) {
 export function renderEditorHTML(n, state) {
     const kindsForPerson = getAllowedKinds(n.type, TYPES.PERSON);
     const personStatus = normalizePersonStatus(n.personStatus, n.type);
-    const personStatusBadge = (n.type === TYPES.PERSON && personStatus !== PERSON_STATUS.ACTIVE)
-        ? `<div class="editor-sheet-status is-${escapeHtml(personStatus)}">${escapeHtml(PERSON_STATUS_LABELS[personStatus])}</div>`
-        : '';
     const personStatusControls = n.type === TYPES.PERSON ? `
-        <div class="editor-status-strip">
-            <span class="editor-status-label">Statut</span>
-            <div class="editor-status-actions">
-                ${Object.values(PERSON_STATUS).map((status) => `
-                    <button
-                        type="button"
-                        class="editor-status-btn ${personStatus === status ? 'active' : ''} is-${escapeHtml(status)}"
-                        data-person-status="${escapeHtml(status)}"
-                    >${escapeHtml(PERSON_STATUS_LABELS[status])}</button>
-                `).join('')}
-            </div>
+        <div class="editor-status-inline">
+            ${Object.values(PERSON_STATUS).map((status) => `
+                <button
+                    type="button"
+                    class="editor-status-btn ${personStatus === status ? 'active' : ''} is-${escapeHtml(status)}"
+                    data-person-status="${escapeHtml(status)}"
+                >${escapeHtml(PERSON_STATUS_LABELS[status])}</button>
+            `).join('')}
         </div>
     ` : '';
 
@@ -119,10 +113,6 @@ export function renderEditorHTML(n, state) {
         <option value="${TYPES.COMPANY}" ${n.type===TYPES.COMPANY?'selected':''}>Entreprise</option>
     `;
 
-    const typeLabel = n.type === TYPES.PERSON
-        ? 'personne'
-        : (n.type === TYPES.COMPANY ? 'entreprise' : 'groupe');
-
     return `
     <div class="editor-panel-layout">
         <div class="editor-side-rail">
@@ -131,34 +121,42 @@ export function renderEditorHTML(n, state) {
                 <button id="btnCenterNode" class="mini-btn">centrer</button>
             </div>
             <div class="editor-side-group editor-side-group-bottom">
-                <button id="btnToggleEdit" type="button" class="mini-btn">Modifier</button>
-                <button id="btnMergeLaunch" type="button" class="mini-btn">Fusion</button>
                 <button id="btnDelete" class="mini-btn danger" type="button">Supprimer</button>
+                <button id="btnExportRP" class="mini-btn" type="button">Dossier</button>
             </div>
         </div>
 
         <div class="editor-main-card">
             <div class="editor-sheet">
                 <div class="editor-sheet-head">
-                    <div class="editor-sheet-name">${escapeHtml(n.name)}</div>
-                    <div class="editor-sheet-type">${escapeHtml(typeLabel)}</div>
-                    ${personStatusBadge}
-                </div>
-
-                <div class="editor-priority-grid">
-                    <div class="editor-quick-field editor-priority-field">
-                        <label>Nom</label>
-                        <input id="edQuickName" type="text" value="${escapeHtml(n.name)}" placeholder="Nom de la fiche">
-                        <div id="awName" class="editor-realtime-presence" style="display:none; min-height:14px; margin-top:4px; font-size:0.68rem; color:#ffcc8a;"></div>
+                    <div class="editor-sheet-head-main">
+                        <div class="editor-sheet-identity-row">
+                            <div class="editor-sheet-title-block">
+                                <input id="edQuickNameInline" class="editor-sheet-name editor-sheet-name-input" type="text" value="${escapeHtml(n.name)}" placeholder="Nom de la fiche">
+                                <div id="awName" class="editor-realtime-presence" style="display:none; min-height:14px; margin-top:4px; font-size:0.68rem; color:#ffcc8a;"></div>
+                            </div>
+                            ${n.type === TYPES.PERSON ? `
+                                <div class="editor-inline-phone editor-inline-phone-head">
+                                    <span class="editor-inline-label">Tel</span>
+                                    <input id="edQuickNum" type="text" value="${escapeHtml(n.num || '')}" placeholder="555-...">
+                                    <div id="awPhone" class="editor-realtime-presence" style="display:none; min-height:12px; margin-top:4px; font-size:0.64rem; color:#ffcc8a;"></div>
+                                </div>
+                            ` : ''}
+                            <select id="edQuickType" class="editor-type-select" aria-label="Type de fiche">
+                                ${typeOptions}
+                            </select>
+                            <label class="editor-color-pill editor-color-pill-head" title="Couleur de la fiche">
+                                <span class="editor-inline-label">Couleur</span>
+                                <input type="color" id="edColorQuick" value="${sanitizeNodeColor(safeHex(n.color))}" class="editor-color-input editor-color-input-inline">
+                            </label>
+                        </div>
                     </div>
-                    <div class="editor-quick-field editor-priority-field">
-                        <label>Téléphone</label>
-                        <input id="edQuickNum" type="text" value="${escapeHtml(n.num || '')}" placeholder="555-...">
-                        <div id="awPhone" class="editor-realtime-presence" style="display:none; min-height:14px; margin-top:4px; font-size:0.68rem; color:#ffcc8a;"></div>
-                    </div>
+                    ${personStatusControls ? `
+                        <div class="editor-sheet-topbar">
+                            ${personStatusControls}
+                        </div>
+                    ` : ''}
                 </div>
-
-                ${personStatusControls}
 
                 <div class="editor-sheet-note">
                     <label class="editor-section-label" for="edDescription">Description</label>
@@ -198,39 +196,25 @@ export function renderEditorHTML(n, state) {
 
                 <div class="editor-link-strip">
                     <div class="editor-inline-title">Ajouter une relation</div>
-                    <div class="editor-link-composer">
+                    <div class="editor-link-composer editor-link-composer-primary">
                         <div class="editor-autocomplete-field flex-grow-input">
                             <input id="editorLinkName" type="text" autocomplete="off" spellcheck="false" placeholder="Nom de la fiche a lier" class="flex-grow-input">
                             <div id="editorLinkNameResults" class="editor-autocomplete-results" hidden></div>
                         </div>
+                    </div>
+                    <div class="editor-link-composer editor-link-composer-secondary">
                         <select id="editorLinkType" class="compact-select editor-compact-select">
                             <option value="${TYPES.PERSON}">Personne</option>
                             <option value="${TYPES.GROUP}">Groupe</option>
                             <option value="${TYPES.COMPANY}">Entreprise</option>
                         </select>
-                    </div>
-                    <div class="editor-link-composer">
-                        <select id="editorLinkKind" class="flex-grow-input">${getLinkOptions(kindsForPerson)}</select>
+                        <select id="editorLinkKind" class="flex-grow-input editor-link-kind-select">${getLinkOptions(kindsForPerson)}</select>
                         <button id="btnAddLinkQuick" class="mini-btn primary" type="button">Ajouter</button>
                     </div>
                     <div id="editorLinkHint" class="editor-link-hint">Si la fiche existe deja, son type est repris automatiquement.</div>
                 </div>
 
-                <div id="editorAdvanced" class="editor-advanced">
-                    <div class="editor-adv-section">
-                        <div class="editor-adv-title">Parametres de fiche</div>
-                        <div class="editor-adv-primary-row">
-                            <div class="editor-adv-field">
-                                <label>Type</label>
-                                <select id="edType">${typeOptions}</select>
-                            </div>
-                            <div class="editor-adv-field editor-adv-field-color">
-                                <label>Couleur</label>
-                                <input type="color" id="edColor" value="${sanitizeNodeColor(safeHex(n.color))}" class="editor-color-input">
-                            </div>
-                        </div>
-                    </div>
-
+                <div id="editorAdvanced" class="editor-advanced editor-advanced-open">
                     <div id="editorMergeSection" class="editor-adv-section">
                         <div class="editor-adv-title">Fusionner cette fiche</div>
                         <div class="editor-adv-row editor-merge-row">
@@ -241,10 +225,6 @@ export function renderEditorHTML(n, state) {
                             <button id="btnMergeApply" class="mini-btn primary" type="button">Fusionner</button>
                         </div>
                         <div class="editor-link-hint">La fiche actuelle sera fusionnee dans la cible choisie.</div>
-                    </div>
-
-                    <div class="editor-adv-row editor-adv-row-utility">
-                        <button id="btnExportRP" class="mini-btn" type="button">Dossier</button>
                     </div>
                 </div>
             </div>
