@@ -107,7 +107,7 @@
       left: 50%;
       top: 50%;
       transform: translate(-50%, -50%);
-      width: min(560px, calc(100vw - var(--left-panel-width) - 120px));
+      width: min(640px, calc(100vw - var(--left-panel-width) - 120px));
       max-height: calc(100vh - 20px);
       border: 1px solid rgba(115, 251, 247, 0.56);
       background:
@@ -260,22 +260,24 @@
     }
     #graph { width: 100%; height: 100%; cursor: default; }
 
-    /* --- HUD (BARRE DE CONTRÔLE FLOTTANTE) --- */
+    /* --- HUD (MENU D'AFFICHAGE DANS LA COLONNE) --- */
     #hud {
-      position: absolute;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(10, 12, 34, 0.9);
+      position: relative;
+      left: auto;
+      bottom: auto;
+      transform: none;
+      width: 100%;
+      background: rgba(10, 12, 34, 0.78);
       backdrop-filter: blur(8px);
       border: 1px solid var(--border-color);
-      padding: 10px 20px;
-      border-radius: 50px; /* Capsule shape */
+      padding: 10px;
+      border-radius: 12px;
       display: flex;
-      align-items: center;
-      gap: 15px;
-      z-index: 20;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
+      z-index: 1;
+      box-shadow: inset 0 0 0 1px rgba(115, 251, 247, 0.04);
     }
     #hud button {
       border: none; background: transparent; color: var(--text-light);
@@ -717,7 +719,7 @@
         max-height: none;
       }
       #editorDragHandle { cursor: default; }
-      #hud { width: 90%; justify-content: space-around; bottom: 10px; padding: 5px 10px; }
+      #hud { width: 100%; padding: 8px; }
       #quick-actions { bottom: 8px; gap: 8px; width: calc(100vw - 16px); }
       .quick-action-btn { min-height: 44px; font-size: 1.45rem; }
       #action-log-list { max-height: 84px; }
@@ -1239,7 +1241,7 @@
     }
 
     #editor {
-      width: min(560px, calc(100vw - var(--left-panel-width) - 120px));
+      width: min(640px, calc(100vw - var(--left-panel-width) - 120px));
       border: 1px solid rgba(102, 243, 255, 0.42);
       border-radius: 18px;
       background:
@@ -1460,6 +1462,7 @@
         <h2>Recherche</h2>
         <input id="searchInput" type="search" placeholder="Nom, matricule..." autocomplete="off" />
         <div id="searchResult"></div>
+        <div id="hud" aria-label="Affichage"></div>
       </div>
 
     </aside>
@@ -1469,17 +1472,6 @@
       <canvas id="graph"></canvas>
 
       <div id="linkLegend"></div>
-
-      <div id="hud">
-        <button id="btnRelayout" title="Recentrer la caméra">⛶ Recentrer</button>
-        <button id="btnToggleSim" title="Pause/Lecture Physique">⏯️</button>
-
-        <div class="hud-divider"></div>
-
-        <label title="Afficher les noms"><input id="chkLabels" type="checkbox" checked/> Noms</label>
-        <label title="Mode performance (pas de néon)"><input id="chkPerf" type="checkbox"/> Eco</label>
-        <label title="Afficher types de liens"><input id="chkLinkTypes" type="checkbox"/> Liens</label>
-      </div>
     </main>
 
 
@@ -1514,10 +1506,6 @@
     <button id="btnQuickCreate" class="quick-action-btn" type="button">CREER</button>
     <button id="btnQuickIntel" class="quick-action-btn" type="button">AIDE IA</button>
   </div>
-
-  <datalist id="datalist-people"></datalist>
-  <datalist id="datalist-groups"></datalist>
-  <datalist id="datalist-companies"></datalist>
 
   <script type="module" src="js/main.js"></script>
 
@@ -1628,6 +1616,23 @@
       });
 
       requestAnimationFrame(renderFrame);
+    })();
+  </script>
+  <script>
+    (() => {
+      const selector = 'input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="hidden"]), textarea';
+      const lockField = (field) => {
+        if (!field || typeof field.setAttribute !== 'function') return;
+        field.setAttribute('autocomplete', 'off');
+        field.setAttribute('autocorrect', 'off');
+        field.setAttribute('autocapitalize', 'off');
+        field.setAttribute('spellcheck', 'false');
+      };
+      document.querySelectorAll(selector).forEach(lockField);
+      document.addEventListener('focusin', (event) => {
+        const field = event.target;
+        if (field && typeof field.matches === 'function' && field.matches(selector)) lockField(field);
+      });
     })();
   </script>
 </body>

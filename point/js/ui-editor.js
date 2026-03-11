@@ -20,6 +20,12 @@ const editorDragState = {
 };
 let editorAdvancedOpen = false;
 
+function nodeTypeLabel(type) {
+    if (type === TYPES.COMPANY) return 'Entreprise';
+    if (type === TYPES.GROUP) return 'Groupe';
+    return 'Personne';
+}
+
 function clamp(value, min, max) {
     return Math.min(Math.max(value, min), max);
 }
@@ -43,6 +49,179 @@ function buildKindOptions(allowedKinds, selected = '') {
 
 function normalizeNodeLookupName(value) {
     return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function getAutocompleteMatches(query, excludedIds = [], limit = 7) {
+    const normalizedQuery = normalizeNodeLookupName(query);
+    if (!normalizedQuery) return [];
+
+    const excluded = new Set(excludedIds.map((id) => String(id)));
+    return state.nodes
+        .filter((item) => item && !excluded.has(String(item.id)))
+        .map((item) => {
+            const name = String(item.name || '').trim();
+            const normalizedName = normalizeNodeLookupName(name);
+            if (!normalizedName) return null;
+            const starts = normalizedName.startsWith(normalizedQuery);
+            const index = normalizedName.indexOf(normalizedQuery);
+            if (index < 0) return null;
+            return { item, starts, index };
+        })
+        .filter(Boolean)
+        .sort((a, b) => {
+            if (a.starts !== b.starts) return a.starts ? -1 : 1;
+            if (a.index !== b.index) return a.index - b.index;
+            return String(a.item.name || '').localeCompare(String(b.item.name || ''), 'fr', { sensitivity: 'base' });
+        })
+        .slice(0, limit)
+        .map((entry) => entry.item);
+}
+
+function attachEditorAutocomplete({ input, resultsEl, excludedIds = [], onPick, onInputChange, onSubmit }) {
+    if (!input || !resultsEl) {
+        return {
+            hide: () => {},
+            refresh: () => {}
+        };
+    }
+
+    let matches = [];
+    let activeIndex = -1;
+    let hideTimer = null;
+
+    const clearHideTimer = () => {
+        if (!hideTimer) return;
+        clearTimeout(hideTimer);
+        hideTimer = null;
+    };
+
+    const hide = () => {
+        clearHideTimer();
+        matches = [];
+        activeIndex = -1;
+        resultsEl.hidden = true;
+        resultsEl.innerHTML = '';
+    };
+
+    const setActiveIndex = (nextIndex) => {
+        activeIndex = nextIndex;
+        Array.from(resultsEl.querySelectorAll('[data-autocomplete-index]')).forEach((button) => {
+            button.classList.toggle('active', Number(button.getAttribute('data-autocomplete-index')) === activeIndex);
+        });
+    };
+
+    const pickNode = (node, { focusInput = true } = {}) => {
+        if (!node) return;
+        input.value = String(node.name || '');
+        hide();
+        if (typeof onPick === 'function') onPick(node);
+        if (focusInput) input.focus();
+    };
+
+    const render = () => {
+        clearHideTimer();
+        const query = String(input.value || '').trim();
+        if (typeof onInputChange === 'function') onInputChange(query);
+        if (!query) {
+            hide();
+            return;
+        }
+
+        matches = getAutocompleteMatches(query, excludedIds);
+        activeIndex = -1;
+
+        if (!matches.length) {
+            hide();
+            return;
+        }
+
+        resultsEl.hidden = false;
+        resultsEl.innerHTML = matches.map((node, index) => `
+            <button
+                type="button"
+                class="editor-autocomplete-hit"
+                data-autocomplete-id="${escapeHtml(String(node.id || ''))}"
+                data-autocomplete-index="${index}"
+            >
+                <span class="editor-autocomplete-name">${escapeHtml(String(node.name || 'Sans nom'))}</span>
+                <span class="editor-autocomplete-type">${escapeHtml(nodeTypeLabel(node.type))}</span>
+            </button>
+        `).join('');
+
+        Array.from(resultsEl.querySelectorAll('[data-autocomplete-id]')).forEach((button) => {
+            button.onmousedown = (event) => {
+                event.preventDefault();
+                clearHideTimer();
+            };
+            button.onmouseenter = () => {
+                setActiveIndex(Number(button.getAttribute('data-autocomplete-index')));
+            };
+            button.onclick = () => {
+                const id = button.getAttribute('data-autocomplete-id') || '';
+                const node = matches.find((entry) => String(entry.id) === String(id)) || null;
+                pickNode(node);
+            };
+        });
+    };
+
+    input.addEventListener('input', render);
+    input.addEventListener('focus', () => {
+        if (String(input.value || '').trim()) render();
+    });
+    input.addEventListener('blur', () => {
+        clearHideTimer();
+        hideTimer = setTimeout(hide, 120);
+    });
+    input.addEventListener('keydown', (event) => {
+        if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            if (!matches.length) {
+                render();
+                if (!matches.length) return;
+            }
+            const nextIndex = Math.min(activeIndex + 1, matches.length - 1);
+            setActiveIndex(nextIndex < 0 ? 0 : nextIndex);
+            return;
+        }
+        if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            if (!matches.length) {
+                render();
+                if (!matches.length) return;
+            }
+            if (!matches.length) return;
+            const nextIndex = activeIndex <= 0 ? 0 : activeIndex - 1;
+            setActiveIndex(nextIndex);
+            return;
+        }
+        if (event.key === 'Escape') {
+            hide();
+            return;
+        }
+        if (event.key === 'Tab' && activeIndex >= 0 && matches[activeIndex]) {
+            event.preventDefault();
+            pickNode(matches[activeIndex], { focusInput: false });
+            return;
+        }
+        if (event.key === 'Enter') {
+            if (activeIndex >= 0 && matches[activeIndex]) {
+                event.preventDefault();
+                pickNode(matches[activeIndex]);
+                return;
+            }
+            if (typeof onSubmit === 'function') {
+                event.preventDefault();
+                onSubmit();
+            }
+        }
+    });
+
+    hide();
+
+    return {
+        hide,
+        refresh: render
+    };
 }
 
 function isCompactLayout() {
@@ -184,14 +363,12 @@ export function renderEditor() {
 
     ui.editorTitle.style.display = 'none';
     ui.editorBody.innerHTML = renderEditorHTML(n, state);
-
-    const dl = document.getElementById('datalist-all');
-    if(dl) {
-        dl.innerHTML = state.nodes
-            .filter(x => x.id !== n.id)
-            .map(x => `<option value="${escapeHtml(x.name)}">`)
-            .join('');
-    }
+    ui.editorBody.querySelectorAll('input:not([type="color"]), textarea').forEach((field) => {
+        field.setAttribute('autocomplete', 'off');
+        field.setAttribute('autocorrect', 'off');
+        field.setAttribute('autocapitalize', 'off');
+        field.setAttribute('spellcheck', 'false');
+    });
 
     setupEditorListeners(n);
     renderActiveLinks(n);
@@ -212,21 +389,23 @@ function setupEditorListeners(n) {
 
     const advancedPanel = document.getElementById('editorAdvanced');
     const btnToggleEdit = document.getElementById('btnToggleEdit');
+    const btnMergeLaunch = document.getElementById('btnMergeLaunch');
     const syncAdvancedButtons = () => {
         const isOpen = !!advancedPanel?.classList.contains('open');
         if (btnToggleEdit) btnToggleEdit.textContent = isOpen ? 'Fermer' : 'Modifier';
     };
     if (advancedPanel && editorAdvancedOpen) advancedPanel.classList.add('open');
     syncAdvancedButtons();
-    const toggleAdvanced = () => {
+    const setAdvancedOpen = (isOpen) => {
         if (!advancedPanel) return;
-        advancedPanel.classList.toggle('open');
+        advancedPanel.classList.toggle('open', !!isOpen);
         editorAdvancedOpen = advancedPanel.classList.contains('open');
         syncAdvancedButtons();
         const editorPanel = document.getElementById('editor');
         requestAnimationFrame(() => clampEditorInViewport(editorPanel));
         setTimeout(() => clampEditorInViewport(editorPanel), 40);
     };
+    const toggleAdvanced = () => setAdvancedOpen(!advancedPanel?.classList.contains('open'));
     if (btnToggleEdit) btnToggleEdit.onclick = toggleAdvanced;
 
     document.getElementById('btnCenterNode').onclick = () => { state.view.x = -n.x * state.view.scale; state.view.y = -n.y * state.view.scale; restartSim(); };
@@ -266,6 +445,29 @@ function setupEditorListeners(n) {
         if (fullName && fullName.value !== safeName) fullName.value = safeName;
     };
 
+    const syncEditorPhoneDisplays = (nextPhone) => {
+        const safePhone = String(nextPhone || '').trim();
+        const quickPhone = document.getElementById('edQuickNum');
+        if (quickPhone && quickPhone.value !== safePhone) quickPhone.value = safePhone;
+        const fullPhone = document.getElementById('edNum');
+        if (fullPhone && fullPhone.value !== safePhone) fullPhone.value = safePhone;
+    };
+
+    const syncMetaDisplays = () => {
+        const accountValue = String(n.accountNumber || '').trim();
+        const citizenValue = String(n.citizenNumber || '').trim();
+
+        const quickAccount = document.getElementById('edQuickAccountNumber');
+        const fullAccount = document.getElementById('edAccountNumber');
+        const quickCitizen = document.getElementById('edQuickCitizenNumber');
+        const fullCitizen = document.getElementById('edCitizenNumber');
+
+        if (quickAccount && quickAccount.value !== accountValue) quickAccount.value = accountValue;
+        if (fullAccount && fullAccount.value !== accountValue) fullAccount.value = accountValue;
+        if (quickCitizen && quickCitizen.value !== citizenValue) quickCitizen.value = citizenValue;
+        if (fullCitizen && fullCitizen.value !== citizenValue) fullCitizen.value = citizenValue;
+    };
+
     const applyNodeName = (nextName) => {
         queueHistory();
         n.name = String(nextName || '').replace(/\s+/g, ' ').trim();
@@ -275,56 +477,60 @@ function setupEditorListeners(n) {
         scheduleSave();
     };
 
-    const splitIdentity = (name) => {
-        const raw = String(name || '').trim().replace(/\s+/g, ' ');
-        if (!raw) return { first: '', last: '' };
-        const parts = raw.split(' ');
-        if (parts.length === 1) return { first: parts[0], last: '' };
-        return {
-            first: parts.slice(0, -1).join(' '),
-            last: parts.slice(-1).join('')
-        };
-    };
-
-    const edFirstName = document.getElementById('edFirstName');
-    const edLastName = document.getElementById('edLastName');
-    const edQuickName = document.getElementById('edQuickName');
-    const syncIdentityInputs = (nameValue) => {
-        const parts = splitIdentity(nameValue);
-        if (edFirstName && edFirstName.value !== parts.first) edFirstName.value = parts.first;
-        if (edLastName && edLastName.value !== parts.last) edLastName.value = parts.last;
+    const applyNodePhone = (nextPhone) => {
+        queueHistory();
+        n.num = String(nextPhone || '').trim();
+        syncEditorPhoneDisplays(n.num);
+        scheduleSave();
     };
 
     document.getElementById('edName').oninput = (e) => {
         applyNodeName(e.target.value);
-        syncIdentityInputs(e.target.value);
     };
-    if (edQuickName) {
-        edQuickName.oninput = (e) => {
-            applyNodeName(e.target.value);
-        };
-    }
-    if (edFirstName || edLastName) {
-        const updateIdentityName = () => {
-            const first = String(edFirstName?.value || '').trim();
-            const last = String(edLastName?.value || '').trim();
-            applyNodeName([first, last].filter(Boolean).join(' '));
-        };
-        if (edFirstName) edFirstName.oninput = updateIdentityName;
-        if (edLastName) edLastName.oninput = updateIdentityName;
-    }
+    const edQuickName = document.getElementById('edQuickName');
+    if (edQuickName) edQuickName.oninput = (e) => applyNodeName(e.target.value);
+    const edQuickNum = document.getElementById('edQuickNum');
+    if (edQuickNum) edQuickNum.oninput = (e) => applyNodePhone(e.target.value);
     document.getElementById('edType').onchange = (e) => { queueHistory(); n.type = e.target.value; updatePersonColors(); restartSim(); draw(); refreshLists(); renderEditor(); scheduleSave(); };
     const inpColor = document.getElementById('edColor');
     if(inpColor) inpColor.oninput = (e) => { queueHistory(); n.color = e.target.value; updatePersonColors(); draw(); scheduleSave(); };
     const inpNum = document.getElementById('edNum');
-    if(inpNum) inpNum.oninput = (e) => { queueHistory(); n.num = e.target.value; scheduleSave(); };
+    if(inpNum) inpNum.oninput = (e) => { applyNodePhone(e.target.value); };
     const inpAccountNumber = document.getElementById('edAccountNumber');
+    const inpQuickAccountNumber = document.getElementById('edQuickAccountNumber');
     if (inpAccountNumber) {
-        inpAccountNumber.oninput = (e) => { queueHistory(); n.accountNumber = e.target.value; scheduleSave(); };
+        inpAccountNumber.oninput = (e) => {
+            queueHistory();
+            n.accountNumber = e.target.value;
+            syncMetaDisplays();
+            scheduleSave();
+        };
+    }
+    if (inpQuickAccountNumber) {
+        inpQuickAccountNumber.oninput = (e) => {
+            queueHistory();
+            n.accountNumber = e.target.value;
+            syncMetaDisplays();
+            scheduleSave();
+        };
     }
     const inpCitizenNumber = document.getElementById('edCitizenNumber');
+    const inpQuickCitizenNumber = document.getElementById('edQuickCitizenNumber');
     if (inpCitizenNumber) {
-        inpCitizenNumber.oninput = (e) => { queueHistory(); n.citizenNumber = e.target.value; scheduleSave(); };
+        inpCitizenNumber.oninput = (e) => {
+            queueHistory();
+            n.citizenNumber = e.target.value;
+            syncMetaDisplays();
+            scheduleSave();
+        };
+    }
+    if (inpQuickCitizenNumber) {
+        inpQuickCitizenNumber.oninput = (e) => {
+            queueHistory();
+            n.citizenNumber = e.target.value;
+            syncMetaDisplays();
+            scheduleSave();
+        };
     }
     const inpDescription = document.getElementById('edDescription');
     if (inpDescription) {
@@ -341,8 +547,11 @@ function setupEditorListeners(n) {
     const linkKindSelect = document.getElementById('editorLinkKind');
     const linkHint = document.getElementById('editorLinkHint');
     const btnAddLinkQuick = document.getElementById('btnAddLinkQuick');
+    const linkNameResults = document.getElementById('editorLinkNameResults');
     const mergeInput = document.getElementById('mergeTarget');
+    const mergeResults = document.getElementById('mergeTargetResults');
     const btnMergeApply = document.getElementById('btnMergeApply');
+    const mergeSection = document.getElementById('editorMergeSection');
 
     const resolveQuickLinkTarget = () => {
         const rawName = normalizeNodeLookupName(linkNameInput?.value || '');
@@ -392,20 +601,20 @@ function setupEditorListeners(n) {
         }
 
         if (linkNameInput) linkNameInput.value = '';
+        linkAutocomplete.hide();
         requestAnimationFrame(() => {
             document.getElementById('editorLinkName')?.focus();
         });
     };
 
-    if (linkNameInput) {
-        linkNameInput.oninput = () => syncQuickLinkComposer();
-        linkNameInput.onkeydown = (event) => {
-            if (event.key === 'Enter') {
-                event.preventDefault();
-                submitQuickLink();
-            }
-        };
-    }
+    const linkAutocomplete = attachEditorAutocomplete({
+        input: linkNameInput,
+        resultsEl: linkNameResults,
+        excludedIds: [n.id],
+        onPick: () => syncQuickLinkComposer(),
+        onInputChange: () => syncQuickLinkComposer(),
+        onSubmit: submitQuickLink
+    });
     if (linkTypeSelect) linkTypeSelect.onchange = () => syncQuickLinkComposer();
     if (btnAddLinkQuick) btnAddLinkQuick.onclick = submitQuickLink;
     syncQuickLinkComposer();
@@ -435,16 +644,28 @@ function setupEditorListeners(n) {
         runMerge(targetNameRaw);
     };
 
-    if (mergeInput) {
-        mergeInput.onkeydown = (event) => {
-            if (event.key === 'Enter') {
-                event.preventDefault();
-                submitMergeTarget();
-            }
+    const mergeAutocomplete = attachEditorAutocomplete({
+        input: mergeInput,
+        resultsEl: mergeResults,
+        excludedIds: [n.id],
+        onSubmit: submitMergeTarget
+    });
+
+    if (btnMergeLaunch) {
+        btnMergeLaunch.onclick = () => {
+            setAdvancedOpen(true);
+            requestAnimationFrame(() => {
+                mergeSection?.scrollIntoView({ block: 'nearest' });
+                mergeInput?.focus();
+                mergeInput?.select();
+            });
         };
     }
 
-    if (btnMergeApply) btnMergeApply.onclick = submitMergeTarget;
+    if (btnMergeApply) btnMergeApply.onclick = () => {
+        mergeAutocomplete.hide();
+        submitMergeTarget();
+    };
 
     document.getElementById('btnExportRP').onclick = () => {
         const typeLabel = n.type === TYPES.PERSON ? "Individu" : (n.type === TYPES.COMPANY ? "Entreprise" : "Organisation");
@@ -468,6 +689,7 @@ function setupEditorListeners(n) {
 
 function renderActiveLinks(n) {
     const chipsContainer = document.getElementById('chipsLinks');
+    const linksCount = document.getElementById('editorLinksCount');
     let activeSelect = null;
     let activeBadge = null;
     let outsideHandler = null;
@@ -476,6 +698,8 @@ function renderActiveLinks(n) {
         const t = (typeof l.target === 'object') ? l.target.id : l.target;
         return s === n.id || t === n.id;
     });
+
+    if (linksCount) linksCount.textContent = String(myLinks.length);
 
     if (myLinks.length === 0) {
         chipsContainer.innerHTML = '<div style="padding:10px; text-align:center; color:#666; font-style:italic; font-size:0.8rem;">Aucune connexion active</div>';
@@ -503,12 +727,11 @@ function renderActiveLinks(n) {
 
     const renderGroup = (title, items) => {
         if (items.length === 0) return '';
-        let html = `<div class="link-category">${title}</div>`;
-        items.forEach(item => {
+        const cards = items.map((item) => {
             const linkColor = computeLinkColor(item.link);
             const typeLabel = kindToLabel(item.link.kind);
             const emoji = linkKindEmoji(item.link.kind);
-            html += `
+            return `
             <div class="chip" data-link-id="${item.link.id}" style="border-left-color: ${linkColor};">
                 <div class="chip-content">
                     <span class="chip-name" data-node-id="${escapeHtml(String(item.other.id))}">${escapeHtml(item.other.name)}</span>
@@ -516,20 +739,23 @@ function renderActiveLinks(n) {
                 </div>
                 <div class="x" title="Supprimer le lien" data-id="${item.link.id}">×</div>
             </div>`;
-        });
-        return html;
+        }).join('');
+
+        return `
+            <section class="link-group-section">
+                <div class="link-group-head">
+                    <div class="link-category">${title}</div>
+                    <div class="link-group-count">${items.length}</div>
+                </div>
+                <div class="link-grid">${cards}</div>
+            </section>
+        `;
     };
 
     chipsContainer.innerHTML = `
-        <div class="sheet-links-columns">
-            <div class="sheet-links-col">
-                ${renderGroup('ENTREPRISES', groups[TYPES.COMPANY])}
-                ${renderGroup('GROUPUSCULES', groups[TYPES.GROUP])}
-            </div>
-            <div class="sheet-links-col">
-                ${renderGroup('PERSONNES', groups[TYPES.PERSON])}
-            </div>
-        </div>
+        ${renderGroup('PERSONNES', groups[TYPES.PERSON])}
+        ${renderGroup('ENTREPRISES', groups[TYPES.COMPANY])}
+        ${renderGroup('GROUPES', groups[TYPES.GROUP])}
     `;
 
     const closeActiveSelect = () => {

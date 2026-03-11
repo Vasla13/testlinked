@@ -19,17 +19,6 @@ function getLinkOptions(allowedKinds) {
         .join('');
 }
 
-function splitIdentityName(name) {
-    const raw = String(name || '').trim().replace(/\s+/g, ' ');
-    if (!raw) return { first: '', last: '' };
-    const parts = raw.split(' ');
-    if (parts.length === 1) return { first: parts[0], last: '' };
-    return {
-        first: parts.slice(0, -1).join(' '),
-        last: parts.slice(-1).join('')
-    };
-}
-
 // =============================================================================
 // --- 1. BARRE LATÉRALE GAUCHE (PATHFINDING / IA) ---
 // =============================================================================
@@ -115,123 +104,146 @@ export function renderEditorHTML(n, state) {
     const typeLabel = n.type === TYPES.PERSON
         ? 'personne'
         : (n.type === TYPES.COMPANY ? 'entreprise' : 'groupe');
-    const identifier = n.citizenNumber || n.accountNumber || n.id || '----------';
-    const identity = splitIdentityName(n.name);
-    const quickIdentityHtml = n.type === TYPES.PERSON
-        ? `
-        <div class="editor-quick-identity">
-            <div class="editor-quick-field">
-                <label>Prénom</label>
-                <input id="edFirstName" type="text" value="${escapeHtml(identity.first)}" placeholder="Prénom">
-            </div>
-            <div class="editor-quick-field">
-                <label>Nom</label>
-                <input id="edLastName" type="text" value="${escapeHtml(identity.last)}" placeholder="Nom">
-            </div>
-        </div>
-        `
-        : `
-        <div class="editor-quick-identity editor-quick-identity-single">
-            <div class="editor-quick-field">
-                <label>Nom</label>
-                <input id="edQuickName" type="text" value="${escapeHtml(n.name)}" placeholder="Nom de la fiche">
-            </div>
-        </div>
-        `;
+    const identifier = n.id || '----------';
 
     return `
-    <div class="editor-sheet">
-        <div class="editor-sheet-head">
-            <div class="editor-sheet-name">${escapeHtml(n.name)}</div>
-            <div class="editor-sheet-type">${escapeHtml(typeLabel)}</div>
-            <div class="editor-sheet-id">${escapeHtml(identifier)}</div>
-        </div>
-
-        <div class="editor-sheet-note">
-            <textarea id="edDescription" rows="2" placeholder="Note sur la personne (si il y en a)">${escapeHtml(n.description || n.notes || '')}</textarea>
-        </div>
-
-        ${quickIdentityHtml}
-
-        <div class="editor-links-head">
-            <span>LIENS ACTIFS</span>
-        </div>
-
-        <div id="chipsLinks"></div>
-
-        <div class="editor-link-strip">
-            <div class="editor-inline-title">Ajouter une relation</div>
-            <div class="editor-link-composer">
-                <input id="editorLinkName" list="datalist-all" placeholder="Nom de la fiche a lier" class="flex-grow-input">
-                <select id="editorLinkType" class="compact-select editor-compact-select">
-                    <option value="${TYPES.PERSON}">Personne</option>
-                    <option value="${TYPES.GROUP}">Groupe</option>
-                    <option value="${TYPES.COMPANY}">Entreprise</option>
-                </select>
+    <div class="editor-panel-layout">
+        <div class="editor-side-rail">
+            <div class="editor-side-group">
+                <button id="btnFocusNode" class="mini-btn ${state.focusMode ? 'active' : ''}">${state.focusMode ? 'tout voir' : 'Focus'}</button>
+                <button id="btnCenterNode" class="mini-btn">centrer</button>
             </div>
-            <div class="editor-link-composer">
-                <select id="editorLinkKind" class="flex-grow-input">${getLinkOptions(kindsForPerson)}</select>
-                <button id="btnAddLinkQuick" class="mini-btn primary" type="button">Ajouter</button>
-            </div>
-            <div id="editorLinkHint" class="editor-link-hint">Si la fiche existe deja, son type est repris automatiquement.</div>
-        </div>
-
-        <div class="editor-sheet-actions">
-            <button id="btnFocusNode" class="mini-btn ${state.focusMode ? 'active' : ''}">${state.focusMode ? 'tout voir' : 'Focus'}</button>
-            <button id="btnCenterNode" class="mini-btn">centrer</button>
-            <button id="btnToggleEdit" type="button" class="mini-btn">Modifier</button>
-        </div>
-
-        <div id="editorAdvanced" class="editor-advanced">
-            <div class="editor-adv-section">
-                <div class="editor-adv-title">Fiche</div>
-                <div class="editor-adv-primary-row">
-                    <div class="editor-adv-field editor-adv-field-name">
-                    <label>Nom</label>
-                        <input id="edName" type="text" value="${escapeHtml(n.name)}" class="editor-name-input">
-                    </div>
-                    <div class="editor-adv-field">
-                    <label>Type</label>
-                        <select id="edType">${typeOptions}</select>
-                    </div>
-                    <div class="editor-adv-field editor-adv-field-color">
-                    <label>Couleur</label>
-                        <input type="color" id="edColor" value="${safeHex(n.color)}" class="editor-color-input">
-                    </div>
-                </div>
-
-                <div class="editor-adv-grid editor-adv-grid-identity">
-                    <div>
-                    <label>Téléphone</label>
-                    <input type="text" id="edNum" value="${escapeHtml(n.num || '')}" placeholder="555-...">
-                    </div>
-                    <div>
-                    <label>Numéro de compte</label>
-                    <input type="text" id="edAccountNumber" value="${escapeHtml(n.accountNumber || '')}" placeholder="ACC-...">
-                    </div>
-                    <div>
-                    <label>Numéro citoyen</label>
-                    <input type="text" id="edCitizenNumber" value="${escapeHtml(n.citizenNumber || '')}" placeholder="CIT-...">
-                    </div>
-                </div>
-            </div>
-
-            <div class="editor-adv-section">
-                <div class="editor-adv-title">Fusionner cette fiche</div>
-                <div class="editor-adv-row editor-merge-row">
-                    <input id="mergeTarget" list="datalist-all" placeholder="Vers qui fusionner ?" class="flex-grow-input">
-                    <button id="btnMergeApply" class="mini-btn primary" type="button">Fusionner</button>
-                </div>
-                <div class="editor-link-hint">La fiche actuelle sera fusionnee dans la cible choisie.</div>
-            </div>
-
-            <div class="editor-adv-row editor-adv-row-utility">
+            <div class="editor-side-group editor-side-group-bottom">
+                <button id="btnToggleEdit" type="button" class="mini-btn">Modifier</button>
+                <button id="btnMergeLaunch" type="button" class="mini-btn">Fusion</button>
                 <button id="btnDelete" class="mini-btn danger" type="button">Supprimer</button>
-                <button id="btnExportRP" class="mini-btn" type="button">Dossier</button>
             </div>
         </div>
 
-        <datalist id="datalist-all"></datalist>
+        <div class="editor-main-card">
+            <div class="editor-sheet">
+                <div class="editor-sheet-head">
+                    <div class="editor-sheet-name">${escapeHtml(n.name)}</div>
+                    <div class="editor-sheet-type">${escapeHtml(typeLabel)}</div>
+                    <div class="editor-sheet-id">${escapeHtml(identifier)}</div>
+                </div>
+
+                <div class="editor-priority-grid">
+                    <div class="editor-quick-field editor-priority-field">
+                        <label>Nom</label>
+                        <input id="edQuickName" type="text" value="${escapeHtml(n.name)}" placeholder="Nom de la fiche">
+                    </div>
+                    <div class="editor-quick-field editor-priority-field">
+                        <label>Téléphone</label>
+                        <input id="edQuickNum" type="text" value="${escapeHtml(n.num || '')}" placeholder="555-...">
+                    </div>
+                </div>
+
+                <div class="editor-sheet-note">
+                    <label class="editor-section-label" for="edDescription">Description</label>
+                    <textarea id="edDescription" rows="3" placeholder="Description / note">${escapeHtml(n.description || n.notes || '')}</textarea>
+                </div>
+
+                <div class="editor-meta-strip">
+                    <div class="editor-meta-pill">
+                        <span>Compte bancaire</span>
+                        <input
+                            id="edQuickAccountNumber"
+                            type="text"
+                            value="${escapeHtml(n.accountNumber || '')}"
+                            placeholder="Non renseigne"
+                        >
+                    </div>
+                    <div class="editor-meta-pill">
+                        <span>Numéro social</span>
+                        <input
+                            id="edQuickCitizenNumber"
+                            type="text"
+                            value="${escapeHtml(n.citizenNumber || '')}"
+                            placeholder="Non renseigne"
+                        >
+                    </div>
+                </div>
+
+                <div class="editor-links-head">
+                    <span>LIENS ACTIFS</span>
+                    <span id="editorLinksCount" class="editor-links-count">0</span>
+                </div>
+
+                <div id="chipsLinks"></div>
+
+                <div class="editor-link-strip">
+                    <div class="editor-inline-title">Ajouter une relation</div>
+                    <div class="editor-link-composer">
+                        <div class="editor-autocomplete-field flex-grow-input">
+                            <input id="editorLinkName" type="text" autocomplete="off" spellcheck="false" placeholder="Nom de la fiche a lier" class="flex-grow-input">
+                            <div id="editorLinkNameResults" class="editor-autocomplete-results" hidden></div>
+                        </div>
+                        <select id="editorLinkType" class="compact-select editor-compact-select">
+                            <option value="${TYPES.PERSON}">Personne</option>
+                            <option value="${TYPES.GROUP}">Groupe</option>
+                            <option value="${TYPES.COMPANY}">Entreprise</option>
+                        </select>
+                    </div>
+                    <div class="editor-link-composer">
+                        <select id="editorLinkKind" class="flex-grow-input">${getLinkOptions(kindsForPerson)}</select>
+                        <button id="btnAddLinkQuick" class="mini-btn primary" type="button">Ajouter</button>
+                    </div>
+                    <div id="editorLinkHint" class="editor-link-hint">Si la fiche existe deja, son type est repris automatiquement.</div>
+                </div>
+
+                <div id="editorAdvanced" class="editor-advanced">
+                    <div class="editor-adv-section">
+                        <div class="editor-adv-title">Fiche</div>
+                        <div class="editor-adv-primary-row">
+                            <div class="editor-adv-field editor-adv-field-name">
+                                <label>Nom complet</label>
+                                <input id="edName" type="text" value="${escapeHtml(n.name)}" class="editor-name-input">
+                            </div>
+                            <div class="editor-adv-field">
+                                <label>Type</label>
+                                <select id="edType">${typeOptions}</select>
+                            </div>
+                            <div class="editor-adv-field editor-adv-field-color">
+                                <label>Couleur</label>
+                                <input type="color" id="edColor" value="${safeHex(n.color)}" class="editor-color-input">
+                            </div>
+                        </div>
+
+                        <div class="editor-adv-grid editor-adv-grid-identity">
+                            <div>
+                                <label>Téléphone</label>
+                                <input type="text" id="edNum" value="${escapeHtml(n.num || '')}" placeholder="555-...">
+                            </div>
+                            <div>
+                                <label>Numéro de compte</label>
+                                <input type="text" id="edAccountNumber" value="${escapeHtml(n.accountNumber || '')}" placeholder="ACC-...">
+                            </div>
+                            <div>
+                                <label>Numéro citoyen</label>
+                                <input type="text" id="edCitizenNumber" value="${escapeHtml(n.citizenNumber || '')}" placeholder="CIT-...">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="editorMergeSection" class="editor-adv-section">
+                        <div class="editor-adv-title">Fusionner cette fiche</div>
+                        <div class="editor-adv-row editor-merge-row">
+                            <div class="editor-autocomplete-field flex-grow-input">
+                                <input id="mergeTarget" type="text" autocomplete="off" spellcheck="false" placeholder="Vers qui fusionner ?" class="flex-grow-input">
+                                <div id="mergeTargetResults" class="editor-autocomplete-results" hidden></div>
+                            </div>
+                            <button id="btnMergeApply" class="mini-btn primary" type="button">Fusionner</button>
+                        </div>
+                        <div class="editor-link-hint">La fiche actuelle sera fusionnee dans la cible choisie.</div>
+                    </div>
+
+                    <div class="editor-adv-row editor-adv-row-utility">
+                        <button id="btnExportRP" class="mini-btn" type="button">Dossier</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
     `;
 }
