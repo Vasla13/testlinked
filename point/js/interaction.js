@@ -5,6 +5,7 @@ import { screenToWorld, clamp } from './utils.js';
 import { selectNode, renderEditor, updatePathfindingPanel, addLink } from './ui.js';
 
 export function setupCanvasEvents(canvas) {
+    const NODE_DRAG_THRESHOLD_PX = 6;
     
     // 1. ZOOM (CORRIGÉ ET SYNCHRONISÉ)
     canvas.addEventListener('wheel', (e) => {
@@ -36,6 +37,7 @@ export function setupCanvasEvents(canvas) {
     let isPanning = false;
     let lastPan = { x: 0, y: 0 };
     let dragLinkSource = null;
+    let suppressNextClick = false;
 
     canvas.addEventListener('mousedown', (e) => {
         const sim = getSimulation();
@@ -56,18 +58,11 @@ export function setupCanvasEvents(canvas) {
             return;
         }
         
-        // Cas 2 : Sélection simple (Clic Gauche sur un point)
-        if (hit && e.button === 0) {
-            // C'est ici que ça bloquait : on force la sélection maintenant
-            selectNode(hit.id);
-            draw();
-            // On laisse l'événement se propager pour que D3 puisse lancer le drag si on bouge
-        }
-        
-        // Cas 3 : Panoramique (Clic Gauche DANS LE VIDE)
+        // Cas 2 : Panoramique (Clic Gauche DANS LE VIDE)
         // On vérifie bien !hit pour ne pas bouger si on est sur un noeud
         if (!hit && e.button === 0) {
             isPanning = true; 
+            suppressNextClick = true;
             lastPan = { x: e.clientX, y: e.clientY };
             canvas.style.cursor = 'grabbing';
             
@@ -117,6 +112,7 @@ export function setupCanvasEvents(canvas) {
             const sim = getSimulation();
             const p = screenToWorld(e.offsetX, e.offsetY, canvas, state.view);
             const hit = sim ? sim.find(p.x, p.y, 40) : null; 
+            suppressNextClick = true;
             
             if (hit && hit.id !== dragLinkSource.id) {
                 const success = addLink(dragLinkSource, hit, null); 
@@ -129,9 +125,26 @@ export function setupCanvasEvents(canvas) {
         // Fin Panoramique
         if (isPanning) { isPanning = false; canvas.style.cursor = 'default'; }
     });
+
+    canvas.addEventListener('click', (e) => {
+        if (suppressNextClick) {
+            suppressNextClick = false;
+            return;
+        }
+        if (e.shiftKey || e.button !== 0) return;
+
+        const sim = getSimulation();
+        if (!sim) return;
+
+        const p = screenToWorld(e.offsetX, e.offsetY, canvas, state.view);
+        const hit = sim.find(p.x, p.y, 40);
+        if (hit) {
+            selectNode(hit.id);
+        }
+    });
     
-    canvas.addEventListener('mouseleave', () => { 
-        isPanning = false; state.hoverId = null; dragLinkSource = null; state.tempLink = null; draw(); 
+    canvas.addEventListener('mouseleave', () => {
+        isPanning = false; state.hoverId = null; dragLinkSource = null; state.tempLink = null; suppressNextClick = false; draw();
     });
 
     // 3. CONFIGURATION D3 DRAG (Pour bouger les nœuds)
@@ -150,13 +163,23 @@ export function setupCanvasEvents(canvas) {
             if (!sim) return;
             if (!e.active) sim.alphaTarget(0.3).restart();
             if (e.subject) {
+                e.subject.__dragStartClientX = Number(e.sourceEvent?.clientX || 0);
+                e.subject.__dragStartClientY = Number(e.sourceEvent?.clientY || 0);
+                e.subject.__dragMoved = false;
                 e.subject.fx = e.subject.x; 
                 e.subject.fy = e.subject.y; 
-                selectNode(e.subject.id); // Sélectionne aussi quand on commence à drag
             }
         })
         .on("drag", e => {
             if (e.subject) {
+                const dx = Math.abs(Number(e.sourceEvent?.clientX || 0) - Number(e.subject.__dragStartClientX || 0));
+                const dy = Math.abs(Number(e.sourceEvent?.clientY || 0) - Number(e.subject.__dragStartClientY || 0));
+                if (!e.subject.__dragMoved && dx < NODE_DRAG_THRESHOLD_PX && dy < NODE_DRAG_THRESHOLD_PX) {
+                    return;
+                }
+                e.subject.__dragMoved = true;
+                suppressNextClick = true;
+
                 // Conversion continue pendant le mouvement
                 const p = screenToWorld(e.sourceEvent.offsetX, e.sourceEvent.offsetY, canvas, state.view);
                 e.subject.fx = p.x; 
@@ -168,9 +191,16 @@ export function setupCanvasEvents(canvas) {
             if (!sim) return;
             if (!e.active) sim.alphaTarget(0);
             if (e.subject) {
+                const moved = Boolean(e.subject.__dragMoved);
                 e.subject.fx = null; 
                 e.subject.fy = null; 
-                saveState(); 
+                delete e.subject.__dragMoved;
+                delete e.subject.__dragStartClientX;
+                delete e.subject.__dragStartClientY;
+
+                if (moved) {
+                    saveState();
+                }
             }
         })
     );
