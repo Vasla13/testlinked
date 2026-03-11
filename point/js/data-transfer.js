@@ -34,6 +34,7 @@ export function generateExportData() {
             num: n.num,
             accountNumber: n.accountNumber,
             citizenNumber: n.citizenNumber,
+            linkedMapPointId: String(n.linkedMapPointId || ''),
             description: n.description,
             notes: n.notes,
             x: n.x,

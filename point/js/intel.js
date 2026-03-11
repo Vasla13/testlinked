@@ -263,6 +263,12 @@ function tokenize(text) {
     return tokens;
 }
 
+function mapPointNameKey(value) {
+    return normalizeText(stripPunctuation(value || ''))
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
 function loadMapPoints() {
     try {
         if (typeof localStorage === 'undefined') return null;
@@ -283,7 +289,8 @@ function loadMapPoints() {
             }
         }
 
-        const map = new Map();
+        const byId = new Map();
+        const byNameBuckets = new Map();
 
         sources.forEach((raw) => {
             if (!raw) return;
@@ -296,24 +303,54 @@ function loadMapPoints() {
                     const x = Number(pt.x);
                     const y = Number(pt.y);
                     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-                    map.set(String(pt.id), { x, y });
+                    const point = {
+                        id: String(pt.id),
+                        name: String(pt.name || ''),
+                        x,
+                        y
+                    };
+                    byId.set(point.id, point);
+                    const nameKey = mapPointNameKey(point.name);
+                    if (!nameKey) return;
+                    const bucket = byNameBuckets.get(nameKey) || [];
+                    bucket.push(point);
+                    byNameBuckets.set(nameKey, bucket);
                 });
             });
         });
 
-        return map.size ? map : null;
+        const byName = new Map();
+        byNameBuckets.forEach((bucket, key) => {
+            if (bucket.length === 1) byName.set(key, bucket[0]);
+        });
+
+        return (byId.size || byName.size) ? { byId, byName } : null;
     } catch (e) {
         return null;
     }
 }
 
+function resolveMapPointForNode(node, mapPoints) {
+    if (!node || !mapPoints) return null;
+    const byId = mapPoints.byId instanceof Map ? mapPoints.byId : null;
+    const byName = mapPoints.byName instanceof Map ? mapPoints.byName : null;
+
+    const linkedId = String(node.linkedMapPointId || '').trim();
+    if (linkedId && byId?.has(linkedId)) return byId.get(linkedId);
+
+    const nodeId = String(node.id || '').trim();
+    if (nodeId && byId?.has(nodeId)) return byId.get(nodeId);
+
+    const nameKey = mapPointNameKey(node.name || '');
+    if (nameKey && byName?.has(nameKey)) return byName.get(nameKey);
+
+    return null;
+}
+
 function geoScoreForNodes(a, b, mapPoints) {
     if (!mapPoints) return { score: 0, distance: null };
-    const idA = String(a.id || '');
-    const idB = String(b.id || '');
-    if (!idA || !idB) return { score: 0, distance: null };
-    const pA = mapPoints.get(idA);
-    const pB = mapPoints.get(idB);
+    const pA = resolveMapPointForNode(a, mapPoints);
+    const pB = resolveMapPointForNode(b, mapPoints);
     if (!pA || !pB) return { score: 0, distance: null };
     const dx = pA.x - pB.x;
     const dy = pA.y - pB.y;

@@ -139,6 +139,7 @@ export function ensureNode(type, name) {
             personStatus: PERSON_STATUS.ACTIVE,
             accountNumber: '',
             citizenNumber: '',
+            linkedMapPointId: '',
             description: '',
             notes: ''
         };

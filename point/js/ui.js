@@ -34,7 +34,7 @@ const COLLAB_ACTIVE_BOARD_STORAGE_KEY = 'bniLinkedActiveBoard_v1';
 const POINT_LOCAL_CHANGE_EVENT = 'bni:point-local-change';
 const ACTION_LOG_STORAGE_KEY = 'bniLinkedActionLog_v1';
 const ACTION_LOG_MAX = 80;
-const COLLAB_NODE_FIELDS = ['name', 'type', 'color', 'manualColor', 'personStatus', 'num', 'accountNumber', 'citizenNumber', 'description', 'notes', 'x', 'y', 'fixed'];
+const COLLAB_NODE_FIELDS = ['name', 'type', 'color', 'manualColor', 'personStatus', 'num', 'accountNumber', 'citizenNumber', 'linkedMapPointId', 'description', 'notes', 'x', 'y', 'fixed'];
 const COLLAB_LINK_FIELDS = ['source', 'target', 'kind'];
 const COLLAB_PRESENCE_HEARTBEAT_MS = 4200;
 const COLLAB_PRESENCE_RETRY_MS = 2200;
@@ -415,6 +415,7 @@ function normalizeCloudNode(rawNode) {
         num: String(rawNode.num || ''),
         accountNumber: String(rawNode.accountNumber || ''),
         citizenNumber: String(rawNode.citizenNumber || ''),
+        linkedMapPointId: String(rawNode.linkedMapPointId || ''),
         description: String(rawNode.description || rawNode.notes || ''),
         notes: String(rawNode.notes || rawNode.description || ''),
         x: Number(rawNode.x) || 0,
@@ -641,6 +642,7 @@ function extractPlainPointPayloadFromCloud(rawData) {
             num: node.num,
             accountNumber: node.accountNumber,
             citizenNumber: node.citizenNumber,
+            linkedMapPointId: String(node.linkedMapPointId || ''),
             description: node.description,
             notes: node.notes,
             x: node.x,
@@ -3502,6 +3504,7 @@ function normalizeImportedNode(rawNode, fallbackId = `node_${uid()}`) {
         num: typeof source.num === 'string' ? source.num : String(source.num ?? ''),
         accountNumber: typeof source.accountNumber === 'string' ? source.accountNumber : '',
         citizenNumber: typeof source.citizenNumber === 'string' ? source.citizenNumber : '',
+        linkedMapPointId: typeof source.linkedMapPointId === 'string' ? source.linkedMapPointId : String(source.linkedMapPointId ?? ''),
         description: rawDescription,
         notes: rawNotes,
         x: Number.isFinite(x) ? x : (Math.random() - 0.5) * 100,
@@ -3582,6 +3585,7 @@ function mergeImportedNodeIntoExisting(existingNode, incomingNode) {
     fillBlank('accountNumber');
     fillBlank('citizenNumber');
     fillBlank('num');
+    fillBlank('linkedMapPointId');
     fillBlank('description');
     fillBlank('notes');
 

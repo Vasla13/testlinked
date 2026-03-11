@@ -83,6 +83,7 @@ export function saveState() {
                 num: n.num,
                 accountNumber: n.accountNumber,
                 citizenNumber: n.citizenNumber,
+                linkedMapPointId: String(n.linkedMapPointId || ''),
                 description: n.description,
                 notes: n.notes,
                 x: n.x, y: n.y, fixed: n.fixed
@@ -137,6 +138,7 @@ export function loadState() {
             node.personStatus = normalizePersonStatus(node.personStatus, node.type);
             if (typeof node.accountNumber !== 'string') node.accountNumber = '';
             if (typeof node.citizenNumber !== 'string') node.citizenNumber = '';
+            node.linkedMapPointId = String(node.linkedMapPointId || '');
             if (typeof node.description !== 'string') node.description = String(node.notes || '');
             if (typeof node.notes !== 'string') node.notes = String(node.description || '');
         });

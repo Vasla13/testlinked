@@ -1,5 +1,73 @@
 import { LINK_KIND_EMOJI, KINDS, KIND_LABELS, PERSON_STATUS, TYPES } from './constants.js';
 
+let cssColorParser = null;
+
+function channelToHex(value) {
+    const channel = Math.max(0, Math.min(255, Number(value) || 0));
+    return Math.round(channel).toString(16).padStart(2, '0');
+}
+
+function colorChannelsToHex(r, g, b) {
+    return `#${channelToHex(r)}${channelToHex(g)}${channelToHex(b)}`;
+}
+
+function hslToHex(h, s, l) {
+    const hue = ((((Number(h) || 0) % 360) + 360) % 360) / 360;
+    const sat = Math.max(0, Math.min(1, Number(s) || 0));
+    const light = Math.max(0, Math.min(1, Number(l) || 0));
+
+    if (sat === 0) {
+        const gray = light * 255;
+        return colorChannelsToHex(gray, gray, gray);
+    }
+
+    const q = light < 0.5 ? light * (1 + sat) : light + sat - (light * sat);
+    const p = 2 * light - q;
+    const hueToChannel = (t) => {
+        let channelHue = t;
+        if (channelHue < 0) channelHue += 1;
+        if (channelHue > 1) channelHue -= 1;
+        if (channelHue < 1 / 6) return p + (q - p) * 6 * channelHue;
+        if (channelHue < 1 / 2) return q;
+        if (channelHue < 2 / 3) return p + (q - p) * (2 / 3 - channelHue) * 6;
+        return p;
+    };
+
+    return colorChannelsToHex(
+        hueToChannel(hue + 1 / 3) * 255,
+        hueToChannel(hue) * 255,
+        hueToChannel(hue - 1 / 3) * 255
+    );
+}
+
+function parseCssColorToHex(color) {
+    if (typeof document === 'undefined') return '';
+    if (typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && !CSS.supports('color', color)) {
+        return '';
+    }
+    if (!cssColorParser) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 1;
+        canvas.height = 1;
+        cssColorParser = canvas.getContext('2d');
+    }
+    if (!cssColorParser) return '';
+
+    try {
+        cssColorParser.fillStyle = '#000000';
+        cssColorParser.fillStyle = color;
+    } catch (e) {
+        return '';
+    }
+
+    const normalized = String(cssColorParser.fillStyle || '').trim();
+    if (/^#[0-9A-F]{6}$/i.test(normalized)) return normalized;
+
+    const rgbMatch = normalized.match(/^rgba?\(\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)(?:\s*,\s*[0-9.]+\s*)?\)$/i);
+    if (!rgbMatch) return '';
+    return colorChannelsToHex(rgbMatch[1], rgbMatch[2], rgbMatch[3]);
+}
+
 // Normalise un ID (objet D3 ou valeur primitive) en string
 export function getId(value) {
     if (value && typeof value === 'object') return String(value.id);
@@ -23,8 +91,16 @@ export function escapeHtml(text) {
 }
 
 export function safeHex(color) {
-    if (!color) return '#ffffff';
-    if (/^#[0-9A-F]{6}$/i.test(color)) return color;
+    const raw = String(color || '').trim();
+    if (!raw) return '#ffffff';
+    if (/^#[0-9A-F]{6}$/i.test(raw)) return raw;
+    const shortHex = raw.match(/^#([0-9A-F]{3})$/i);
+    if (shortHex) {
+        const [r, g, b] = shortHex[1].split('');
+        return `#${r}${r}${g}${g}${b}${b}`;
+    }
+    const cssHex = parseCssColorToHex(raw);
+    if (cssHex) return cssHex;
     return '#ffffff';
 }
 
@@ -52,12 +128,12 @@ export function hexToRgb(hex) {
 }
 
 export function rgbToHex(r, g, b) {
-    return "#" + ((1 << 24) + (Math.round(r) << 16) + (Math.round(g) << 8) + Math.round(b)).toString(16).slice(1);
+    return colorChannelsToHex(r, g, b);
 }
 
 export function randomPastel() {
     const hue = Math.floor(Math.random() * 360);
-    return `hsl(${hue}, 70%, 80%)`;
+    return hslToHex(hue, 0.7, 0.8);
 }
 
 // Math helpers
