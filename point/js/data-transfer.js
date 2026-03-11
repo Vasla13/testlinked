@@ -36,8 +36,7 @@ export function generateExportData() {
             notes: n.notes,
             x: n.x,
             y: n.y,
-            fixed: n.fixed,
-            linkedMapPointId: n.linkedMapPointId
+            fixed: n.fixed
         })),
         links: state.links.map(l => ({
             id: l.id,

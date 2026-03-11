@@ -172,14 +172,6 @@ export function injectStyles() {
             color: #041621;
             border-color: rgba(115, 251, 247, 0.95);
         }
-        #btnMerge {
-            background: rgba(98, 214, 216, 0.95);
-            color: #041621;
-        }
-        #btnToggleEditSecondary {
-            text-transform: capitalize;
-        }
-
         .editor-advanced {
             margin-top: 10px;
             border: 1px solid rgba(115, 251, 247, 0.25);
@@ -2024,22 +2016,22 @@ export function injectStyles() {
         .editor-sheet {
             display: flex;
             flex-direction: column;
-            gap: 14px;
+            gap: 12px;
             color: var(--text-main);
         }
         .editor-sheet-head {
             grid-template-columns: minmax(0, 1fr) auto auto;
             align-items: end;
-            gap: 10px;
-            padding-bottom: 12px;
+            gap: 8px;
+            padding-bottom: 10px;
             border-bottom: 1px solid rgba(102, 243, 255, 0.14);
         }
         .editor-sheet-name {
             font-family: var(--font-main);
-            font-size: clamp(1.6rem, 3vw, 2.3rem);
-            line-height: 0.92;
+            font-size: clamp(1.25rem, 2.2vw, 1.8rem);
+            line-height: 0.98;
             color: var(--text-light);
-            letter-spacing: 0.08em;
+            letter-spacing: 0.06em;
             text-transform: uppercase;
         }
         .editor-sheet-type {
@@ -2057,45 +2049,24 @@ export function injectStyles() {
         }
         .editor-sheet-id {
             font-family: var(--font-code);
-            font-size: 1.25rem;
+            font-size: 0.88rem;
             line-height: 1;
             color: #9fd8e1;
-            letter-spacing: 0.14em;
-        }
-        .editor-sheet-values {
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 10px;
-            padding: 0;
-            border-bottom: none;
-            margin: 0;
-            font-family: var(--font-main);
-            font-size: 0.72rem;
-            line-height: 1.4;
-            text-transform: uppercase;
-            color: #90aac6;
-        }
-        .editor-sheet-values > div {
-            min-height: 52px;
-            padding: 10px 12px;
-            border: 1px solid rgba(102, 243, 255, 0.12);
-            border-radius: 8px;
-            background: rgba(4, 11, 27, 0.72);
-            display: flex;
-            align-items: flex-start;
+            letter-spacing: 0.12em;
         }
         .editor-sheet-note {
             border-bottom: none;
             margin: 0;
         }
         .editor-sheet-note textarea {
-            min-height: 74px;
+            min-height: 60px;
             border: 1px solid rgba(102, 243, 255, 0.16);
             border-radius: 8px;
-            padding: 12px 14px;
+            padding: 10px 12px;
             background: rgba(2, 8, 20, 0.92);
             color: var(--text-main);
             font-family: var(--font-main);
-            font-size: 1rem;
+            font-size: 0.92rem;
             line-height: 1.35;
         }
         .editor-sheet-note textarea::placeholder {
@@ -2147,16 +2118,28 @@ export function injectStyles() {
             color: #a8bed8;
             letter-spacing: 2px;
         }
-        .editor-links-head .mini-btn {
-            min-width: 104px;
-        }
         #chipsLinks {
-            min-height: 110px;
+            min-height: 96px;
             border: 1px dashed rgba(102, 243, 255, 0.22);
             border-radius: 10px;
             background: rgba(3, 10, 24, 0.74);
-            padding: 12px;
+            padding: 10px;
             margin-bottom: 0;
+        }
+        .editor-link-strip {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 10px 12px;
+            border: 1px solid rgba(102, 243, 255, 0.12);
+            border-radius: 10px;
+            background: rgba(4, 11, 27, 0.66);
+        }
+        .editor-inline-title {
+            color: #a8bed8;
+            font-size: 0.7rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
         }
         .sheet-links-columns {
             gap: 12px;
@@ -2208,37 +2191,34 @@ export function injectStyles() {
             color: #ff9aa7;
         }
         .editor-sheet-actions {
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 10px;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
             margin-top: 0;
         }
         .editor-sheet-actions .mini-btn {
-            min-height: 42px;
-            font-size: 0.76rem;
+            min-height: 38px;
+            font-size: 0.72rem;
             line-height: 1.15;
             font-family: var(--font-main);
-            letter-spacing: 1.4px;
+            letter-spacing: 1.2px;
             text-transform: uppercase;
             background: linear-gradient(90deg, rgba(16, 34, 52, 0.82), rgba(8, 17, 30, 0.9));
             color: var(--accent-cyan);
             border: 1px solid rgba(102, 243, 255, 0.16);
-        }
-        #btnToggleEditSecondary {
-            min-width: 104px;
         }
         .editor-advanced {
             margin-top: 4px;
             border: 1px solid rgba(102, 243, 255, 0.14);
             border-radius: 12px;
             background: linear-gradient(180deg, rgba(5, 12, 28, 0.94), rgba(3, 9, 22, 0.86));
-            padding: 12px;
+            padding: 10px;
         }
         .editor-adv-section {
             display: flex;
             flex-direction: column;
-            gap: 10px;
-            margin-bottom: 12px;
-            padding: 12px;
+            gap: 8px;
+            margin-bottom: 10px;
+            padding: 10px;
             border: 1px solid rgba(102, 243, 255, 0.12);
             border-radius: 10px;
             background: rgba(3, 10, 24, 0.54);
@@ -2253,20 +2233,45 @@ export function injectStyles() {
             gap: 10px;
             margin-bottom: 10px;
         }
+        .editor-adv-primary-row {
+            display: flex;
+            align-items: end;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .editor-adv-field {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            min-width: 0;
+        }
+        .editor-adv-field-name {
+            flex: 0 1 220px;
+        }
+        .editor-adv-field-color {
+            flex: 0 0 74px;
+        }
         .editor-adv-grid label {
             color: #8ba4c0;
             letter-spacing: 1.6px;
             font-size: 0.68rem;
         }
+        .editor-adv-grid-identity {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
         .editor-adv-row {
             gap: 10px;
             margin-bottom: 10px;
+        }
+        .editor-adv-row-utility {
+            justify-content: flex-end;
+            margin-bottom: 0;
         }
         .editor-merge-row {
             flex-wrap: wrap;
         }
         .editor-merge-row .flex-grow-input {
-            min-width: 220px;
+            min-width: 180px;
         }
         .editor-adv-links {
             gap: 8px;
@@ -2275,10 +2280,11 @@ export function injectStyles() {
         .editor-link-composer {
             display: flex;
             gap: 8px;
+            align-items: center;
         }
         .editor-link-hint {
             color: var(--text-muted);
-            font-size: 0.76rem;
+            font-size: 0.72rem;
             line-height: 1.4;
         }
         .flex-row-force {
@@ -2292,18 +2298,16 @@ export function injectStyles() {
         .editor-compact-select {
             width: 112px;
         }
+        .editor-name-input {
+            max-width: 220px;
+        }
         .editor-color-input {
-            height: 34px;
+            height: 38px;
             padding: 0;
             cursor: pointer;
             border-radius: 8px;
             border: 1px solid rgba(102, 243, 255, 0.18);
             background: rgba(2, 8, 20, 0.92);
-        }
-        .editor-map-id {
-            font-size: 0.8rem;
-            font-family: var(--font-code);
-            letter-spacing: 0.04em;
         }
 
         #filter-bar {
@@ -2514,8 +2518,16 @@ export function injectStyles() {
             .editor-quick-identity {
                 grid-template-columns: 1fr;
             }
+            .editor-sheet-actions,
+            .editor-adv-grid-identity {
+                grid-template-columns: 1fr;
+            }
+            .editor-adv-primary-row,
+            .editor-adv-row-utility,
             .editor-link-composer {
+                display: flex;
                 flex-direction: column;
+                align-items: stretch;
             }
             .cloud-inline-form,
             .cloud-grid,

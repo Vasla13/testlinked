@@ -1,4 +1,4 @@
-import { state, nodeById, pushHistory, saveState, scheduleSave, linkHasNode } from './state.js'; // AJOUT saveState
+import { state, nodeById, pushHistory, scheduleSave, linkHasNode } from './state.js';
 import { ensureNode, mergeNodes, updatePersonColors } from './logic.js';
 import { renderEditorHTML } from './templates.js';
 import { restartSim } from './physics.js';
@@ -212,11 +212,9 @@ function setupEditorListeners(n) {
 
     const advancedPanel = document.getElementById('editorAdvanced');
     const btnToggleEdit = document.getElementById('btnToggleEdit');
-    const btnToggleEditSecondary = document.getElementById('btnToggleEditSecondary');
     const syncAdvancedButtons = () => {
         const isOpen = !!advancedPanel?.classList.contains('open');
         if (btnToggleEdit) btnToggleEdit.textContent = isOpen ? 'Fermer' : 'Modifier';
-        if (btnToggleEditSecondary) btnToggleEditSecondary.textContent = isOpen ? 'Fermer' : 'Options';
     };
     if (advancedPanel && editorAdvancedOpen) advancedPanel.classList.add('open');
     syncAdvancedButtons();
@@ -230,7 +228,6 @@ function setupEditorListeners(n) {
         setTimeout(() => clampEditorInViewport(editorPanel), 40);
     };
     if (btnToggleEdit) btnToggleEdit.onclick = toggleAdvanced;
-    if (btnToggleEditSecondary) btnToggleEditSecondary.onclick = toggleAdvanced;
 
     document.getElementById('btnCenterNode').onclick = () => { state.view.x = -n.x * state.view.scale; state.view.y = -n.y * state.view.scale; restartSim(); };
 
@@ -339,38 +336,12 @@ function setupEditorListeners(n) {
         };
     }
 
-    // --- FIX : SAUVEGARDE IMMÉDIATE LORS DE LA VALIDATION ---
-    const btnValMap = document.getElementById('btnValidateMapId');
-    const inpMapId = document.getElementById('edMapId');
-
-    if(btnValMap && inpMapId) {
-        btnValMap.onclick = () => {
-            n.linkedMapPointId = inpMapId.value.trim();
-            saveState(); // <--- SAUVEGARDE FORCÉE ICI
-            renderEditor();
-            showCustomAlert("LIAISON ENREGISTRÉE");
-        };
-        inpMapId.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') btnValMap.click();
-        });
-    }
-
-    const btnOpenMapLink = document.getElementById('btnOpenMapLink');
-    if (btnOpenMapLink) {
-        btnOpenMapLink.onclick = () => {
-            const targetId = (n.linkedMapPointId || n.id || '').trim();
-            if (!targetId) return;
-            window.location.href = `../map/index.html?focus=${encodeURIComponent(targetId)}`;
-        };
-    }
-
     const linkNameInput = document.getElementById('editorLinkName');
     const linkTypeSelect = document.getElementById('editorLinkType');
     const linkKindSelect = document.getElementById('editorLinkKind');
     const linkHint = document.getElementById('editorLinkHint');
     const btnAddLinkQuick = document.getElementById('btnAddLinkQuick');
     const mergeInput = document.getElementById('mergeTarget');
-    const btnMerge = document.getElementById('btnMerge');
     const btnMergeApply = document.getElementById('btnMergeApply');
 
     const resolveQuickLinkTarget = () => {
@@ -420,11 +391,8 @@ function setupEditorListeners(n) {
             return;
         }
 
-        editorAdvancedOpen = true;
         if (linkNameInput) linkNameInput.value = '';
         requestAnimationFrame(() => {
-            const reopened = document.getElementById('editorAdvanced');
-            if (reopened) reopened.classList.add('open');
             document.getElementById('editorLinkName')?.focus();
         });
     };
@@ -477,26 +445,6 @@ function setupEditorListeners(n) {
     }
 
     if (btnMergeApply) btnMergeApply.onclick = submitMergeTarget;
-
-    if (btnMerge) {
-        btnMerge.onclick = () => {
-            const targetNameRaw = mergeInput ? mergeInput.value.trim() : '';
-            if (targetNameRaw) {
-                submitMergeTarget();
-                return;
-            }
-            editorAdvancedOpen = true;
-            requestAnimationFrame(() => {
-                const reopened = document.getElementById('editorAdvanced');
-                if (reopened) {
-                    reopened.classList.add('open');
-                    syncAdvancedButtons();
-                    clampEditorInViewport(document.getElementById('editor'));
-                }
-                document.getElementById('mergeTarget')?.focus();
-            });
-        };
-    }
 
     document.getElementById('btnExportRP').onclick = () => {
         const typeLabel = n.type === TYPES.PERSON ? "Individu" : (n.type === TYPES.COMPANY ? "Entreprise" : "Organisation");

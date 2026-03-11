@@ -83,8 +83,7 @@ export function saveState() {
                 citizenNumber: n.citizenNumber,
                 description: n.description,
                 notes: n.notes,
-                x: n.x, y: n.y, fixed: n.fixed,
-                linkedMapPointId: n.linkedMapPointId 
+                x: n.x, y: n.y, fixed: n.fixed
             })),
             links: state.links.map(l => ({
                 id: l.id,

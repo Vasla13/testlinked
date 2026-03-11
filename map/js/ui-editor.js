@@ -214,9 +214,6 @@ function renderPointEditor() {
                         class="cyber-input"
                     >
                 </div>
-                <button id="btnOpenInPoint" class="action-btn full-width editor-open-network" type="button">
-                    Ouvrir dans Reseau
-                </button>
             </div>
 
             <div class="editor-section" style="--editor-accent:#dff7ff;">
@@ -322,10 +319,6 @@ function renderPointEditor() {
         renderAll();
         renderEditor();
         saveLocalState();
-    };
-
-    document.getElementById('btnOpenInPoint').onclick = () => {
-        window.location.href = `../point/index.html?focus=${encodeURIComponent(point.id)}`;
     };
 
     document.getElementById('btnLinkPoint').onclick = () => {

@@ -47,13 +47,11 @@ window.addEventListener('load', () => {
     setTimeout(refreshCanvasSize, 100);
     setTimeout(refreshCanvasSize, 500);
 
-    // --- FIX NAVIGATION RETOUR (Map -> Point) ---
     const params = new URLSearchParams(window.location.search);
     const focusId = params.get('focus');
     
     if (focusId) {
-        // Recherche : Soit ID direct, soit ID map lié
-        const targetNode = state.nodes.find(n => n.id === focusId || n.linkedMapPointId === focusId);
+        const targetNode = state.nodes.find(n => n.id === focusId);
 
         if (targetNode) {
             console.log("🕸️ Retour Map détecté. Cible :", targetNode.name);

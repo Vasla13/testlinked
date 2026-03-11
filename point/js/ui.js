@@ -34,7 +34,7 @@ const COLLAB_ACTIVE_BOARD_STORAGE_KEY = 'bniLinkedActiveBoard_v1';
 const POINT_LOCAL_CHANGE_EVENT = 'bni:point-local-change';
 const ACTION_LOG_STORAGE_KEY = 'bniLinkedActionLog_v1';
 const ACTION_LOG_MAX = 80;
-const COLLAB_NODE_FIELDS = ['name', 'type', 'color', 'num', 'accountNumber', 'citizenNumber', 'description', 'notes', 'x', 'y', 'fixed', 'linkedMapPointId'];
+const COLLAB_NODE_FIELDS = ['name', 'type', 'color', 'num', 'accountNumber', 'citizenNumber', 'description', 'notes', 'x', 'y', 'fixed'];
 const COLLAB_LINK_FIELDS = ['source', 'target', 'kind'];
 const COLLAB_PRESENCE_HEARTBEAT_MS = 4200;
 const COLLAB_PRESENCE_RETRY_MS = 2200;
@@ -415,8 +415,7 @@ function normalizeCloudNode(rawNode) {
         notes: String(rawNode.notes || rawNode.description || ''),
         x: Number(rawNode.x) || 0,
         y: Number(rawNode.y) || 0,
-        fixed: Boolean(rawNode.fixed),
-        linkedMapPointId: String(rawNode.linkedMapPointId || '')
+        fixed: Boolean(rawNode.fixed)
     };
 }
 
@@ -640,8 +639,7 @@ function extractPlainPointPayloadFromCloud(rawData) {
             notes: node.notes,
             x: node.x,
             y: node.y,
-            fixed: node.fixed,
-            linkedMapPointId: node.linkedMapPointId
+            fixed: node.fixed
         }));
     const nodeIds = new Set(nodes.map((node) => String(node.id)));
     const deletedLinkMap = new Map(normalized.deletedLinks.map((entry) => [String(entry.id), entry]));
@@ -3284,8 +3282,7 @@ function normalizeImportedNode(rawNode, fallbackId = `node_${uid()}`) {
         notes: rawNotes,
         x: Number.isFinite(x) ? x : (Math.random() - 0.5) * 100,
         y: Number.isFinite(y) ? y : (Math.random() - 0.5) * 100,
-        fixed: Boolean(source.fixed),
-        linkedMapPointId: typeof source.linkedMapPointId === 'string' ? source.linkedMapPointId.trim() : ''
+        fixed: Boolean(source.fixed)
     };
 }
 
@@ -3306,7 +3303,6 @@ function normalizeImportedLink(rawLink) {
 function indexNodeForMerge(indexes, node) {
     if (!node || typeof node !== 'object') return;
     pushIndexedNode(indexes.byId, normalizeMergeText(node.id), node);
-    pushIndexedNode(indexes.byLinkedMapPointId, normalizeMergeText(node.linkedMapPointId), node);
     pushIndexedNode(indexes.byCitizenNumber, normalizeMergeText(node.citizenNumber), node);
     pushIndexedNode(indexes.byAccountNumber, normalizeMergeText(node.accountNumber), node);
     pushIndexedNode(indexes.byNum, normalizeMergeText(node.num), node);
@@ -3316,7 +3312,6 @@ function indexNodeForMerge(indexes, node) {
 function buildNodeMergeIndexes(nodes) {
     const indexes = {
         byId: new Map(),
-        byLinkedMapPointId: new Map(),
         byCitizenNumber: new Map(),
         byAccountNumber: new Map(),
         byNum: new Map(),
@@ -3330,9 +3325,6 @@ function buildNodeMergeIndexes(nodes) {
 function findMergeTarget(indexes, node) {
     const exactId = getUniqueIndexedNode(indexes.byId, normalizeMergeText(node.id));
     if (exactId) return exactId;
-
-    const linkedMapMatch = getUniqueIndexedNode(indexes.byLinkedMapPointId, normalizeMergeText(node.linkedMapPointId));
-    if (linkedMapMatch) return linkedMapMatch;
 
     const citizenMatch = getUniqueIndexedNode(indexes.byCitizenNumber, normalizeMergeText(node.citizenNumber));
     if (citizenMatch) return citizenMatch;
@@ -3363,7 +3355,6 @@ function mergeImportedNodeIntoExisting(existingNode, incomingNode) {
         }
     };
 
-    fillBlank('linkedMapPointId');
     fillBlank('accountNumber');
     fillBlank('citizenNumber');
     fillBlank('num');

@@ -115,10 +115,7 @@ export function renderEditorHTML(n, state) {
     const typeLabel = n.type === TYPES.PERSON
         ? 'personne'
         : (n.type === TYPES.COMPANY ? 'entreprise' : 'groupe');
-    const identifier = n.citizenNumber || n.accountNumber || n.num || '----------';
-    const valueA = (n.description || 'Valeur description').slice(0, 40);
-    const valueB = n.num || 'Valeur point social';
-    const valueC = n.type === TYPES.COMPANY ? 'Valeur metier' : 'Valeur metier';
+    const identifier = n.citizenNumber || n.accountNumber || n.id || '----------';
     const identity = splitIdentityName(n.name);
     const quickIdentityHtml = n.type === TYPES.PERSON
         ? `
@@ -150,12 +147,6 @@ export function renderEditorHTML(n, state) {
             <div class="editor-sheet-id">${escapeHtml(identifier)}</div>
         </div>
 
-        <div class="editor-sheet-values">
-            <div>${escapeHtml(valueA || 'Valeur description')}</div>
-            <div>${escapeHtml(valueB || 'Valeur point social')}</div>
-            <div>${escapeHtml(valueC || 'Valeur metier')}</div>
-        </div>
-
         <div class="editor-sheet-note">
             <textarea id="edDescription" rows="2" placeholder="Note sur la personne (si il y en a)">${escapeHtml(n.description || n.notes || '')}</textarea>
         </div>
@@ -164,78 +155,77 @@ export function renderEditorHTML(n, state) {
 
         <div class="editor-links-head">
             <span>LIENS ACTIFS</span>
-            <button id="btnToggleEdit" type="button" class="mini-btn">Modifier</button>
         </div>
 
         <div id="chipsLinks"></div>
 
+        <div class="editor-link-strip">
+            <div class="editor-inline-title">Ajouter une relation</div>
+            <div class="editor-link-composer">
+                <input id="editorLinkName" list="datalist-all" placeholder="Nom de la fiche a lier" class="flex-grow-input">
+                <select id="editorLinkType" class="compact-select editor-compact-select">
+                    <option value="${TYPES.PERSON}">Personne</option>
+                    <option value="${TYPES.GROUP}">Groupe</option>
+                    <option value="${TYPES.COMPANY}">Entreprise</option>
+                </select>
+            </div>
+            <div class="editor-link-composer">
+                <select id="editorLinkKind" class="flex-grow-input">${getLinkOptions(kindsForPerson)}</select>
+                <button id="btnAddLinkQuick" class="mini-btn primary" type="button">Ajouter</button>
+            </div>
+            <div id="editorLinkHint" class="editor-link-hint">Si la fiche existe deja, son type est repris automatiquement.</div>
+        </div>
+
         <div class="editor-sheet-actions">
             <button id="btnFocusNode" class="mini-btn ${state.focusMode ? 'active' : ''}">${state.focusMode ? 'tout voir' : 'Focus'}</button>
             <button id="btnCenterNode" class="mini-btn">centrer</button>
-            <button id="btnMerge" class="mini-btn">fusion</button>
-            <button id="btnToggleEditSecondary" class="mini-btn">Options</button>
+            <button id="btnToggleEdit" type="button" class="mini-btn">Modifier</button>
         </div>
 
         <div id="editorAdvanced" class="editor-advanced">
             <div class="editor-adv-section">
                 <div class="editor-adv-title">Fiche</div>
-            <div class="editor-adv-grid">
-                <div>
+                <div class="editor-adv-primary-row">
+                    <div class="editor-adv-field editor-adv-field-name">
                     <label>Nom</label>
-                    <input id="edName" type="text" value="${escapeHtml(n.name)}">
-                </div>
-                <div>
+                        <input id="edName" type="text" value="${escapeHtml(n.name)}" class="editor-name-input">
+                    </div>
+                    <div class="editor-adv-field">
                     <label>Type</label>
-                    <select id="edType">${typeOptions}</select>
-                </div>
-                <div>
+                        <select id="edType">${typeOptions}</select>
+                    </div>
+                    <div class="editor-adv-field editor-adv-field-color">
                     <label>Couleur</label>
-                    <input type="color" id="edColor" value="${safeHex(n.color)}" class="editor-color-input">
+                        <input type="color" id="edColor" value="${safeHex(n.color)}" class="editor-color-input">
+                    </div>
                 </div>
-            </div>
 
-            <div class="editor-adv-grid">
-                <div>
+                <div class="editor-adv-grid editor-adv-grid-identity">
+                    <div>
                     <label>Téléphone</label>
                     <input type="text" id="edNum" value="${escapeHtml(n.num || '')}" placeholder="555-...">
-                </div>
-                <div>
+                    </div>
+                    <div>
                     <label>Numéro de compte</label>
                     <input type="text" id="edAccountNumber" value="${escapeHtml(n.accountNumber || '')}" placeholder="ACC-...">
-                </div>
-                <div>
+                    </div>
+                    <div>
                     <label>Numéro citoyen</label>
                     <input type="text" id="edCitizenNumber" value="${escapeHtml(n.citizenNumber || '')}" placeholder="CIT-...">
+                    </div>
                 </div>
-            </div>
-            </div>
-
-            <div class="editor-adv-row">
-                <input type="text" id="edMapId" value="${escapeHtml(n.linkedMapPointId || '')}" placeholder="ID liaison tactique map" class="flex-grow-input editor-map-id">
-                <button id="btnValidateMapId" class="mini-btn primary" type="button">Valider</button>
-                <button id="btnOpenMapLink" class="mini-btn" type="button">Tactique</button>
             </div>
 
             <div class="editor-adv-section">
-                <div class="editor-adv-title">Ajouter une relation</div>
-                <div class="editor-link-composer">
-                    <input id="editorLinkName" list="datalist-all" placeholder="Nom de la fiche a lier" class="flex-grow-input">
-                    <select id="editorLinkType" class="compact-select editor-compact-select">
-                        <option value="${TYPES.PERSON}">Personne</option>
-                        <option value="${TYPES.GROUP}">Groupe</option>
-                        <option value="${TYPES.COMPANY}">Entreprise</option>
-                    </select>
+                <div class="editor-adv-title">Fusionner cette fiche</div>
+                <div class="editor-adv-row editor-merge-row">
+                    <input id="mergeTarget" list="datalist-all" placeholder="Vers qui fusionner ?" class="flex-grow-input">
+                    <button id="btnMergeApply" class="mini-btn primary" type="button">Fusionner</button>
                 </div>
-                <div class="editor-link-composer">
-                    <select id="editorLinkKind" class="flex-grow-input">${getLinkOptions(kindsForPerson)}</select>
-                    <button id="btnAddLinkQuick" class="mini-btn primary" type="button">Ajouter</button>
-                </div>
-                <div id="editorLinkHint" class="editor-link-hint">Si la fiche existe deja, son type est repris automatiquement.</div>
+                <div class="editor-link-hint">La fiche actuelle sera fusionnee dans la cible choisie.</div>
             </div>
 
-            <div class="editor-adv-row editor-merge-row">
-                <input id="mergeTarget" list="datalist-all" placeholder="Vers qui fusionner ?" class="flex-grow-input">
-                <button id="btnMergeApply" class="mini-btn primary" type="button">Fusionner</button>
+            <div class="editor-adv-row editor-adv-row-utility">
                 <button id="btnDelete" class="mini-btn danger" type="button">Supprimer</button>
                 <button id="btnExportRP" class="mini-btn" type="button">Dossier</button>
             </div>

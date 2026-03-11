@@ -309,8 +309,8 @@ function loadMapPoints() {
 
 function geoScoreForNodes(a, b, mapPoints) {
     if (!mapPoints) return { score: 0, distance: null };
-    const idA = String(a.linkedMapPointId || a.id || '');
-    const idB = String(b.linkedMapPointId || b.id || '');
+    const idA = String(a.id || '');
+    const idB = String(b.id || '');
     if (!idA || !idB) return { score: 0, distance: null };
     const pA = mapPoints.get(idA);
     const pB = mapPoints.get(idB);
