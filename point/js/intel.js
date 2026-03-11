@@ -1,6 +1,7 @@
 import { state, nodeById } from './state.js';
 import { KINDS, TYPES, PERSON_STATUS } from './constants.js';
 import { clamp, getId, normalizePersonStatus } from './utils.js';
+import { loadMapPointIndex, resolveMapPointForNode as resolveLinkedMapPoint } from '../../shared/js/map-link-contract.mjs';
 
 const LINK_STRENGTH = {
     [KINDS.PATRON]: 1.25,
@@ -107,9 +108,6 @@ const DEFAULT_WEIGHTS = {
     decouverte: { graph: 0.4, text: 0.22, tags: 0.12, profile: 0.09, bridge: 0.07, lex: 0.06, geo: 0.04 },
     creatif: { graph: 0.28, text: 0.28, tags: 0.18, profile: 0.06, bridge: 0.1, lex: 0.05, geo: 0.05 }
 };
-const MAP_ACTIVE_BOARD_STORAGE_KEY = 'bniLinkedMapActiveBoard_v1';
-const MAP_SHARED_SNAPSHOT_STORAGE_KEY = 'bniLinkedMapSharedSnapshot_v1';
-
 function pairKey(aId, bId) {
     const a = String(aId);
     const b = String(bId);
@@ -263,88 +261,12 @@ function tokenize(text) {
     return tokens;
 }
 
-function mapPointNameKey(value) {
-    return normalizeText(stripPunctuation(value || ''))
-        .replace(/\s+/g, ' ')
-        .trim();
-}
-
 function loadMapPoints() {
-    try {
-        if (typeof localStorage === 'undefined') return null;
-        const sources = [];
-
-        const localRaw = localStorage.getItem('tacticalMapData');
-        if (localRaw) {
-            sources.push(localRaw);
-        }
-
-        const activeBoardRaw = localStorage.getItem(MAP_ACTIVE_BOARD_STORAGE_KEY);
-        const snapshotRaw = localStorage.getItem(MAP_SHARED_SNAPSHOT_STORAGE_KEY);
-        if (activeBoardRaw && snapshotRaw) {
-            const activeBoard = JSON.parse(activeBoardRaw);
-            const snapshot = JSON.parse(snapshotRaw);
-            if (activeBoard?.boardId && snapshot?.boardId && String(activeBoard.boardId) === String(snapshot.boardId)) {
-                sources.push(JSON.stringify(snapshot.data || null));
-            }
-        }
-
-        const byId = new Map();
-        const byNameBuckets = new Map();
-
-        sources.forEach((raw) => {
-            if (!raw) return;
-            const data = JSON.parse(raw);
-            if (!data || !Array.isArray(data.groups)) return;
-
-            data.groups.forEach(group => {
-                (group.points || []).forEach(pt => {
-                    if (!pt || !pt.id) return;
-                    const x = Number(pt.x);
-                    const y = Number(pt.y);
-                    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-                    const point = {
-                        id: String(pt.id),
-                        name: String(pt.name || ''),
-                        x,
-                        y
-                    };
-                    byId.set(point.id, point);
-                    const nameKey = mapPointNameKey(point.name);
-                    if (!nameKey) return;
-                    const bucket = byNameBuckets.get(nameKey) || [];
-                    bucket.push(point);
-                    byNameBuckets.set(nameKey, bucket);
-                });
-            });
-        });
-
-        const byName = new Map();
-        byNameBuckets.forEach((bucket, key) => {
-            if (bucket.length === 1) byName.set(key, bucket[0]);
-        });
-
-        return (byId.size || byName.size) ? { byId, byName } : null;
-    } catch (e) {
-        return null;
-    }
+    return loadMapPointIndex();
 }
 
 function resolveMapPointForNode(node, mapPoints) {
-    if (!node || !mapPoints) return null;
-    const byId = mapPoints.byId instanceof Map ? mapPoints.byId : null;
-    const byName = mapPoints.byName instanceof Map ? mapPoints.byName : null;
-
-    const linkedId = String(node.linkedMapPointId || '').trim();
-    if (linkedId && byId?.has(linkedId)) return byId.get(linkedId);
-
-    const nodeId = String(node.id || '').trim();
-    if (nodeId && byId?.has(nodeId)) return byId.get(nodeId);
-
-    const nameKey = mapPointNameKey(node.name || '');
-    if (nameKey && byName?.has(nameKey)) return byName.get(nameKey);
-
-    return null;
+    return resolveLinkedMapPoint(node, mapPoints);
 }
 
 function geoScoreForNodes(a, b, mapPoints) {

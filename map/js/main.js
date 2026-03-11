@@ -1,4 +1,4 @@
-import { state, setGroups, generateID, loadLocalState, saveLocalState, pushHistory, undo, getMapData } from './state.js';
+import { state, applyMapBoardData, generateID, loadLocalState, saveLocalState, pushHistory, undo, getMapData } from './state.js';
 import { initEngine, updateTransform } from './engine.js'; 
 import { renderGroupsList, initUI, selectItem } from './ui.js';
 import { customAlert, customConfirm, openSaveOptionsModal } from './ui-modals.js';
@@ -8,6 +8,7 @@ import { ICONS } from './constants.js';
 import { api } from './api.js';
 import { initCloudCollab, openCloudMenu, getCloudSaveModalOptions } from './cloud.js';
 import { initAlertPickerMode, loadAlertFromUrl } from './alerts.js';
+import { createMapGroup } from '../../shared/js/map-board.mjs';
 
 const DEFAULT_DATA = [
     { name: "Alliés", color: "#73fbf7", visible: true, points: [], zones: [] },
@@ -39,10 +40,16 @@ function sanitizeZoneStyle(rawStyle) {
     };
 }
 
-function sanitizeIncomingGroup(rawGroup, pointIds, zoneIds, fallbackIndex) {
+function sanitizeIncomingGroup(rawGroup, groupIds, pointIds, zoneIds, fallbackIndex) {
     const palette = ['#73fbf7', '#ff6b81', '#ffd400', '#ff922b', '#a9e34b'];
     const source = rawGroup && typeof rawGroup === 'object' ? rawGroup : {};
+    let groupId = String(source.id || '');
+    if (!groupId || groupIds.has(groupId)) {
+        groupId = makeUniqueId(groupIds);
+    }
+    groupIds.add(groupId);
     const safeGroup = {
+        id: groupId,
         name: String(source.name || `GROUPE ${fallbackIndex + 1}`),
         color: String(source.color || palette[fallbackIndex % palette.length]),
         visible: source.visible !== false,
@@ -139,14 +146,16 @@ function mergeIncomingMapData(data) {
 
     const pointIds = new Set();
     const zoneIds = new Set();
+    const groupIds = new Set();
     state.groups.forEach(group => {
+        if (group?.id) groupIds.add(String(group.id));
         (group.points || []).forEach(point => pointIds.add(String(point.id)));
         (group.zones || []).forEach(zone => zoneIds.add(String(zone.id)));
     });
 
     const incomingGroups = Array.isArray(data?.groups) ? data.groups : [];
     incomingGroups.forEach((group, index) => {
-        const safeGroup = sanitizeIncomingGroup(group, pointIds, zoneIds, state.groups.length + index);
+        const safeGroup = sanitizeIncomingGroup(group, groupIds, pointIds, zoneIds, state.groups.length + index);
         state.groups.push(safeGroup);
         stats.addedGroups += 1;
         stats.addedPoints += safeGroup.points.length;
@@ -267,13 +276,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Chargement
     const localData = loadLocalState();
     if (localData && localData.groups) {
-        state.groups = localData.groups;
-        state.tacticalLinks = localData.tacticalLinks || [];
+        applyMapBoardData(localData);
         if (localData.currentFileName) state.currentFileName = localData.currentFileName;
         renderGroupsList();
         renderAll();
     } else {
-        state.groups = DEFAULT_DATA;
+        applyMapBoardData({ groups: DEFAULT_DATA, tacticalLinks: [] });
         renderGroupsList();
         renderAll();
     }
@@ -397,8 +405,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 try {
                     const data = validateImportedMapPayload(JSON.parse(ev.target.result), 'load');
                     pushHistory();
-                    setGroups(data.groups);
-                    state.tacticalLinks = Array.isArray(data.tacticalLinks) ? data.tacticalLinks : [];
+                    applyMapBoardData(data);
                     state.currentFileName = file.name.replace(/\.json$/i, '');
                     renderGroupsList(); renderAll(); saveLocalState();
                     customAlert("SUCCÈS", `Carte chargée : ${file.name}`);
@@ -459,11 +466,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         btnAddGroup.onclick = () => {
             pushHistory();
             const colors = ['#73fbf7', '#ff6b81', '#ff922b', '#a9e34b', '#fcc2d7'];
-            state.groups.push({
+            state.groups.push(createMapGroup({
                 name: `GROUPE ${state.groups.length + 1}`,
                 color: colors[state.groups.length % colors.length],
-                visible: true, points: [], zones: []
-            });
+                visible: true,
+                points: [],
+                zones: []
+            }, {
+                makeGroupId: () => generateID(),
+                index: state.groups.length
+            }));
             renderGroupsList(); saveLocalState();
         };
     }

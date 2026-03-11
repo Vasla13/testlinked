@@ -1,3 +1,5 @@
+import { normalizeMapBoardPayload, normalizeMapGroups } from '../../shared/js/map-board.mjs';
+
 export const state = {
     groups: [],
     tacticalLinks: [],
@@ -90,8 +92,12 @@ export function undo() {
     try {
         const prevJSON = history.pop();
         const prevData = JSON.parse(prevJSON);
-        state.groups = prevData.groups;
-        state.tacticalLinks = prevData.tacticalLinks || [];
+        const normalized = normalizeMapBoardPayload({
+            groups: prevData.groups,
+            tacticalLinks: prevData.tacticalLinks || []
+        });
+        state.groups = normalized.groups;
+        state.tacticalLinks = normalized.tacticalLinks || [];
         return true;
     } catch (e) {
         console.error("Erreur Undo:", e);
@@ -138,19 +144,7 @@ export function pruneTacticalLinks(removedIds) {
 }
 
 export function setGroups(newGroups) { 
-    newGroups.forEach(g => {
-        if(!g.zones) g.zones = [];
-        g.points.forEach(p => {
-            if(!p.id) p.id = generateID();
-            if(!p.iconType) p.iconType = "DEFAULT";
-            if(!p.status) p.status = "ACTIVE";
-        });
-        g.zones.forEach(z => {
-            if(!z.id) z.id = generateID();
-            if(!z.type) z.type = 'POLYGON'; 
-        });
-    });
-    state.groups = newGroups; 
+    state.groups = normalizeMapGroups(newGroups || []);
     if(state.tacticalLinks) {
         state.tacticalLinks.forEach(l => {
             if(!l.id) l.id = generateID();
@@ -195,6 +189,13 @@ export function exportToJSON(fileNameOverride) {
     document.body.removeChild(a);
     URL.revokeObjectURL(a.href);
     return true;
+}
+
+export function applyMapBoardData(payload = {}) {
+    const normalized = normalizeMapBoardPayload(payload || {});
+    state.groups = normalized.groups;
+    state.tacticalLinks = normalized.tacticalLinks || [];
+    return normalized;
 }
 
 export function saveLocalState() {

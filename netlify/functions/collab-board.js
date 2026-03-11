@@ -124,6 +124,48 @@ function clampFiniteNumber(value, fallback, min = null, max = null) {
   return num;
 }
 
+function normalizeLegacyKey(value, fallback = "") {
+  return String(value || fallback)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s_-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function slugifyToken(value, fallback = "item") {
+  const safe = normalizeLegacyKey(value, fallback)
+    .replace(/[\s_]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+  return safe || fallback;
+}
+
+function makeLegacyId(prefix, token, occurrence = 0) {
+  const base = slugifyToken(token, prefix);
+  return occurrence > 0
+    ? `${prefix}_legacy_${base}_${occurrence + 1}`
+    : `${prefix}_legacy_${base}`;
+}
+
+function ensureUniqueId(preferredId, usedIds, buildFallbackId) {
+  let nextId = String(preferredId || "").trim();
+  if (nextId && !usedIds.has(nextId)) {
+    usedIds.add(nextId);
+    return nextId;
+  }
+
+  let attempt = 0;
+  do {
+    nextId = String(buildFallbackId(attempt) || "").trim();
+    attempt += 1;
+  } while (!nextId || usedIds.has(nextId));
+
+  usedIds.add(nextId);
+  return nextId;
+}
+
 function normalizeMapZoneStyle(rawStyle) {
   const style = rawStyle && typeof rawStyle === "object" ? rawStyle : {};
   return {
@@ -132,10 +174,19 @@ function normalizeMapZoneStyle(rawStyle) {
   };
 }
 
-function normalizeMapPoint(rawPoint, fallbackIndex = 0) {
+function normalizeMapPoint(rawPoint, fallbackIndex = 0, options = {}) {
   if (!rawPoint || typeof rawPoint !== "object") return null;
+  const usedIds = options.usedIds instanceof Set ? options.usedIds : new Set();
+  const pointScope = String(options.scopeKey || `group-${fallbackIndex + 1}`);
+  const pointKey = normalizeLegacyKey(rawPoint.name || "", `point-${fallbackIndex + 1}`);
+  const pointId = ensureUniqueId(
+    rawPoint.id,
+    usedIds,
+    (attempt) => makeLegacyId("mp", `${pointScope}-${pointKey || `point-${fallbackIndex + 1}`}`, attempt)
+  );
+
   return {
-    id: String(rawPoint.id || newId(`mp${fallbackIndex}`)),
+    id: pointId,
     name: String(rawPoint.name || `Point ${fallbackIndex + 1}`),
     x: clampFiniteNumber(rawPoint.x, 50),
     y: clampFiniteNumber(rawPoint.y, 50),
@@ -146,9 +197,16 @@ function normalizeMapPoint(rawPoint, fallbackIndex = 0) {
   };
 }
 
-function normalizeMapZone(rawZone, fallbackIndex = 0) {
+function normalizeMapZone(rawZone, fallbackIndex = 0, options = {}) {
   if (!rawZone || typeof rawZone !== "object") return null;
-  const zoneId = String(rawZone.id || newId(`mz${fallbackIndex}`));
+  const usedIds = options.usedIds instanceof Set ? options.usedIds : new Set();
+  const zoneScope = String(options.scopeKey || `group-${fallbackIndex + 1}`);
+  const zoneKey = normalizeLegacyKey(rawZone.name || "", `zone-${fallbackIndex + 1}`);
+  const zoneId = ensureUniqueId(
+    rawZone.id,
+    usedIds,
+    (attempt) => makeLegacyId("mz", `${zoneScope}-${zoneKey || `zone-${fallbackIndex + 1}`}`, attempt)
+  );
   const zoneName = String(rawZone.name || `Zone ${fallbackIndex + 1}`);
   const style = normalizeMapZoneStyle(rawZone.style);
 
@@ -187,15 +245,43 @@ function normalizeMapZone(rawZone, fallbackIndex = 0) {
 
 function normalizeMapGroup(rawGroup, groupIndex = 0) {
   if (!rawGroup || typeof rawGroup !== "object") rawGroup = {};
+  const groupOccurrences = normalizeMapGroup.groupOccurrences instanceof Map
+    ? normalizeMapGroup.groupOccurrences
+    : new Map();
+  const usedGroupIds = normalizeMapGroup.usedGroupIds instanceof Set
+    ? normalizeMapGroup.usedGroupIds
+    : new Set();
+  const usedPointIds = normalizeMapGroup.usedPointIds instanceof Set
+    ? normalizeMapGroup.usedPointIds
+    : new Set();
+  const usedZoneIds = normalizeMapGroup.usedZoneIds instanceof Set
+    ? normalizeMapGroup.usedZoneIds
+    : new Set();
+  const legacyKey = normalizeLegacyKey(rawGroup.name || "", `group-${groupIndex + 1}`);
+  const occurrence = groupOccurrences.get(legacyKey) || 0;
+  groupOccurrences.set(legacyKey, occurrence + 1);
+  const groupId = ensureUniqueId(
+    rawGroup.id,
+    usedGroupIds,
+    (attempt) => makeLegacyId("grp", legacyKey || `group-${groupIndex + 1}`, occurrence + attempt)
+  );
+
   return {
+    id: groupId,
     name: String(rawGroup.name || `GROUPE ${groupIndex + 1}`),
     color: String(rawGroup.color || MAP_GROUP_PALETTE[groupIndex % MAP_GROUP_PALETTE.length]),
     visible: rawGroup.visible !== false,
     points: (Array.isArray(rawGroup.points) ? rawGroup.points : [])
-      .map((point, pointIndex) => normalizeMapPoint(point, pointIndex))
+      .map((point, pointIndex) => normalizeMapPoint(point, pointIndex, {
+        usedIds: usedPointIds,
+        scopeKey: groupId,
+      }))
       .filter(Boolean),
     zones: (Array.isArray(rawGroup.zones) ? rawGroup.zones : [])
-      .map((zone, zoneIndex) => normalizeMapZone(zone, zoneIndex))
+      .map((zone, zoneIndex) => normalizeMapZone(zone, zoneIndex, {
+        usedIds: usedZoneIds,
+        scopeKey: groupId,
+      }))
       .filter(Boolean),
   };
 }
@@ -205,8 +291,13 @@ function normalizeMapLink(rawLink, fallbackIndex = 0) {
   const from = String(rawLink.from || rawLink.source || "");
   const to = String(rawLink.to || rawLink.target || "");
   if (!from || !to || from === to) return null;
+  const usedIds = normalizeMapLink.usedIds instanceof Set ? normalizeMapLink.usedIds : new Set();
   return {
-    id: String(rawLink.id || newId(`ml${fallbackIndex}`)),
+    id: ensureUniqueId(
+      rawLink.id,
+      usedIds,
+      (attempt) => makeLegacyId("ml", `${mapPairKey(from, to)}-${fallbackIndex + 1}`, attempt)
+    ),
     from,
     to,
     color: rawLink.color || null,
@@ -216,6 +307,11 @@ function normalizeMapLink(rawLink, fallbackIndex = 0) {
 
 function normalizeMapBoardPayload(data) {
   const raw = data && typeof data === "object" ? data : {};
+  normalizeMapGroup.groupOccurrences = new Map();
+  normalizeMapGroup.usedGroupIds = new Set();
+  normalizeMapGroup.usedPointIds = new Set();
+  normalizeMapGroup.usedZoneIds = new Set();
+  normalizeMapLink.usedIds = new Set();
   const groups = (Array.isArray(raw.groups) ? raw.groups : [])
     .map((group, groupIndex) => normalizeMapGroup(group, groupIndex))
     .filter(Boolean);
@@ -259,16 +355,16 @@ function buildMapDeletionSets(existingPayload, incomingPayload, basePayload) {
   const incoming = normalizeOptionalMapBoardPayload(incomingPayload);
   const base = normalizeOptionalMapBoardPayload(basePayload);
 
-  const deletedGroupKeys = new Set();
+  const deletedGroupIds = new Set();
   const deletedPointIds = new Set();
   const deletedZoneIds = new Set();
   const deletedLinkKeys = new Set();
 
-  const existingGroupKeys = new Set(
-    existing.groups.map((group) => String(group?.name || "").trim().toLowerCase()).filter(Boolean)
+  const existingGroupIds = new Set(
+    existing.groups.map((group) => String(group?.id || "").trim()).filter(Boolean)
   );
-  const incomingGroupKeys = new Set(
-    incoming.groups.map((group) => String(group?.name || "").trim().toLowerCase()).filter(Boolean)
+  const incomingGroupIds = new Set(
+    incoming.groups.map((group) => String(group?.id || "").trim()).filter(Boolean)
   );
 
   const existingPointIds = new Set();
@@ -299,9 +395,9 @@ function buildMapDeletionSets(existingPayload, incomingPayload, basePayload) {
   });
 
   base.groups.forEach((group) => {
-    const groupKey = String(group?.name || "").trim().toLowerCase();
-    if (groupKey && (!existingGroupKeys.has(groupKey) || !incomingGroupKeys.has(groupKey))) {
-      deletedGroupKeys.add(groupKey);
+    const groupId = String(group?.id || "").trim();
+    if (groupId && (!existingGroupIds.has(groupId) || !incomingGroupIds.has(groupId))) {
+      deletedGroupIds.add(groupId);
     }
 
     (Array.isArray(group?.points) ? group.points : []).forEach((point) => {
@@ -334,7 +430,7 @@ function buildMapDeletionSets(existingPayload, incomingPayload, basePayload) {
   });
 
   return {
-    deletedGroupKeys,
+    deletedGroupIds,
     deletedPointIds,
     deletedZoneIds,
     deletedLinkKeys,
@@ -348,8 +444,8 @@ function mergeMapBoardPayload(existingData, incomingData, baseData = null) {
   const mergedGroups = cloneJson(
     existing.groups
       .filter((group) => {
-        const key = String(group?.name || "").trim().toLowerCase();
-        return !key || !deletionSets.deletedGroupKeys.has(key);
+        const groupId = String(group?.id || "").trim();
+        return !groupId || !deletionSets.deletedGroupIds.has(groupId);
       })
       .map((group) => ({
         ...group,
@@ -366,11 +462,11 @@ function mergeMapBoardPayload(existingData, incomingData, baseData = null) {
   );
   const pointIndex = new Map();
   const zoneIndex = new Map();
-  const groupByName = new Map();
+  const groupById = new Map();
 
   mergedGroups.forEach((group, groupIdx) => {
-    const key = String(group?.name || "").trim().toLowerCase();
-    if (key && !groupByName.has(key)) groupByName.set(key, groupIdx);
+    const groupId = String(group?.id || "").trim();
+    if (groupId && !groupById.has(groupId)) groupById.set(groupId, groupIdx);
 
     (Array.isArray(group?.points) ? group.points : []).forEach((point, pointIdx) => {
       const pointId = String(point?.id || "").trim();
@@ -386,25 +482,26 @@ function mergeMapBoardPayload(existingData, incomingData, baseData = null) {
   });
 
   incoming.groups.forEach((incomingGroup, incomingIdx) => {
-    const groupName = String(incomingGroup?.name || "").trim();
-    const key = groupName.toLowerCase();
-    if (key && deletionSets.deletedGroupKeys.has(key)) return;
-    let targetIdx = key && groupByName.has(key) ? groupByName.get(key) : -1;
+    const groupId = String(incomingGroup?.id || "").trim();
+    if (groupId && deletionSets.deletedGroupIds.has(groupId)) return;
+    let targetIdx = groupId && groupById.has(groupId) ? groupById.get(groupId) : -1;
 
     if (targetIdx < 0) {
       targetIdx = mergedGroups.push({
-        name: groupName || `GROUPE ${mergedGroups.length + 1}`,
+        id: groupId || makeLegacyId("grp", `group-${mergedGroups.length + 1}`),
+        name: String(incomingGroup?.name || `GROUPE ${mergedGroups.length + 1}`),
         color: String(incomingGroup?.color || MAP_GROUP_PALETTE[mergedGroups.length % MAP_GROUP_PALETTE.length]),
         visible: incomingGroup?.visible !== false,
         points: [],
         zones: [],
       }) - 1;
-      if (key) groupByName.set(key, targetIdx);
+      if (groupId) groupById.set(groupId, targetIdx);
     }
 
     const targetGroup = mergedGroups[targetIdx];
     if (!targetGroup || typeof targetGroup !== "object") return;
-    targetGroup.name = groupName || targetGroup.name || `GROUPE ${incomingIdx + 1}`;
+    targetGroup.id = groupId || targetGroup.id || makeLegacyId("grp", `group-${incomingIdx + 1}`);
+    targetGroup.name = String(incomingGroup?.name || targetGroup.name || `GROUPE ${incomingIdx + 1}`);
     targetGroup.color = String(incomingGroup?.color || targetGroup.color || MAP_GROUP_PALETTE[targetIdx % MAP_GROUP_PALETTE.length]);
     targetGroup.visible = incomingGroup?.visible !== false;
     if (!Array.isArray(targetGroup.points)) targetGroup.points = [];
@@ -1505,4 +1602,11 @@ exports.handler = async (event) => {
   }
 
   return errorResponse(400, "Action inconnue.");
+};
+
+exports.__test = {
+  normalizeMapBoardPayload,
+  mergeMapBoardPayload,
+  normalizeBoardPayload,
+  mergeBoardPayload,
 };

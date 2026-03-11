@@ -500,3 +500,7 @@ exports.handler = async (event) => {
 
   return jsonResponse(400, { ok: false, error: "Invalid action" });
 };
+
+exports.__test = {
+  normalizeAlert,
+};

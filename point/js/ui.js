@@ -11,6 +11,16 @@ import { showSettings, showContextMenu, hideContextMenu } from './ui-settings.js
 import { renderEditor } from './ui-editor.js';
 import { computeLinkSuggestions, getAllowedKinds } from './intel.js';
 import { generateExportData, buildExportFilename, downloadExportData } from './data-transfer.js';
+import {
+    updateBoardQueryParam,
+    createStoredCollabStateBridge,
+    buildCollabAuthRequester,
+    buildCollabBoardRequester,
+    stopNamedTimer,
+    queueNamedTimer,
+    stopRetriableLoop,
+    scheduleRetriableLoop
+} from '../../shared/js/collab-browser.mjs';
 
 const ui = {
     listCompanies: document.getElementById('listCompanies'),
@@ -66,11 +76,15 @@ const collab = {
     presence: [],
     presenceTimer: null,
     presenceLoopToken: 0,
+    presenceLoopRunning: false,
+    presenceRetryMs: 0,
     presenceInFlight: false,
     syncState: 'idle',
     syncLabel: 'Local',
     sessionTimer: null,
     sessionLoopToken: 0,
+    sessionLoopRunning: false,
+    sessionRetryMs: 0,
     sessionInFlight: false,
     homePanel: 'cloud'
 };
@@ -80,6 +94,19 @@ const COLLAB_AUTOSAVE_RETRY_MS = 250;
 const COLLAB_WATCH_TIMEOUT_MS = 3600;
 const COLLAB_WATCH_RETRY_MIN_MS = 300;
 const COLLAB_WATCH_RETRY_MAX_MS = 4000;
+const collabStorage = createStoredCollabStateBridge({
+    sessionStorageKey: COLLAB_SESSION_STORAGE_KEY,
+    boardStorageKey: COLLAB_ACTIVE_BOARD_STORAGE_KEY
+});
+const sharedCollabAuthRequest = buildCollabAuthRequester({
+    endpoint: COLLAB_AUTH_ENDPOINT,
+    getToken: () => collab.token,
+    allowGetFallback: false
+});
+const sharedCollabBoardRequest = buildCollabBoardRequester({
+    endpoint: COLLAB_BOARD_ENDPOINT,
+    getToken: () => collab.token
+});
 
 let actionLogs = [];
 const INTEL_PRESETS = {
@@ -257,75 +284,19 @@ function canEditCloudBoard() {
 }
 
 function setBoardQueryParam(boardId) {
-    try {
-        const url = new URL(window.location.href);
-        if (boardId) url.searchParams.set('board', boardId);
-        else url.searchParams.delete('board');
-        window.history.replaceState({}, '', url.toString());
-    } catch (e) {}
+    updateBoardQueryParam(boardId);
 }
 
 function persistCollabState() {
-    try {
-        const sessionPayload = {
-            token: collab.token || '',
-            user: collab.user || null
-        };
-        localStorage.setItem(COLLAB_SESSION_STORAGE_KEY, JSON.stringify(sessionPayload));
-
-        if (collab.activeBoardId) {
-            const boardPayload = {
-                boardId: collab.activeBoardId,
-                role: collab.activeRole || '',
-                title: collab.activeBoardTitle || '',
-                ownerId: collab.ownerId || '',
-                updatedAt: collab.activeBoardUpdatedAt || ''
-            };
-            localStorage.setItem(COLLAB_ACTIVE_BOARD_STORAGE_KEY, JSON.stringify(boardPayload));
-        } else {
-            localStorage.removeItem(COLLAB_ACTIVE_BOARD_STORAGE_KEY);
-        }
-    } catch (e) {}
+    collabStorage.persist(collab);
 }
 
 function clearCollabStorage() {
-    try {
-        localStorage.removeItem(COLLAB_SESSION_STORAGE_KEY);
-        localStorage.removeItem(COLLAB_ACTIVE_BOARD_STORAGE_KEY);
-    } catch (e) {}
+    collabStorage.clear();
 }
 
 function hydrateCollabState() {
-    collab.pendingBoardId = '';
-    try {
-        const sessionRaw = localStorage.getItem(COLLAB_SESSION_STORAGE_KEY);
-        if (sessionRaw) {
-            const parsed = JSON.parse(sessionRaw);
-            collab.token = String(parsed.token || '');
-            collab.user = parsed.user && typeof parsed.user === 'object' ? parsed.user : null;
-        }
-    } catch (e) {
-        collab.token = '';
-        collab.user = null;
-    }
-
-    try {
-        const boardRaw = localStorage.getItem(COLLAB_ACTIVE_BOARD_STORAGE_KEY);
-        if (boardRaw) {
-            const parsedBoard = JSON.parse(boardRaw);
-            collab.activeBoardId = String(parsedBoard.boardId || '');
-            collab.activeRole = String(parsedBoard.role || '');
-            collab.activeBoardTitle = String(parsedBoard.title || '');
-            collab.ownerId = String(parsedBoard.ownerId || '');
-            collab.activeBoardUpdatedAt = String(parsedBoard.updatedAt || '');
-        }
-    } catch (e) {
-        collab.activeBoardId = '';
-        collab.activeRole = '';
-        collab.activeBoardTitle = '';
-        collab.ownerId = '';
-        collab.activeBoardUpdatedAt = '';
-    }
+    collabStorage.hydrate(collab);
 }
 
 function syncCloudStatus() {
@@ -838,10 +809,7 @@ function hasLocalCloudChanges() {
 }
 
 function stopCollabAutosave() {
-    if (collab.autosaveDebounceTimer) {
-        clearTimeout(collab.autosaveDebounceTimer);
-        collab.autosaveDebounceTimer = null;
-    }
+    stopNamedTimer(collab, 'autosaveDebounceTimer');
 }
 
 async function flushPendingCloudAutosave(boardId = collab.activeBoardId) {
@@ -868,10 +836,9 @@ function queueCloudAutosave(delayMs = COLLAB_AUTOSAVE_DEBOUNCE_MS) {
     if (!isCloudBoardActive() || !canEditCloudBoard()) return;
     stopCollabAutosave();
     setCloudSyncState('pending');
-    collab.autosaveDebounceTimer = setTimeout(() => {
-        collab.autosaveDebounceTimer = null;
+    queueNamedTimer(collab, 'autosaveDebounceTimer', () => {
         saveActiveCloudBoard({ manual: false, quiet: true }).catch(() => {});
-    }, Math.max(0, Number(delayMs) || 0));
+    }, delayMs);
 }
 
 function onPointLocalChange() {
@@ -896,40 +863,41 @@ function startCollabAutosave() {
 }
 
 function stopCollabLiveSync() {
-    collab.syncLoopToken += 1;
-    collab.syncLoopRunning = false;
-    collab.syncRetryMs = 0;
-    if (collab.syncTimer) {
-        clearTimeout(collab.syncTimer);
-        collab.syncTimer = null;
-    }
+    stopRetriableLoop(collab, {
+        timerKey: 'syncTimer',
+        tokenKey: 'syncLoopToken',
+        runningKey: 'syncLoopRunning',
+        retryKey: 'syncRetryMs'
+    });
 }
 
 function stopCollabPresence() {
-    collab.presenceLoopToken += 1;
-    collab.presenceInFlight = false;
-    if (collab.presenceTimer) {
-        clearTimeout(collab.presenceTimer);
-        collab.presenceTimer = null;
-    }
+    stopRetriableLoop(collab, {
+        timerKey: 'presenceTimer',
+        tokenKey: 'presenceLoopToken',
+        runningKey: 'presenceLoopRunning',
+        retryKey: 'presenceRetryMs',
+        inFlightKey: 'presenceInFlight'
+    });
 }
 
 function stopCollabSessionHeartbeat() {
-    collab.sessionLoopToken += 1;
-    collab.sessionInFlight = false;
-    if (collab.sessionTimer) {
-        clearTimeout(collab.sessionTimer);
-        collab.sessionTimer = null;
-    }
+    stopRetriableLoop(collab, {
+        timerKey: 'sessionTimer',
+        tokenKey: 'sessionLoopToken',
+        runningKey: 'sessionLoopRunning',
+        retryKey: 'sessionRetryMs',
+        inFlightKey: 'sessionInFlight'
+    });
 }
 
 function scheduleNextSessionHeartbeat(loopToken, delayMs = COLLAB_SESSION_HEARTBEAT_MS) {
-    if (collab.sessionLoopToken !== loopToken) return;
-    if (collab.sessionTimer) clearTimeout(collab.sessionTimer);
-    collab.sessionTimer = setTimeout(() => {
-        collab.sessionTimer = null;
+    scheduleRetriableLoop(collab, {
+        timerKey: 'sessionTimer',
+        tokenKey: 'sessionLoopToken'
+    }, loopToken, delayMs, () => {
         runCollabSessionHeartbeat(loopToken).catch(() => {});
-    }, Math.max(0, Number(delayMs) || 0));
+    });
 }
 
 async function runCollabSessionHeartbeat(loopToken = collab.sessionLoopToken) {
@@ -966,12 +934,12 @@ function startCollabSessionHeartbeat() {
 }
 
 function scheduleNextPresenceTick(loopToken, delayMs = COLLAB_PRESENCE_HEARTBEAT_MS) {
-    if (collab.presenceLoopToken !== loopToken) return;
-    if (collab.presenceTimer) clearTimeout(collab.presenceTimer);
-    collab.presenceTimer = setTimeout(() => {
-        collab.presenceTimer = null;
+    scheduleRetriableLoop(collab, {
+        timerKey: 'presenceTimer',
+        tokenKey: 'presenceLoopToken'
+    }, loopToken, delayMs, () => {
         touchCollabPresence(loopToken).catch(() => {});
-    }, Math.max(0, Number(delayMs) || 0));
+    });
 }
 
 async function clearCollabPresence(boardId = collab.activeBoardId) {
@@ -1017,12 +985,12 @@ function startCollabPresence() {
 }
 
 function scheduleNextWatchTick(loopToken, delayMs = 0) {
-    if (collab.syncLoopToken !== loopToken) return;
-    if (collab.syncTimer) clearTimeout(collab.syncTimer);
-    collab.syncTimer = setTimeout(() => {
-        collab.syncTimer = null;
+    scheduleRetriableLoop(collab, {
+        timerKey: 'syncTimer',
+        tokenKey: 'syncLoopToken'
+    }, loopToken, delayMs, () => {
         runCollabWatchLoop(loopToken).catch(() => {});
-    }, Math.max(0, Number(delayMs) || 0));
+    });
 }
 
 async function runCollabWatchLoop(loopToken) {
@@ -1141,44 +1109,11 @@ function startCollabLiveSync() {
 }
 
 async function collabAuthRequest(action, payload = {}) {
-    const response = await fetch(COLLAB_AUTH_ENDPOINT, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            ...(collab.token ? { 'x-collab-token': collab.token } : {})
-        },
-        body: JSON.stringify({ action, ...payload })
-    });
-    let data = {};
-    try { data = await response.json(); } catch (e) {}
-    if (!response.ok || !data.ok) {
-        const err = new Error(data.error || `Erreur auth (${response.status})`);
-        err.status = response.status;
-        err.payload = data || {};
-        throw err;
-    }
-    return data;
+    return sharedCollabAuthRequest(action, payload);
 }
 
 async function collabBoardRequest(action, payload = {}) {
-    if (!collab.token) throw new Error('Session cloud manquante.');
-    const response = await fetch(COLLAB_BOARD_ENDPOINT, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'x-collab-token': collab.token
-        },
-        body: JSON.stringify({ action, ...payload })
-    });
-    let data = {};
-    try { data = await response.json(); } catch (e) {}
-    if (!response.ok || !data.ok) {
-        const err = new Error(data.error || `Erreur cloud (${response.status})`);
-        err.status = response.status;
-        err.payload = data || {};
-        throw err;
-    }
-    return data;
+    return sharedCollabBoardRequest(action, payload);
 }
 
 function setActiveCloudBoardFromSummary(summary = null) {

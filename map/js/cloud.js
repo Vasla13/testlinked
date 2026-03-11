@@ -1,6 +1,5 @@
 import {
     state,
-    generateID,
     getMapData,
     exportToJSON,
     setGroups,
@@ -12,12 +11,34 @@ import { renderGroupsList } from './ui-list.js';
 import { renderAll } from './render.js';
 import { customAlert, customConfirm, customPrompt } from './ui-modals.js';
 import { escapeHtml } from './utils.js';
+import {
+    parseJsonSafe as parseStoredJsonSafe,
+    readResponseSafe as readCollabResponseSafe,
+    endpointHintMessage as getEndpointHintMessage,
+    updateBoardQueryParam,
+    createStoredCollabStateBridge,
+    buildCollabAuthRequester,
+    buildCollabBoardRequester,
+    stopNamedTimer,
+    queueNamedTimer,
+    stopRetriableLoop,
+    scheduleRetriableLoop
+} from '../../shared/js/collab-browser.mjs';
+import {
+    MAP_SHARED_SNAPSHOT_STORAGE_KEY,
+    clearSharedMapSnapshot,
+    writeSharedMapSnapshot
+} from '../../shared/js/map-link-contract.mjs';
+import {
+    normalizeMapBoardPayload as normalizeSharedMapBoardPayload,
+    normalizeOptionalMapBoardPayload as normalizeSharedOptionalMapBoardPayload,
+    mergeMapBoardPayload as mergeSharedMapBoardPayload
+} from '../../shared/js/map-board.mjs';
 
 const COLLAB_AUTH_ENDPOINT = '/.netlify/functions/collab-auth';
 const COLLAB_BOARD_ENDPOINT = '/.netlify/functions/collab-board';
 const COLLAB_SESSION_STORAGE_KEY = 'bniLinkedCollabSession_v1';
 const COLLAB_ACTIVE_BOARD_STORAGE_KEY = 'bniLinkedMapActiveBoard_v1';
-const MAP_SHARED_SNAPSHOT_STORAGE_KEY = 'bniLinkedMapSharedSnapshot_v1';
 const MAP_LOCAL_CHANGE_EVENT = 'bni:map-local-change';
 
 const collab = {
@@ -47,37 +68,35 @@ const COLLAB_AUTOSAVE_RETRY_MS = 250;
 const COLLAB_WATCH_TIMEOUT_MS = 7000;
 const COLLAB_WATCH_RETRY_MIN_MS = 500;
 const COLLAB_WATCH_RETRY_MAX_MS = 4000;
+const collabStorage = createStoredCollabStateBridge({
+    sessionStorageKey: COLLAB_SESSION_STORAGE_KEY,
+    boardStorageKey: COLLAB_ACTIVE_BOARD_STORAGE_KEY,
+    extraClearKeys: [MAP_SHARED_SNAPSHOT_STORAGE_KEY]
+});
+const sharedCollabAuthRequest = buildCollabAuthRequester({
+    endpoint: COLLAB_AUTH_ENDPOINT,
+    getToken: () => collab.token,
+    allowGetFallback: true
+});
+const sharedCollabBoardRequest = buildCollabBoardRequester({
+    endpoint: COLLAB_BOARD_ENDPOINT,
+    getToken: () => collab.token
+});
 
 function parseJsonSafe(value) {
-    try {
-        return JSON.parse(value);
-    } catch (e) {
-        return null;
-    }
+    return parseStoredJsonSafe(value, null);
 }
 
 async function readResponseSafe(response) {
-    try {
-        return await response.json();
-    } catch (e) {
-        return {};
-    }
+    return readCollabResponseSafe(response, {});
 }
 
 function endpointHintMessage(statusCode, domain) {
-    if (statusCode === 404 || statusCode === 405) {
-        return `${domain} indisponible (${statusCode}). Lance le site avec "npx netlify dev".`;
-    }
-    return '';
+    return getEndpointHintMessage(statusCode, domain);
 }
 
 function setBoardQueryParam(boardId) {
-    try {
-        const url = new URL(window.location.href);
-        if (boardId) url.searchParams.set('board', boardId);
-        else url.searchParams.delete('board');
-        window.history.replaceState({}, '', url.toString());
-    } catch (e) {}
+    updateBoardQueryParam(boardId);
 }
 
 function isCloudBoardActive() {
@@ -97,79 +116,28 @@ export function canEditCloudBoard() {
 }
 
 function persistCollabState() {
-    try {
-        const sessionPayload = {
-            token: collab.token || '',
-            user: collab.user || null
-        };
-        localStorage.setItem(COLLAB_SESSION_STORAGE_KEY, JSON.stringify(sessionPayload));
-
-        if (collab.activeBoardId) {
-            const boardPayload = {
-                boardId: collab.activeBoardId,
-                role: collab.activeRole || '',
-                title: collab.activeBoardTitle || '',
-                ownerId: collab.ownerId || '',
-                updatedAt: collab.activeBoardUpdatedAt || ''
-            };
-            localStorage.setItem(COLLAB_ACTIVE_BOARD_STORAGE_KEY, JSON.stringify(boardPayload));
-        } else {
-            localStorage.removeItem(COLLAB_ACTIVE_BOARD_STORAGE_KEY);
-        }
-    } catch (e) {}
+    collabStorage.persist(collab);
 }
 
 function clearCollabStorage() {
-    try {
-        localStorage.removeItem(COLLAB_SESSION_STORAGE_KEY);
-        localStorage.removeItem(COLLAB_ACTIVE_BOARD_STORAGE_KEY);
-        localStorage.removeItem(MAP_SHARED_SNAPSHOT_STORAGE_KEY);
-    } catch (e) {}
+    collabStorage.clear();
 }
 
 function syncSharedMapSnapshot(payload = null) {
-    try {
-        if (!collab.activeBoardId || !payload || !Array.isArray(payload.groups)) {
-            localStorage.removeItem(MAP_SHARED_SNAPSHOT_STORAGE_KEY);
-            return;
-        }
+    if (!collab.activeBoardId || !payload || !Array.isArray(payload.groups)) {
+        clearSharedMapSnapshot();
+        return;
+    }
 
-        localStorage.setItem(MAP_SHARED_SNAPSHOT_STORAGE_KEY, JSON.stringify({
-            boardId: collab.activeBoardId,
-            updatedAt: collab.activeBoardUpdatedAt || '',
-            data: payload
-        }));
-    } catch (e) {}
+    writeSharedMapSnapshot(localStorage, {
+        boardId: collab.activeBoardId,
+        updatedAt: collab.activeBoardUpdatedAt || '',
+        data: payload
+    });
 }
 
 function hydrateCollabState() {
-    collab.pendingBoardId = '';
-
-    try {
-        const sessionRaw = localStorage.getItem(COLLAB_SESSION_STORAGE_KEY);
-        const parsed = parseJsonSafe(sessionRaw || '{}');
-        collab.token = String(parsed?.token || '');
-        collab.user = parsed?.user && typeof parsed.user === 'object' ? parsed.user : null;
-    } catch (e) {
-        collab.token = '';
-        collab.user = null;
-    }
-
-    try {
-        const boardRaw = localStorage.getItem(COLLAB_ACTIVE_BOARD_STORAGE_KEY);
-        const parsed = parseJsonSafe(boardRaw || '{}');
-        collab.activeBoardId = String(parsed?.boardId || '');
-        collab.activeRole = String(parsed?.role || '');
-        collab.activeBoardTitle = String(parsed?.title || '');
-        collab.ownerId = String(parsed?.ownerId || '');
-        collab.activeBoardUpdatedAt = String(parsed?.updatedAt || '');
-    } catch (e) {
-        collab.activeBoardId = '';
-        collab.activeRole = '';
-        collab.activeBoardTitle = '';
-        collab.ownerId = '';
-        collab.activeBoardUpdatedAt = '';
-    }
+    collabStorage.hydrate(collab);
 }
 
 function syncCloudStatus() {
@@ -259,19 +227,15 @@ function hasLocalCloudChanges() {
 }
 
 function stopCollabAutosave() {
-    if (collab.autosaveDebounceTimer) {
-        clearTimeout(collab.autosaveDebounceTimer);
-        collab.autosaveDebounceTimer = null;
-    }
+    stopNamedTimer(collab, 'autosaveDebounceTimer');
 }
 
 function queueCloudAutosave(delayMs = COLLAB_AUTOSAVE_DEBOUNCE_MS) {
     if (!isCloudBoardActive() || !canEditCloudBoard()) return;
     stopCollabAutosave();
-    collab.autosaveDebounceTimer = setTimeout(() => {
-        collab.autosaveDebounceTimer = null;
+    queueNamedTimer(collab, 'autosaveDebounceTimer', () => {
         saveActiveCloudBoard({ manual: false, quiet: true }).catch(() => {});
-    }, Math.max(0, Number(delayMs) || 0));
+    }, delayMs);
 }
 
 function onMapLocalChange() {
@@ -297,22 +261,21 @@ function startCollabAutosave() {
 }
 
 function stopCollabLiveSync() {
-    collab.syncLoopToken += 1;
-    collab.syncLoopRunning = false;
-    collab.syncRetryMs = 0;
-    if (collab.syncTimer) {
-        clearTimeout(collab.syncTimer);
-        collab.syncTimer = null;
-    }
+    stopRetriableLoop(collab, {
+        timerKey: 'syncTimer',
+        tokenKey: 'syncLoopToken',
+        runningKey: 'syncLoopRunning',
+        retryKey: 'syncRetryMs'
+    });
 }
 
 function scheduleNextWatchTick(loopToken, delayMs = 0) {
-    if (collab.syncLoopToken !== loopToken) return;
-    if (collab.syncTimer) clearTimeout(collab.syncTimer);
-    collab.syncTimer = setTimeout(() => {
-        collab.syncTimer = null;
+    scheduleRetriableLoop(collab, {
+        timerKey: 'syncTimer',
+        tokenKey: 'syncLoopToken'
+    }, loopToken, delayMs, () => {
         runCollabWatchLoop(loopToken).catch(() => {});
-    }, Math.max(0, Number(delayMs) || 0));
+    });
 }
 
 async function runCollabWatchLoop(loopToken) {
@@ -363,108 +326,12 @@ async function runCollabWatchLoop(loopToken) {
     }
 }
 
-function makeLinkPairKey(a, b) {
-    const x = String(a || '').trim();
-    const y = String(b || '').trim();
-    return x < y ? `${x}|${y}` : `${y}|${x}`;
-}
-
 function normalizeOptionalMapBoardData(rawData) {
-    if (!rawData || typeof rawData !== 'object' || !Array.isArray(rawData.groups)) {
-        return { groups: [], tacticalLinks: [] };
-    }
     try {
-        return normalizeMapBoardData(rawData);
+        return normalizeSharedOptionalMapBoardPayload(rawData);
     } catch (e) {
         return { groups: [], tacticalLinks: [] };
     }
-}
-
-function buildMapDeletionSets(remoteRaw, localRaw, baseRaw = null) {
-    const remote = normalizeOptionalMapBoardData(remoteRaw);
-    const local = normalizeOptionalMapBoardData(localRaw);
-    const base = normalizeOptionalMapBoardData(baseRaw);
-
-    const deletedGroupKeys = new Set();
-    const deletedPointIds = new Set();
-    const deletedZoneIds = new Set();
-    const deletedLinkKeys = new Set();
-
-    const remoteGroupKeys = new Set(
-        remote.groups.map((group) => String(group?.name || '').trim().toLowerCase()).filter(Boolean)
-    );
-    const localGroupKeys = new Set(
-        local.groups.map((group) => String(group?.name || '').trim().toLowerCase()).filter(Boolean)
-    );
-
-    const remotePointIds = new Set();
-    const localPointIds = new Set();
-    const remoteZoneIds = new Set();
-    const localZoneIds = new Set();
-
-    remote.groups.forEach((group) => {
-        (Array.isArray(group?.points) ? group.points : []).forEach((point) => {
-            const pointId = String(point?.id || '').trim();
-            if (pointId) remotePointIds.add(pointId);
-        });
-        (Array.isArray(group?.zones) ? group.zones : []).forEach((zone) => {
-            const zoneId = String(zone?.id || '').trim();
-            if (zoneId) remoteZoneIds.add(zoneId);
-        });
-    });
-
-    local.groups.forEach((group) => {
-        (Array.isArray(group?.points) ? group.points : []).forEach((point) => {
-            const pointId = String(point?.id || '').trim();
-            if (pointId) localPointIds.add(pointId);
-        });
-        (Array.isArray(group?.zones) ? group.zones : []).forEach((zone) => {
-            const zoneId = String(zone?.id || '').trim();
-            if (zoneId) localZoneIds.add(zoneId);
-        });
-    });
-
-    base.groups.forEach((group) => {
-        const groupKey = String(group?.name || '').trim().toLowerCase();
-        if (groupKey && (!remoteGroupKeys.has(groupKey) || !localGroupKeys.has(groupKey))) {
-            deletedGroupKeys.add(groupKey);
-        }
-
-        (Array.isArray(group?.points) ? group.points : []).forEach((point) => {
-            const pointId = String(point?.id || '').trim();
-            if (pointId && (!remotePointIds.has(pointId) || !localPointIds.has(pointId))) {
-                deletedPointIds.add(pointId);
-            }
-        });
-
-        (Array.isArray(group?.zones) ? group.zones : []).forEach((zone) => {
-            const zoneId = String(zone?.id || '').trim();
-            if (zoneId && (!remoteZoneIds.has(zoneId) || !localZoneIds.has(zoneId))) {
-                deletedZoneIds.add(zoneId);
-            }
-        });
-    });
-
-    const remoteLinkKeys = new Set(
-        remote.tacticalLinks.map((link) => makeLinkPairKey(link?.from, link?.to)).filter(Boolean)
-    );
-    const localLinkKeys = new Set(
-        local.tacticalLinks.map((link) => makeLinkPairKey(link?.from, link?.to)).filter(Boolean)
-    );
-
-    base.tacticalLinks.forEach((link) => {
-        const linkKey = makeLinkPairKey(link?.from, link?.to);
-        if (linkKey && (!remoteLinkKeys.has(linkKey) || !localLinkKeys.has(linkKey))) {
-            deletedLinkKeys.add(linkKey);
-        }
-    });
-
-    return {
-        deletedGroupKeys,
-        deletedPointIds,
-        deletedZoneIds,
-        deletedLinkKeys
-    };
 }
 
 function setCloudShadowData(rawData) {
@@ -476,174 +343,9 @@ function setCloudShadowData(rawData) {
 }
 
 function mergeMapBoardData(remoteRaw, localRaw, baseRaw = null) {
-    const remote = normalizeMapBoardData(remoteRaw);
-    const local = normalizeMapBoardData(localRaw);
-    const deletionSets = buildMapDeletionSets(remote, local, baseRaw);
-
-    const mergedGroups = cloneJsonSafe(
-        remote.groups
-            .filter((group) => {
-                const key = String(group?.name || '').trim().toLowerCase();
-                return !key || !deletionSets.deletedGroupKeys.has(key);
-            })
-            .map((group) => ({
-                ...group,
-                points: (Array.isArray(group?.points) ? group.points : []).filter((point) => {
-                    const pointId = String(point?.id || '').trim();
-                    return !pointId || !deletionSets.deletedPointIds.has(pointId);
-                }),
-                zones: (Array.isArray(group?.zones) ? group.zones : []).filter((zone) => {
-                    const zoneId = String(zone?.id || '').trim();
-                    return !zoneId || !deletionSets.deletedZoneIds.has(zoneId);
-                })
-            })),
-        []
+    return normalizeSharedMapBoardPayload(
+        mergeSharedMapBoardPayload(remoteRaw, localRaw, baseRaw)
     );
-    const pointIndex = new Map();
-    const zoneIndex = new Map();
-    const groupByName = new Map();
-
-    mergedGroups.forEach((group, groupIdx) => {
-        const key = String(group?.name || '').trim().toLowerCase();
-        if (key && !groupByName.has(key)) groupByName.set(key, groupIdx);
-
-        const points = Array.isArray(group.points) ? group.points : [];
-        points.forEach((point, pointIdx) => {
-            const pointId = String(point?.id || '').trim();
-            if (!pointId || deletionSets.deletedPointIds.has(pointId) || pointIndex.has(pointId)) return;
-            pointIndex.set(pointId, { groupIdx, pointIdx });
-        });
-
-        const zones = Array.isArray(group.zones) ? group.zones : [];
-        zones.forEach((zone, zoneIdx) => {
-            let zoneId = String(zone?.id || '').trim();
-            if (!zoneId) {
-                zoneId = generateID();
-                zone.id = zoneId;
-            }
-            if (deletionSets.deletedZoneIds.has(zoneId) || zoneIndex.has(zoneId)) return;
-            zoneIndex.set(zoneId, { groupIdx, zoneIdx });
-        });
-    });
-
-    local.groups.forEach((localGroup, localIdx) => {
-        const localName = String(localGroup?.name || '').trim();
-        const key = localName.toLowerCase();
-        if (key && deletionSets.deletedGroupKeys.has(key)) return;
-        let targetIdx = key && groupByName.has(key) ? groupByName.get(key) : -1;
-        if (targetIdx < 0) {
-            const created = {
-                name: localName || `GROUPE ${mergedGroups.length + 1}`,
-                color: String(localGroup?.color || '#73fbf7'),
-                visible: localGroup?.visible !== false,
-                points: [],
-                zones: []
-            };
-            targetIdx = mergedGroups.push(created) - 1;
-            if (key) groupByName.set(key, targetIdx);
-        }
-
-        const targetGroup = mergedGroups[targetIdx];
-        if (!targetGroup || typeof targetGroup !== 'object') return;
-        targetGroup.name = localName || targetGroup.name || `GROUPE ${localIdx + 1}`;
-        targetGroup.color = String(localGroup?.color || targetGroup.color || '#73fbf7');
-        targetGroup.visible = localGroup?.visible !== false;
-        if (!Array.isArray(targetGroup.points)) targetGroup.points = [];
-        if (!Array.isArray(targetGroup.zones)) targetGroup.zones = [];
-
-        const localPoints = Array.isArray(localGroup?.points) ? localGroup.points : [];
-        localPoints.forEach((rawPoint) => {
-            const pointCopy = cloneJsonSafe(rawPoint, null);
-            const pointId = String(pointCopy?.id || '').trim();
-            if (!pointCopy || !pointId || deletionSets.deletedPointIds.has(pointId)) return;
-
-            if (pointIndex.has(pointId)) {
-                const loc = pointIndex.get(pointId);
-                const points = mergedGroups[loc.groupIdx].points;
-                points[loc.pointIdx] = pointCopy;
-                return;
-            }
-
-            const nextPointIdx = targetGroup.points.push(pointCopy) - 1;
-            pointIndex.set(pointId, { groupIdx: targetIdx, pointIdx: nextPointIdx });
-        });
-
-        const localZones = Array.isArray(localGroup?.zones) ? localGroup.zones : [];
-        localZones.forEach((rawZone) => {
-            const zoneCopy = cloneJsonSafe(rawZone, null);
-            if (!zoneCopy || typeof zoneCopy !== 'object') return;
-
-            let zoneId = String(zoneCopy.id || '').trim();
-            if (!zoneId) {
-                zoneId = generateID();
-                zoneCopy.id = zoneId;
-            }
-            if (deletionSets.deletedZoneIds.has(zoneId)) return;
-
-            if (zoneIndex.has(zoneId)) {
-                const loc = zoneIndex.get(zoneId);
-                const zones = mergedGroups[loc.groupIdx].zones;
-                zones[loc.zoneIdx] = zoneCopy;
-                return;
-            }
-
-            const nextZoneIdx = targetGroup.zones.push(zoneCopy) - 1;
-            zoneIndex.set(zoneId, { groupIdx: targetIdx, zoneIdx: nextZoneIdx });
-        });
-    });
-
-    const validPointIds = new Set();
-    mergedGroups.forEach((group) => {
-        const points = Array.isArray(group?.points) ? group.points : [];
-        points.forEach((point) => {
-            const pointId = String(point?.id || '').trim();
-            if (pointId) validPointIds.add(pointId);
-        });
-    });
-
-    const mergedLinkMap = new Map();
-    const remoteLinks = Array.isArray(remote.tacticalLinks) ? remote.tacticalLinks : [];
-    remoteLinks.forEach((rawLink) => {
-        const from = String(rawLink?.from || '').trim();
-        const to = String(rawLink?.to || '').trim();
-        if (!from || !to || from === to) return;
-        if (!validPointIds.has(from) || !validPointIds.has(to)) return;
-        const pairKey = makeLinkPairKey(from, to);
-        if (deletionSets.deletedLinkKeys.has(pairKey)) return;
-        mergedLinkMap.set(pairKey, cloneJsonSafe(rawLink, null));
-    });
-
-    const localLinks = Array.isArray(local.tacticalLinks) ? local.tacticalLinks : [];
-    localLinks.forEach((rawLink) => {
-        const from = String(rawLink?.from || '').trim();
-        const to = String(rawLink?.to || '').trim();
-        if (!from || !to || from === to) return;
-        if (!validPointIds.has(from) || !validPointIds.has(to)) return;
-        const pairKey = makeLinkPairKey(from, to);
-        if (deletionSets.deletedLinkKeys.has(pairKey)) return;
-        mergedLinkMap.set(pairKey, cloneJsonSafe(rawLink, null));
-    });
-
-    const usedLinkIds = new Set();
-    const tacticalLinks = Array.from(mergedLinkMap.values())
-        .filter(Boolean)
-        .map((link) => {
-            const safeLink = cloneJsonSafe(link, {}) || {};
-            let linkId = String(safeLink.id || '').trim();
-            if (!linkId || usedLinkIds.has(linkId)) {
-                linkId = generateID();
-            }
-            usedLinkIds.add(linkId);
-            return {
-                id: linkId,
-                from: String(safeLink.from || ''),
-                to: String(safeLink.to || ''),
-                color: safeLink.color || null,
-                type: String(safeLink.type || 'Standard')
-            };
-        });
-
-    return { groups: mergedGroups, tacticalLinks };
 }
 
 async function syncActiveCloudBoard(options = {}) {
@@ -709,53 +411,11 @@ function startCollabLiveSync() {
 }
 
 async function collabAuthRequest(action, payload = {}) {
-    const postResponse = await fetch(COLLAB_AUTH_ENDPOINT, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            ...(collab.token ? { 'x-collab-token': collab.token } : {})
-        },
-        body: JSON.stringify({ action, ...payload })
-    });
-
-    let response = postResponse;
-    let data = await readResponseSafe(postResponse);
-    if ((!response.ok || !data.ok) && response.status === 405 && (action === 'me' || action === 'logout')) {
-        const url = new URL(COLLAB_AUTH_ENDPOINT, window.location.origin);
-        url.searchParams.set('action', action);
-        if (collab.token) url.searchParams.set('token', collab.token);
-        response = await fetch(url.toString(), { method: 'GET' });
-        data = await readResponseSafe(response);
-    }
-
-    if (!response.ok || !data.ok) {
-        const hint = endpointHintMessage(response.status, 'Auth');
-        throw new Error(hint || data.error || `Erreur auth (${response.status})`);
-    }
-    return data;
+    return sharedCollabAuthRequest(action, payload);
 }
 
 async function collabBoardRequest(action, payload = {}) {
-    if (!collab.token) throw new Error('Session cloud manquante.');
-
-    const response = await fetch(COLLAB_BOARD_ENDPOINT, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'x-collab-token': collab.token
-        },
-        body: JSON.stringify({ action, ...payload })
-    });
-
-    const data = await readResponseSafe(response);
-    if (!response.ok || !data.ok) {
-        const hint = endpointHintMessage(response.status, 'Cloud');
-        const err = new Error(hint || data.error || `Erreur cloud (${response.status})`);
-        err.status = response.status;
-        err.payload = data || {};
-        throw err;
-    }
-    return data;
+    return sharedCollabBoardRequest(action, payload);
 }
 
 function setActiveCloudBoardFromSummary(summary = null) {
@@ -795,31 +455,7 @@ function normalizeMapBoardData(rawData) {
     if (!Array.isArray(rawData.groups)) {
         throw new Error('Le board cloud ne contient pas de groupes.');
     }
-
-    const groups = rawData.groups.map((group) => {
-        const safeGroup = group && typeof group === 'object' ? { ...group } : {};
-        if (!Array.isArray(safeGroup.points)) safeGroup.points = [];
-        if (!Array.isArray(safeGroup.zones)) safeGroup.zones = [];
-        return safeGroup;
-    });
-
-    const linksRaw = Array.isArray(rawData.tacticalLinks) ? rawData.tacticalLinks : [];
-    const tacticalLinks = linksRaw
-        .map((link) => {
-            const from = String(link?.from || link?.source || '').trim();
-            const to = String(link?.to || link?.target || '').trim();
-            if (!from || !to || from === to) return null;
-            return {
-                id: String(link?.id || generateID()),
-                from,
-                to,
-                color: link?.color || null,
-                type: String(link?.type || 'Standard')
-            };
-        })
-        .filter(Boolean);
-
-    return { groups, tacticalLinks };
+    return normalizeSharedMapBoardPayload(rawData);
 }
 
 function applyCloudMapData(rawData) {
