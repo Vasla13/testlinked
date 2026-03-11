@@ -64,6 +64,7 @@ const state = {
     drawMode: false,
     drawType: '',
     drawCircleDraft: null,
+    drawCircleHoverMode: false,
     isFreeDrawing: false,
     drawDraftPoints: [],
     drawBackupAlert: null,
@@ -84,6 +85,7 @@ const state = {
     allowedUsers: [],
     userDirectory: [],
     selectionDrag: null,
+    contextMenuMapCoords: null,
     contextMenuOpen: false,
     modalSession: {
         open: false,
@@ -842,6 +844,7 @@ function setLockState(locked) {
 function closeContextMenu() {
     if (!dom.contextMenu) return;
     dom.contextMenu.classList.remove('visible');
+    state.contextMenuMapCoords = null;
     state.contextMenuOpen = false;
 }
 
@@ -868,6 +871,7 @@ function stopDrawingMode(options = {}) {
     state.drawMode = false;
     state.drawType = '';
     state.drawCircleDraft = null;
+    state.drawCircleHoverMode = false;
     state.isFreeDrawing = false;
     state.drawDraftPoints = [];
     closeContextMenu();
@@ -898,6 +902,12 @@ function stopDrawingMode(options = {}) {
 function beginNewAlertDraw(type) {
     const backupAlert = cloneAlertRecord(state.currentAlert);
     const backupSelection = cloneSelection(state.selection);
+    const contextCoords = state.contextMenuMapCoords
+        ? {
+            x: state.contextMenuMapCoords.x,
+            y: state.contextMenuMapCoords.y,
+        }
+        : null;
 
     closeContextMenu();
     if (isAlertModalOpen()) closeAlertModal({ restore: false });
@@ -907,15 +917,30 @@ function beginNewAlertDraw(type) {
     state.drawMode = true;
     state.drawType = type;
     state.drawCircleDraft = null;
+    state.drawCircleHoverMode = false;
     state.isFreeDrawing = false;
     state.drawDraftPoints = [];
     state.drawBackupAlert = backupAlert;
     state.drawBackupSelection = backupSelection;
+    return contextCoords;
 }
 
 function startCircleDraw() {
-    beginNewAlertDraw('circle');
-    setStatusMessage('Clique puis glisse pour creer le cercle de la nouvelle alerte.', 'ok');
+    const contextCoords = beginNewAlertDraw('circle');
+    if (contextCoords) {
+        state.drawCircleDraft = {
+            cx: contextCoords.x,
+            cy: contextCoords.y,
+            r: 0,
+        };
+        state.drawCircleHoverMode = true;
+    }
+    setStatusMessage(
+        contextCoords
+            ? 'Point de depart place. Bouge la souris pour regler le rayon, puis clique gauche pour valider.'
+            : 'Clique puis glisse pour creer le cercle de la nouvelle alerte.',
+        'ok'
+    );
     renderSelection();
     renderBanner();
     refreshStatusCards();
@@ -937,6 +962,7 @@ function finalizeCircleDraft() {
 
     if (!Number.isFinite(draft.r) || draft.r < 0.2) {
         state.drawCircleDraft = null;
+        state.drawCircleHoverMode = false;
         stopDrawingMode({ restoreBackup: true });
         setStatusMessage('Zone trop petite.', 'warn');
         return;
@@ -949,6 +975,7 @@ function finalizeCircleDraft() {
     }]);
 
     state.drawCircleDraft = null;
+    state.drawCircleHoverMode = false;
     setSelection(nextSelection, {
         syncForm: true,
         resetDraft: true,
@@ -1009,7 +1036,12 @@ function refreshModeControls() {
 
     if (state.drawMode) {
         if (state.drawType === 'circle') {
-            setDrawStatus('Nouvelle zone. Clique puis glisse pour regler le rayon.', 'circle');
+            setDrawStatus(
+                state.drawCircleHoverMode
+                    ? 'Nouvelle zone. Bouge la souris pour regler le rayon puis clique gauche pour valider.'
+                    : 'Nouvelle zone. Clique puis glisse pour regler le rayon.',
+                'circle'
+            );
         } else {
             const count = state.drawDraftPoints.length;
             setDrawStatus(`Dessin libre. Maintiens clic gauche pour tracer. ${count} point${count > 1 ? 's' : ''} poses.`, 'zone');
@@ -1188,6 +1220,14 @@ function renderSelection() {
         draft.setAttribute('stroke-dasharray', '0.5 0.26');
         draft.setAttribute('class', 'staff-alert-draft');
         dom.alertLayer.appendChild(draft);
+
+        const draftCenter = computePolygonCenter(state.drawDraftPoints);
+        const anchor = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        anchor.setAttribute('cx', draftCenter.x);
+        anchor.setAttribute('cy', draftCenter.y);
+        anchor.setAttribute('r', '0.32');
+        anchor.setAttribute('class', 'staff-alert-anchor');
+        dom.alertLayer.appendChild(anchor);
     }
 
     if (state.drawMode) return;
@@ -1256,7 +1296,7 @@ function renderBanner() {
         const displayRadius = draft ? getDraftCircleDisplayRadius(draft) : getCurrentRadius();
         meta = draft && draftGps
             ? `Nouvelle zone • GPS ${draftGps.x.toFixed(2)} / ${draftGps.y.toFixed(2)} • Rayon ${Math.max(draftRadius, displayRadius).toFixed(1)} • Trait ${getCurrentStrokeWidth().toFixed(2)}`
-            : `Nouvelle zone • Clique puis glisse • Rayon ${getCurrentRadius().toFixed(1)} • Trait ${getCurrentStrokeWidth().toFixed(2)}`;
+            : `Nouvelle zone • Clic droit puis pointeur • Rayon ${getCurrentRadius().toFixed(1)} • Trait ${getCurrentStrokeWidth().toFixed(2)}`;
     }
     const startDate = getDraftStartDate();
     if (!state.drawMode && selection?.shapeType === 'zone') {
@@ -1810,6 +1850,7 @@ function initMap() {
         if (!state.unlocked) return;
         if (state.drawMode || state.selectionDrag) return;
         event.preventDefault();
+        state.contextMenuMapCoords = getMapPercentCoords(event.clientX, event.clientY);
         openContextMenu(event.clientX, event.clientY);
     });
 
@@ -1820,11 +1861,19 @@ function initMap() {
 
         if (state.drawMode && state.drawType === 'circle') {
             const coords = getMapPercentCoords(event.clientX, event.clientY);
+            if (state.drawCircleHoverMode && state.drawCircleDraft) {
+                const dx = coords.x - state.drawCircleDraft.cx;
+                const dy = coords.y - state.drawCircleDraft.cy;
+                state.drawCircleDraft.r = Math.sqrt((dx * dx) + (dy * dy));
+                finalizeCircleDraft();
+                return;
+            }
             state.drawCircleDraft = {
                 cx: coords.x,
                 cy: coords.y,
                 r: 0,
             };
+            state.drawCircleHoverMode = false;
             renderInteractivePreview();
             return;
         }
