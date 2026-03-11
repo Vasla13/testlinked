@@ -250,52 +250,73 @@ export function injectStyles() {
 
         /* HUD & DOCK */
         #hud {
-            position: relative;
+            position: fixed;
+            top: max(16px, env(safe-area-inset-top));
+            right: max(18px, env(safe-area-inset-right));
             left: auto;
-            right: auto;
             bottom: auto;
             transform: none;
-            width: 100%;
-            max-width: none;
-            margin-top: 6px;
-            padding: 10px;
-            border-radius: 12px;
-            background: rgba(5, 7, 20, 0.78);
-            border: 1px solid rgba(115, 251, 247, 0.18);
-            display: flex;
-            flex-direction: column;
-            align-items: stretch;
-            justify-content: flex-start;
+            width: min(320px, calc(100vw - 28px));
+            max-width: 320px;
+            margin-top: 0;
+            padding: 12px;
+            border-radius: 18px;
+            background:
+                linear-gradient(180deg, rgba(5, 11, 28, 0.96), rgba(3, 8, 20, 0.94)),
+                radial-gradient(circle at top right, rgba(115, 251, 247, 0.12), transparent 55%);
+            border: 1px solid rgba(115, 251, 247, 0.22);
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 8px;
-            flex-wrap: nowrap;
-            box-shadow: inset 0 0 0 1px rgba(115, 251, 247, 0.04);
+            z-index: 70;
+            backdrop-filter: blur(14px);
+            box-shadow:
+                inset 0 0 0 1px rgba(115, 251, 247, 0.05),
+                0 18px 36px rgba(0, 0, 0, 0.34);
         }
         .hud-panel-title {
-            color: #8ba4c0;
-            font-size: 0.66rem;
-            letter-spacing: 1.8px;
+            grid-column: 1 / -1;
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 0 2px 4px;
+        }
+        .hud-panel-kicker {
+            color: #d7efff;
+            font-size: 0.68rem;
+            letter-spacing: 2.2px;
             text-transform: uppercase;
-            padding-left: 2px;
+            font-weight: 700;
+        }
+        .hud-panel-sub {
+            color: #6d86a2;
+            font-size: 0.56rem;
+            letter-spacing: 1.3px;
+            text-transform: uppercase;
         }
 
         .icon-svg { width: 16px; height: 16px; fill: currentColor; display: block; }
 
         #hud .hud-btn {
             background: transparent; border: none; color: #8b9bb4; cursor: pointer;
-            display: flex; align-items: center; gap: 6px; font-family: var(--font-main);
+            display: flex; align-items: center; gap: 10px; font-family: var(--font-main);
             font-size: 0.92rem; text-transform: uppercase; font-weight: 700;
             padding: 6px; transition: all 0.2s; border-radius: 4px;
             letter-spacing: 0.8px;
+            min-width: 0;
         }
         #hud .hud-btn:hover { color: var(--accent-cyan); background: rgba(115, 251, 247, 0.05); }
         #hud .hud-btn.active { color: var(--accent-cyan); text-shadow: 0 0 8px rgba(115, 251, 247, 0.6); }
         #hud .hud-mode-btn {
-            min-height: 38px;
-            padding: 8px 10px;
-            border: 1px solid rgba(115, 251, 247, 0.16);
-            border-radius: 10px;
-            background: rgba(10, 18, 38, 0.82);
+            min-height: 54px;
+            padding: 10px 12px;
+            border: 1px solid rgba(115, 251, 247, 0.14);
+            border-radius: 14px;
+            background: rgba(8, 16, 34, 0.82);
             clip-path: none;
+            justify-content: flex-start;
+            text-align: left;
         }
         #hud .hud-mode-btn.active {
             background: rgba(115, 251, 247, 0.1);
@@ -306,6 +327,54 @@ export function injectStyles() {
         #hud .hud-mode-btn.is-off {
             color: #7b90ab;
             border-color: rgba(123, 144, 171, 0.14);
+        }
+        #hud .hud-btn-icon {
+            flex: 0 0 30px;
+            width: 30px;
+            height: 30px;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(115, 251, 247, 0.08);
+            border: 1px solid rgba(115, 251, 247, 0.14);
+            color: currentColor;
+        }
+        #hud .hud-btn-copy {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            justify-content: center;
+            gap: 2px;
+            min-width: 0;
+        }
+        #hud .hud-btn-label {
+            color: #6e87a4;
+            font-size: 0.52rem;
+            line-height: 1;
+            letter-spacing: 1.7px;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+        #hud .hud-btn-value {
+            color: #d8eeff;
+            font-size: 0.8rem;
+            line-height: 1.1;
+            letter-spacing: 0.9px;
+            text-transform: uppercase;
+            font-weight: 700;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
+        }
+        #hud .hud-mode-btn.active .hud-btn-icon {
+            background: rgba(115, 251, 247, 0.16);
+            border-color: rgba(115, 251, 247, 0.38);
+            box-shadow: 0 0 12px rgba(115, 251, 247, 0.12);
+        }
+        #hud .hud-mode-btn.is-off .hud-btn-value {
+            color: #8ba1bb;
         }
 
         .hud-toggle {
@@ -2605,36 +2674,56 @@ export function injectStyles() {
         }
 
         #hud {
-            position: relative;
+            position: fixed;
+            top: max(12px, env(safe-area-inset-top));
+            right: max(12px, env(safe-area-inset-right));
             left: auto;
-            right: auto;
             bottom: auto;
             transform: none;
-            width: 100%;
-            max-width: none;
-            margin-top: 6px;
-            padding: 10px;
+            width: min(252px, calc(100vw - 18px));
+            max-width: 252px;
+            margin-top: 0;
+            padding: 8px;
             background: rgba(5, 12, 28, 0.82);
             border: 1px solid rgba(102, 243, 255, 0.18);
-            border-radius: 12px;
-            display: flex;
-            flex-direction: column;
+            border-radius: 14px;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
             align-items: stretch;
             justify-content: flex-start;
-            gap: 8px;
-            flex-wrap: nowrap;
+            gap: 6px;
             box-shadow: inset 0 0 0 1px rgba(102, 243, 255, 0.04);
+        }
+        .hud-panel-title {
+            grid-column: 1 / -1;
+            padding: 0 1px 2px;
         }
         #hud .hud-btn {
             color: var(--text-muted);
-            font-size: 0.76rem;
+            font-size: 0.7rem;
             letter-spacing: 1.4px;
         }
         #hud .hud-mode-btn {
             width: 100%;
-            min-height: 38px;
-            justify-content: space-between;
+            min-height: 48px;
+            justify-content: flex-start;
             border-radius: 10px;
+            padding: 8px 9px;
+            gap: 8px;
+        }
+        #hud .hud-btn-icon {
+            flex-basis: 26px;
+            width: 26px;
+            height: 26px;
+            border-radius: 8px;
+        }
+        #hud .hud-btn-label {
+            font-size: 0.48rem;
+            letter-spacing: 1.4px;
+        }
+        #hud .hud-btn-value {
+            font-size: 0.64rem;
+            letter-spacing: 1px;
         }
         .hud-toggle {
             color: var(--text-muted);
@@ -2871,12 +2960,13 @@ export function injectStyles() {
                 transform: rotate(90deg);
             }
             #hud {
-                position: relative;
+                position: fixed;
+                top: max(12px, env(safe-area-inset-top));
+                right: max(12px, env(safe-area-inset-right));
                 left: auto;
-                right: auto;
                 bottom: auto;
-                width: 100%;
-                margin-top: 8px;
+                width: min(252px, calc(100vw - 18px));
+                margin-top: 0;
                 justify-content: flex-start;
                 flex-wrap: nowrap;
             }

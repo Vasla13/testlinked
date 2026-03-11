@@ -2349,6 +2349,11 @@ export function initUI() {
     updatePathfindingPanel();
     updateIntelButtonLockVisual();
 
+    const hud = document.getElementById('hud');
+    if (hud && hud.parentElement !== document.body) {
+        document.body.appendChild(hud);
+    }
+
     const canvas = document.getElementById('graph');
     window.addEventListener('resize', resizeCanvas);
 
@@ -3867,16 +3872,52 @@ function setupHudButtons() {
         { value: FILTERS.SOCIAL, short: 'Social' }
     ];
 
+    const iconMarkup = {
+        labels: `
+            <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v11a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5zM7 8h10v2H7zm0 4h6v2H7z"/>
+            </svg>
+        `,
+        links: `
+            <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M10.59 13.41a1.99 1.99 0 0 0 2.82 0l3.59-3.59a2 2 0 1 0-2.83-2.82l-1.17 1.17-1.41-1.41 1.17-1.17a4 4 0 0 1 5.66 5.66l-3.59 3.59a4 4 0 0 1-5.66 0l-.59-.59 1.41-1.41zm2.82-2.82-2.82 2.82-1.41-1.41 2.82-2.82zm-4.24 6.24a4 4 0 0 1-5.66 0 4 4 0 0 1 0-5.66l3.59-3.59a4 4 0 0 1 5.66 0l.59.59-1.41 1.41-.59-.59a2 2 0 1 0-2.83 2.82l-3.59 3.59a2 2 0 1 0 2.83 2.82l1.17-1.17 1.41 1.41z"/>
+            </svg>
+        `,
+        filter: `
+            <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 5h16l-6.5 7.43V19l-3-1.6v-4.97z"/>
+            </svg>
+        `,
+        info: `
+            <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M11 10h2v7h-2zm0-3h2v2h-2zm1-5a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16z"/>
+            </svg>
+        `
+    };
+
+    const setHudButtonContent = (button, icon, label, value) => {
+        button.innerHTML = `
+            <span class="hud-btn-icon">${iconMarkup[icon] || ''}</span>
+            <span class="hud-btn-copy">
+                <span class="hud-btn-label">${escapeHtml(label)}</span>
+                <span class="hud-btn-value">${escapeHtml(value)}</span>
+            </span>
+        `;
+    };
+
     const title = document.createElement('div');
     title.className = 'hud-panel-title';
-    title.textContent = 'Affichage';
+    title.innerHTML = `
+        <span class="hud-panel-kicker">Affichage</span>
+        <span class="hud-panel-sub">Commandes visuelles</span>
+    `;
     hud.appendChild(title);
 
     const btnLabels = document.createElement('button');
     btnLabels.className = 'hud-btn hud-mode-btn';
     const updateLabelBtn = () => {
         const current = labelModes.find((entry) => entry.value === state.labelMode) || labelModes[0];
-        btnLabels.innerHTML = `<span>Noms · ${current.short}</span>`;
+        setHudButtonContent(btnLabels, 'labels', 'Noms', current.short);
         btnLabels.title = current.title;
         btnLabels.classList.toggle('active', state.labelMode !== 1);
         btnLabels.classList.toggle('is-off', state.labelMode === 0);
@@ -3895,7 +3936,7 @@ function setupHudButtons() {
     const btnLinkTypes = document.createElement('button');
     btnLinkTypes.className = 'hud-btn hud-mode-btn';
     const updateLinkTypesBtn = () => {
-        btnLinkTypes.innerHTML = `<span>Liens · ${state.showLinkTypes ? 'Types' : 'Base'}</span>`;
+        setHudButtonContent(btnLinkTypes, 'links', 'Liens', state.showLinkTypes ? 'Types' : 'Base');
         btnLinkTypes.classList.toggle('active', !!state.showLinkTypes);
     };
     updateLinkTypesBtn();
@@ -3912,7 +3953,7 @@ function setupHudButtons() {
     btnFilterMode.className = 'hud-btn hud-mode-btn';
     const updateFilterBtn = () => {
         const current = filterModes.find((entry) => entry.value === state.activeFilter) || filterModes[0];
-        btnFilterMode.innerHTML = `<span>Filtre · ${current.short}</span>`;
+        setHudButtonContent(btnFilterMode, 'filter', 'Filtre', current.short);
         btnFilterMode.classList.toggle('active', state.activeFilter !== FILTERS.ALL);
     };
     updateFilterBtn();
@@ -3929,7 +3970,7 @@ function setupHudButtons() {
 
     const btnInfo = document.createElement('button');
     btnInfo.className = 'hud-btn hud-mode-btn';
-    btnInfo.innerHTML = '<span>Info · Liens</span>';
+    setHudButtonContent(btnInfo, 'info', 'Aide', 'Liens');
     btnInfo.title = 'Ouvrir l aide sur les types de liens';
     btnInfo.onclick = () => showLinkGuide();
     hud.appendChild(btnInfo);
