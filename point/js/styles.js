@@ -251,15 +251,15 @@ export function injectStyles() {
         /* HUD & DOCK */
         #hud {
             position: fixed;
-            top: max(16px, env(safe-area-inset-top));
-            right: max(18px, env(safe-area-inset-right));
+            top: max(14px, env(safe-area-inset-top));
+            right: max(14px, env(safe-area-inset-right));
             left: auto;
             bottom: auto;
             transform: none;
-            width: min(292px, calc(100vw - 28px));
-            max-width: 292px;
+            width: min(224px, calc(100vw - 22px));
+            max-width: 224px;
             margin-top: 0;
-            padding: 12px;
+            padding: 8px;
             border-radius: 18px;
             background:
                 linear-gradient(180deg, rgba(5, 11, 28, 0.96), rgba(3, 8, 20, 0.94)),
@@ -267,7 +267,7 @@ export function injectStyles() {
             border: 1px solid rgba(115, 251, 247, 0.22);
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 6px;
             z-index: 70;
             backdrop-filter: blur(14px);
             box-shadow:
@@ -275,11 +275,7 @@ export function injectStyles() {
                 0 18px 36px rgba(0, 0, 0, 0.34);
         }
         .hud-panel-title {
-            display: flex;
-            align-items: baseline;
-            justify-content: space-between;
-            gap: 10px;
-            padding: 0 2px 2px;
+            display: none;
         }
         .hud-panel-kicker {
             color: #d7efff;
@@ -300,30 +296,44 @@ export function injectStyles() {
         #hud .hud-btn {
             background: transparent; border: none; color: #8b9bb4; cursor: pointer;
             display: flex; align-items: center; gap: 10px; font-family: var(--font-main);
-            font-size: 0.92rem; text-transform: uppercase; font-weight: 700;
+            font-size: 0.88rem; text-transform: uppercase; font-weight: 700;
             width: 100%;
-            padding: 6px; transition: all 0.2s; border-radius: 4px;
+            padding: 0; transition: all 0.2s; border-radius: 4px;
             letter-spacing: 0.8px;
             min-width: 0;
         }
-        #hud .hud-btn:hover { color: var(--accent-cyan); background: rgba(115, 251, 247, 0.05); }
-        #hud .hud-btn.active { color: var(--accent-cyan); text-shadow: 0 0 8px rgba(115, 251, 247, 0.6); }
+        #hud .hud-btn:hover { color: var(--accent-cyan); }
+        #hud .hud-btn.active { color: var(--accent-cyan); text-shadow: none; }
+        #hud .hud-stack-btn,
         #hud .hud-mode-btn {
             min-height: 50px;
-            padding: 10px 12px;
+            padding: 10px 11px;
             border: 1px solid rgba(115, 251, 247, 0.14);
             border-radius: 14px;
-            background: rgba(8, 16, 34, 0.82);
-            clip-path: none;
+            background: linear-gradient(180deg, rgba(8, 16, 34, 0.9), rgba(4, 10, 22, 0.96));
+            clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
             justify-content: flex-start;
             text-align: left;
+            transition:
+                transform 0.16s ease,
+                border-color 0.2s ease,
+                background 0.2s ease,
+                box-shadow 0.2s ease,
+                color 0.2s ease;
         }
+        #hud .hud-stack-btn:hover,
+        #hud .hud-mode-btn:hover {
+            transform: translateY(-1px);
+            background: linear-gradient(180deg, rgba(10, 20, 40, 0.94), rgba(5, 13, 28, 0.98));
+            border-color: rgba(115, 251, 247, 0.24);
+        }
+        #hud .hud-stack-btn.active,
         #hud .hud-mode-btn.active {
-            background: rgba(115, 251, 247, 0.1);
+            background: linear-gradient(180deg, rgba(16, 35, 58, 0.96), rgba(8, 18, 32, 0.96));
             border-color: rgba(115, 251, 247, 0.42);
-            text-shadow: none;
             box-shadow: 0 0 14px rgba(115, 251, 247, 0.12);
         }
+        #hud .hud-stack-btn.is-off,
         #hud .hud-mode-btn.is-off {
             color: #7b90ab;
             border-color: rgba(123, 144, 171, 0.14);
@@ -343,44 +353,54 @@ export function injectStyles() {
         #hud .hud-btn-copy {
             display: flex;
             flex: 1 1 auto;
-            flex-direction: row;
-            align-items: center;
-            justify-content: space-between;
-            gap: 10px;
+            flex-direction: column;
+            align-items: flex-start;
+            justify-content: center;
+            gap: 2px;
             min-width: 0;
         }
         #hud .hud-btn-label {
             color: #d8eeff;
-            font-size: 0.72rem;
+            font-size: 0.8rem;
             line-height: 1;
-            letter-spacing: 1.3px;
-            text-transform: uppercase;
-            font-weight: 700;
-        }
-        #hud .hud-btn-value {
-            flex: 0 0 auto;
-            color: #bdefff;
-            font-size: 0.62rem;
-            line-height: 1;
-            letter-spacing: 1.1px;
+            letter-spacing: 1.8px;
             text-transform: uppercase;
             font-weight: 700;
             white-space: nowrap;
-            padding: 5px 8px;
-            border-radius: 999px;
-            border: 1px solid rgba(115, 251, 247, 0.16);
-            background: rgba(115, 251, 247, 0.08);
         }
+        #hud .hud-btn-value {
+            flex: 0 0 auto;
+            color: #89a5be;
+            font-size: 0.54rem;
+            line-height: 1.15;
+            letter-spacing: 1.8px;
+            text-transform: uppercase;
+            font-weight: 700;
+            white-space: nowrap;
+            padding: 0;
+            border-radius: 0;
+            border: none;
+            background: transparent;
+        }
+        #hud .hud-stack-btn.no-meta .hud-btn-copy,
+        #hud .hud-mode-btn.no-meta .hud-btn-copy {
+            gap: 0;
+        }
+        #hud .hud-stack-btn.active .hud-btn-icon,
         #hud .hud-mode-btn.active .hud-btn-icon {
             background: rgba(115, 251, 247, 0.16);
             border-color: rgba(115, 251, 247, 0.38);
             box-shadow: 0 0 12px rgba(115, 251, 247, 0.12);
         }
+        #hud .hud-stack-btn.active .hud-btn-value,
         #hud .hud-mode-btn.active .hud-btn-value {
-            background: rgba(115, 251, 247, 0.16);
-            border-color: rgba(115, 251, 247, 0.34);
-            color: #e9fdff;
+            color: #bdf6ff;
         }
+        #hud .hud-stack-btn.is-off .hud-btn-label,
+        #hud .hud-mode-btn.is-off .hud-btn-label {
+            color: #9ab0c9;
+        }
+        #hud .hud-stack-btn.is-off .hud-btn-value,
         #hud .hud-mode-btn.is-off .hud-btn-value {
             color: #8ba1bb;
         }
@@ -392,8 +412,91 @@ export function injectStyles() {
             background: rgba(115, 251, 247, 0.12);
             border-color: rgba(115, 251, 247, 0.24);
         }
-        #hud .hud-action-btn .hud-btn-value {
-            color: #d7f9ff;
+        #hud .hud-action-btn .hud-btn-label {
+            letter-spacing: 2px;
+        }
+        #hud .hud-filter-card {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            padding: 8px;
+            border: 1px solid rgba(115, 251, 247, 0.16);
+            border-radius: 16px;
+            background: linear-gradient(180deg, rgba(8, 16, 34, 0.9), rgba(4, 10, 22, 0.96));
+            clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+            box-shadow: inset 0 0 0 1px rgba(115, 251, 247, 0.03);
+        }
+        #hud .hud-filter-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 1px 1px 5px;
+            color: #7d93ad;
+            font-size: 0.52rem;
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+        #hud .hud-filter-title-icon,
+        #hud .hud-filter-option-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: currentColor;
+        }
+        #hud .hud-filter-title-icon {
+            width: 16px;
+            height: 16px;
+        }
+        #hud .hud-filter-title-icon .icon-svg {
+            width: 14px;
+            height: 14px;
+        }
+        #hud .hud-filter-option {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 9px;
+            border: 1px solid transparent;
+            border-radius: 12px;
+            background: transparent;
+            color: #93a6bf;
+            cursor: pointer;
+            font-family: var(--font-main);
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 1.4px;
+            text-transform: uppercase;
+            transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+        }
+        #hud .hud-filter-option:hover {
+            color: #dff9ff;
+            background: rgba(115, 251, 247, 0.05);
+        }
+        #hud .hud-filter-option.active {
+            color: var(--accent-cyan);
+            background: rgba(115, 251, 247, 0.14);
+            border-color: rgba(115, 251, 247, 0.42);
+            box-shadow: inset 0 0 0 1px rgba(115, 251, 247, 0.12);
+        }
+        #hud .hud-filter-option-icon {
+            flex: 0 0 18px;
+            width: 18px;
+            height: 18px;
+        }
+        #hud .hud-filter-option-label {
+            flex: 1 1 auto;
+            min-width: 0;
+            text-align: left;
+        }
+        #hud .hud-settings-btn .hud-btn-icon {
+            flex-basis: 34px;
+            width: 34px;
+            height: 34px;
+            border-radius: 12px;
+            background: rgba(115, 251, 247, 0.1);
+            border-color: rgba(115, 251, 247, 0.22);
         }
 
         .hud-toggle {
@@ -1978,6 +2081,86 @@ export function injectStyles() {
             color: var(--accent-cyan);
             flex: 0 0 auto;
         }
+        .settings-preset-shell {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 18px;
+            padding: 14px;
+            border: 1px solid rgba(102, 243, 255, 0.16);
+            border-radius: 14px;
+            background: linear-gradient(180deg, rgba(3, 10, 24, 0.82), rgba(4, 11, 26, 0.68));
+            box-shadow: inset 0 0 0 1px rgba(102, 243, 255, 0.04);
+        }
+        .settings-preset-head {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .settings-preset-title {
+            color: var(--text-light);
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 1.8px;
+            text-transform: uppercase;
+        }
+        .settings-preset-sub {
+            color: #88a2bc;
+            font-size: 0.68rem;
+            line-height: 1.45;
+        }
+        .settings-preset-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+        }
+        .settings-preset-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 6px;
+            padding: 10px 11px;
+            border: 1px solid rgba(102, 243, 255, 0.12);
+            border-radius: 10px;
+            background: rgba(6, 14, 30, 0.88);
+            color: var(--text-main);
+            cursor: pointer;
+            text-align: left;
+            font-family: var(--font-main);
+            transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, transform 0.16s ease;
+        }
+        .settings-preset-btn:hover {
+            transform: translateY(-1px);
+            border-color: rgba(102, 243, 255, 0.24);
+            background: rgba(8, 18, 38, 0.96);
+        }
+        .settings-preset-btn.active {
+            border-color: rgba(102, 243, 255, 0.42);
+            background: rgba(102, 243, 255, 0.12);
+            box-shadow: 0 0 14px rgba(102, 243, 255, 0.12);
+        }
+        .settings-preset-name {
+            color: var(--text-light);
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 1.3px;
+            text-transform: uppercase;
+        }
+        .settings-preset-hint-inline {
+            color: #8aa4bc;
+            font-size: 0.64rem;
+            line-height: 1.45;
+        }
+        .settings-preset-hint {
+            min-height: 20px;
+            padding: 10px 12px;
+            border: 1px solid rgba(102, 243, 255, 0.12);
+            border-radius: 10px;
+            background: rgba(3, 10, 24, 0.72);
+            color: #b4d9ea;
+            font-size: 0.72rem;
+            line-height: 1.45;
+        }
         .settings-section-break {
             margin-top: 20px;
             padding-top: 12px;
@@ -2700,8 +2883,8 @@ export function injectStyles() {
             left: auto;
             bottom: auto;
             transform: none;
-            width: min(282px, calc(100vw - 20px));
-            max-width: 282px;
+            width: min(224px, calc(100vw - 20px));
+            max-width: 224px;
             margin-top: 0;
             padding: 8px;
             background: rgba(5, 12, 28, 0.82);
@@ -2715,13 +2898,14 @@ export function injectStyles() {
             box-shadow: inset 0 0 0 1px rgba(102, 243, 255, 0.04);
         }
         .hud-panel-title {
-            padding: 0 1px 2px;
+            display: none;
         }
         #hud .hud-btn {
             color: var(--text-muted);
             font-size: 0.7rem;
             letter-spacing: 1.4px;
         }
+        #hud .hud-stack-btn,
         #hud .hud-mode-btn {
             width: 100%;
             min-height: 46px;
@@ -2738,41 +2922,46 @@ export function injectStyles() {
         }
         #hud .hud-btn-label {
             color: var(--text-light);
-            font-size: 0.68rem;
-            letter-spacing: 1.2px;
+            font-size: 0.74rem;
+            letter-spacing: 1.5px;
         }
         #hud .hud-btn-value {
             flex: 0 0 auto;
-            font-size: 0.58rem;
+            font-size: 0.5rem;
             line-height: 1;
-            letter-spacing: 1px;
-            padding: 4px 7px;
-            border-radius: 999px;
-            border: 1px solid rgba(102, 243, 255, 0.14);
-            background: rgba(102, 243, 255, 0.08);
+            letter-spacing: 1.6px;
+            padding: 0;
+            border-radius: 0;
+            border: none;
+            background: transparent;
         }
         #hud .hud-btn-copy {
             flex: 1 1 auto;
-            flex-direction: row;
-            align-items: center;
-            justify-content: space-between;
-            gap: 8px;
+            flex-direction: column;
+            align-items: flex-start;
+            justify-content: center;
+            gap: 2px;
         }
-        #hud .hud-mode-btn.active .hud-btn-value {
-            border-color: rgba(102, 243, 255, 0.28);
-            background: rgba(102, 243, 255, 0.14);
-            color: #eafcff;
+        #hud .hud-filter-card {
+            padding: 7px;
+            gap: 3px;
         }
-        #hud .hud-action-btn {
-            border-color: rgba(102, 243, 255, 0.24);
-            background: linear-gradient(90deg, rgba(10, 20, 40, 0.94), rgba(8, 18, 32, 0.92));
+        #hud .hud-filter-title {
+            padding: 1px 1px 4px;
+            font-size: 0.5rem;
         }
-        #hud .hud-action-btn .hud-btn-icon {
+        #hud .hud-filter-option {
+            padding: 7px 8px;
+            font-size: 0.68rem;
+            letter-spacing: 1.3px;
+        }
+        #hud .hud-settings-btn .hud-btn-icon {
+            flex-basis: 30px;
+            width: 30px;
+            height: 30px;
+            border-radius: 10px;
             background: rgba(102, 243, 255, 0.12);
             border-color: rgba(102, 243, 255, 0.22);
-        }
-        #hud .hud-action-btn .hud-btn-value {
-            color: #d8faff;
         }
         .hud-toggle {
             color: var(--text-muted);
@@ -2870,17 +3059,28 @@ export function injectStyles() {
             #hud {
                 top: max(10px, env(safe-area-inset-top));
                 right: max(10px, env(safe-area-inset-right));
-                width: min(258px, calc(100vw - 16px));
-                max-width: 258px;
-                padding: 7px;
-                gap: 6px;
+                width: min(206px, calc(100vw - 16px));
+                max-width: 206px;
+                padding: 6px;
+                gap: 5px;
             }
+            #hud .hud-stack-btn,
             #hud .hud-mode-btn {
-                min-height: 44px;
+                min-height: 42px;
                 padding: 7px 8px;
             }
+            #hud .hud-btn-label {
+                font-size: 0.68rem;
+            }
             #hud .hud-btn-value {
-                font-size: 0.6rem;
+                font-size: 0.48rem;
+            }
+            #hud .hud-filter-option {
+                padding: 6px 7px;
+                font-size: 0.64rem;
+            }
+            #hud .hud-filter-title {
+                font-size: 0.48rem;
             }
             .editor-sheet-name {
                 font-size: 0.98rem;
@@ -2898,19 +3098,23 @@ export function injectStyles() {
 
         @media (min-width: 1024px) and (min-height: 821px) and (max-width: 1439px) {
             #hud {
-                width: min(272px, calc(100vw - 18px));
-                max-width: 272px;
+                width: min(218px, calc(100vw - 18px));
+                max-width: 218px;
             }
         }
 
         @media (min-width: 1920px) {
             #hud {
-                width: min(308px, calc(100vw - 28px));
-                max-width: 308px;
-                padding: 10px;
+                width: min(236px, calc(100vw - 28px));
+                max-width: 236px;
+                padding: 9px;
             }
+            #hud .hud-stack-btn,
             #hud .hud-mode-btn {
                 min-height: 52px;
+            }
+            #hud .hud-filter-option {
+                padding: 9px 10px;
             }
             .editor-sheet-name {
                 font-size: 1.22rem;
@@ -2925,8 +3129,8 @@ export function injectStyles() {
 
         @media (min-width: 2560px), (min-width: 1920px) and (min-aspect-ratio: 21/9) {
             #hud {
-                width: min(328px, calc(100vw - 32px));
-                max-width: 328px;
+                width: min(244px, calc(100vw - 32px));
+                max-width: 244px;
             }
             .editor-sheet-name {
                 font-size: 1.3rem;

@@ -3867,10 +3867,10 @@ function setupHudButtons() {
         { value: 0, short: 'Off', title: 'Masquer tous les noms' }
     ];
     const filterModes = [
-        { value: FILTERS.ALL, short: 'Global' },
-        { value: FILTERS.BUSINESS, short: 'Business' },
-        { value: FILTERS.ILLEGAL, short: 'Conflit' },
-        { value: FILTERS.SOCIAL, short: 'Social' }
+        { value: FILTERS.ALL, short: 'Global', icon: 'global', title: 'Voir tout le reseau' },
+        { value: FILTERS.BUSINESS, short: 'Business', icon: 'business', title: 'Favorise les liens business' },
+        { value: FILTERS.ILLEGAL, short: 'Conflit', icon: 'conflict', title: 'Favorise les tensions et conflits' },
+        { value: FILTERS.SOCIAL, short: 'Social', icon: 'social', title: 'Favorise les liens sociaux' }
     ];
 
     const iconMarkup = {
@@ -3898,32 +3898,82 @@ function setupHudButtons() {
             <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M11 10h2v7h-2zm0-3h2v2h-2zm1-5a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16z"/>
             </svg>
+        `,
+        settings: `
+            <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M19.14 12.94a7.43 7.43 0 0 0 .05-.94 7.43 7.43 0 0 0-.05-.94l2.03-1.58a.5.5 0 0 0 .12-.63l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.04 7.04 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.49-.42h-3.84a.5.5 0 0 0-.49.42l-.36 2.54c-.58.23-1.12.54-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.7 8.85a.5.5 0 0 0 .12.63l2.03 1.58a7.43 7.43 0 0 0-.05.94c0 .32.02.63.05.94L2.82 14.52a.5.5 0 0 0-.12.63l1.92 3.32a.5.5 0 0 0 .6.22l2.39-.96c.51.4 1.05.71 1.63.94l.36 2.54a.5.5 0 0 0 .49.42h3.84a.5.5 0 0 0 .49-.42l.36-2.54c.58-.23 1.12-.54 1.63-.94l2.39.96a.5.5 0 0 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.63zM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5z"/>
+            </svg>
+        `,
+        global: `
+            <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm6.92 9h-3.04a15.7 15.7 0 0 0-1.21-5.02A8.03 8.03 0 0 1 18.92 11zm-6.92 9c-.78 0-2.18-2.04-2.63-5h5.26c-.45 2.96-1.85 5-2.63 5zm-2.88-7a13.9 13.9 0 0 1 0-2h5.76a13.9 13.9 0 0 1 0 2zm.25-4c.45-2.96 1.85-5 2.63-5s2.18 2.04 2.63 5zM9.33 5.98A15.7 15.7 0 0 0 8.12 11H5.08a8.03 8.03 0 0 1 4.25-5.02zM5.08 13h3.04a15.7 15.7 0 0 0 1.21 5.02A8.03 8.03 0 0 1 5.08 13zm9.59 5.02A15.7 15.7 0 0 0 15.88 13h3.04a8.03 8.03 0 0 1-4.25 5.02z"/>
+            </svg>
+        `,
+        business: `
+            <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M9 6V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V6h3.5A1.5 1.5 0 0 1 20 7.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 16.5v-9A1.5 1.5 0 0 1 5.5 6zm2 0h2V5h-2zm-5 4h12v6H6z"/>
+            </svg>
+        `,
+        conflict: `
+            <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M7.05 4.64 9.88 7.46 8.46 8.88 5.64 6.05zm9.9 0 1.41 1.41-2.82 2.83-1.41-1.42zM10 10l4 4-1.5 1.5-1.29-1.29-3.5 3.5-1.42-1.42 3.5-3.5L8.5 11.5zm4-4 1.5-1.5 3.86 3.86-1.5 1.5zM6.05 14.12l1.41 1.41-2.82 2.83-1.42-1.42z"/>
+            </svg>
+        `,
+        social: `
+            <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 21s-6.72-4.34-9.19-8.08C.63 9.6 2.2 5.5 6.12 5.08 8.1 4.87 9.69 5.78 10.7 7.2 11.71 5.78 13.3 4.87 15.28 5.08c3.92.42 5.49 4.52 3.31 7.84C18.72 16.66 12 21 12 21z"/>
+            </svg>
         `
     };
 
-    const setHudButtonContent = (button, icon, label, value) => {
+    const setHudButtonContent = (button, icon, label, value = '') => {
         button.innerHTML = `
             <span class="hud-btn-icon">${iconMarkup[icon] || ''}</span>
             <span class="hud-btn-copy">
                 <span class="hud-btn-label">${escapeHtml(label)}</span>
-                <span class="hud-btn-value">${escapeHtml(value)}</span>
+                ${value ? `<span class="hud-btn-value">${escapeHtml(value)}</span>` : ''}
             </span>
         `;
+        button.classList.toggle('has-meta', !!value);
+        button.classList.toggle('no-meta', !value);
     };
 
-    const title = document.createElement('div');
-    title.className = 'hud-panel-title';
-    title.innerHTML = `
-        <span class="hud-panel-kicker">Affichage</span>
-        <span class="hud-panel-sub">Vue reseau</span>
-    `;
-    hud.appendChild(title);
+    const createHudButton = (className = 'hud-btn hud-stack-btn') => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = className;
+        return button;
+    };
 
-    const btnLabels = document.createElement('button');
-    btnLabels.className = 'hud-btn hud-mode-btn';
+    const updateHudView = () => {
+        updateLinkLegend();
+        draw();
+        scheduleSave();
+    };
+
+    const btnRecenter = createHudButton('hud-btn hud-stack-btn hud-action-btn');
+    setHudButtonContent(btnRecenter, 'recenter', 'Recentrer');
+    btnRecenter.title = 'Recentrer la vue sur l ensemble du reseau';
+    btnRecenter.onclick = () => recenterGraphView();
+    hud.appendChild(btnRecenter);
+
+    const btnLinkTypes = createHudButton('hud-btn hud-stack-btn');
+    const updateLinkTypesBtn = () => {
+        setHudButtonContent(btnLinkTypes, 'links', 'Liens', state.showLinkTypes ? 'Types' : 'Base');
+        btnLinkTypes.classList.toggle('active', !!state.showLinkTypes);
+    };
+    updateLinkTypesBtn();
+    btnLinkTypes.onclick = () => {
+        state.showLinkTypes = !state.showLinkTypes;
+        updateLinkTypesBtn();
+        updateHudView();
+    };
+    hud.appendChild(btnLinkTypes);
+
+    const btnLabels = createHudButton('hud-btn hud-stack-btn');
     const updateLabelBtn = () => {
         const current = labelModes.find((entry) => entry.value === state.labelMode) || labelModes[0];
-        setHudButtonContent(btnLabels, 'labels', 'Noms', current.short);
+        setHudButtonContent(btnLabels, 'labels', current.short, 'Noms');
         btnLabels.title = current.title;
         btnLabels.classList.toggle('active', state.labelMode !== 1);
         btnLabels.classList.toggle('is-off', state.labelMode === 0);
@@ -3939,47 +3989,42 @@ function setupHudButtons() {
     };
     hud.appendChild(btnLabels);
 
-    const btnLinkTypes = document.createElement('button');
-    btnLinkTypes.className = 'hud-btn hud-mode-btn';
-    const updateLinkTypesBtn = () => {
-        setHudButtonContent(btnLinkTypes, 'links', 'Liens', state.showLinkTypes ? 'Types' : 'Base');
-        btnLinkTypes.classList.toggle('active', !!state.showLinkTypes);
+    const filterCard = document.createElement('div');
+    filterCard.className = 'hud-filter-card';
+    const filterOptionButtons = [];
+    const updateFilterButtons = () => {
+        filterOptionButtons.forEach(({ button, entry }) => {
+            const active = state.activeFilter === entry.value;
+            button.classList.toggle('active', active);
+            button.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
     };
-    updateLinkTypesBtn();
-    btnLinkTypes.onclick = () => {
-        state.showLinkTypes = !state.showLinkTypes;
-        updateLinkTypesBtn();
-        updateLinkLegend();
-        draw();
-        scheduleSave();
-    };
-    hud.appendChild(btnLinkTypes);
+    filterModes.forEach((entry) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'hud-filter-option';
+        button.title = entry.title;
+        button.innerHTML = `
+            <span class="hud-filter-option-icon">${iconMarkup[entry.icon] || ''}</span>
+            <span class="hud-filter-option-label">${escapeHtml(entry.short)}</span>
+        `;
+        button.onclick = () => {
+            state.activeFilter = entry.value;
+            updateFilterButtons();
+            updateHudView();
+        };
+        filterCard.appendChild(button);
+        filterOptionButtons.push({ button, entry });
+    });
+    updateFilterButtons();
+    hud.appendChild(filterCard);
 
-    const btnFilterMode = document.createElement('button');
-    btnFilterMode.className = 'hud-btn hud-mode-btn';
-    const updateFilterBtn = () => {
-        const current = filterModes.find((entry) => entry.value === state.activeFilter) || filterModes[0];
-        setHudButtonContent(btnFilterMode, 'filter', 'Filtre', current.short);
-        btnFilterMode.classList.toggle('active', state.activeFilter !== FILTERS.ALL);
-    };
-    updateFilterBtn();
-    btnFilterMode.onclick = () => {
-        const currentIndex = filterModes.findIndex((entry) => entry.value === state.activeFilter);
-        const next = filterModes[(currentIndex + 1 + filterModes.length) % filterModes.length] || filterModes[0];
-        state.activeFilter = next.value;
-        updateFilterBtn();
-        updateLinkLegend();
-        draw();
-        scheduleSave();
-    };
-    hud.appendChild(btnFilterMode);
-
-    const btnRecenter = document.createElement('button');
-    btnRecenter.className = 'hud-btn hud-mode-btn hud-action-btn';
-    setHudButtonContent(btnRecenter, 'recenter', 'Recentrer', 'Reseau');
-    btnRecenter.title = 'Recentrer la vue sur l ensemble du reseau';
-    btnRecenter.onclick = () => recenterGraphView();
-    hud.appendChild(btnRecenter);
+    const btnSettings = createHudButton('hud-btn hud-stack-btn hud-settings-btn');
+    btnSettings.innerHTML = `<span class="hud-btn-icon">${iconMarkup.settings}</span>`;
+    btnSettings.setAttribute('aria-label', 'Ouvrir les parametres et presets de vision reseau');
+    btnSettings.title = 'Ouvrir les parametres et presets de vision reseau';
+    btnSettings.onclick = () => showSettings();
+    hud.appendChild(btnSettings);
 }
 
 function ensureHvtPanel() {

@@ -8,6 +8,148 @@ import { selectNode, renderEditor, updatePathfindingPanel, refreshLists, showCus
 let settingsPanel = null;
 let contextMenu = null;
 
+const DEFAULT_PHYSICS_SETTINGS = {
+    repulsion: 1200,
+    gravity: 0.005,
+    linkLength: 220,
+    friction: 0.3,
+    collision: 50,
+    enemyForce: 300,
+    structureRepulsion: 0.1,
+    curveStrength: 1.0,
+    socialLinkStrength: 0.34,
+    socialLinkDistanceMult: 0.78,
+    businessLinkStrength: 0.26,
+    businessLinkDistanceMult: 1.08,
+    companyChargeMultiplier: 5,
+    groupChargeMultiplier: 3,
+    companyTerritoryRadius: 450,
+    groupTerritoryRadius: 350,
+    enemyDistanceMultiplier: 1.0,
+    presetId: 'standard'
+};
+
+const PHYSICS_PRESETS = [
+    {
+        id: 'standard',
+        label: 'Standard',
+        hint: 'Vision equilibree du reseau.',
+        patch: {}
+    },
+    {
+        id: 'enemy_far',
+        label: 'Ennemis tres eloignes',
+        hint: 'Ouvre fortement les conflits et les guerres.',
+        patch: {
+            enemyForce: 760,
+            enemyDistanceMultiplier: 1.75,
+            repulsion: 1350,
+            gravity: 0.003
+        }
+    },
+    {
+        id: 'enemy_near',
+        label: 'Ennemis proches',
+        hint: 'Garde les tensions visibles sans tout exploser.',
+        patch: {
+            enemyForce: 140,
+            enemyDistanceMultiplier: 0.55,
+            gravity: 0.008,
+            linkLength: 200
+        }
+    },
+    {
+        id: 'friends_close',
+        label: 'Amis proches',
+        hint: 'Le social colle plus fort que le business.',
+        patch: {
+            socialLinkStrength: 0.78,
+            socialLinkDistanceMult: 0.46,
+            businessLinkStrength: 0.18,
+            businessLinkDistanceMult: 1.25,
+            companyChargeMultiplier: 6,
+            repulsion: 1280
+        }
+    },
+    {
+        id: 'group_cluster',
+        label: 'Groupuscule fort',
+        hint: 'Les groupes se resserrent en noyaux plus nets.',
+        patch: {
+            groupChargeMultiplier: 1.65,
+            groupTerritoryRadius: 230,
+            businessLinkStrength: 0.4,
+            businessLinkDistanceMult: 0.76,
+            structureRepulsion: 0.06,
+            gravity: 0.007
+        }
+    },
+    {
+        id: 'companies_far',
+        label: 'Entreprises tres loin',
+        hint: 'Ecarte fortement les blocs business.',
+        patch: {
+            companyChargeMultiplier: 8.5,
+            companyTerritoryRadius: 720,
+            structureRepulsion: 0.18,
+            businessLinkDistanceMult: 1.34,
+            repulsion: 1550,
+            gravity: 0.0035
+        }
+    },
+    {
+        id: 'groups_far',
+        label: 'Groupes tres loin',
+        hint: 'Separation plus dure entre factions et groupes.',
+        patch: {
+            groupChargeMultiplier: 5.8,
+            groupTerritoryRadius: 620,
+            structureRepulsion: 0.16,
+            linkLength: 250,
+            repulsion: 1450,
+            gravity: 0.0035
+        }
+    }
+];
+
+function cloneDefaultPhysicsSettings() {
+    return { ...DEFAULT_PHYSICS_SETTINGS };
+}
+
+function formatSettingValue(key, value) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return String(value ?? '');
+    if (key === 'gravity' || key === 'structureRepulsion') return numeric.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+    if (key === 'friction') return numeric.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+    if (String(key).toLowerCase().includes('mult') || String(key).toLowerCase().includes('strength')) {
+        return numeric.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+    }
+    return String(Math.round(numeric * 100) / 100);
+}
+
+function buildPresetButtonsMarkup() {
+    return PHYSICS_PRESETS.map((preset) => `
+        <button type="button" class="settings-preset-btn" data-preset-id="${preset.id}">
+            <span class="settings-preset-name">${preset.label}</span>
+            <span class="settings-preset-hint-inline">${preset.hint}</span>
+        </button>
+    `).join('');
+}
+
+function applyPhysicsPreset(presetId) {
+    const preset = PHYSICS_PRESETS.find((entry) => entry.id === presetId);
+    if (!preset) return;
+    state.physicsSettings = {
+        ...cloneDefaultPhysicsSettings(),
+        ...preset.patch,
+        presetId: preset.id
+    };
+    updateSettingsUI();
+    restartSim();
+    draw();
+    scheduleSave();
+}
+
 // --- GESTION DU PANNEAU REGLAGES ---
 export function showSettings() {
     if (!settingsPanel) createSettingsPanel();
@@ -28,7 +170,7 @@ function createSettingsPanel() {
 
     settingsPanel.innerHTML = `
         <div class="settings-header">
-            <h3>Paramètres Physique</h3>
+            <h3>Vision reseau</h3>
             <div class="settings-close" id="btnCloseSettings">✕</div>
         </div>
         
@@ -40,6 +182,15 @@ function createSettingsPanel() {
                 <input type="checkbox" id="chkGlobeInner"/>
                 <div class="toggle-track"><div class="toggle-thumb"></div></div>
             </label>
+        </div>
+
+        <div class="settings-preset-shell">
+            <div class="settings-preset-head">
+                <div class="settings-preset-title">Presets pre-faits</div>
+                <div class="settings-preset-sub">Change la lecture du reseau en un clic</div>
+            </div>
+            <div id="settingsPresetGrid" class="settings-preset-grid">${buildPresetButtonsMarkup()}</div>
+            <div id="settingsPresetHint" class="settings-preset-hint"></div>
         </div>
 
         <div class="setting-row"><label>Répulsion Globale <span id="val-repulsion" class="setting-val"></span></label><input type="range" id="sl-repulsion" min="100" max="5000" step="50"></div>
@@ -66,6 +217,9 @@ function createSettingsPanel() {
     document.getElementById('btnCloseSettings').onclick = () => { settingsPanel.style.display = 'none'; };
     document.getElementById('chkGlobeInner').onchange = (e) => { state.globeMode = e.target.checked; restartSim(); scheduleSave(); };
     document.getElementById('btnResetPhysics').onclick = resetPhysicsDefaults;
+    settingsPanel.querySelectorAll('[data-preset-id]').forEach((btn) => {
+        btn.onclick = () => applyPhysicsPreset(btn.getAttribute('data-preset-id') || '');
+    });
 
     bindSlider('sl-repulsion', 'repulsion');
     bindSlider('sl-gravity', 'gravity');
@@ -83,8 +237,10 @@ function bindSlider(id, key) {
     if(sl) {
         sl.oninput = (e) => {
             state.physicsSettings[key] = parseFloat(e.target.value);
+            state.physicsSettings.presetId = 'custom';
             updateSettingsUI();
             restartSim();
+            draw();
             scheduleSave();
         };
     }
@@ -98,7 +254,7 @@ function updateSettingsUI() {
         const val = document.getElementById(id.replace('sl-', 'val-'));
         if(sl && val && S[key] !== undefined) { 
             sl.value = S[key]; 
-            val.innerText = S[key]; 
+            val.innerText = formatSettingValue(key, S[key]); 
         }
     };
     
@@ -121,13 +277,26 @@ function updateSettingsUI() {
         hvtSl.value = n;
         hvtVal.innerText = n === 0 ? 'OFF' : n;
     }
+
+    const activePresetId = String(S.presetId || 'custom');
+    settingsPanel.querySelectorAll('[data-preset-id]').forEach((btn) => {
+        btn.classList.toggle('active', btn.getAttribute('data-preset-id') === activePresetId);
+    });
+    const presetHint = document.getElementById('settingsPresetHint');
+    if (presetHint) {
+        const activePreset = PHYSICS_PRESETS.find((entry) => entry.id === activePresetId);
+        presetHint.textContent = activePreset
+            ? activePreset.hint
+            : 'Mode custom: tu as modifie les reglages a la main.';
+    }
 }
 
 function resetPhysicsDefaults() {
-    state.physicsSettings = { repulsion: 1200, gravity: 0.005, linkLength: 220, friction: 0.3, collision: 50, enemyForce: 300, structureRepulsion: 0.1, curveStrength: 1.0 };
+    state.physicsSettings = cloneDefaultPhysicsSettings();
     state.globeMode = true;
     updateSettingsUI();
     restartSim();
+    draw();
     scheduleSave();
 }
 

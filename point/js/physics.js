@@ -5,6 +5,70 @@ import { clamp } from './utils.js';
 
 let simulation;
 
+const SOCIAL_LINK_KINDS = new Set([
+    KINDS.FAMILLE,
+    KINDS.COUPLE,
+    KINDS.AMOUR,
+    KINDS.AMI,
+    KINDS.CONNAISSANCE
+]);
+
+const BUSINESS_LINK_KINDS = new Set([
+    KINDS.PATRON,
+    KINDS.HAUT_GRADE,
+    KINDS.EMPLOYE,
+    KINDS.COLLEGUE,
+    KINDS.PARTENAIRE,
+    KINDS.AFFILIATION,
+    KINDS.MEMBRE,
+    KINDS.RELATION,
+    KINDS.RIVAL
+]);
+
+function numSetting(value, fallback) {
+    return Number.isFinite(Number(value)) ? Number(value) : fallback;
+}
+
+function getLinkDistance(link, settings) {
+    const base = numSetting(settings.linkLength, 220);
+    const socialMult = numSetting(settings.socialLinkDistanceMult, 0.78);
+    const businessMult = numSetting(settings.businessLinkDistanceMult, 1.08);
+
+    if (link.kind === KINDS.AFFILIATION) return base * Math.max(1.35, businessMult * 1.45);
+    if (link.kind === KINDS.PATRON) return base * 0.3 * businessMult;
+    if (link.kind === KINDS.HAUT_GRADE) return base * 0.5 * businessMult;
+    if (link.kind === KINDS.EMPLOYE) return base * 0.9 * businessMult;
+    if (link.kind === KINDS.COLLEGUE) return base * 0.95 * businessMult;
+    if (link.kind === KINDS.PARTENAIRE) return base * 1.02 * businessMult;
+    if (link.kind === KINDS.MEMBRE) return base * 1.08 * businessMult;
+    if (link.kind === KINDS.RELATION) return base * 1.1 * businessMult;
+    if (SOCIAL_LINK_KINDS.has(link.kind)) {
+        if (link.kind === KINDS.CONNAISSANCE) return base * Math.min(1.1, socialMult + 0.18);
+        return base * socialMult;
+    }
+    if (BUSINESS_LINK_KINDS.has(link.kind)) return base * businessMult;
+    return base;
+}
+
+function getLinkStrength(link, settings) {
+    const socialStrength = clamp(numSetting(settings.socialLinkStrength, 0.34), 0.05, 1.4);
+    const businessStrength = clamp(numSetting(settings.businessLinkStrength, 0.26), 0.05, 1.2);
+
+    if (link.kind === KINDS.PATRON) return clamp(Math.max(0.45, businessStrength * 2.2), 0.05, 1.4);
+    if (link.kind === KINDS.HAUT_GRADE) return clamp(Math.max(0.34, businessStrength * 1.6), 0.05, 1.3);
+    if (link.kind === KINDS.EMPLOYE) return clamp(Math.max(0.24, businessStrength * 1.1), 0.05, 1.1);
+    if (link.kind === KINDS.COLLEGUE) return clamp(businessStrength * 0.95, 0.05, 1.1);
+    if (link.kind === KINDS.AFFILIATION || link.kind === KINDS.MEMBRE) return clamp(businessStrength * 0.74, 0.05, 1.0);
+    if (link.kind === KINDS.PARTENAIRE || link.kind === KINDS.RELATION || link.kind === KINDS.RIVAL) {
+        return clamp(businessStrength * 0.88, 0.05, 1.0);
+    }
+    if (SOCIAL_LINK_KINDS.has(link.kind)) {
+        if (link.kind === KINDS.CONNAISSANCE) return clamp(socialStrength * 0.72, 0.05, 1.1);
+        return socialStrength;
+    }
+    return 0.25;
+}
+
 export function initPhysics() {
     simulation = d3.forceSimulation()
         .alphaDecay(0.01) 
@@ -53,19 +117,11 @@ export function restartSim() {
         .id(d => d.id)
         .distance(l => {
             if (l.kind === KINDS.ENNEMI) return 0; 
-            
-            // Slider: Link Length
-            const base = S.linkLength;
-            if (l.kind === KINDS.AFFILIATION) return base * 2.0; 
-            if (l.kind === KINDS.PATRON) return base * 0.3;
-            if (l.kind === KINDS.HAUT_GRADE) return base * 0.5;
-            if (l.kind === KINDS.EMPLOYE) return base * 0.9; 
-            return base; 
+            return getLinkDistance(l, S);
         })
         .strength(l => {
             if (l.kind === KINDS.ENNEMI) return 0; 
-            if (l.kind === KINDS.PATRON) return 1.0;
-            return 0.25; 
+            return getLinkStrength(l, S);
         })
     );
 
@@ -82,6 +138,7 @@ export function restartSim() {
 
             const isBigS = (s.type === TYPES.COMPANY || s.type === TYPES.GROUP);
             const isBigT = (t.type === TYPES.COMPANY || t.type === TYPES.GROUP);
+            const enemyDistanceMultiplier = numSetting(S.enemyDistanceMultiplier, 1.0);
             
             let hateRadius = 900; 
             
@@ -96,6 +153,7 @@ export function restartSim() {
                 hateRadius = 2500; 
                 forceMultiplier *= 2;
             }
+            hateRadius *= enemyDistanceMultiplier;
 
             let dx = t.x - s.x || (Math.random() - 0.5);
             let dy = t.y - s.y || (Math.random() - 0.5);
@@ -116,8 +174,8 @@ export function restartSim() {
     simulation.force("charge", d3.forceManyBody()
         .strength(n => {
             let strength = -adaptiveRepulsion; 
-            if (n.type === TYPES.COMPANY) strength *= 5; 
-            if (n.type === TYPES.GROUP) strength *= 3;
+            if (n.type === TYPES.COMPANY) strength *= numSetting(S.companyChargeMultiplier, 5);
+            if (n.type === TYPES.GROUP) strength *= numSetting(S.groupChargeMultiplier, 3);
             const degree = nodeDegree.get(n.id) || 0;
             strength -= (degree * 150); 
             return strength;
@@ -151,7 +209,9 @@ export function restartSim() {
     simulation.force("territory", () => {
         const structures = state.nodes.filter(n => n.type === TYPES.COMPANY || n.type === TYPES.GROUP);
         for (const struct of structures) {
-            const territoryRadius = (struct.type === TYPES.COMPANY) ? 450 : 350; 
+            const territoryRadius = (struct.type === TYPES.COMPANY)
+                ? numSetting(S.companyTerritoryRadius, 450)
+                : numSetting(S.groupTerritoryRadius, 350);
             for (const n of state.nodes) {
                 if (n.id === struct.id || n.type === TYPES.COMPANY || n.type === TYPES.GROUP) continue;
                 if (n.fx != null) continue;

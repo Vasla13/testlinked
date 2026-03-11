@@ -16,8 +16,14 @@ export const state = {
     activeFilter: 'ALL',
     globeMode: true,
     physicsSettings: {
-        repulsion: 1200, gravity: 0.005, linkLength: 220, friction: 0.3, 
-        collision: 50, enemyForce: 300, structureRepulsion: 0.1, curveStrength: 1.0
+        repulsion: 1200, gravity: 0.005, linkLength: 220, friction: 0.3,
+        collision: 50, enemyForce: 300, structureRepulsion: 0.1, curveStrength: 1.0,
+        socialLinkStrength: 0.34, socialLinkDistanceMult: 0.78,
+        businessLinkStrength: 0.26, businessLinkDistanceMult: 1.08,
+        companyChargeMultiplier: 5, groupChargeMultiplier: 3,
+        companyTerritoryRadius: 450, groupTerritoryRadius: 350,
+        enemyDistanceMultiplier: 1.0,
+        presetId: 'standard'
     },
     history: [], tempLink: null, labelMode: 1, showLinkTypes: false, 
     performance: false, view: { x: 0, y: 0, scale: 0.8 }, forceSimulation: false,
