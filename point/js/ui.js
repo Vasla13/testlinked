@@ -89,9 +89,9 @@ const collab = {
     homePanel: 'cloud'
 };
 
-const COLLAB_AUTOSAVE_DEBOUNCE_MS = 380;
-const COLLAB_AUTOSAVE_RETRY_MS = 250;
-const COLLAB_WATCH_TIMEOUT_MS = 3600;
+const COLLAB_AUTOSAVE_DEBOUNCE_MS = 1100;
+const COLLAB_AUTOSAVE_RETRY_MS = 450;
+const COLLAB_WATCH_TIMEOUT_MS = 7000;
 const COLLAB_WATCH_RETRY_MIN_MS = 300;
 const COLLAB_WATCH_RETRY_MAX_MS = 4000;
 const collabStorage = createStoredCollabStateBridge({
@@ -483,6 +483,30 @@ function normalizeCloudBoardData(rawData, options = {}) {
     };
 }
 
+function canonicalizePointPayload(payload) {
+    const raw = payload && typeof payload === 'object' ? payload : {};
+    const meta = raw.meta && typeof raw.meta === 'object'
+        ? { ...raw.meta, date: '' }
+        : { date: '' };
+    const nodes = (Array.isArray(raw.nodes) ? raw.nodes : [])
+        .map((node) => normalizeCloudNode(node))
+        .filter(Boolean)
+        .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    const links = (Array.isArray(raw.links) ? raw.links : [])
+        .map((link) => normalizeCloudLink(link))
+        .filter(Boolean)
+        .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+
+    return {
+        meta,
+        physicsSettings: raw.physicsSettings && typeof raw.physicsSettings === 'object'
+            ? cloneJson(raw.physicsSettings, {})
+            : {},
+        nodes,
+        links
+    };
+}
+
 function buildCloudEntityMeta(currentEntity, shadowEntity, fields, nowIso, actor) {
     const shadowMeta = normalizeCloudEntityMeta(shadowEntity?._collab, fields, shadowEntity?._collab?.updatedAt || '', shadowEntity?._collab?.updatedBy || actor);
     const fieldTimes = {};
@@ -671,8 +695,7 @@ function withoutCloudAutosave(fn) {
 }
 
 function setCloudSyncState(nextState, label = '') {
-    collab.syncState = nextState;
-    collab.syncLabel = label || ({
+    const nextLabel = label || ({
         local: 'Local',
         session: 'Session cloud',
         live: 'Synchro live active',
@@ -682,7 +705,32 @@ function setCloudSyncState(nextState, label = '') {
         merged: 'Fusion auto appliquee',
         error: 'Sync en attente'
     }[nextState] || 'Cloud');
+    if (collab.syncState === nextState && collab.syncLabel === nextLabel) return;
+    collab.syncState = nextState;
+    collab.syncLabel = nextLabel;
     syncCloudStatus();
+}
+
+function presenceListsEqual(left = [], right = []) {
+    if (left.length !== right.length) return false;
+    for (let index = 0; index < left.length; index += 1) {
+        const a = left[index];
+        const b = right[index];
+        if (!b) return false;
+        if (
+            String(a.userId || '') !== String(b.userId || '') ||
+            String(a.username || '') !== String(b.username || '') ||
+            String(a.role || '') !== String(b.role || '') ||
+            String(a.activeNodeId || '') !== String(b.activeNodeId || '') ||
+            String(a.activeNodeName || '') !== String(b.activeNodeName || '') ||
+            String(a.mode || '') !== String(b.mode || '') ||
+            String(a.lastAt || '') !== String(b.lastAt || '') ||
+            Boolean(a.isSelf) !== Boolean(b.isSelf)
+        ) {
+            return false;
+        }
+    }
+    return true;
 }
 
 function updateCollabPresence(rawPresence = []) {
@@ -701,11 +749,13 @@ function updateCollabPresence(rawPresence = []) {
             isSelf: userId === String(collab.user?.id || '')
         });
     });
-    collab.presence = [...deduped.values()].sort((a, b) => {
+    const nextPresence = [...deduped.values()].sort((a, b) => {
         if (a.isSelf && !b.isSelf) return -1;
         if (!a.isSelf && b.isSelf) return 1;
         return String(a.username || '').localeCompare(String(b.username || ''));
     });
+    if (presenceListsEqual(collab.presence, nextPresence)) return;
+    collab.presence = nextPresence;
     syncCloudStatus();
 }
 
@@ -767,35 +817,37 @@ function syncCloudLivePanels() {
 function applyCloudBoardData(rawData, options = {}) {
     const quiet = Boolean(options.quiet);
     const plain = extractPlainPointPayloadFromCloud(rawData);
-    withoutCloudAutosave(() => processData(plain, 'load', { silent: true }));
+    const serverFingerprint = fingerprintFromPointPayload(plain);
+    const localFingerprint = fingerprintFromPointPayload(generateExportData());
+    const shouldReloadLocalState = serverFingerprint !== localFingerprint;
+
+    if (shouldReloadLocalState) {
+        withoutCloudAutosave(() => processData(plain, 'load', { silent: true }));
+    }
     setCloudShadowData(rawData);
     if (typeof options.projectName === 'string') {
         state.projectName = options.projectName;
     }
-    captureCloudSavedState();
-    if (state.selection && !nodeById(state.selection)) state.selection = null;
-    renderEditor();
-    updatePathfindingPanel();
-    refreshHvt();
-    draw();
+    captureCloudSavedState(collab.localChangeSeq, serverFingerprint);
+    if (shouldReloadLocalState) {
+        if (state.selection && !nodeById(state.selection)) state.selection = null;
+        renderEditor();
+        updatePathfindingPanel();
+        refreshHvt();
+        draw();
+    }
     if (!quiet) {
         appendActionLog('sync live: board mis a jour');
     }
 }
 
 function fingerprintFromPointPayload(payload) {
-    const normalizedMeta = payload?.meta && typeof payload.meta === 'object'
-        ? { ...payload.meta, date: '' }
-        : { date: '' };
-    return JSON.stringify({
-        ...payload,
-        meta: normalizedMeta
-    });
+    return JSON.stringify(canonicalizePointPayload(payload));
 }
 
-function captureCloudSavedState(changeSeq = collab.localChangeSeq) {
+function captureCloudSavedState(changeSeq = collab.localChangeSeq, fingerprint = collab.lastSavedFingerprint || '') {
     const targetSeq = Math.max(0, Number(changeSeq) || 0);
-    collab.lastSavedFingerprint = '';
+    collab.lastSavedFingerprint = String(fingerprint || '');
     collab.lastSavedChangeSeq = Math.max(
         collab.lastSavedChangeSeq,
         Math.min(collab.localChangeSeq, targetSeq)
@@ -1233,12 +1285,10 @@ async function saveActiveCloudBoard(options = {}) {
                 if (shouldApplyServerData) {
                     applyCloudBoardData(result.board.data, { quiet: true, projectName: collab.activeBoardTitle });
                 } else {
-                    collab.lastSavedFingerprint = serverFingerprint;
-                    captureCloudSavedState(savedChangeSeq);
+                    captureCloudSavedState(savedChangeSeq, serverFingerprint);
                 }
             } else {
-                collab.lastSavedFingerprint = localFingerprint;
-                captureCloudSavedState(savedChangeSeq);
+                captureCloudSavedState(savedChangeSeq, localFingerprint);
             }
         }
         setCloudSyncState(result?.mergedConflict ? 'merged' : 'live', result?.mergedConflict ? 'Fusion auto appliquee' : 'Synchronise');

@@ -347,11 +347,54 @@ function ensureEditorDrag() {
     });
 }
 
+function captureEditorFocusState(editorBody = ui.editorBody) {
+    if (!editorBody) return null;
+    const active = document.activeElement;
+    if (!active || !editorBody.contains(active)) return null;
+
+    const fieldId = String(active.id || '').trim();
+    if (!fieldId) return null;
+
+    return {
+        selectionId: String(state.selection || ''),
+        fieldId,
+        scrollTop: editorBody.scrollTop,
+        selectionStart: typeof active.selectionStart === 'number' ? active.selectionStart : null,
+        selectionEnd: typeof active.selectionEnd === 'number' ? active.selectionEnd : null,
+        selectionDirection: typeof active.selectionDirection === 'string' ? active.selectionDirection : 'none'
+    };
+}
+
+function restoreEditorFocusState(snapshot, editorBody = ui.editorBody) {
+    if (!snapshot || !editorBody) return;
+    if (String(state.selection || '') !== String(snapshot.selectionId || '')) return;
+
+    const field = document.getElementById(snapshot.fieldId);
+    if (!field || !editorBody.contains(field)) return;
+
+    try {
+        field.focus({ preventScroll: true });
+    } catch (e) {
+        field.focus();
+    }
+
+    if (typeof field.setSelectionRange === 'function' && snapshot.selectionStart !== null && snapshot.selectionEnd !== null) {
+        try {
+            field.setSelectionRange(snapshot.selectionStart, snapshot.selectionEnd, snapshot.selectionDirection || 'none');
+        } catch (e) {}
+    }
+
+    if (Number.isFinite(snapshot.scrollTop)) {
+        editorBody.scrollTop = snapshot.scrollTop;
+    }
+}
+
 export function renderEditor() {
     ensureEditorDrag();
     const n = nodeById(state.selection);
     updatePathfindingPanel();
     const editorPanel = document.getElementById('editor');
+    const focusSnapshot = captureEditorFocusState();
 
     if (!n) {
         if (editorPanel) editorPanel.style.display = 'none';
@@ -372,7 +415,10 @@ export function renderEditor() {
 
     setupEditorListeners(n);
     renderActiveLinks(n);
-    requestAnimationFrame(() => clampEditorInViewport(editorPanel));
+    requestAnimationFrame(() => {
+        restoreEditorFocusState(focusSnapshot);
+        clampEditorInViewport(editorPanel);
+    });
 }
 
 function setupEditorListeners(n) {
