@@ -5,6 +5,12 @@ import { clamp } from './utils.js';
 
 let simulation;
 
+function getD3() {
+    if (typeof globalThis !== 'undefined' && globalThis.d3) return globalThis.d3;
+    if (typeof window !== 'undefined' && window.d3) return window.d3;
+    return null;
+}
+
 const SOCIAL_LINK_KINDS = new Set([
     KINDS.FAMILLE,
     KINDS.COUPLE,
@@ -70,10 +76,17 @@ function getLinkStrength(link, settings) {
 }
 
 export function initPhysics() {
-    simulation = d3.forceSimulation()
+    const d3lib = getD3();
+    if (!d3lib?.forceSimulation) {
+        simulation = null;
+        return null;
+    }
+
+    simulation = d3lib.forceSimulation()
         .alphaDecay(0.01) 
         .velocityDecay(state.physicsSettings.friction) 
         .on("tick", ticked);
+    return simulation;
 }
 
 function ticked() {
@@ -82,7 +95,15 @@ function ticked() {
 }
 
 export function restartSim() {
-    if (!simulation) initPhysics();
+    if (!simulation && !initPhysics()) {
+        draw();
+        return;
+    }
+    const d3lib = getD3();
+    if (!simulation || !d3lib) {
+        draw();
+        return;
+    }
     
     // MAJ de la friction depuis les réglages
     simulation.velocityDecay(state.physicsSettings.friction);
@@ -113,7 +134,7 @@ export function restartSim() {
     const adaptiveRepulsion = S.repulsion * (1 + densityBoost * 0.7);
 
     // 1. LIENS
-    simulation.force("link", d3.forceLink(state.links)
+    simulation.force("link", d3lib.forceLink(state.links)
         .id(d => d.id)
         .distance(l => {
             if (l.kind === KINDS.ENNEMI) return 0; 
@@ -126,8 +147,8 @@ export function restartSim() {
     );
 
     // 2. GRAVITÉ CENTRALE (Slider: Gravity)
-    simulation.force("gravityX", d3.forceX(0).strength(S.gravity));
-    simulation.force("gravityY", d3.forceY(0).strength(S.gravity));
+    simulation.force("gravityX", d3lib.forceX(0).strength(S.gravity));
+    simulation.force("gravityY", d3lib.forceY(0).strength(S.gravity));
 
     // 3. ENNEMIS (Utilise le NOUVEAU Slider: enemyForce)
     const enemyRepulsion = (alpha) => {
@@ -171,7 +192,7 @@ export function restartSim() {
     simulation.force("enemyRepulsion", enemyRepulsion);
 
     // 4. CHARGE GLOBALE (Slider: Repulsion)
-    simulation.force("charge", d3.forceManyBody()
+    simulation.force("charge", d3lib.forceManyBody()
         .strength(n => {
             let strength = -adaptiveRepulsion; 
             if (n.type === TYPES.COMPANY) strength *= numSetting(S.companyChargeMultiplier, 5);
@@ -185,7 +206,7 @@ export function restartSim() {
     );
 
     // 5. COLLISION (Slider: Collision)
-    simulation.force("collide", d3.forceCollide()
+    simulation.force("collide", d3lib.forceCollide()
         .radius(n => nodeRadius(n) + adaptiveCollision) 
         .iterations(2)
     );

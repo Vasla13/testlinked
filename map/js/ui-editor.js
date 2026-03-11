@@ -5,6 +5,7 @@ import { percentageToGps, gpsToPercentage, escapeHtml } from './utils.js';
 import { renderAll } from './render.js';
 import { renderGroupsList } from './ui-list.js';
 import { deselect } from './ui.js';
+import { bindMapRealtimeTextField, unbindMapRealtimeTextFields, syncMapRealtimeAwarenessDecorations } from './cloud.js';
 
 const sidebarRight = document.getElementById('sidebar-right');
 const editorContent = document.getElementById('editor-content');
@@ -23,6 +24,7 @@ function renderEmptyEditor() {
 }
 
 export function renderEditor() {
+    unbindMapRealtimeTextFields();
     if (state.selectedPoint) {
         renderPointEditor();
         return;
@@ -99,6 +101,7 @@ function renderZoneEditor() {
                     value="${escapeAttr(zone.name || '')}"
                     class="cyber-input"
                 >
+                <div id="mapAwZoneName" class="editor-realtime-presence" style="display:none; min-height:14px; margin-top:6px; font-size:0.68rem; color:#ffcc8a;"></div>
             </div>
 
             ${geometryBlock}
@@ -117,12 +120,15 @@ function renderZoneEditor() {
         </div>
     `;
 
-    document.getElementById('ezName').oninput = (event) => {
-        zone.name = event.target.value;
-        renderAll();
-        renderGroupsList();
-        saveLocalState();
-    };
+    const zoneNameInput = document.getElementById('ezName');
+    if (!bindMapRealtimeTextField('zone', zone, 'name', zoneNameInput)) {
+        zoneNameInput.oninput = (event) => {
+            zone.name = event.target.value;
+            renderAll();
+            renderGroupsList();
+            saveLocalState();
+        };
+    }
 
     document.getElementById('ezGroup').onchange = (event) => {
         const nextGroupIndex = parseInt(event.target.value, 10);
@@ -170,6 +176,7 @@ function renderZoneEditor() {
     };
 
     document.getElementById('btnClose').onclick = deselect;
+    syncMapRealtimeAwarenessDecorations();
 }
 
 function renderPointEditor() {
@@ -206,6 +213,7 @@ function renderPointEditor() {
                         value="${escapeAttr(point.name || '')}"
                         class="cyber-input"
                     >
+                    <div id="mapAwPointName" class="editor-realtime-presence" style="display:none; min-height:14px; margin-top:6px; font-size:0.68rem; color:#ffcc8a;"></div>
                     <input
                         type="text"
                         id="edType"
@@ -213,6 +221,7 @@ function renderPointEditor() {
                         placeholder="Type / affiliation"
                         class="cyber-input"
                     >
+                    <div id="mapAwPointType" class="editor-realtime-presence" style="display:none; min-height:14px; margin-top:6px; font-size:0.68rem; color:#ffcc8a;"></div>
                 </div>
             </div>
 
@@ -260,6 +269,7 @@ function renderPointEditor() {
                     <span>Intel</span>
                 </div>
                 <textarea id="edNotes" class="cyber-input" placeholder="Notes...">${escapeHtml(point.notes || '')}</textarea>
+                <div id="mapAwPointNotes" class="editor-realtime-presence" style="display:none; min-height:14px; margin-top:6px; font-size:0.68rem; color:#ffcc8a;"></div>
             </div>
 
             <div class="editor-actions-row">
@@ -269,12 +279,15 @@ function renderPointEditor() {
         </div>
     `;
 
-    document.getElementById('edName').oninput = (event) => {
-        point.name = event.target.value;
-        renderAll();
-        renderGroupsList();
-        saveLocalState();
-    };
+    const pointNameInput = document.getElementById('edName');
+    if (!bindMapRealtimeTextField('point', point, 'name', pointNameInput)) {
+        pointNameInput.oninput = (event) => {
+            point.name = event.target.value;
+            renderAll();
+            renderGroupsList();
+            saveLocalState();
+        };
+    }
 
     document.getElementById('edIcon').onchange = (event) => {
         point.iconType = event.target.value;
@@ -282,16 +295,22 @@ function renderPointEditor() {
         saveLocalState();
     };
 
-    document.getElementById('edType').oninput = (event) => {
-        point.type = event.target.value;
-        renderGroupsList();
-        saveLocalState();
-    };
+    const pointTypeInput = document.getElementById('edType');
+    if (!bindMapRealtimeTextField('point', point, 'type', pointTypeInput)) {
+        pointTypeInput.oninput = (event) => {
+            point.type = event.target.value;
+            renderGroupsList();
+            saveLocalState();
+        };
+    }
 
-    document.getElementById('edNotes').oninput = (event) => {
-        point.notes = event.target.value;
-        saveLocalState();
-    };
+    const pointNotesInput = document.getElementById('edNotes');
+    if (!bindMapRealtimeTextField('point', point, 'notes', pointNotesInput)) {
+        pointNotesInput.oninput = (event) => {
+            point.notes = event.target.value;
+            saveLocalState();
+        };
+    }
 
     const updateCoords = () => {
         const percent = gpsToPercentage(
@@ -344,8 +363,10 @@ function renderPointEditor() {
     };
 
     document.getElementById('btnClose').onclick = deselect;
+    syncMapRealtimeAwarenessDecorations();
 }
 
 export function closeEditor() {
     sidebarRight.classList.remove('active');
+    unbindMapRealtimeTextFields();
 }

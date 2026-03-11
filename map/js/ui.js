@@ -6,6 +6,7 @@ import { renderGroupsList } from './ui-list.js';
 import { initContextMenu, handleLinkClick, handleLinkHover, handleLinkOut, moveTooltip } from './ui-menus.js';
 import { handleMapMouseDown, handleMapMouseMove, handleMapMouseUp } from './zone-editor.js';
 import { addTacticalLink } from './state.js'; // Correction import
+import { updateMapCloudPresence } from './cloud.js';
 
 export { handleLinkClick, handleLinkHover, handleLinkOut, moveTooltip };
 
@@ -114,6 +115,7 @@ export function selectItem(type, gIndex, index) {
     }
     renderAll(); 
     renderEditor(); 
+    updateMapCloudPresence().catch(() => {});
 }
 
 export function selectPoint(gIndex, pIndex) { selectItem('point', gIndex, pIndex); }
@@ -123,6 +125,7 @@ export function deselect() {
     state.selectedZone = null; 
     renderAll(); 
     closeEditor(); 
+    updateMapCloudPresence().catch(() => {});
 }
 
 export { renderGroupsList };

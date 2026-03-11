@@ -4,6 +4,33 @@ import { draw } from './render.js';
 import { screenToWorld, clamp } from './utils.js';
 import { selectNode, renderEditor, updatePathfindingPanel, addLink } from './ui.js';
 
+function getD3() {
+    if (typeof globalThis !== 'undefined' && globalThis.d3) return globalThis.d3;
+    if (typeof window !== 'undefined' && window.d3) return window.d3;
+    return null;
+}
+
+function findNodeAtPosition(worldX, worldY, radius = 40) {
+    const sim = getSimulation();
+    if (sim && typeof sim.find === 'function') {
+        return sim.find(worldX, worldY, radius);
+    }
+
+    let bestNode = null;
+    let bestDistSq = radius * radius;
+    state.nodes.forEach((node) => {
+        if (!node || !Number.isFinite(node.x) || !Number.isFinite(node.y)) return;
+        const dx = worldX - Number(node.x);
+        const dy = worldY - Number(node.y);
+        const distSq = (dx * dx) + (dy * dy);
+        if (distSq <= bestDistSq) {
+            bestNode = node;
+            bestDistSq = distSq;
+        }
+    });
+    return bestNode;
+}
+
 function getCanvasEventPosition(event, canvas) {
     const source = event?.sourceEvent || event;
     const rect = canvas.getBoundingClientRect();
@@ -23,6 +50,7 @@ function getWorldPositionFromEvent(event, canvas) {
 }
 
 export function setupCanvasEvents(canvas) {
+    if (!canvas) return;
     const NODE_DRAG_THRESHOLD_PX = 6;
     
     // 1. ZOOM (CORRIGÉ ET SYNCHRONISÉ)
@@ -59,14 +87,11 @@ export function setupCanvasEvents(canvas) {
     let suppressNextClick = false;
 
     canvas.addEventListener('mousedown', (e) => {
-        const sim = getSimulation();
-        if (!sim) return; 
-
         // Calcul précis de la position monde
         const p = getWorldPositionFromEvent(e, canvas);
         
         // On cherche un nœud sous la souris (Rayon 40px)
-        const hit = sim.find(p.x, p.y, 40); 
+        const hit = findNodeAtPosition(p.x, p.y, 40); 
         
         // Cas 1 : Création de lien (Shift + Clic)
         if (e.shiftKey && hit) {
@@ -113,10 +138,9 @@ export function setupCanvasEvents(canvas) {
         }
         
         // Changement curseur au survol
-        const sim = getSimulation();
-        if (sim && !isPanning && !dragLinkSource) {
+        if (!isPanning && !dragLinkSource) {
             const p = getWorldPositionFromEvent(e, canvas);
-            const hit = sim.find(p.x, p.y, 40);
+            const hit = findNodeAtPosition(p.x, p.y, 40);
             if (hit) { 
                 if (state.hoverId !== hit.id) { state.hoverId = hit.id; canvas.style.cursor = 'pointer'; draw(); } 
             } else { 
@@ -128,9 +152,8 @@ export function setupCanvasEvents(canvas) {
     canvas.addEventListener('mouseup', (e) => {
         // Fin création lien
         if (dragLinkSource) {
-            const sim = getSimulation();
             const p = getWorldPositionFromEvent(e, canvas);
-            const hit = sim ? sim.find(p.x, p.y, 40) : null; 
+            const hit = findNodeAtPosition(p.x, p.y, 40); 
             suppressNextClick = true;
             
             if (hit && hit.id !== dragLinkSource.id) {
@@ -152,11 +175,8 @@ export function setupCanvasEvents(canvas) {
         }
         if (e.shiftKey || e.button !== 0) return;
 
-        const sim = getSimulation();
-        if (!sim) return;
-
         const p = getWorldPositionFromEvent(e, canvas);
-        const hit = sim.find(p.x, p.y, 40);
+        const hit = findNodeAtPosition(p.x, p.y, 40);
         if (hit) {
             selectNode(hit.id);
         }
@@ -167,15 +187,18 @@ export function setupCanvasEvents(canvas) {
     });
 
     // 3. CONFIGURATION D3 DRAG (Pour bouger les nœuds)
-    d3.select(canvas).call(d3.drag()
+    const d3lib = getD3();
+    if (!d3lib?.select || !d3lib?.drag) {
+        return;
+    }
+
+    d3lib.select(canvas).call(d3lib.drag()
         .container(canvas)
         .filter(event => !event.shiftKey && event.button === 0) // Uniquement Clic Gauche sans Shift
         .subject(e => {
-            const sim = getSimulation();
-            if (!sim) return null;
             // On utilise screenToWorld ici aussi pour être cohérent !
             const p = getWorldPositionFromEvent(e, canvas);
-            return sim.find(p.x, p.y, 40);
+            return findNodeAtPosition(p.x, p.y, 40);
         })
         .on("start", e => {
             const sim = getSimulation();

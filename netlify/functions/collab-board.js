@@ -1077,6 +1077,8 @@ async function listBoardPresence(store, boardId) {
       boardId: String(row.boardId || boardId || ""),
       activeNodeId: String(row.activeNodeId || ""),
       activeNodeName: String(row.activeNodeName || ""),
+      activeTextKey: String(row.activeTextKey || ""),
+      activeTextLabel: String(row.activeTextLabel || ""),
       mode: String(row.mode || "editing"),
       lastAt: String(row.lastAt || ""),
     });
@@ -1097,6 +1099,8 @@ async function touchBoardPresence(store, board, user, role, payload = {}) {
     role: sanitizeRole(role || ROLE_EDITOR, ROLE_EDITOR),
     activeNodeId: String(payload.activeNodeId || ""),
     activeNodeName: String(payload.activeNodeName || "").slice(0, 80),
+    activeTextKey: String(payload.activeTextKey || ""),
+    activeTextLabel: String(payload.activeTextLabel || "").slice(0, 80),
     mode: String(payload.mode || "editing"),
     lastAt: now,
   });

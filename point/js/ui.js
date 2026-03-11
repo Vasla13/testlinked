@@ -21,6 +21,9 @@ import {
     stopRetriableLoop,
     scheduleRetriableLoop
 } from '../../shared/js/collab-browser.mjs';
+import { createRealtimeBoardSession } from '../../shared/realtime/board-session.mjs';
+import { canUseRealtimeTransport } from '../../shared/realtime/config.mjs';
+import { canonicalizePointPayload, diffPointOps, applyPointOps } from '../../shared/realtime/point-doc.mjs';
 
 const ui = {
     listCompanies: document.getElementById('listCompanies'),
@@ -86,7 +89,12 @@ const collab = {
     sessionLoopRunning: false,
     sessionRetryMs: 0,
     sessionInFlight: false,
-    homePanel: 'cloud'
+    homePanel: 'cloud',
+    realtimeSession: null,
+    realtimeFallbackActive: false,
+    realtimeTextBindings: new Map(),
+    activeTextKey: '',
+    activeTextLabel: ''
 };
 
 const COLLAB_AUTOSAVE_DEBOUNCE_MS = 1600;
@@ -109,6 +117,8 @@ const sharedCollabBoardRequest = buildCollabBoardRequester({
 });
 
 let actionLogs = [];
+let realtimeTextTools = null;
+let realtimeTextToolsPromise = null;
 const INTEL_PRESETS = {
     quick: {
         mode: 'serieux',
@@ -130,6 +140,29 @@ const INTEL_PRESETS = {
         noveltyRatio: 0.45,
         limit: 20,
         sources: { graph: true, text: true, tags: true, profile: true, bridge: true, lex: true, geo: true }
+    }
+};
+
+const POINT_REALTIME_TEXT_FIELDS = {
+    name: {
+        label: 'Nom',
+        awarenessId: 'awName'
+    },
+    num: {
+        label: 'Telephone',
+        awarenessId: 'awPhone'
+    },
+    accountNumber: {
+        label: 'Compte',
+        awarenessId: 'awAccount'
+    },
+    citizenNumber: {
+        label: 'Numero social',
+        awarenessId: 'awCitizen'
+    },
+    description: {
+        label: 'Description',
+        awarenessId: 'awDescription'
     }
 };
 
@@ -212,6 +245,85 @@ function resolveActionActor(preferred = '') {
     return 'Operateur';
 }
 
+async function preloadRealtimeTextTools() {
+    if (realtimeTextTools) return realtimeTextTools;
+    if (!realtimeTextToolsPromise) {
+        realtimeTextToolsPromise = import('../../shared/realtime/y-text-browser.mjs')
+            .then(async (module) => {
+                if (typeof module.preloadBrowserYTextTools === 'function') {
+                    await module.preloadBrowserYTextTools();
+                }
+                realtimeTextTools = module;
+                return module;
+            })
+            .catch(() => null);
+    }
+    return realtimeTextToolsPromise;
+}
+
+function getPointRealtimeTextKey(nodeId, fieldName) {
+    if (!realtimeTextTools?.makePointTextKey) return '';
+    return realtimeTextTools.makePointTextKey(nodeId, fieldName);
+}
+
+function clearRealtimeFieldPresence(options = {}) {
+    const shouldNotify = Boolean(options.notify);
+    const hadPresence = Boolean(collab.activeTextKey || collab.activeTextLabel);
+    collab.activeTextKey = '';
+    collab.activeTextLabel = '';
+    if (shouldNotify && hadPresence) {
+        if (collab.realtimeSession) {
+            collab.realtimeSession.updatePresence();
+        } else if (isCloudBoardActive() && collab.user) {
+            touchCollabPresence(collab.presenceLoopToken, { force: true }).catch(() => {});
+        }
+    }
+}
+
+function setRealtimeFieldPresence(textKey, textLabel) {
+    const nextKey = String(textKey || '').trim();
+    const nextLabel = String(textLabel || '').trim();
+    if (collab.activeTextKey === nextKey && collab.activeTextLabel === nextLabel) return;
+    collab.activeTextKey = nextKey;
+    collab.activeTextLabel = nextLabel;
+    if (collab.realtimeSession) {
+        collab.realtimeSession.updatePresence();
+    } else if (isCloudBoardActive() && collab.user) {
+        touchCollabPresence(collab.presenceLoopToken, { force: true }).catch(() => {});
+    }
+}
+
+function getPointFieldAwarenessContainerId(fieldName) {
+    return POINT_REALTIME_TEXT_FIELDS[fieldName]?.awarenessId || '';
+}
+
+function getPointFieldAwarenessMessage(textKey) {
+    if (!textKey) return '';
+    const editors = collab.presence.filter((entry) =>
+        !entry.isSelf &&
+        String(entry.activeTextKey || '') === String(textKey || '')
+    );
+    if (!editors.length) return '';
+    const names = editors.slice(0, 2).map((entry) => entry.username).filter(Boolean);
+    if (!names.length) return 'Edition distante en cours';
+    if (names.length === 1) return `${names[0]} edite ce champ`;
+    return `${names.join(', ')} editent ce champ`;
+}
+
+function syncPointRealtimeAwarenessDecorations(nodeId = state.selection) {
+    const cleanNodeId = String(nodeId || '').trim();
+    Object.keys(POINT_REALTIME_TEXT_FIELDS).forEach((fieldName) => {
+        const awarenessId = getPointFieldAwarenessContainerId(fieldName);
+        if (!awarenessId) return;
+        const el = document.getElementById(awarenessId);
+        if (!el) return;
+        const textKey = cleanNodeId ? getPointRealtimeTextKey(cleanNodeId, fieldName) : '';
+        const message = getPointFieldAwarenessMessage(textKey);
+        el.textContent = message;
+        el.style.display = message ? 'block' : 'none';
+    });
+}
+
 export function appendActionLog(message, options = {}) {
     const text = sanitizeLogText(message, '');
     if (!text) return false;
@@ -283,6 +395,14 @@ function canEditCloudBoard() {
     return isCloudBoardActive() && (collab.activeRole === 'owner' || collab.activeRole === 'editor');
 }
 
+function shouldUseRealtimeCloud() {
+    return isCloudBoardActive() && Boolean(collab.user && collab.token) && canUseRealtimeTransport();
+}
+
+function isRealtimeCloudActive() {
+    return Boolean(collab.realtimeSession);
+}
+
 function setBoardQueryParam(boardId) {
     updateBoardQueryParam(boardId);
 }
@@ -293,6 +413,23 @@ function persistCollabState() {
 
 function clearCollabStorage() {
     collabStorage.clear();
+}
+
+function triggerFileInput(inputId) {
+    const input = document.getElementById(inputId);
+    if (!(input instanceof HTMLInputElement)) return false;
+    try {
+        if (typeof input.showPicker === 'function') {
+            input.showPicker();
+            return true;
+        }
+    } catch (e) {}
+    try {
+        input.click();
+        return true;
+    } catch (e) {
+        return false;
+    }
 }
 
 function hydrateCollabState() {
@@ -483,7 +620,7 @@ function normalizeCloudBoardData(rawData, options = {}) {
     };
 }
 
-function canonicalizePointPayload(payload) {
+function canonicalizePointPayloadForCompare(payload) {
     const raw = payload && typeof payload === 'object' ? payload : {};
     const meta = raw.meta && typeof raw.meta === 'object'
         ? { ...raw.meta, date: '' }
@@ -737,6 +874,8 @@ function presenceListsEqual(left = [], right = []) {
             String(a.role || '') !== String(b.role || '') ||
             String(a.activeNodeId || '') !== String(b.activeNodeId || '') ||
             String(a.activeNodeName || '') !== String(b.activeNodeName || '') ||
+            String(a.activeTextKey || '') !== String(b.activeTextKey || '') ||
+            String(a.activeTextLabel || '') !== String(b.activeTextLabel || '') ||
             String(a.mode || '') !== String(b.mode || '') ||
             Boolean(a.isSelf) !== Boolean(b.isSelf)
         ) {
@@ -757,6 +896,8 @@ function updateCollabPresence(rawPresence = []) {
             role: String(row?.role || ''),
             activeNodeId: String(row?.activeNodeId || ''),
             activeNodeName: String(row?.activeNodeName || ''),
+            activeTextKey: String(row?.activeTextKey || ''),
+            activeTextLabel: String(row?.activeTextLabel || ''),
             mode: String(row?.mode || 'editing'),
             lastAt: String(row?.lastAt || ''),
             isSelf: userId === String(collab.user?.id || '')
@@ -770,6 +911,7 @@ function updateCollabPresence(rawPresence = []) {
     if (presenceListsEqual(collab.presence, nextPresence)) return;
     collab.presence = nextPresence;
     syncCloudStatus();
+    syncPointRealtimeAwarenessDecorations();
 }
 
 function renderCloudPresenceChips(entries = [], options = {}) {
@@ -779,7 +921,9 @@ function renderCloudPresenceChips(entries = [], options = {}) {
     return visible.map((entry) => {
         const initials = String(entry.username || '?').slice(0, 2).toUpperCase();
         const label = entry.isSelf ? 'toi' : entry.username;
-        const detail = entry.activeNodeName ? `Fiche ${entry.activeNodeName}` : (entry.mode === 'viewing' ? 'Lecture' : 'Edition');
+        const detail = entry.activeTextLabel
+            ? `${entry.activeNodeName ? `${entry.activeNodeName} · ` : ''}${entry.activeTextLabel}`
+            : (entry.activeNodeName ? `Fiche ${entry.activeNodeName}` : (entry.mode === 'viewing' ? 'Lecture' : 'Edition'));
         return `
             <div class="cloud-presence-pill${entry.isSelf ? ' is-self' : ''}">
                 <span class="cloud-presence-avatar">${escapeHtml(initials)}</span>
@@ -857,7 +1001,30 @@ function applyCloudBoardData(rawData, options = {}) {
 }
 
 function fingerprintFromPointPayload(payload) {
-    return JSON.stringify(canonicalizePointPayload(payload));
+    return JSON.stringify(canonicalizePointPayloadForCompare(payload));
+}
+
+function stripPointRealtimeTextFields(payload) {
+    const normalized = canonicalizePointPayload(payload);
+    return {
+        ...normalized,
+        nodes: normalized.nodes.map((node) => ({
+            ...node,
+            name: '',
+            num: '',
+            accountNumber: '',
+            citizenNumber: '',
+            description: '',
+            notes: ''
+        }))
+    };
+}
+
+function diffPointOpsWithoutRealtimeText(previousPayload, nextPayload) {
+    return diffPointOps(
+        stripPointRealtimeTextFields(previousPayload),
+        stripPointRealtimeTextFields(nextPayload)
+    );
 }
 
 function captureCloudSavedState(changeSeq = collab.localChangeSeq, fingerprint = collab.lastSavedFingerprint || '') {
@@ -875,6 +1042,264 @@ function hasLocalCloudChanges() {
     return collab.localChangeSeq !== collab.lastSavedChangeSeq;
 }
 
+function stopCollabRealtime() {
+    stopCollabRealtimeText();
+    if (!collab.realtimeSession) return;
+    try {
+        collab.realtimeSession.stop('switch-sync-mode');
+    } catch (e) {}
+    collab.realtimeSession = null;
+    collab.realtimeFallbackActive = false;
+    if (state.selection) {
+        renderEditor();
+    }
+}
+
+function stopCollabRealtimeText() {
+    if (!(collab.realtimeTextBindings instanceof Map) || !collab.realtimeTextBindings.size) {
+        clearRealtimeFieldPresence({ notify: false });
+        return;
+    }
+    [...collab.realtimeTextBindings.values()].forEach((binding) => {
+        try {
+            binding.stop();
+        } catch (e) {}
+    });
+    collab.realtimeTextBindings.clear();
+    clearRealtimeFieldPresence({ notify: false });
+}
+
+function setPointRealtimeFieldValue(nodeId, fieldName, nextValue, options = {}) {
+    const node = nodeById(nodeId);
+    if (!node) return false;
+    const textValue = String(nextValue || '');
+    const field = String(fieldName || '').trim();
+
+    if (field === 'description') {
+        if (String(node.description || '') === textValue && String(node.notes || '') === textValue) {
+            return false;
+        }
+        node.description = textValue;
+        node.notes = textValue;
+    } else if (field === 'name') {
+        const cleanName = textValue.replace(/\s+/g, ' ').trim();
+        if (String(node.name || '') === cleanName) return false;
+        node.name = cleanName;
+        const headName = document.querySelector('.editor-sheet-name');
+        if (headName) headName.textContent = cleanName || 'Sans nom';
+        refreshLists();
+        updatePathfindingPanel();
+        draw();
+    } else {
+        if (String(node[field] || '') === textValue) {
+            return false;
+        }
+        node[field] = textValue;
+    }
+
+    if (options.local) {
+        withoutCloudAutosave(() => saveState());
+    }
+    syncPointRealtimeAwarenessDecorations(nodeId);
+    return true;
+}
+
+function ensurePointRealtimeTextBinding(nodeId, fieldName) {
+    const field = String(fieldName || '').trim();
+    const config = POINT_REALTIME_TEXT_FIELDS[field];
+    const textKey = getPointRealtimeTextKey(nodeId, field);
+    if (!config || !textKey || !isRealtimeCloudActive()) return null;
+    if (collab.realtimeTextBindings.has(textKey)) {
+        return collab.realtimeTextBindings.get(textKey);
+    }
+
+    const initialNode = nodeById(nodeId);
+    const initialValue = field === 'description'
+        ? String(initialNode?.description || initialNode?.notes || '')
+        : String(initialNode?.[field] || '');
+    const binding = realtimeTextTools.createTextFieldYBinding({
+        key: textKey,
+        initialValue,
+        canEdit: () => isRealtimeCloudActive() && canEditCloudBoard(),
+        onSendUpdate: (key, update) => {
+            if (!collab.realtimeSession) return false;
+            return collab.realtimeSession.roomClient.sendTextUpdate(key, update);
+        },
+        onValueChange: (nextValue, meta = {}) => {
+            setPointRealtimeFieldValue(nodeId, field, nextValue, {
+                local: meta.origin !== 'remote'
+            });
+        },
+        onFocusChange: (meta = {}) => {
+            if (meta.active) {
+                setRealtimeFieldPresence(textKey, config.label);
+                return;
+            }
+            if (collab.activeTextKey === textKey) {
+                clearRealtimeFieldPresence({ notify: true });
+            }
+        }
+    });
+
+    collab.realtimeTextBindings.set(textKey, binding);
+    collab.realtimeSession.roomClient.subscribeText(textKey);
+    return binding;
+}
+
+function handleCollabRealtimeTextUpdate(payload = {}) {
+    const textKey = String(payload.key || '').trim();
+    if (!textKey) return;
+    const binding = collab.realtimeTextBindings.get(textKey);
+    if (!binding) return;
+    binding.applyRemoteUpdate(payload.update || '', {
+        full: Boolean(payload.full)
+    });
+    syncPointRealtimeAwarenessDecorations();
+}
+
+export function bindRealtimePointField(node, fieldName, field) {
+    if (!node || !field || !isRealtimeCloudActive()) return false;
+    const binding = ensurePointRealtimeTextBinding(node.id, fieldName);
+    if (!binding) return false;
+    binding.attachField(field);
+    syncPointRealtimeAwarenessDecorations(node.id);
+    return true;
+}
+
+export function bindRealtimeDescriptionField(node, textarea) {
+    return bindRealtimePointField(node, 'description', textarea);
+}
+
+export function unbindRealtimeDescriptionField() {
+    stopCollabRealtimeText();
+}
+
+export function unbindRealtimePointFields() {
+    stopCollabRealtimeText();
+}
+
+function startLegacyCloudTransport() {
+    stopCollabRealtime();
+    collab.realtimeFallbackActive = true;
+    startCollabAutosave();
+    startCollabLiveSync();
+    startCollabPresence();
+    if (!collab.saveInFlight && !hasLocalCloudChanges()) {
+        setCloudSyncState(
+            canEditCloudBoard() ? 'live' : 'session',
+            canEditCloudBoard() ? 'Synchro live active' : 'Lecture live active'
+        );
+    }
+}
+
+async function activateCloudTransport() {
+    stopCollabAutosave();
+    stopCollabLiveSync();
+    stopCollabPresence();
+    if (!isCloudBoardActive() || !collab.user || !collab.token) {
+        stopCollabRealtime();
+        return false;
+    }
+
+    if (!shouldUseRealtimeCloud()) {
+        startLegacyCloudTransport();
+        return false;
+    }
+
+    try {
+        const started = await startCollabRealtime();
+        if (started) return true;
+    } catch (e) {
+        appendActionLog(`cloud: fallback legacy (${sanitizeLogText(e?.message, 'temps reel indisponible')})`);
+    }
+
+    startLegacyCloudTransport();
+    setCloudSyncState('session', 'Fallback cloud actif');
+    return false;
+}
+
+async function startCollabRealtime() {
+    if (!shouldUseRealtimeCloud()) return false;
+    stopCollabRealtime();
+    await preloadRealtimeTextTools().catch(() => null);
+
+    const session = await createRealtimeBoardSession({
+        page: 'point',
+        boardId: collab.activeBoardId,
+        collabToken: collab.token,
+        getCurrentSnapshot: () => generateExportData(),
+        canonicalizeSnapshot: canonicalizePointPayload,
+        diffOps: diffPointOpsWithoutRealtimeText,
+        applyOps: applyPointOps,
+        applySnapshot: (snapshot, meta = {}) => {
+            applyCloudBoardData(snapshot, {
+                quiet: true,
+                projectName: collab.activeBoardTitle,
+                ...(meta || {})
+            });
+        },
+        onPresence: (presence) => updateCollabPresence(presence || []),
+        onStatus: (status) => {
+            if (status === 'connected') {
+                setCloudSyncState('live', 'Temps reel actif');
+            } else if (status === 'connecting') {
+                setCloudSyncState('syncing', 'Connexion temps reel...');
+            }
+        },
+        onError: (error) => {
+            setCloudSyncState('error', error?.message || 'Erreur temps reel');
+        },
+        onTextUpdate: (payload) => {
+            handleCollabRealtimeTextUpdate(payload || {});
+        },
+        onClose: (meta = {}) => {
+            if (collab.realtimeSession === session) {
+                collab.realtimeSession = null;
+            }
+            stopCollabRealtimeText();
+            if (!meta.intentional && isCloudBoardActive()) {
+                collab.realtimeFallbackActive = true;
+                startCollabAutosave();
+                startCollabLiveSync();
+                startCollabPresence();
+                setCloudSyncState('session', 'Fallback cloud actif');
+            }
+            if (state.selection) {
+                renderEditor();
+            }
+        },
+        onLocalAccepted: () => {
+            const currentSnapshot = generateExportData();
+            setCloudShadowData(buildCloudBoardPayload(currentSnapshot));
+            captureCloudSavedState(collab.localChangeSeq, fingerprintFromPointPayload(currentSnapshot));
+            setCloudSyncState('live', 'Temps reel actif');
+        },
+        localFlushMs: 120,
+        buildPresence: (extra = {}) => {
+            const selectedId = String(extra.activeNodeId || state.selection || '');
+            const selected = nodeById(selectedId);
+            return {
+                activeNodeId: selectedId,
+                activeNodeName: String(extra.activeNodeName || selected?.name || ''),
+                activeTextKey: String(extra.activeTextKey || collab.activeTextKey || ''),
+                activeTextLabel: String(extra.activeTextLabel || collab.activeTextLabel || ''),
+                mode: String(extra.mode || (canEditCloudBoard() ? 'editing' : 'viewing'))
+            };
+        }
+    });
+
+    collab.realtimeSession = session;
+    collab.realtimeFallbackActive = false;
+    stopCollabAutosave();
+    stopCollabLiveSync();
+    stopCollabPresence();
+    session.updatePresence();
+    if (state.selection) {
+        renderEditor();
+    }
+    return true;
+}
+
 function stopCollabAutosave() {
     stopNamedTimer(collab, 'autosaveDebounceTimer');
 }
@@ -884,6 +1309,9 @@ async function flushPendingCloudAutosave(boardId = collab.activeBoardId) {
     if (!targetBoardId) return false;
     if (String(collab.activeBoardId || '') !== targetBoardId) return false;
     if (!canEditCloudBoard()) return false;
+    if (isRealtimeCloudActive()) {
+        return collab.realtimeSession.flushLocalChanges();
+    }
 
     let waitCount = 0;
     while (collab.saveInFlight && waitCount < 20) {
@@ -901,6 +1329,10 @@ async function flushPendingCloudAutosave(boardId = collab.activeBoardId) {
 
 function queueCloudAutosave(delayMs = COLLAB_AUTOSAVE_DEBOUNCE_MS) {
     if (!isCloudBoardActive() || !canEditCloudBoard()) return;
+    if (isRealtimeCloudActive()) {
+        collab.realtimeSession.scheduleLocalFlush(delayMs);
+        return;
+    }
     stopCollabAutosave();
     setCloudSyncState('pending');
     queueNamedTimer(collab, 'autosaveDebounceTimer', () => {
@@ -911,6 +1343,10 @@ function queueCloudAutosave(delayMs = COLLAB_AUTOSAVE_DEBOUNCE_MS) {
 function onPointLocalChange() {
     if (collab.suppressAutosave > 0) return;
     collab.localChangeSeq += 1;
+    if (isRealtimeCloudActive()) {
+        queueCloudAutosave();
+        return;
+    }
     queueCloudAutosave();
 }
 
@@ -926,6 +1362,7 @@ function startCollabAutosave() {
         stopCollabAutosave();
         return;
     }
+    if (isRealtimeCloudActive()) return;
     queueCloudAutosave(COLLAB_AUTOSAVE_RETRY_MS);
 }
 
@@ -1020,15 +1457,26 @@ async function clearCollabPresence(boardId = collab.activeBoardId) {
 async function touchCollabPresence(loopToken = collab.presenceLoopToken, options = {}) {
     if (collab.presenceLoopToken !== loopToken && !options.force) return;
     if (!isCloudBoardActive() || !collab.user || !collab.token) return;
+    const selected = nodeById(state.selection);
+    if (isRealtimeCloudActive()) {
+        return collab.realtimeSession.updatePresence({
+            activeNodeId: state.selection || '',
+            activeNodeName: selected?.name || '',
+            activeTextKey: String(collab.activeTextKey || ''),
+            activeTextLabel: String(collab.activeTextLabel || ''),
+            mode: canEditCloudBoard() ? 'editing' : 'viewing'
+        });
+    }
     if (collab.presenceInFlight && !options.force) return;
 
     collab.presenceInFlight = true;
     try {
-        const selected = nodeById(state.selection);
         const response = await collabBoardRequest('touch_presence', {
             boardId: collab.activeBoardId,
             activeNodeId: state.selection || '',
             activeNodeName: selected?.name || '',
+            activeTextKey: String(collab.activeTextKey || ''),
+            activeTextLabel: String(collab.activeTextLabel || ''),
             mode: canEditCloudBoard() ? 'editing' : 'viewing'
         });
         updateCollabPresence(response?.presence || []);
@@ -1044,6 +1492,10 @@ function startCollabPresence() {
     stopCollabPresence();
     if (!isCloudBoardActive() || !collab.user || !collab.token) {
         updateCollabPresence([]);
+        return;
+    }
+    if (isRealtimeCloudActive()) {
+        touchCollabPresence(collab.presenceLoopToken, { force: true }).catch(() => {});
         return;
     }
     const loopToken = collab.presenceLoopToken + 1;
@@ -1118,6 +1570,7 @@ async function runCollabWatchLoop(loopToken) {
 
 async function syncActiveCloudBoard(options = {}) {
     const quiet = Boolean(options.quiet);
+    if (isRealtimeCloudActive()) return false;
     if (!isCloudBoardActive() || !collab.user || !collab.token) return false;
     if (collab.syncInFlight) return false;
     if (collab.saveInFlight) return false;
@@ -1167,6 +1620,7 @@ async function syncActiveCloudBoard(options = {}) {
 function startCollabLiveSync() {
     stopCollabLiveSync();
     if (!isCloudBoardActive() || !collab.user || !collab.token) return;
+    if (isRealtimeCloudActive()) return;
     const loopToken = collab.syncLoopToken + 1;
     collab.syncLoopToken = loopToken;
     collab.syncLoopRunning = true;
@@ -1185,6 +1639,14 @@ async function collabBoardRequest(action, payload = {}) {
 
 function setActiveCloudBoardFromSummary(summary = null) {
     const previousBoardId = String(collab.activeBoardId || '');
+    const nextBoardId = summary && summary.id ? String(summary.id || '') : '';
+    const boardChanged = previousBoardId !== nextBoardId;
+    if (boardChanged || !nextBoardId) {
+        stopCollabRealtime();
+        stopCollabAutosave();
+        stopCollabLiveSync();
+        stopCollabPresence();
+    }
     if (!summary || !summary.id) {
         collab.activeBoardId = '';
         collab.activeRole = '';
@@ -1209,14 +1671,7 @@ function setActiveCloudBoardFromSummary(summary = null) {
     applyLocalPersistencePolicy();
     syncCloudStatus();
     persistCollabState();
-    if (isCloudBoardActive()) {
-        startCollabAutosave();
-        startCollabLiveSync();
-        startCollabPresence();
-    } else {
-        stopCollabAutosave();
-        stopCollabLiveSync();
-        stopCollabPresence();
+    if (!isCloudBoardActive()) {
         setCloudSyncState(collab.user ? 'session' : 'local');
     }
 }
@@ -1243,7 +1698,7 @@ async function openCloudBoard(boardId, options = {}) {
     updateCollabPresence(result?.presence || []);
     applyCloudBoardData(result.board.data, { quiet: true, projectName: summary.title });
     setBoardQueryParam(summary.id);
-    setCloudSyncState(canEditCloudBoard() ? 'live' : 'session', canEditCloudBoard() ? 'Synchro live active' : 'Lecture live active');
+    await activateCloudTransport();
 
     if (!options.quiet) {
         showCustomAlert(`☁️ Board cloud ouvert : ${escapeHtml(summary.title)}`);
@@ -1261,6 +1716,26 @@ async function saveActiveCloudBoard(options = {}) {
     }
     if (!canEditCloudBoard()) {
         if (manual && !quiet) showCustomAlert("Tu n'as pas les droits d'edition cloud.");
+        return false;
+    }
+    if (isRealtimeCloudActive()) {
+        const hadChanges = hasLocalCloudChanges();
+        if (!hadChanges) {
+            setCloudSyncState('live', 'Temps reel actif');
+            if (manual && !quiet) showCustomAlert('☁️ Temps reel deja synchronise.');
+            return true;
+        }
+
+        setCloudSyncState('syncing', 'Envoi temps reel...');
+        const flushed = await collab.realtimeSession.flushLocalChanges();
+        if (flushed || !hasLocalCloudChanges()) {
+            setCloudSyncState('live', 'Temps reel actif');
+            if (manual && !quiet) showCustomAlert('☁️ Synchro temps reel envoyee.');
+            return true;
+        }
+
+        setCloudSyncState('pending', 'Connexion temps reel en cours');
+        if (manual && !quiet) showCustomAlert('Connexion temps reel en cours. Les modifs restent locales pour le moment.');
         return false;
     }
     if (collab.saveInFlight) {
@@ -1362,10 +1837,14 @@ async function createCloudBoardFromCurrent() {
     if (result.board.data) setCloudShadowData(result.board.data);
     captureCloudSavedState();
     setBoardQueryParam(result.board.id);
-    setCloudSyncState('live', 'Synchro live active');
+    await activateCloudTransport();
 }
 
 async function logoutCollab() {
+    stopCollabRealtime();
+    stopCollabAutosave();
+    stopCollabLiveSync();
+    stopCollabPresence();
     try {
         await clearCollabPresence(collab.activeBoardId);
         if (collab.token) await collabAuthRequest('logout');
@@ -1375,9 +1854,6 @@ async function logoutCollab() {
     collab.user = null;
     setActiveCloudBoardFromSummary(null);
     clearCollabStorage();
-    stopCollabAutosave();
-    stopCollabLiveSync();
-    stopCollabPresence();
     stopCollabSessionHeartbeat();
     setLocalPersistenceEnabled(true);
     setBoardQueryParam('');
@@ -1802,7 +2278,7 @@ async function renderCloudHome() {
             }
             if (action === 'open-file') {
                 modalOverlay.style.display = 'none';
-                document.getElementById('fileImport')?.click();
+                triggerFileInput('fileImport');
                 return;
             }
             if (action === 'open-text') {
@@ -1811,7 +2287,7 @@ async function renderCloudHome() {
             }
             if (action === 'merge-file') {
                 modalOverlay.style.display = 'none';
-                document.getElementById('fileMerge')?.click();
+                triggerFileInput('fileMerge');
                 return;
             }
             if (action === 'merge-text') {
@@ -2514,7 +2990,7 @@ function openDataHubModal() {
             }
             if (action === 'open-file') {
                 modalOverlay.style.display = 'none';
-                document.getElementById('fileImport')?.click();
+                triggerFileInput('fileImport');
                 return;
             }
             if (action === 'open-text') {
@@ -2523,7 +2999,7 @@ function openDataHubModal() {
             }
             if (action === 'merge-file') {
                 modalOverlay.style.display = 'none';
-                document.getElementById('fileMerge')?.click();
+                triggerFileInput('fileMerge');
                 return;
             }
             if (action === 'merge-text') {
@@ -3371,8 +3847,8 @@ function showDataMenu(mode) {
                 }
                 modalOverlay.style.display = 'none';
                 if(mode === 'save') downloadJSON();
-                if(mode === 'load') document.getElementById('fileImport').click();
-                if(mode === 'merge') document.getElementById('fileMerge').click();
+                if(mode === 'load') triggerFileInput('fileImport');
+                if(mode === 'merge') triggerFileInput('fileMerge');
             };
 
             const btnText = document.createElement('button');

@@ -24,6 +24,9 @@ import {
     stopRetriableLoop,
     scheduleRetriableLoop
 } from '../../shared/js/collab-browser.mjs';
+import { createRealtimeBoardSession } from '../../shared/realtime/board-session.mjs';
+import { canUseRealtimeTransport } from '../../shared/realtime/config.mjs';
+import { canonicalizeMapPayload, diffMapOps, applyMapOps } from '../../shared/realtime/map-doc.mjs';
 import {
     MAP_SHARED_SNAPSHOT_STORAGE_KEY,
     clearSharedMapSnapshot,
@@ -60,7 +63,14 @@ const collab = {
     lastSavedFingerprint: '',
     shadowData: null,
     saveInFlight: false,
-    homePanel: 'cloud'
+    presence: [],
+    homePanel: 'cloud',
+    realtimeSession: null,
+    realtimeFallbackActive: false,
+    realtimeTextBindings: new Map(),
+    activeTextKey: '',
+    activeTextLabel: '',
+    suppressAutosave: 0
 };
 
 const COLLAB_AUTOSAVE_DEBOUNCE_MS = 700;
@@ -83,8 +93,38 @@ const sharedCollabBoardRequest = buildCollabBoardRequester({
     getToken: () => collab.token
 });
 
+const MAP_REALTIME_TEXT_FIELDS = {
+    point: {
+        name: { label: 'Nom', awarenessId: 'mapAwPointName' },
+        type: { label: 'Type', awarenessId: 'mapAwPointType' },
+        notes: { label: 'Notes', awarenessId: 'mapAwPointNotes' }
+    },
+    zone: {
+        name: { label: 'Nom zone', awarenessId: 'mapAwZoneName' }
+    }
+};
+
+let realtimeTextTools = null;
+let realtimeTextToolsPromise = null;
+
 function parseJsonSafe(value) {
     return parseStoredJsonSafe(value, null);
+}
+
+async function preloadRealtimeTextTools() {
+    if (realtimeTextTools) return realtimeTextTools;
+    if (!realtimeTextToolsPromise) {
+        realtimeTextToolsPromise = import('../../shared/realtime/y-text-browser.mjs')
+            .then(async (module) => {
+                if (typeof module.preloadBrowserYTextTools === 'function') {
+                    await module.preloadBrowserYTextTools();
+                }
+                realtimeTextTools = module;
+                return module;
+            })
+            .catch(() => null);
+    }
+    return realtimeTextToolsPromise;
 }
 
 async function readResponseSafe(response) {
@@ -113,6 +153,146 @@ export function isLocalSaveLocked() {
 
 export function canEditCloudBoard() {
     return isCloudBoardActive() && (collab.activeRole === 'owner' || collab.activeRole === 'editor');
+}
+
+function shouldUseRealtimeCloud() {
+    return isCloudBoardActive() && Boolean(collab.user && collab.token) && canUseRealtimeTransport();
+}
+
+function isRealtimeCloudActive() {
+    return Boolean(collab.realtimeSession);
+}
+
+function getMapSelectedEntity() {
+    if (state.selectedPoint) {
+        const group = state.groups[state.selectedPoint.groupIndex];
+        const point = group?.points?.[state.selectedPoint.pointIndex] || null;
+        if (point) {
+            return {
+                entityType: 'point',
+                entity: point,
+                label: String(point.name || '')
+            };
+        }
+    }
+    if (state.selectedZone) {
+        const group = state.groups[state.selectedZone.groupIndex];
+        const zone = group?.zones?.[state.selectedZone.zoneIndex] || null;
+        if (zone) {
+            return {
+                entityType: 'zone',
+                entity: zone,
+                label: String(zone.name || '')
+            };
+        }
+    }
+    return null;
+}
+
+function findMapPointById(pointId) {
+    const cleanPointId = String(pointId || '').trim();
+    if (!cleanPointId) return null;
+    for (const group of state.groups) {
+        const point = (Array.isArray(group?.points) ? group.points : [])
+            .find((entry) => String(entry?.id || '') === cleanPointId);
+        if (point) return point;
+    }
+    return null;
+}
+
+function findMapZoneById(zoneId) {
+    const cleanZoneId = String(zoneId || '').trim();
+    if (!cleanZoneId) return null;
+    for (const group of state.groups) {
+        const zone = (Array.isArray(group?.zones) ? group.zones : [])
+            .find((entry) => String(entry?.id || '') === cleanZoneId);
+        if (zone) return zone;
+    }
+    return null;
+}
+
+function getMapRealtimeTextKey(entityType, entityId, fieldName) {
+    if (!realtimeTextTools?.makeMapTextKey) return '';
+    return realtimeTextTools.makeMapTextKey(entityType, entityId, fieldName);
+}
+
+function getMapFieldConfig(entityType, fieldName) {
+    return MAP_REALTIME_TEXT_FIELDS[String(entityType || '').trim()]?.[String(fieldName || '').trim()] || null;
+}
+
+function clearMapRealtimeFieldPresence(options = {}) {
+    const shouldNotify = Boolean(options.notify);
+    const hadPresence = Boolean(collab.activeTextKey || collab.activeTextLabel);
+    collab.activeTextKey = '';
+    collab.activeTextLabel = '';
+    if (shouldNotify) {
+        updateMapCloudPresence().catch(() => {});
+    } else if (hadPresence) {
+        syncMapRealtimeAwarenessDecorations();
+    }
+}
+
+function setMapRealtimeFieldPresence(textKey, textLabel) {
+    const nextKey = String(textKey || '').trim();
+    const nextLabel = String(textLabel || '').trim();
+    if (collab.activeTextKey === nextKey && collab.activeTextLabel === nextLabel) return;
+    collab.activeTextKey = nextKey;
+    collab.activeTextLabel = nextLabel;
+    updateMapCloudPresence().catch(() => {});
+}
+
+function updateMapPresence(entries = []) {
+    const deduped = new Map();
+    (Array.isArray(entries) ? entries : []).forEach((row) => {
+        const userId = String(row?.userId || '').trim();
+        if (!userId) return;
+        deduped.set(userId, {
+            userId,
+            username: String(row?.username || 'operateur'),
+            role: String(row?.role || ''),
+            activeNodeId: String(row?.activeNodeId || ''),
+            activeNodeName: String(row?.activeNodeName || ''),
+            activeTextKey: String(row?.activeTextKey || ''),
+            activeTextLabel: String(row?.activeTextLabel || ''),
+            mode: String(row?.mode || 'editing'),
+            isSelf: userId === String(collab.user?.id || '')
+        });
+    });
+    collab.presence = [...deduped.values()].sort((a, b) => {
+        if (a.isSelf && !b.isSelf) return -1;
+        if (!a.isSelf && b.isSelf) return 1;
+        return String(a.username || '').localeCompare(String(b.username || ''));
+    });
+    syncMapRealtimeAwarenessDecorations();
+}
+
+function getMapAwarenessMessage(textKey) {
+    if (!textKey) return '';
+    const editors = collab.presence.filter((entry) =>
+        !entry.isSelf &&
+        String(entry.activeTextKey || '') === String(textKey || '')
+    );
+    if (!editors.length) return '';
+    const names = editors.slice(0, 2).map((entry) => entry.username).filter(Boolean);
+    if (!names.length) return 'Edition distante en cours';
+    if (names.length === 1) return `${names[0]} edite ce champ`;
+    return `${names.join(', ')} editent ce champ`;
+}
+
+export function syncMapRealtimeAwarenessDecorations() {
+    const selected = getMapSelectedEntity();
+    Object.entries(MAP_REALTIME_TEXT_FIELDS).forEach(([entityType, fields]) => {
+        Object.entries(fields).forEach(([fieldName, config]) => {
+            const el = document.getElementById(config.awarenessId);
+            if (!el) return;
+            const textKey = selected && selected.entityType === entityType
+                ? getMapRealtimeTextKey(entityType, selected.entity.id, fieldName)
+                : '';
+            const message = getMapAwarenessMessage(textKey);
+            el.textContent = message;
+            el.style.display = message ? 'block' : 'none';
+        });
+    });
 }
 
 function persistCollabState() {
@@ -205,10 +385,41 @@ function getCloudMapPayload() {
     };
 }
 
+function stripMapRealtimeTextFields(payload) {
+    const normalized = canonicalizeMapPayload(payload);
+    return {
+        ...normalized,
+        groups: normalized.groups.map((group) => ({
+            ...group,
+            points: (Array.isArray(group.points) ? group.points : []).map((point) => ({
+                ...point,
+                name: '',
+                type: '',
+                notes: ''
+            })),
+            zones: (Array.isArray(group.zones) ? group.zones : []).map((zone) => ({
+                ...zone,
+                name: ''
+            }))
+        }))
+    };
+}
+
+function diffMapOpsWithoutRealtimeText(previousPayload, nextPayload) {
+    return diffMapOps(
+        stripMapRealtimeTextFields(previousPayload),
+        stripMapRealtimeTextFields(nextPayload)
+    );
+}
+
 function computeCloudFingerprint() {
     try {
         if (!isCloudBoardActive()) return '';
-        return JSON.stringify(normalizeSharedMapBoardPayload(getCloudMapPayload()));
+        const normalized = normalizeSharedMapBoardPayload(getCloudMapPayload());
+        const fingerprintPayload = isRealtimeCloudActive()
+            ? stripMapRealtimeTextFields(normalized)
+            : normalized;
+        return JSON.stringify(fingerprintPayload);
     } catch (e) {
         return '';
     }
@@ -226,12 +437,286 @@ function hasLocalCloudChanges() {
     return Boolean(current) && current !== String(collab.lastSavedFingerprint || '');
 }
 
+function withoutCloudAutosave(fn) {
+    collab.suppressAutosave += 1;
+    try {
+        return fn();
+    } finally {
+        collab.suppressAutosave = Math.max(0, collab.suppressAutosave - 1);
+    }
+}
+
+function stopCollabRealtime() {
+    stopMapRealtimeText();
+    if (!collab.realtimeSession) return;
+    try {
+        collab.realtimeSession.stop('switch-sync-mode');
+    } catch (e) {}
+    collab.realtimeSession = null;
+    collab.realtimeFallbackActive = false;
+}
+
+function stopMapRealtimeText() {
+    if (!(collab.realtimeTextBindings instanceof Map) || !collab.realtimeTextBindings.size) {
+        clearMapRealtimeFieldPresence({ notify: false });
+        return;
+    }
+    [...collab.realtimeTextBindings.values()].forEach((binding) => {
+        try {
+            binding.stop();
+        } catch (e) {}
+    });
+    collab.realtimeTextBindings.clear();
+    clearMapRealtimeFieldPresence({ notify: false });
+}
+
+function setMapRealtimeFieldValue(entityType, entityId, fieldName, nextValue, options = {}) {
+    const cleanType = String(entityType || '').trim();
+    const cleanField = String(fieldName || '').trim();
+    const target = cleanType === 'point'
+        ? findMapPointById(entityId)
+        : findMapZoneById(entityId);
+    if (!target) return false;
+    const textValue = String(nextValue || '');
+    if (String(target[cleanField] || '') === textValue) return false;
+    target[cleanField] = textValue;
+
+    if (cleanType === 'point' && (cleanField === 'name' || cleanField === 'type')) {
+        renderGroupsList();
+        renderAll();
+    } else if (cleanType === 'zone' && cleanField === 'name') {
+        renderGroupsList();
+        renderAll();
+    }
+
+    if (options.local) {
+        withoutCloudAutosave(() => saveLocalState());
+    }
+    syncMapRealtimeAwarenessDecorations();
+    return true;
+}
+
+function ensureMapRealtimeTextBinding(entityType, entityId, fieldName) {
+    const config = getMapFieldConfig(entityType, fieldName);
+    const textKey = getMapRealtimeTextKey(entityType, entityId, fieldName);
+    if (!config || !textKey || !isRealtimeCloudActive()) return null;
+    if (collab.realtimeTextBindings.has(textKey)) {
+        return collab.realtimeTextBindings.get(textKey);
+    }
+
+    const target = entityType === 'point'
+        ? findMapPointById(entityId)
+        : findMapZoneById(entityId);
+    const binding = realtimeTextTools.createTextFieldYBinding({
+        key: textKey,
+        initialValue: String(target?.[fieldName] || ''),
+        canEdit: () => isRealtimeCloudActive() && canEditCloudBoard(),
+        onSendUpdate: (key, update) => {
+            if (!collab.realtimeSession) return false;
+            return collab.realtimeSession.roomClient.sendTextUpdate(key, update);
+        },
+        onValueChange: (nextValue, meta = {}) => {
+            setMapRealtimeFieldValue(entityType, entityId, fieldName, nextValue, {
+                local: meta.origin !== 'remote'
+            });
+        },
+        onFocusChange: (meta = {}) => {
+            if (meta.active) {
+                setMapRealtimeFieldPresence(textKey, config.label);
+                return;
+            }
+            if (collab.activeTextKey === textKey) {
+                clearMapRealtimeFieldPresence({ notify: true });
+            }
+        }
+    });
+
+    collab.realtimeTextBindings.set(textKey, binding);
+    collab.realtimeSession.roomClient.subscribeText(textKey);
+    return binding;
+}
+
+function handleMapRealtimeTextUpdate(payload = {}) {
+    const textKey = String(payload.key || '').trim();
+    if (!textKey) return;
+    const binding = collab.realtimeTextBindings.get(textKey);
+    if (!binding) return;
+    binding.applyRemoteUpdate(payload.update || '', {
+        full: Boolean(payload.full)
+    });
+    syncMapRealtimeAwarenessDecorations();
+}
+
+export function bindMapRealtimeTextField(entityType, entity, fieldName, field) {
+    const entityId = String(entity?.id || '').trim();
+    if (!entityId || !field || !isRealtimeCloudActive()) return false;
+    const binding = ensureMapRealtimeTextBinding(entityType, entityId, fieldName);
+    if (!binding) return false;
+    binding.attachField(field);
+    syncMapRealtimeAwarenessDecorations();
+    return true;
+}
+
+export function unbindMapRealtimeTextFields() {
+    stopMapRealtimeText();
+}
+
+export async function updateMapCloudPresence(extra = {}) {
+    if (!isCloudBoardActive() || !collab.user || !collab.token) return false;
+    const selected = getMapSelectedEntity();
+    const payload = {
+        activeNodeId: String(extra.activeNodeId || selected?.entity?.id || ''),
+        activeNodeName: String(extra.activeNodeName || selected?.label || ''),
+        activeTextKey: String(extra.activeTextKey || collab.activeTextKey || ''),
+        activeTextLabel: String(extra.activeTextLabel || collab.activeTextLabel || ''),
+        mode: String(extra.mode || (canEditCloudBoard() ? 'editing' : 'viewing'))
+    };
+
+    if (isRealtimeCloudActive()) {
+        return collab.realtimeSession.updatePresence(payload);
+    }
+
+    try {
+        const response = await collabBoardRequest('touch_presence', {
+            boardId: collab.activeBoardId,
+            ...payload
+        });
+        updateMapPresence(response?.presence || []);
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+function startLegacyCloudTransport() {
+    stopCollabRealtime();
+    collab.realtimeFallbackActive = true;
+    startCollabAutosave();
+    startCollabLiveSync();
+}
+
+async function activateCloudTransport() {
+    stopCollabAutosave();
+    stopCollabLiveSync();
+    if (!isCloudBoardActive() || !collab.user || !collab.token) {
+        stopCollabRealtime();
+        return false;
+    }
+
+    if (!shouldUseRealtimeCloud()) {
+        startLegacyCloudTransport();
+        return false;
+    }
+
+    try {
+        const started = await startCollabRealtime();
+        if (started) return true;
+    } catch (e) {}
+
+    startLegacyCloudTransport();
+    return false;
+}
+
+async function startCollabRealtime() {
+    if (!shouldUseRealtimeCloud()) return false;
+    stopCollabRealtime();
+    await preloadRealtimeTextTools().catch(() => null);
+
+    const session = await createRealtimeBoardSession({
+        page: 'map',
+        boardId: collab.activeBoardId,
+        collabToken: collab.token,
+        getCurrentSnapshot: () => normalizeMapBoardData(getCloudMapPayload()),
+        canonicalizeSnapshot: canonicalizeMapPayload,
+        diffOps: diffMapOpsWithoutRealtimeText,
+        applyOps: applyMapOps,
+        applySnapshot: (snapshot) => {
+            applyCloudMapData(snapshot);
+            setCloudShadowData(snapshot);
+            captureCloudSavedFingerprint();
+        },
+        onPresence: (presence) => updateMapPresence(presence || []),
+        onStatus: () => {},
+        onError: () => {},
+        onTextUpdate: (payload) => {
+            handleMapRealtimeTextUpdate(payload || {});
+        },
+        onClose: (meta = {}) => {
+            if (collab.realtimeSession === session) {
+                collab.realtimeSession = null;
+            }
+            stopMapRealtimeText();
+            if (!meta.intentional && isCloudBoardActive()) {
+                collab.realtimeFallbackActive = true;
+                startCollabAutosave();
+                startCollabLiveSync();
+            }
+            if (state.selectedPoint || state.selectedZone) {
+                import('./ui-editor.js').then((module) => {
+                    module.renderEditor?.();
+                }).catch(() => {});
+            }
+        },
+        onLocalAccepted: ({ snapshot }) => {
+            setCloudShadowData(snapshot);
+            collab.lastSavedFingerprint = JSON.stringify(canonicalizeMapPayload(snapshot));
+            syncSharedMapSnapshot(snapshot);
+        },
+        localFlushMs: 90,
+        buildPresence: () => {
+            const selected = getMapSelectedEntity();
+            return {
+                activePointId: String(selected?.entity?.id || ''),
+                activeLabel: String(selected?.label || ''),
+                activeTextKey: String(collab.activeTextKey || ''),
+                activeTextLabel: String(collab.activeTextLabel || ''),
+                mode: canEditCloudBoard() ? 'editing' : 'viewing'
+            };
+        }
+    });
+
+    collab.realtimeSession = session;
+    collab.realtimeFallbackActive = false;
+    stopCollabAutosave();
+    stopCollabLiveSync();
+    session.updatePresence();
+    syncMapRealtimeAwarenessDecorations();
+    return true;
+}
+
 function stopCollabAutosave() {
     stopNamedTimer(collab, 'autosaveDebounceTimer');
 }
 
+async function flushPendingCloudAutosave(boardId = collab.activeBoardId) {
+    const targetBoardId = String(boardId || '').trim();
+    if (!targetBoardId) return false;
+    if (String(collab.activeBoardId || '') !== targetBoardId) return false;
+    if (!canEditCloudBoard()) return false;
+    if (isRealtimeCloudActive()) {
+        return collab.realtimeSession.flushLocalChanges();
+    }
+
+    let waitCount = 0;
+    while (collab.saveInFlight && waitCount < 20) {
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        waitCount += 1;
+    }
+
+    const hadDebounce = Boolean(collab.autosaveDebounceTimer);
+    const hasChanges = hasLocalCloudChanges();
+    if (!hadDebounce && !hasChanges) return false;
+
+    stopCollabAutosave();
+    return saveActiveCloudBoard({ manual: false, quiet: true, force: true });
+}
+
 function queueCloudAutosave(delayMs = COLLAB_AUTOSAVE_DEBOUNCE_MS) {
     if (!isCloudBoardActive() || !canEditCloudBoard()) return;
+    if (isRealtimeCloudActive()) {
+        collab.realtimeSession.scheduleLocalFlush(delayMs);
+        return;
+    }
     stopCollabAutosave();
     queueNamedTimer(collab, 'autosaveDebounceTimer', () => {
         saveActiveCloudBoard({ manual: false, quiet: true }).catch(() => {});
@@ -239,6 +724,7 @@ function queueCloudAutosave(delayMs = COLLAB_AUTOSAVE_DEBOUNCE_MS) {
 }
 
 function onMapLocalChange() {
+    if (collab.suppressAutosave > 0) return;
     if (isCloudBoardActive()) {
         syncSharedMapSnapshot(getCloudMapPayload());
     }
@@ -257,6 +743,7 @@ function startCollabAutosave() {
         stopCollabAutosave();
         return;
     }
+    if (isRealtimeCloudActive()) return;
     queueCloudAutosave(COLLAB_AUTOSAVE_RETRY_MS);
 }
 
@@ -294,6 +781,7 @@ async function runCollabWatchLoop(loopToken) {
 
         if (collab.syncLoopToken !== loopToken) return;
         collab.syncRetryMs = COLLAB_WATCH_RETRY_MIN_MS;
+        updateMapPresence(watch?.presence || []);
 
         if (watch?.deleted || watch?.revoked) {
             setActiveCloudBoardFromSummary(null);
@@ -351,6 +839,7 @@ function mergeMapBoardData(remoteRaw, localRaw, baseRaw = null) {
 async function syncActiveCloudBoard(options = {}) {
     const quiet = Boolean(options.quiet);
     const allowDuringSave = Boolean(options.allowDuringSave);
+    if (isRealtimeCloudActive()) return false;
     if (!isCloudBoardActive() || !collab.user || !collab.token) return false;
     if (collab.syncInFlight) return false;
     if (collab.saveInFlight && !allowDuringSave) return false;
@@ -374,6 +863,7 @@ async function syncActiveCloudBoard(options = {}) {
 
         const localChanged = hasLocalCloudChanges();
         updateActiveBoardSummary(remoteSummary);
+        updateMapPresence(result?.presence || []);
 
         if (localChanged && canEditCloudBoard()) {
             const localSnapshot = getCloudMapPayload();
@@ -388,6 +878,7 @@ async function syncActiveCloudBoard(options = {}) {
         }
 
         applyCloudMapData(result.board.data);
+        updateMapPresence(result?.presence || []);
         setCloudShadowData(result.board.data);
         state.currentFileName = remoteSummary.title;
         captureCloudSavedFingerprint();
@@ -403,6 +894,7 @@ async function syncActiveCloudBoard(options = {}) {
 function startCollabLiveSync() {
     stopCollabLiveSync();
     if (!isCloudBoardActive() || !collab.user || !collab.token) return;
+    if (isRealtimeCloudActive()) return;
     const loopToken = collab.syncLoopToken + 1;
     collab.syncLoopToken = loopToken;
     collab.syncLoopRunning = true;
@@ -419,6 +911,14 @@ async function collabBoardRequest(action, payload = {}) {
 }
 
 function setActiveCloudBoardFromSummary(summary = null) {
+    const previousBoardId = String(collab.activeBoardId || '');
+    const nextBoardId = summary && summary.id ? String(summary.id || '') : '';
+    const boardChanged = previousBoardId !== nextBoardId;
+    if (boardChanged || !nextBoardId) {
+        stopCollabRealtime();
+        stopCollabAutosave();
+        stopCollabLiveSync();
+    }
     if (!summary || !summary.id) {
         collab.activeBoardId = '';
         collab.activeRole = '';
@@ -427,6 +927,8 @@ function setActiveCloudBoardFromSummary(summary = null) {
         collab.activeBoardUpdatedAt = '';
         collab.lastSavedFingerprint = '';
         collab.shadowData = null;
+        collab.presence = [];
+        clearMapRealtimeFieldPresence({ notify: false });
         syncSharedMapSnapshot(null);
     } else {
         collab.activeBoardId = String(summary.id || '');
@@ -436,16 +938,12 @@ function setActiveCloudBoardFromSummary(summary = null) {
         collab.activeBoardUpdatedAt = String(summary.updatedAt || '');
     }
 
+    if (previousBoardId && previousBoardId !== collab.activeBoardId) {
+        syncSharedMapSnapshot(null);
+    }
     applyLocalPersistencePolicy();
     syncCloudStatus();
     persistCollabState();
-    if (isCloudBoardActive()) {
-        startCollabAutosave();
-        startCollabLiveSync();
-    } else {
-        stopCollabAutosave();
-        stopCollabLiveSync();
-    }
 }
 
 function normalizeMapBoardData(rawData) {
@@ -459,14 +957,18 @@ function normalizeMapBoardData(rawData) {
 }
 
 function applyCloudMapData(rawData) {
-    const normalized = normalizeMapBoardData(rawData);
-    state.tacticalLinks = normalized.tacticalLinks;
-    setGroups(normalized.groups);
-    state.tacticalLinks = normalized.tacticalLinks;
-    renderGroupsList();
-    renderAll();
-    saveLocalState();
-    syncSharedMapSnapshot(normalized);
+    return withoutCloudAutosave(() => {
+        const normalized = normalizeMapBoardData(rawData);
+        state.tacticalLinks = normalized.tacticalLinks;
+        setGroups(normalized.groups);
+        state.tacticalLinks = normalized.tacticalLinks;
+        renderGroupsList();
+        renderAll();
+        saveLocalState();
+        syncSharedMapSnapshot(normalized);
+        syncMapRealtimeAwarenessDecorations();
+        return normalized;
+    });
 }
 
 async function openCloudBoard(boardId, options = {}) {
@@ -491,10 +993,12 @@ async function openCloudBoard(boardId, options = {}) {
 
     setActiveCloudBoardFromSummary(summary);
     applyCloudMapData(result.board.data);
+    updateMapPresence(result.presence || []);
     setCloudShadowData(result.board.data);
     state.currentFileName = summary.title;
     captureCloudSavedFingerprint();
     setBoardQueryParam(summary.id);
+    await activateCloudTransport();
 
     if (!options.quiet) {
         await customAlert('CLOUD', `☁️ Board ouvert : ${escapeHtml(summary.title)}`);
@@ -513,6 +1017,24 @@ export async function saveActiveCloudBoard(options = {}) {
 
     if (!canEditCloudBoard()) {
         if (manual && !quiet) await customAlert('CLOUD', "Tu n'as pas les droits d'edition cloud.");
+        return false;
+    }
+    if (isRealtimeCloudActive()) {
+        const hadChanges = hasLocalCloudChanges();
+        if (!hadChanges) {
+            if (manual && !quiet) await customAlert('CLOUD', '☁️ Temps reel deja synchronise.');
+            return true;
+        }
+
+        const flushed = await collab.realtimeSession.flushLocalChanges();
+        if (flushed || !hasLocalCloudChanges()) {
+            if (manual && !quiet) await customAlert('CLOUD', '☁️ Synchro temps reel envoyee.');
+            return true;
+        }
+
+        if (manual && !quiet) {
+            await customAlert('CLOUD', 'Connexion temps reel en cours. Les modifs restent locales pour le moment.');
+        }
         return false;
     }
 
@@ -618,10 +1140,14 @@ async function createCloudBoardFromCurrent() {
     captureCloudSavedFingerprint();
     syncSharedMapSnapshot(payload);
     setBoardQueryParam(result.board.id);
+    await activateCloudTransport();
     return true;
 }
 
 async function logoutCollab() {
+    stopCollabRealtime();
+    stopCollabAutosave();
+    stopCollabLiveSync();
     try {
         if (collab.token) await collabAuthRequest('logout');
     } catch (e) {}
@@ -630,8 +1156,6 @@ async function logoutCollab() {
     collab.user = null;
     setActiveCloudBoardFromSummary(null);
     clearCollabStorage();
-    stopCollabAutosave();
-    stopCollabLiveSync();
     setLocalPersistenceEnabled(true);
     setBoardQueryParam('');
     syncCloudStatus();
@@ -671,6 +1195,23 @@ function closeCloudModal() {
     modal.overlay.classList.add('hidden');
 }
 
+function triggerFileInput(inputId) {
+    const input = document.getElementById(inputId);
+    if (!(input instanceof HTMLInputElement)) return false;
+    try {
+        if (typeof input.showPicker === 'function') {
+            input.showPicker();
+            return true;
+        }
+    } catch (e) {}
+    try {
+        input.click();
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
 async function saveLocalMapSnapshot() {
     if (isLocalSaveLocked()) {
         await customAlert('ACCES', 'Export local bloque sur ce board cloud.');
@@ -702,6 +1243,8 @@ async function copyLocalMapSnapshot() {
 }
 
 async function renderCloudMembers(boardId) {
+    await flushPendingCloudAutosave(boardId).catch(() => {});
+
     let result;
     try {
         result = await collabBoardRequest('get_board', { boardId });
@@ -891,6 +1434,8 @@ async function renderCloudMembers(boardId) {
 }
 
 async function renderCloudHome() {
+    await flushPendingCloudAutosave(collab.activeBoardId).catch(() => {});
+
     if (!collab.user) {
         openCloudModal(
             'CLOUD COLLABORATIF',
@@ -1106,9 +1651,7 @@ async function renderCloudHome() {
 
             if (action === 'open-file') {
                 closeCloudModal();
-                window.setTimeout(() => {
-                    document.getElementById('fileImport')?.click();
-                }, 40);
+                triggerFileInput('fileImport');
                 return;
             }
             if (action === 'save-file') {
@@ -1121,9 +1664,7 @@ async function renderCloudHome() {
             }
             if (action === 'merge-file') {
                 closeCloudModal();
-                window.setTimeout(() => {
-                    document.getElementById('fileMerge')?.click();
-                }, 40);
+                triggerFileInput('fileMerge');
                 return;
             }
             if (action === 'reset-all') {

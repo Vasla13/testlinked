@@ -149,10 +149,12 @@ export function renderEditorHTML(n, state) {
                     <div class="editor-quick-field editor-priority-field">
                         <label>Nom</label>
                         <input id="edQuickName" type="text" value="${escapeHtml(n.name)}" placeholder="Nom de la fiche">
+                        <div id="awName" class="editor-realtime-presence" style="display:none; min-height:14px; margin-top:4px; font-size:0.68rem; color:#ffcc8a;"></div>
                     </div>
                     <div class="editor-quick-field editor-priority-field">
                         <label>Téléphone</label>
                         <input id="edQuickNum" type="text" value="${escapeHtml(n.num || '')}" placeholder="555-...">
+                        <div id="awPhone" class="editor-realtime-presence" style="display:none; min-height:14px; margin-top:4px; font-size:0.68rem; color:#ffcc8a;"></div>
                     </div>
                 </div>
 
@@ -161,6 +163,7 @@ export function renderEditorHTML(n, state) {
                 <div class="editor-sheet-note">
                     <label class="editor-section-label" for="edDescription">Description</label>
                     <textarea id="edDescription" rows="3" placeholder="Description / note">${escapeHtml(n.description || n.notes || '')}</textarea>
+                    <div id="awDescription" class="editor-realtime-presence" style="display:none; min-height:14px; margin-top:4px; font-size:0.68rem; color:#ffcc8a;"></div>
                 </div>
 
                 <div class="editor-meta-strip">
@@ -172,6 +175,7 @@ export function renderEditorHTML(n, state) {
                             value="${escapeHtml(n.accountNumber || '')}"
                             placeholder="Non renseigne"
                         >
+                        <div id="awAccount" class="editor-realtime-presence" style="display:none; min-height:14px; margin-top:4px; font-size:0.68rem; color:#ffcc8a;"></div>
                     </div>
                     <div class="editor-meta-pill">
                         <span>Numéro social</span>
@@ -181,6 +185,7 @@ export function renderEditorHTML(n, state) {
                             value="${escapeHtml(n.citizenNumber || '')}"
                             placeholder="Non renseigne"
                         >
+                        <div id="awCitizen" class="editor-realtime-presence" style="display:none; min-height:14px; margin-top:4px; font-size:0.68rem; color:#ffcc8a;"></div>
                     </div>
                 </div>
 

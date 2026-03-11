@@ -3,7 +3,7 @@ import { ensureNode, mergeNodes, updatePersonColors } from './logic.js';
 import { renderEditorHTML } from './templates.js';
 import { restartSim } from './physics.js';
 import { draw, updateDegreeCache } from './render.js';
-import { addLink as addUILink, logNodeAdded, refreshLists, updatePathfindingPanel, selectNode, showCustomConfirm, showCustomAlert, showCustomPrompt, refreshHvt } from './ui.js';
+import { addLink as addUILink, logNodeAdded, refreshLists, updatePathfindingPanel, selectNode, showCustomConfirm, showCustomAlert, showCustomPrompt, refreshHvt, bindRealtimeDescriptionField, bindRealtimePointField, unbindRealtimePointFields } from './ui.js';
 import { escapeHtml, kindToLabel, linkKindEmoji, computeLinkColor, sanitizeNodeColor, normalizePersonStatus } from './utils.js';
 import { TYPES, KINDS, KIND_LABELS, PERSON_PERSON_KINDS, PERSON_ORG_KINDS, ORG_ORG_KINDS, PERSON_STATUS, PERSON_STATUS_LABELS } from './constants.js';
 
@@ -395,6 +395,7 @@ export function renderEditor() {
     updatePathfindingPanel();
     const editorPanel = document.getElementById('editor');
     const focusSnapshot = captureEditorFocusState();
+    unbindRealtimePointFields();
 
     if (!n) {
         if (editorPanel) editorPanel.style.display = 'none';
@@ -527,9 +528,17 @@ function setupEditorListeners(n) {
         applyNodeName(e.target.value);
     };
     const edQuickName = document.getElementById('edQuickName');
-    if (edQuickName) edQuickName.oninput = (e) => applyNodeName(e.target.value);
+    if (edQuickName) {
+        if (!bindRealtimePointField(n, 'name', edQuickName)) {
+            edQuickName.oninput = (e) => applyNodeName(e.target.value);
+        }
+    }
     const edQuickNum = document.getElementById('edQuickNum');
-    if (edQuickNum) edQuickNum.oninput = (e) => applyNodePhone(e.target.value);
+    if (edQuickNum) {
+        if (!bindRealtimePointField(n, 'num', edQuickNum)) {
+            edQuickNum.oninput = (e) => applyNodePhone(e.target.value);
+        }
+    }
     document.getElementById('edType').onchange = (e) => {
         queueHistory();
         n.type = e.target.value;
@@ -555,30 +564,36 @@ function setupEditorListeners(n) {
     };
     const inpQuickAccountNumber = document.getElementById('edQuickAccountNumber');
     if (inpQuickAccountNumber) {
-        inpQuickAccountNumber.oninput = (e) => {
-            queueHistory();
-            n.accountNumber = e.target.value;
-            syncMetaDisplays();
-            scheduleSave();
-        };
+        if (!bindRealtimePointField(n, 'accountNumber', inpQuickAccountNumber)) {
+            inpQuickAccountNumber.oninput = (e) => {
+                queueHistory();
+                n.accountNumber = e.target.value;
+                syncMetaDisplays();
+                scheduleSave();
+            };
+        }
     }
     const inpQuickCitizenNumber = document.getElementById('edQuickCitizenNumber');
     if (inpQuickCitizenNumber) {
-        inpQuickCitizenNumber.oninput = (e) => {
-            queueHistory();
-            n.citizenNumber = e.target.value;
-            syncMetaDisplays();
-            scheduleSave();
-        };
+        if (!bindRealtimePointField(n, 'citizenNumber', inpQuickCitizenNumber)) {
+            inpQuickCitizenNumber.oninput = (e) => {
+                queueHistory();
+                n.citizenNumber = e.target.value;
+                syncMetaDisplays();
+                scheduleSave();
+            };
+        }
     }
     const inpDescription = document.getElementById('edDescription');
     if (inpDescription) {
-        inpDescription.oninput = (e) => {
-            queueHistory();
-            n.description = e.target.value;
-            n.notes = e.target.value;
-            scheduleSave();
-        };
+        if (!bindRealtimeDescriptionField(n, inpDescription)) {
+            inpDescription.oninput = (e) => {
+                queueHistory();
+                n.description = e.target.value;
+                n.notes = e.target.value;
+                scheduleSave();
+            };
+        }
     }
     Array.from(document.querySelectorAll('[data-person-status]')).forEach((btn) => {
         btn.onclick = () => {
