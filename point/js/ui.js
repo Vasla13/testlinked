@@ -4505,6 +4505,12 @@ function updateIntelPanel(force = false) {
         const isSurprise = s.surprise >= 0.6 ? `<span class="intel-badge">Surprise</span>` : '';
         const isAlias = s.alias ? `<span class="intel-badge">Alias?</span>` : '';
         const isGeo = s.geoScore && s.geoScore > 0.55 ? `<span class="intel-badge">Geo</span>` : '';
+        const hasMissing = s.aStatus === PERSON_STATUS.MISSING || s.bStatus === PERSON_STATUS.MISSING;
+        const hasDeceased = s.aStatus === PERSON_STATUS.DECEASED || s.bStatus === PERSON_STATUS.DECEASED;
+        const statusBadges = [
+            hasMissing ? `<span class="intel-badge">Disparu</span>` : '',
+            hasDeceased ? `<span class="intel-badge">Mort</span>` : ''
+        ].join('');
         const reasons = (showReasons && s.reasons && s.reasons.length) ? `<div class="intel-reasons">${s.reasons.slice(0, 3).map(r => escapeHtml(r)).join(' · ')}</div>` : '';
         const allowedKinds = getAllowedKinds(s.a.type, s.b.type);
         const options = Array.from(allowedKinds).map(k => `<option value="${k}" ${k === s.kind ? 'selected' : ''}>${linkKindEmoji(k)} ${kindToLabel(k)}</option>`).join('');
@@ -4515,7 +4521,7 @@ function updateIntelPanel(force = false) {
                         <span class="intel-score">Score ${scorePct}%</span>
                         <span class="intel-confidence">Confiance ${confPct}%</span>
                     </div>
-                    <div class="intel-badges">${isBridge}${isSurprise}${isAlias}${isGeo}</div>
+                    <div class="intel-badges">${isBridge}${isSurprise}${isAlias}${isGeo}${statusBadges}</div>
                 </div>
                 <div class="intel-names">
                     <span class="intel-name-pair">${escapeHtml(s.a.name)} ⇄ ${escapeHtml(s.b.name)}</span>

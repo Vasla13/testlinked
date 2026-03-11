@@ -1,6 +1,6 @@
 import { state, nodeById } from './state.js';
-import { KINDS, TYPES } from './constants.js';
-import { clamp, getId } from './utils.js';
+import { KINDS, TYPES, PERSON_STATUS } from './constants.js';
+import { clamp, getId, normalizePersonStatus } from './utils.js';
 
 const LINK_STRENGTH = {
     [KINDS.PATRON]: 1.25,
@@ -353,9 +353,10 @@ function cosine(vecA, vecB) {
     return dot / (Math.sqrt(magA) * Math.sqrt(magB));
 }
 
-function buildGraphData() {
+function buildGraphData(blockedTransitIds = new Set()) {
     const adjacency = new Map();
     const neighborSet = new Map();
+    const fullNeighborSet = new Map();
     const degree = new Map();
     const linkSet = new Set();
 
@@ -363,6 +364,7 @@ function buildGraphData() {
         const key = String(id);
         if (!adjacency.has(key)) adjacency.set(key, new Map());
         if (!neighborSet.has(key)) neighborSet.set(key, new Set());
+        if (!fullNeighborSet.has(key)) fullNeighborSet.set(key, new Set());
         if (!degree.has(key)) degree.set(key, 0);
         return key;
     };
@@ -377,6 +379,7 @@ function buildGraphData() {
 
         const w = LINK_STRENGTH[l.kind] ?? 0.6;
         const addEdge = (from, to) => {
+            if (blockedTransitIds.has(String(to)) && !blockedTransitIds.has(String(from))) return;
             const map = adjacency.get(from);
             let entry = map.get(to);
             if (!entry) {
@@ -391,14 +394,21 @@ function buildGraphData() {
         addEdge(t, s);
 
         if (l.kind !== KINDS.ENNEMI) {
-            neighborSet.get(s).add(t);
-            neighborSet.get(t).add(s);
-            degree.set(s, (degree.get(s) || 0) + 1);
-            degree.set(t, (degree.get(t) || 0) + 1);
+            fullNeighborSet.get(s).add(t);
+            fullNeighborSet.get(t).add(s);
+
+            if (!blockedTransitIds.has(t) || blockedTransitIds.has(s)) {
+                neighborSet.get(s).add(t);
+                degree.set(s, (degree.get(s) || 0) + 1);
+            }
+            if (!blockedTransitIds.has(s) || blockedTransitIds.has(t)) {
+                neighborSet.get(t).add(s);
+                degree.set(t, (degree.get(t) || 0) + 1);
+            }
         }
     });
 
-    return { adjacency, neighborSet, degree, linkSet };
+    return { adjacency, neighborSet, fullNeighborSet, degree, linkSet };
 }
 
 function buildComponents(neighborSet) {
@@ -447,6 +457,68 @@ function getTypeCompat(a, b) {
     return TYPE_COMPAT[key] ?? 0.85;
 }
 
+function getNodePersonStatus(node) {
+    return normalizePersonStatus(node?.personStatus, node?.type);
+}
+
+function computeStatusModifiers(a, b, context = {}) {
+    const aStatus = getNodePersonStatus(a);
+    const bStatus = getNodePersonStatus(b);
+    const hasMissing = aStatus === PERSON_STATUS.MISSING || bStatus === PERSON_STATUS.MISSING;
+    const hasDeceased = aStatus === PERSON_STATUS.DECEASED || bStatus === PERSON_STATUS.DECEASED;
+    const investigativeLead = Boolean(
+        context.orgMention ||
+        context.bridgeScore ||
+        context.mentionScore >= 0.25 ||
+        context.geoScore >= 0.45
+    );
+    const archivalLead = Boolean(
+        context.familyHint ||
+        context.aliasHint ||
+        context.commonCount >= 2
+    );
+
+    let scoreFactor = 1;
+    let confidenceFactor = 1;
+    const reasons = [];
+
+    if (hasMissing) {
+        scoreFactor *= investigativeLead ? 0.96 : 0.88;
+        confidenceFactor *= 0.94;
+        reasons.push('Statut disparu pris en compte');
+    }
+
+    if (hasDeceased) {
+        scoreFactor *= archivalLead ? 0.68 : 0.52;
+        confidenceFactor *= archivalLead ? 0.8 : 0.68;
+        reasons.push('Statut mort pris en compte');
+    }
+
+    if (aStatus === PERSON_STATUS.DECEASED && bStatus === PERSON_STATUS.DECEASED) {
+        scoreFactor *= 0.85;
+        confidenceFactor *= 0.92;
+    }
+
+    return {
+        aStatus,
+        bStatus,
+        scoreFactor,
+        confidenceFactor,
+        reasons
+    };
+}
+
+function shouldAllowPairWithStatuses(aId, bId, focusId, deceasedNodeIds) {
+    const leftId = String(aId || '');
+    const rightId = String(bId || '');
+    const leftDead = deceasedNodeIds.has(leftId);
+    const rightDead = deceasedNodeIds.has(rightId);
+    if (!leftDead && !rightDead) return true;
+    if (!focusId) return false;
+    const focusedId = String(focusId);
+    return deceasedNodeIds.has(focusedId) && (leftId === focusedId || rightId === focusedId);
+}
+
 export function getAllowedKinds(sourceType, targetType) {
     if (sourceType === TYPES.PERSON && targetType === TYPES.PERSON) {
         return new Set([KINDS.FAMILLE, KINDS.COUPLE, KINDS.AMOUR, KINDS.AMI, KINDS.ENNEMI, KINDS.RIVAL, KINDS.CONNAISSANCE, KINDS.COLLEGUE, KINDS.RELATION]);
@@ -458,7 +530,22 @@ export function getAllowedKinds(sourceType, targetType) {
 }
 
 export function suggestKind(a, b, score = 0.5, mode = 'decouverte', hint = {}) {
+    const aStatus = hint.aStatus || getNodePersonStatus(a);
+    const bStatus = hint.bStatus || getNodePersonStatus(b);
+    const hasDeceased = aStatus === PERSON_STATUS.DECEASED || bStatus === PERSON_STATUS.DECEASED;
+
     if (mode === 'creatif') return KINDS.RELATION;
+    if (hasDeceased) {
+        if (a.type === TYPES.PERSON && b.type === TYPES.PERSON) {
+            if (hint.family || hint.surname) return KINDS.FAMILLE;
+            if (hint.alias) return KINDS.RELATION;
+            return KINDS.RELATION;
+        }
+        if (a.type === TYPES.PERSON || b.type === TYPES.PERSON) {
+            if (hint.family || hint.surname) return KINDS.FAMILLE;
+            return KINDS.RELATION;
+        }
+    }
     if (a.type === TYPES.PERSON && b.type === TYPES.PERSON) {
         if (hint.alias) return KINDS.RELATION;
         if (hint.family || hint.surname) return KINDS.FAMILLE;
@@ -518,9 +605,14 @@ export function computeLinkSuggestions(options = {}) {
     const noveltyRatio = clamp(typeof options.noveltyRatio === 'number' ? options.noveltyRatio : 0.25, 0, 0.6);
     const sources = options.sources || { graph: true, text: true, tags: true, profile: true, bridge: true, lex: true, geo: true };
 
+    const blockedTransitIds = new Set(
+        nodes
+            .filter((node) => getNodePersonStatus(node) === PERSON_STATUS.DECEASED)
+            .map((node) => String(node.id))
+    );
     const nodeMap = new Map(nodes.map(n => [String(n.id), n]));
-    const { adjacency, neighborSet, degree, linkSet } = buildGraphData();
-    const components = buildComponents(neighborSet);
+    const { adjacency, neighborSet, fullNeighborSet, degree, linkSet } = buildGraphData(blockedTransitIds);
+    const components = buildComponents(fullNeighborSet);
     const profiles = buildProfiles(adjacency);
     const mapPoints = loadMapPoints();
 
@@ -586,6 +678,7 @@ export function computeLinkSuggestions(options = {}) {
             const id = String(n.id);
             if (id === focusId) return;
             if (linkSet.has(pairKey(id, focusId))) return;
+            if (!shouldAllowPairWithStatuses(id, focusId, focusId, blockedTransitIds)) return;
             candidates.add(pairKey(id, focusId));
         });
     } else if (nodes.length <= 240) {
@@ -594,6 +687,7 @@ export function computeLinkSuggestions(options = {}) {
                 const a = String(nodes[i].id);
                 const b = String(nodes[j].id);
                 if (linkSet.has(pairKey(a, b))) continue;
+                if (!shouldAllowPairWithStatuses(a, b, focusId, blockedTransitIds)) continue;
                 candidates.add(pairKey(a, b));
             }
         }
@@ -602,10 +696,12 @@ export function computeLinkSuggestions(options = {}) {
             const aId = String(n.id);
             const neigh = neighborSet.get(aId) || new Set();
             neigh.forEach(mid => {
+                if (blockedTransitIds.has(String(mid))) return;
                 const second = neighborSet.get(mid) || new Set();
                 second.forEach(bId => {
                     if (bId === aId) return;
                     if (linkSet.has(pairKey(aId, bId))) return;
+                    if (!shouldAllowPairWithStatuses(aId, bId, focusId, blockedTransitIds)) return;
                     candidates.add(pairKey(aId, bId));
                 });
             });
@@ -617,6 +713,7 @@ export function computeLinkSuggestions(options = {}) {
             for (let i = 0; i < arr.length; i++) {
                 for (let j = i + 1; j < arr.length; j++) {
                     if (linkSet.has(pairKey(arr[i], arr[j]))) continue;
+                    if (!shouldAllowPairWithStatuses(arr[i], arr[j], focusId, blockedTransitIds)) continue;
                     candidates.add(pairKey(arr[i], arr[j]));
                 }
             }
@@ -630,6 +727,7 @@ export function computeLinkSuggestions(options = {}) {
                 const bId = top[j];
                 if (linkSet.has(pairKey(aId, bId))) continue;
                 if ((components.get(aId) || 0) === (components.get(bId) || 0)) continue;
+                if (!shouldAllowPairWithStatuses(aId, bId, focusId, blockedTransitIds)) continue;
                 candidates.add(pairKey(aId, bId));
             }
         }
@@ -651,6 +749,7 @@ export function computeLinkSuggestions(options = {}) {
         const a = nodeMap.get(aId);
         const b = nodeMap.get(bId);
         if (!a || !b) return;
+        if (!shouldAllowPairWithStatuses(aId, bId, focusId, blockedTransitIds)) return;
 
         const neighborsA = neighborSet.get(aId) || new Set();
         const neighborsB = neighborSet.get(bId) || new Set();
@@ -804,6 +903,16 @@ export function computeLinkSuggestions(options = {}) {
             }
         }
         lexScore = clamp(lexScore, 0, 1);
+        const familyKindHint = familyHint || surnameScore > 0.5;
+        const statusMeta = computeStatusModifiers(a, b, {
+            commonCount,
+            mentionScore,
+            bridgeScore,
+            geoScore,
+            familyHint: familyKindHint,
+            aliasHint,
+            orgMention: orgMentionFlag
+        });
 
         const degA = degree.get(aId) || 0;
         const degB = degree.get(bId) || 0;
@@ -821,6 +930,7 @@ export function computeLinkSuggestions(options = {}) {
 
         score *= degPenalty;
         score *= (0.9 + 0.1 * typeCompat);
+        score *= statusMeta.scoreFactor;
 
         const surprise = clamp((bridgeScore * 0.6) + (textScore * 0.4) + (tagScore * 0.3) - (graphScore * 0.4), 0, 1);
         if (mode === 'creatif') score = clamp(score + surprise * 0.08, 0, 1);
@@ -840,7 +950,7 @@ export function computeLinkSuggestions(options = {}) {
             (aliasScore > 0.55 ? 0.18 : 0) +
             (useLex && lexScore > 0.25 ? 0.18 : 0) +
             (useGeo && geoScore > 0.45 ? 0.12 : 0);
-        const confidence = clamp(score * 0.7 + evidence, 0, 1);
+        const confidence = clamp((score * 0.7 + evidence) * statusMeta.confidenceFactor, 0, 1);
 
         const reasons = [];
         if (commonCount >= 2) {
@@ -866,6 +976,7 @@ export function computeLinkSuggestions(options = {}) {
         if (useGeo && geoScore > 0.45 && geoInfo.distance !== null) reasons.push(`Proximite geo ~${Math.round(geoInfo.distance)}%`);
         if (fb.up > fb.down) reasons.push(`Appris: +${fb.up - fb.down}`);
         if (fb.down > fb.up) reasons.push('Historique negatif');
+        if (statusMeta.reasons.length) reasons.push(...statusMeta.reasons);
 
         if (score < minScore) {
             if (!(mode === 'creatif' && surprise > 0.6 && score > minScore * 0.7)) return;
@@ -873,7 +984,15 @@ export function computeLinkSuggestions(options = {}) {
 
         const personOrg = (a.type === TYPES.PERSON || b.type === TYPES.PERSON) && a.type !== b.type;
         const orgMention = personOrg && (orgMentionFlag || mentionScore >= 0.25 || nameOverlapScore >= 0.3);
-        const kindHint = { family: familyHint || surnameScore > 0.5, surname: surnameScore > 0.4, orgMention, alias: aliasHint, role: roleHint };
+        const kindHint = {
+            family: familyKindHint,
+            surname: surnameScore > 0.4,
+            orgMention,
+            alias: aliasHint,
+            role: roleHint,
+            aStatus: statusMeta.aStatus,
+            bStatus: statusMeta.bStatus
+        };
 
         suggestions.push({
             id: key,
@@ -891,6 +1010,8 @@ export function computeLinkSuggestions(options = {}) {
             profileScore,
             lexScore,
             geoScore,
+            aStatus: statusMeta.aStatus,
+            bStatus: statusMeta.bStatus,
             alias: aliasHint,
             bridge: bridgeScore,
             kind: suggestKind(a, b, score, mode, kindHint)
