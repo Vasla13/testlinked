@@ -125,19 +125,7 @@
       display: none !important;
     }
     #editorDragHandle {
-      min-height: 36px;
-      padding: 8px 12px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      border-bottom: 1px solid rgba(115, 251, 247, 0.28);
-      background: linear-gradient(90deg, rgba(115, 251, 247, 0.12), rgba(16, 30, 44, 0.85));
-      color: #cfefff;
-      font-size: 0.74rem;
-      letter-spacing: 1px;
-      text-transform: uppercase;
-      user-select: none;
-      cursor: grab;
+      display: none;
     }
     #editor.dragging #editorDragHandle {
       cursor: grabbing;
@@ -150,7 +138,7 @@
       padding: 16px 18px 18px !important;
       text-align: left !important;
       opacity: 1 !important;
-      max-height: calc(100vh - 92px);
+      max-height: calc(100vh - 56px);
       overflow-y: auto;
       background: rgba(2, 8, 22, 0.5);
     }
@@ -1254,13 +1242,7 @@
     }
 
     #editorDragHandle {
-      min-height: 38px;
-      padding: 0 14px;
-      background: linear-gradient(90deg, rgba(102, 243, 255, 0.18), rgba(7, 19, 36, 0.96) 56%);
-      border-bottom: 1px solid rgba(102, 243, 255, 0.18);
-      font-size: 0.72rem;
-      letter-spacing: 2.6px;
-      font-weight: 700;
+      display: none;
     }
 
     #editorDragHint {
@@ -1269,6 +1251,7 @@
 
     #editorBody {
       padding: 12px 14px 14px !important;
+      max-height: calc(100vh - 56px);
       background: linear-gradient(180deg, rgba(5, 12, 28, 0.92), rgba(3, 10, 24, 0.82)) !important;
     }
 

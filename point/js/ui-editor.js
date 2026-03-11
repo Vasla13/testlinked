@@ -274,18 +274,27 @@ function ensureEditorDrag() {
     editorDragState.initialized = true;
 
     const editorPanel = document.getElementById('editor');
-    const dragHandle = document.getElementById('editorDragHandle');
     const rightPanel = document.getElementById('right');
-    if (!editorPanel || !dragHandle || !rightPanel) return;
+    if (!editorPanel || !rightPanel) return;
 
-    dragHandle.addEventListener('dblclick', () => {
+    const isDragIntent = (event) => {
+        if (!event?.target) return false;
+        const header = event.target.closest('.editor-sheet-head');
+        if (!header || !editorPanel.contains(header)) return false;
+        if (event.target.closest('input, textarea, button, select, label, a')) return false;
+        return true;
+    };
+
+    editorPanel.addEventListener('dblclick', (event) => {
+        if (!isDragIntent(event)) return;
         if (isCompactLayout()) return;
         resetEditorPosition(editorPanel);
         requestAnimationFrame(() => clampEditorInViewport(editorPanel));
     });
 
-    dragHandle.addEventListener('mousedown', (event) => {
+    editorPanel.addEventListener('mousedown', (event) => {
         if (event.button !== 0) return;
+        if (!isDragIntent(event)) return;
         if (isCompactLayout()) return;
         if (editorPanel.style.display === 'none') return;
 

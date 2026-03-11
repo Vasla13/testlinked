@@ -4434,6 +4434,16 @@ function setupHudButtons() {
         button.className = className;
         return button;
     };
+    const createHudIconButton = (icon, title, onClick) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'hud-btn hud-tool-btn';
+        button.title = title;
+        button.setAttribute('aria-label', title);
+        button.innerHTML = `<span class="hud-btn-icon">${iconMarkup[icon] || ''}</span>`;
+        button.onclick = onClick;
+        return button;
+    };
 
     const updateHudView = () => {
         updateLinkLegend();
@@ -4441,23 +4451,11 @@ function setupHudButtons() {
         scheduleSave();
     };
 
-    const btnRecenter = createHudButton('hud-btn hud-stack-btn hud-action-btn');
+    const btnRecenter = createHudButton('hud-btn hud-stack-btn hud-primary-btn');
     setHudButtonContent(btnRecenter, 'recenter', 'Recentrer');
     btnRecenter.title = 'Recentrer la vue sur l ensemble du reseau';
     btnRecenter.onclick = () => recenterGraphView();
     hud.appendChild(btnRecenter);
-
-    const btnZoomOut = createHudButton('hud-btn hud-stack-btn hud-action-btn');
-    setHudButtonContent(btnZoomOut, 'zoomOut', 'Zoom', '-');
-    btnZoomOut.title = 'Zoom arriere';
-    btnZoomOut.onclick = () => stepGraphZoom(-1);
-    hud.appendChild(btnZoomOut);
-
-    const btnZoomIn = createHudButton('hud-btn hud-stack-btn hud-action-btn');
-    setHudButtonContent(btnZoomIn, 'zoomIn', 'Zoom', '+');
-    btnZoomIn.title = 'Zoom avant';
-    btnZoomIn.onclick = () => stepGraphZoom(1);
-    hud.appendChild(btnZoomIn);
 
     const btnLinkTypes = createHudButton('hud-btn hud-stack-btn');
     const updateLinkTypesBtn = () => {
@@ -4545,19 +4543,23 @@ function setupHudButtons() {
     updateFilterControls();
     hud.appendChild(filterCard);
 
-    document.addEventListener('click', (event) => {
+    if (hud.__modeOutsideHandler) {
+        document.removeEventListener('click', hud.__modeOutsideHandler);
+    }
+    hud.__modeOutsideHandler = (event) => {
         if (!modeDrawerOpen) return;
         if (hud.contains(event.target)) return;
         modeDrawerOpen = false;
         updateFilterControls();
-    });
+    };
+    document.addEventListener('click', hud.__modeOutsideHandler);
 
-    const btnSettings = createHudButton('hud-btn hud-stack-btn hud-settings-btn');
-    setHudButtonContent(btnSettings, 'settings', 'Parametres', 'Vision');
-    btnSettings.setAttribute('aria-label', 'Ouvrir les parametres et presets de vision reseau');
-    btnSettings.title = 'Ouvrir les parametres et presets de vision reseau';
-    btnSettings.onclick = () => showSettings();
-    hud.appendChild(btnSettings);
+    const toolbar = document.createElement('div');
+    toolbar.className = 'hud-toolbar';
+    toolbar.appendChild(createHudIconButton('zoomOut', 'Zoom arriere', () => stepGraphZoom(-1)));
+    toolbar.appendChild(createHudIconButton('zoomIn', 'Zoom avant', () => stepGraphZoom(1)));
+    toolbar.appendChild(createHudIconButton('settings', 'Ouvrir les parametres et presets de vision reseau', () => showSettings()));
+    hud.appendChild(toolbar);
 }
 
 function ensureHvtPanel() {

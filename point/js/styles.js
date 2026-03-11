@@ -3217,18 +3217,18 @@ export function injectStyles() {
             left: auto;
             bottom: auto;
             transform: none;
-            width: min(148px, calc(100vw - 20px));
-            max-width: 148px;
+            width: min(156px, calc(100vw - 20px));
+            max-width: 156px;
             margin-top: 0;
-            padding: 6px;
+            padding: 8px 7px;
             background: rgba(5, 12, 28, 0.82);
             border: 1px solid rgba(102, 243, 255, 0.18);
-            border-radius: 14px;
+            border-radius: 16px;
             display: flex;
             flex-direction: column;
             align-items: stretch;
             justify-content: flex-start;
-            gap: 5px;
+            gap: 6px;
             box-shadow: inset 0 0 0 1px rgba(102, 243, 255, 0.04);
         }
         .hud-panel-title {
@@ -3242,16 +3242,20 @@ export function injectStyles() {
         #hud .hud-stack-btn,
         #hud .hud-mode-btn {
             width: 100%;
-            min-height: 48px;
+            min-height: 50px;
             justify-content: flex-start;
-            border-radius: 10px;
-            padding: 7px 8px;
-            gap: 8px;
+            border-radius: 11px;
+            padding: 8px 9px;
+            gap: 9px;
+        }
+        #hud .hud-primary-btn {
+            border-color: rgba(102, 243, 255, 0.24);
+            background: linear-gradient(180deg, rgba(10, 22, 42, 0.94), rgba(4, 10, 22, 0.98));
         }
         #hud .hud-btn-icon {
-            flex-basis: 25px;
-            width: 25px;
-            height: 25px;
+            flex-basis: 26px;
+            width: 26px;
+            height: 26px;
             border-radius: 7px;
         }
         #hud .hud-btn-label {
@@ -3281,7 +3285,7 @@ export function injectStyles() {
         }
         #hud .hud-filter-card {
             padding: 6px;
-            gap: 4px;
+            gap: 5px;
         }
         #hud .hud-filter-title {
             padding: 1px 1px 4px;
@@ -3299,6 +3303,43 @@ export function injectStyles() {
             border-radius: 7px;
             background: rgba(102, 243, 255, 0.12);
             border-color: rgba(102, 243, 255, 0.22);
+        }
+        #hud .hud-toolbar {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 6px;
+            padding: 6px;
+            border: 1px solid rgba(102, 243, 255, 0.16);
+            border-radius: 14px;
+            background: linear-gradient(180deg, rgba(8, 16, 34, 0.9), rgba(4, 10, 22, 0.96));
+            box-shadow: inset 0 0 0 1px rgba(102, 243, 255, 0.03);
+            clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+        }
+        #hud .hud-tool-btn {
+            min-height: 36px;
+            padding: 0;
+            justify-content: center;
+            border: 1px solid rgba(102, 243, 255, 0.18);
+            border-radius: 10px;
+            background: linear-gradient(180deg, rgba(10, 22, 42, 0.94), rgba(5, 12, 26, 0.98));
+            clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+            transition: transform 0.16s ease, border-color 0.2s ease, background 0.2s ease;
+        }
+        #hud .hud-tool-btn:hover {
+            transform: translateY(-1px);
+            border-color: rgba(102, 243, 255, 0.32);
+            background: linear-gradient(180deg, rgba(14, 28, 52, 0.98), rgba(6, 14, 30, 1));
+        }
+        #hud .hud-tool-btn .hud-btn-icon {
+            flex-basis: 28px;
+            width: 28px;
+            height: 28px;
+            margin: 0;
+            background: rgba(102, 243, 255, 0.1);
+            border: 1px solid rgba(102, 243, 255, 0.18);
+        }
+        #hud .hud-tool-btn .hud-btn-copy {
+            display: none;
         }
         .hud-toggle {
             color: var(--text-muted);
