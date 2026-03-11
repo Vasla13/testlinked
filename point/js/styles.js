@@ -2816,6 +2816,74 @@ export function injectStyles() {
             color: #ff9aa7;
         }
 
+        /* --- RESPONSIVE DESKTOP --- */
+        @media (min-width: 1024px) and (max-height: 820px) {
+            #hud {
+                top: max(10px, env(safe-area-inset-top));
+                right: max(10px, env(safe-area-inset-right));
+                width: min(236px, calc(100vw - 16px));
+                max-width: 236px;
+                padding: 7px;
+                gap: 6px;
+            }
+            #hud .hud-mode-btn {
+                min-height: 46px;
+                padding: 7px 8px;
+            }
+            #hud .hud-btn-value {
+                font-size: 0.6rem;
+            }
+            .editor-sheet-name {
+                font-size: 3rem;
+            }
+            .editor-sheet-type,
+            .editor-sheet-values,
+            .editor-sheet-note textarea,
+            .editor-sheet-actions .mini-btn {
+                font-size: 1.72rem;
+            }
+            .chip-name {
+                font-size: 1.65rem;
+            }
+        }
+
+        @media (min-width: 1024px) and (min-height: 821px) and (max-width: 1439px) {
+            #hud {
+                width: min(244px, calc(100vw - 18px));
+                max-width: 244px;
+            }
+        }
+
+        @media (min-width: 1920px) {
+            #hud {
+                width: min(296px, calc(100vw - 28px));
+                max-width: 296px;
+                padding: 10px;
+            }
+            #hud .hud-mode-btn {
+                min-height: 52px;
+            }
+            .editor-sheet-name {
+                font-size: 3.8rem;
+            }
+            .editor-sheet-type,
+            .editor-sheet-values,
+            .editor-sheet-note textarea,
+            .editor-sheet-actions .mini-btn {
+                font-size: 2.12rem;
+            }
+        }
+
+        @media (min-width: 2560px), (min-width: 1920px) and (min-aspect-ratio: 21/9) {
+            #hud {
+                width: min(320px, calc(100vw - 32px));
+                max-width: 320px;
+            }
+            .editor-sheet-name {
+                font-size: 4rem;
+            }
+        }
+
         @media (max-width: 900px) {
             .modal-segment {
                 grid-template-columns: 1fr;

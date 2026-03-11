@@ -1317,6 +1317,138 @@
       overflow: hidden;
     }
 
+    /* --- RESPONSIVE DESKTOP --- */
+    @media (min-width: 1024px) and (max-height: 820px) {
+      :root {
+        --left-panel-width: 256px;
+      }
+
+      #app {
+        padding: 4px 8px 8px 4px;
+      }
+
+      #left {
+        padding: 20px 12px 18px;
+      }
+
+      #right {
+        padding: 12px 12px 12px 0;
+      }
+
+      #editor {
+        width: min(580px, calc(100vw - var(--left-panel-width) - 84px));
+        max-height: calc(100vh - 16px);
+      }
+
+      #quick-actions {
+        bottom: 14px;
+        width: min(640px, calc(100vw - 20px));
+        gap: 8px;
+      }
+
+      .quick-action-btn {
+        min-height: 46px;
+        font-size: 1.08rem;
+        letter-spacing: 1.6px;
+      }
+
+      #linkLegend {
+        bottom: 14px;
+        left: 14px;
+        padding: 8px 10px;
+      }
+
+      .brand-logo {
+        max-height: 72px;
+      }
+
+      button {
+        min-height: 40px;
+        font-size: 0.78rem;
+        padding: 9px 12px;
+      }
+    }
+
+    @media (min-width: 1024px) and (min-height: 821px) and (max-width: 1439px) {
+      :root {
+        --left-panel-width: 270px;
+      }
+
+      #editor {
+        width: min(620px, calc(100vw - var(--left-panel-width) - 108px));
+      }
+
+      #quick-actions {
+        width: min(700px, calc(100vw - 26px));
+      }
+    }
+
+    @media (min-width: 1440px) and (max-width: 1919px) {
+      :root {
+        --left-panel-width: 292px;
+      }
+
+      #app {
+        padding: 8px 12px 12px 8px;
+      }
+
+      #editor {
+        width: min(700px, calc(100vw - var(--left-panel-width) - 140px));
+      }
+
+      #quick-actions {
+        width: min(840px, calc(100vw - 40px));
+      }
+    }
+
+    @media (min-width: 1920px) {
+      :root {
+        --left-panel-width: 320px;
+      }
+
+      #app {
+        padding: 10px 16px 16px 10px;
+      }
+
+      #left {
+        padding: 30px 18px 28px;
+      }
+
+      #right {
+        padding: 20px 20px 20px 0;
+      }
+
+      #editor {
+        width: min(780px, calc(100vw - var(--left-panel-width) - 180px));
+      }
+
+      #quick-actions {
+        width: min(980px, calc(100vw - 60px));
+      }
+
+      .brand-logo {
+        max-height: 90px;
+      }
+    }
+
+    @media (min-width: 2560px), (min-width: 1920px) and (min-aspect-ratio: 21/9) {
+      :root {
+        --left-panel-width: 344px;
+      }
+
+      #editor {
+        width: min(860px, calc(100vw - var(--left-panel-width) - 220px));
+      }
+
+      #quick-actions {
+        width: min(1120px, calc(100vw - 96px));
+      }
+
+      #linkLegend {
+        max-width: 320px;
+      }
+    }
+
     @media (max-width: 900px) {
       body.point-skin {
         overflow: auto;

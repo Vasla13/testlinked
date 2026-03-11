@@ -1214,6 +1214,10 @@ body.map-shell {
     position: relative;
     margin: 0;
     overflow: hidden;
+    --map-shell-sidebar-width: 318px;
+    --map-shell-sidebar-offset: 14px;
+    --map-shell-floating-left: 340px;
+    --map-shell-floating-width: min(330px, calc(100vw - 32px));
     background:
         radial-gradient(circle at 16% 18%, rgba(102, 243, 255, 0.08), transparent 26%),
         radial-gradient(circle at 84% 14%, rgba(255, 204, 138, 0.06), transparent 24%),
@@ -1268,7 +1272,7 @@ body.map-shell #app-container {
 
 body.map-shell #sidebar-left,
 body.map-shell #sidebar-right {
-    width: 318px;
+    width: var(--map-shell-sidebar-width);
     padding: 16px 14px 14px;
     gap: 12px;
     background:
@@ -1284,9 +1288,9 @@ body.map-shell #sidebar-left {
 }
 
 body.map-shell #sidebar-right {
-    right: 14px;
-    top: 14px;
-    bottom: 14px;
+    right: var(--map-shell-sidebar-offset);
+    top: var(--map-shell-sidebar-offset);
+    bottom: var(--map-shell-sidebar-offset);
     height: auto;
     border-left: 1px solid rgba(102, 243, 255, 0.18);
     border-right: none;
@@ -1781,7 +1785,8 @@ body.map-shell .hud-btn.active {
 
 body.map-shell .floating-panel,
 body.map-shell #drawing-toolbar.floating-panel.compact {
-    width: min(330px, calc(100vw - 32px));
+    left: var(--map-shell-floating-left);
+    width: var(--map-shell-floating-width);
     background:
         linear-gradient(180deg, rgba(7, 15, 33, 0.95), rgba(4, 10, 22, 0.9)),
         radial-gradient(circle at top right, rgba(102, 243, 255, 0.08), transparent 44%);
@@ -2573,6 +2578,104 @@ body.map-shell .loader-step.is-complete {
 @keyframes loaderLineIn {
     from { opacity: 0; transform: translateY(6px); }
     to { opacity: 1; transform: translateY(0); }
+}
+
+/* --- RESPONSIVE DESKTOP --- */
+@media (min-width: 1024px) and (max-height: 820px) {
+    body.map-shell {
+        --map-shell-sidebar-width: 286px;
+        --map-shell-sidebar-offset: 10px;
+        --map-shell-floating-left: 304px;
+        --map-shell-floating-width: min(308px, calc(100vw - 24px));
+    }
+
+    body.map-shell #top-bar {
+        height: 50px;
+        padding: 0 14px;
+    }
+
+    body.map-shell .shell-section {
+        gap: 10px;
+        padding: 12px 12px 13px;
+    }
+
+    body.map-shell .shell-mode-btn,
+    body.map-shell .shell-primary-btn,
+    body.map-shell .shell-secondary-btn,
+    body.map-shell .btn-switch,
+    body.map-shell .action-btn,
+    body.map-shell .file-btn,
+    body.map-shell button {
+        min-height: 40px;
+        font-size: 0.84rem;
+    }
+
+    body.map-shell #hud-bottom {
+        bottom: 12px;
+        gap: 6px;
+        padding: 7px 10px;
+    }
+
+    body.map-shell #coords-display {
+        min-width: 96px;
+        font-size: 1.35rem;
+    }
+
+    body.map-shell .zoom-display {
+        min-width: 118px;
+        padding: 6px 8px;
+    }
+}
+
+@media (min-width: 1024px) and (min-height: 821px) and (max-width: 1439px) {
+    body.map-shell {
+        --map-shell-sidebar-width: 300px;
+        --map-shell-floating-left: 320px;
+        --map-shell-floating-width: min(320px, calc(100vw - 28px));
+    }
+}
+
+@media (min-width: 1440px) and (max-width: 1919px) {
+    body.map-shell {
+        --map-shell-sidebar-width: 326px;
+        --map-shell-floating-left: 348px;
+        --map-shell-floating-width: min(348px, calc(100vw - 40px));
+    }
+}
+
+@media (min-width: 1920px) {
+    body.map-shell {
+        --map-shell-sidebar-width: 344px;
+        --map-shell-sidebar-offset: 18px;
+        --map-shell-floating-left: 372px;
+        --map-shell-floating-width: min(360px, 20vw);
+    }
+
+    body.map-shell .shell-section {
+        padding: 16px 16px 18px;
+    }
+
+    body.map-shell #hud-bottom {
+        padding: 10px 12px;
+        gap: 10px;
+    }
+}
+
+@media (min-width: 2560px), (min-width: 1920px) and (min-aspect-ratio: 21/9) {
+    body.map-shell {
+        --map-shell-sidebar-width: 360px;
+        --map-shell-sidebar-offset: 22px;
+        --map-shell-floating-left: 392px;
+        --map-shell-floating-width: min(380px, 18vw);
+    }
+
+    body.map-shell .shell-logo {
+        max-height: 96px;
+    }
+
+    body.map-shell #coords-display {
+        font-size: 1.65rem;
+    }
 }
 
 @media (min-width: 769px) {
