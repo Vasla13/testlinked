@@ -198,6 +198,31 @@ function mergeIncomingMapData(data) {
     return stats;
 }
 
+function validateImportedMapPayload(data, mode = 'load') {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+        throw new Error('Le fichier doit contenir un objet JSON valide.');
+    }
+    if (!Array.isArray(data.groups)) {
+        throw new Error(
+            mode === 'merge'
+                ? 'Fichier de fusion incompatible: tableau "groups" manquant.'
+                : 'Fichier incompatible: tableau "groups" manquant.'
+        );
+    }
+    if (Object.prototype.hasOwnProperty.call(data, 'tacticalLinks') && !Array.isArray(data.tacticalLinks)) {
+        throw new Error('Fichier incompatible: "tacticalLinks" doit etre un tableau.');
+    }
+    return data;
+}
+
+function getMapImportErrorMessage(error, fallback = 'Fichier invalide.') {
+    if (error instanceof SyntaxError) {
+        return 'JSON illisible. Verifie le format du fichier.';
+    }
+    const message = String(error?.message || '').trim();
+    return message || fallback;
+}
+
 function focusPointById(targetId) {
     const wantedId = String(targetId || '').trim();
     if (!wantedId) return false;
@@ -308,19 +333,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         syncDataActionsUi();
     };
 
+    const archiveMapBackup = async (snapshotName) => {
+        const mapData = getMapData();
+        const fileName = String(snapshotName || state.currentFileName || `map_${Date.now()}`);
+        const success = await api.saveToDatabase(mapData, fileName);
+        if (success) console.log("✅ Backup Database OK");
+        else console.warn("❌ Backup Database Échoué");
+        return success;
+    };
+
     const openSaveHub = () => {
         const saveOptions = getCloudSaveModalOptions();
-
-        if (!saveOptions.localExportLocked) {
-            const mapData = getMapData();
-            const fileName = state.currentFileName || `map_${Date.now()}`;
-            api.saveToDatabase(mapData, fileName).then(success => {
-                if(success) console.log("✅ Backup Database OK");
-                else console.warn("❌ Backup Database Échoué");
-            });
-        }
-
-        openSaveOptionsModal(saveOptions);
+        openSaveOptionsModal({
+            ...saveOptions,
+            onArchiveLocal: saveOptions.localExportLocked ? null : archiveMapBackup
+        });
     };
 
     if (btnSave) {
@@ -365,19 +392,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         fileImport.onchange = (e) => {
             const file = e.target.files[0];
             if (!file) return;
-            state.currentFileName = file.name.replace(/\.json$/i, '');
             const reader = new FileReader();
             reader.onload = (ev) => {
                 try {
-                    const data = JSON.parse(ev.target.result);
-                    if (data.groups) {
-                        pushHistory();
-                        setGroups(data.groups);
-                        if(data.tacticalLinks) state.tacticalLinks = data.tacticalLinks;
-                        renderGroupsList(); renderAll(); saveLocalState();
-                        customAlert("SUCCÈS", `Carte chargée : ${file.name}`);
-                    }
-                } catch (err) { customAlert("ERREUR", "Fichier invalide."); }
+                    const data = validateImportedMapPayload(JSON.parse(ev.target.result), 'load');
+                    pushHistory();
+                    setGroups(data.groups);
+                    state.tacticalLinks = Array.isArray(data.tacticalLinks) ? data.tacticalLinks : [];
+                    state.currentFileName = file.name.replace(/\.json$/i, '');
+                    renderGroupsList(); renderAll(); saveLocalState();
+                    customAlert("SUCCÈS", `Carte chargée : ${file.name}`);
+                } catch (err) {
+                    customAlert("ERREUR", getMapImportErrorMessage(err));
+                }
             };
             reader.readAsText(file);
             fileImport.value = ''; 
@@ -394,19 +421,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             const reader = new FileReader();
             reader.onload = (ev) => {
                 try {
-                    const data = JSON.parse(ev.target.result);
-                    if (Array.isArray(data.groups)) {
-                        pushHistory();
-                        const stats = mergeIncomingMapData(data);
-                        renderGroupsList(); renderAll(); saveLocalState();
-                        customAlert(
-                            "FUSION",
-                            `${stats.addedGroups} groupes, ${stats.addedPoints} points, ${stats.addedZones} zones, ${stats.addedLinks} liens ajoutés.`
-                        );
-                    } else {
-                        customAlert("ERREUR", "Fichier de fusion invalide.");
-                    }
-                } catch (err) { customAlert("ERREUR", "Impossible de fusionner."); }
+                    const data = validateImportedMapPayload(JSON.parse(ev.target.result), 'merge');
+                    pushHistory();
+                    const stats = mergeIncomingMapData(data);
+                    renderGroupsList(); renderAll(); saveLocalState();
+                    customAlert(
+                        "FUSION",
+                        `${stats.addedGroups} groupes, ${stats.addedPoints} points, ${stats.addedZones} zones, ${stats.addedLinks} liens ajoutés.`
+                    );
+                } catch (err) {
+                    customAlert("ERREUR", getMapImportErrorMessage(err, "Impossible de fusionner."));
+                }
             };
             reader.readAsText(file);
             fileMerge.value = '';

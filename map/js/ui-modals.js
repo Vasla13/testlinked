@@ -322,6 +322,7 @@ export function openSaveOptionsModal(options = {}) {
     const boardTitle = String(options?.boardTitle || '');
     const safeBoardTitle = escapeMarkup(boardTitle);
     const onSaveCloud = typeof options?.onSaveCloud === 'function' ? options.onSaveCloud : null;
+    const onArchiveLocal = typeof options?.onArchiveLocal === 'function' ? options.onArchiveLocal : null;
 
     const overlay = document.getElementById('modal-overlay');
     const title = document.getElementById('modal-title');
@@ -418,6 +419,10 @@ export function openSaveOptionsModal(options = {}) {
                     const exported = exportToJSON(newName);
                     if (!exported) {
                         await customAlert("ACCES", "Export local bloque sur ce board cloud.");
+                        return;
+                    }
+                    if (onArchiveLocal) {
+                        await Promise.resolve(onArchiveLocal(newName)).catch(() => null);
                     }
                 }
             }, 300);
@@ -440,17 +445,26 @@ export function openSaveOptionsModal(options = {}) {
 
     const btnCopyRaw = document.getElementById('btnCopyRaw');
     if (btnCopyRaw) {
-        btnCopyRaw.onclick = () => {
+        btnCopyRaw.onclick = async () => {
             const txt = document.getElementById('rawJsonOutput');
+            if (!txt) return;
             txt.select();
-            navigator.clipboard.writeText(txt.value);
-            const originalText = btnCopyRaw.innerText;
-            btnCopyRaw.innerText = "Copie OK";
-            btnCopyRaw.classList.add('active');
-            setTimeout(() => {
-                btnCopyRaw.innerText = originalText;
-                btnCopyRaw.classList.remove('active');
-            }, 2000);
+            try {
+                await navigator.clipboard.writeText(txt.value);
+                if (onArchiveLocal) {
+                    const archiveName = state.currentFileName || 'mission_tactique';
+                    await Promise.resolve(onArchiveLocal(archiveName)).catch(() => null);
+                }
+                const originalText = btnCopyRaw.innerText;
+                btnCopyRaw.innerText = "Copie OK";
+                btnCopyRaw.classList.add('active');
+                setTimeout(() => {
+                    btnCopyRaw.innerText = originalText;
+                    btnCopyRaw.classList.remove('active');
+                }, 2000);
+            } catch (e) {
+                await customAlert("ERREUR", "Impossible de copier le JSON.");
+            }
         };
     }
 

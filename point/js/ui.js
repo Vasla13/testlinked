@@ -10,6 +10,7 @@ import { setupCanvasEvents } from './interaction.js';
 import { showSettings, showContextMenu, hideContextMenu } from './ui-settings.js';
 import { renderEditor } from './ui-editor.js';
 import { computeLinkSuggestions, getAllowedKinds } from './intel.js';
+import { generateExportData, buildExportFilename, downloadExportData } from './data-transfer.js';
 
 const ui = {
     listCompanies: document.getElementById('listCompanies'),
@@ -3228,45 +3229,6 @@ function showRawDataInput(mode) {
 
 // --- LOGIQUE METIER (IMPORT/EXPORT) ---
 
-function getAutoName() {
-    const now = new Date();
-    const d = now.toISOString().split('T')[0];
-    return `reseau_${d}`;
-}
-
-function generateExportData() {
-    const nameToSave = state.projectName || getAutoName();
-    return {
-        meta: {
-            date: new Date().toISOString(),
-            projectName: nameToSave,
-            version: "2.1"
-        },
-        nodes: state.nodes.map(n => ({
-            id: n.id,
-            name: n.name,
-            type: n.type,
-            color: n.color,
-            num: n.num,
-            accountNumber: n.accountNumber,
-            citizenNumber: n.citizenNumber,
-            description: n.description,
-            notes: n.notes,
-            x: n.x,
-            y: n.y,
-            fixed: n.fixed,
-            linkedMapPointId: n.linkedMapPointId
-        })),
-        links: state.links.map(l => ({
-            id: l.id,
-            source: (typeof l.source === 'object') ? l.source.id : l.source,
-            target: (typeof l.target === 'object') ? l.target.id : l.target,
-            kind: l.kind
-        })),
-        physicsSettings: state.physicsSettings
-    };
-}
-
 function normalizeLinkEndpoint(value) {
     if (value && typeof value === 'object') return String(value.id ?? '');
     return String(value ?? '');
@@ -3433,18 +3395,8 @@ function downloadJSON() {
     }
 
     const data = generateExportData();
-    const fileName = "fichier_neural.json";
-
-    // 1. TÉLÉCHARGEMENT LOCAL
-    const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
-    const objectUrl = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = objectUrl;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(objectUrl);
+    const fileName = buildExportFilename();
+    downloadExportData(data, fileName);
 }
 
 function handleFileProcess(file, mode) {

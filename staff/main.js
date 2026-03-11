@@ -1,4 +1,5 @@
 import { gpsToPercentage, percentageToGps } from '../map/js/utils.js';
+import { createPickerBridge } from './picker-bridge.js';
 
 const STAFF_CODE = 'staff';
 const ALERTS_ENDPOINT = '/.netlify/functions/alerts';
@@ -40,6 +41,7 @@ const dom = {
     whitelistAddBtn: document.getElementById('btnAddWhitelistUser'),
     whitelistSuggestions: document.getElementById('staffWhitelistSuggestions'),
     whitelistList: document.getElementById('staffWhitelistList'),
+    pickOnMapBtn: document.getElementById('btnPickAlertOnMap'),
     viewport: document.getElementById('viewport'),
     mapWorld: document.getElementById('map-world'),
     mapImage: document.getElementById('map-image'),
@@ -90,6 +92,20 @@ const state = {
         originSelection: null,
     },
 };
+
+const pickerBridge = createPickerBridge({
+    pickerUrl: '../map/index.html?pickAlert=1',
+    targetOrigin: window.location.origin,
+    onPayload: (payload) => {
+        applyPickerSelection(payload);
+    },
+    onOpened: () => {
+        setStatusMessage('Carte dediee ouverte. Clique sur la carte pour rapatrier la position.', 'ok');
+    },
+    onBlocked: () => {
+        setStatusMessage('Popup bloquee. Autorise les fenetres puis reessaie.', 'error');
+    }
+});
 
 function escapeText(value) {
     return String(value ?? '')
@@ -1685,32 +1701,7 @@ function openPickerMapWindow() {
         setStatusMessage('Deverrouille la console avant d’ouvrir la carte dediee.', 'warn');
         return;
     }
-
-    const picker = window.open(
-        '../map/index.html?pickAlert=1',
-        'bni-alert-picker',
-        'width=1480,height=940,resizable=yes,scrollbars=no'
-    );
-
-    if (!picker) {
-        setStatusMessage('Popup bloquee. Autorise les fenetres puis reessaie.', 'error');
-        return;
-    }
-
-    state.pickerWindow = picker;
-    try {
-        picker.focus();
-    } catch (e) {}
-    setStatusMessage('Carte dediee ouverte. Clique sur la carte pour rapatrier la position.', 'ok');
-}
-
-function handlePickerMessage(event) {
-    if (event.origin !== window.location.origin) return;
-    const data = event.data && typeof event.data === 'object' ? event.data : null;
-    if (!data || data.type !== 'bni-alert-location') return;
-
-    applyPickerSelection(data.payload);
-    state.pickerWindow = null;
+    pickerBridge.open();
 }
 
 async function loadCurrentAlert() {
@@ -1981,6 +1972,7 @@ function bindEvents() {
     });
 
     dom.publishBtn?.addEventListener('click', saveAlert);
+    dom.pickOnMapBtn?.addEventListener('click', openPickerMapWindow);
     dom.modalCloseBtn?.addEventListener('click', () => closeAlertModal({ restore: true }));
     dom.modalCancelBtn?.addEventListener('click', () => closeAlertModal({ restore: true }));
     dom.ctxNewZone?.addEventListener('click', startCircleDraw);
@@ -2087,6 +2079,8 @@ function bindEvents() {
             closeAlertModal({ restore: true });
         }
     });
+
+    pickerBridge.bind();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
