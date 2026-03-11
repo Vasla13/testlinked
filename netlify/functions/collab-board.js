@@ -81,14 +81,6 @@ const COLLAB_NODE_FIELDS = [
 const COLLAB_LINK_FIELDS = ["source", "target", "kind"];
 const MAP_GROUP_PALETTE = ["#73fbf7", "#ff6b81", "#ffd400", "#ff922b", "#a9e34b"];
 
-function isSameBoardPayload(a, b) {
-  try {
-    return JSON.stringify(a) === JSON.stringify(b);
-  } catch (e) {
-    return false;
-  }
-}
-
 function cloneJson(value, fallback = null) {
   try {
     return JSON.parse(JSON.stringify(value));
@@ -108,6 +100,14 @@ function timeValue(value) {
 
 function sortById(list) {
   return [...list].sort((a, b) => String(a?.id || "").localeCompare(String(b?.id || "")));
+}
+
+function normalizeMetaForCompare(meta) {
+  const source = meta && typeof meta === "object" ? { ...meta } : {};
+  if (Object.prototype.hasOwnProperty.call(source, "date")) {
+    source.date = "";
+  }
+  return source;
 }
 
 function mapPairKey(a, b) {
@@ -348,6 +348,15 @@ function normalizeOptionalMapBoardPayload(data) {
     };
   }
   return normalizeMapBoardPayload(data);
+}
+
+function canonicalizeMapBoardPayloadForCompare(data) {
+  const normalized = normalizeMapBoardPayload(data);
+  return {
+    meta: normalizeMetaForCompare(normalized.meta),
+    groups: cloneJson(normalized.groups, []),
+    tacticalLinks: cloneJson(normalized.tacticalLinks, []),
+  };
 }
 
 function buildMapDeletionSets(existingPayload, incomingPayload, basePayload) {
@@ -722,6 +731,61 @@ function normalizeBoardPayload(data, options = {}) {
   };
 }
 
+function canonicalizePointBoardPayloadForCompare(data, options = {}) {
+  const normalized = normalizeBoardPayload(data, options);
+  return {
+    meta: normalizeMetaForCompare(normalized.meta),
+    physicsSettings: cloneJson(normalized.physicsSettings, {}),
+    nodes: normalized.nodes.map((node) => ({
+      id: node.id,
+      name: node.name,
+      type: node.type,
+      color: node.color,
+      manualColor: node.manualColor,
+      personStatus: node.personStatus,
+      num: node.num,
+      accountNumber: node.accountNumber,
+      citizenNumber: node.citizenNumber,
+      description: node.description,
+      notes: node.notes,
+      x: node.x,
+      y: node.y,
+      fixed: node.fixed,
+      linkedMapPointId: node.linkedMapPointId,
+    })),
+    links: normalized.links.map((link) => ({
+      id: link.id,
+      source: link.source,
+      target: link.target,
+      kind: link.kind,
+    })),
+    deletedNodes: normalized.deletedNodes.map((item) => ({
+      id: item.id,
+      deletedAt: item.deletedAt,
+      deletedBy: item.deletedBy,
+    })),
+    deletedLinks: normalized.deletedLinks.map((item) => ({
+      id: item.id,
+      deletedAt: item.deletedAt,
+      deletedBy: item.deletedBy,
+    })),
+  };
+}
+
+function canonicalizeBoardPayloadByPage(page, data, options = {}) {
+  return normalizePage(page) === "map"
+    ? canonicalizeMapBoardPayloadForCompare(data)
+    : canonicalizePointBoardPayloadForCompare(data, options);
+}
+
+function isSameBoardPayloadByPage(page, left, right, options = {}) {
+  try {
+    return JSON.stringify(canonicalizeBoardPayloadByPage(page, left, options)) === JSON.stringify(canonicalizeBoardPayloadByPage(page, right, options));
+  } catch (e) {
+    return false;
+  }
+}
+
 function normalizeBoardActivity(board) {
   const rows = Array.isArray(board?.activity) ? board.activity : [];
   return rows
@@ -1042,6 +1106,11 @@ async function touchBoardPresence(store, board, user, role, payload = {}) {
 async function clearBoardPresence(store, boardId, userId) {
   if (!boardId || !userId) return;
   await store.delete(presenceKey(boardId, userId)).catch(() => {});
+}
+
+function sanitizeShareRole(inputRole) {
+  const safeRole = sanitizeRole(inputRole, ROLE_EDITOR);
+  return safeRole === ROLE_OWNER ? ROLE_EDITOR : safeRole;
 }
 
 function sleep(ms) {
@@ -1367,7 +1436,10 @@ exports.handler = async (event) => {
           existingUser: board.lastEditedBy?.username || board.ownerName || "",
           incomingUser: user.username,
         });
-    const sameData = isSameBoardPayload(normalizedCurrent, mergedData);
+    const sameData = isSameBoardPayloadByPage(page, normalizedCurrent, mergedData, {
+      fallbackUpdatedAt: board.updatedAt || "",
+      fallbackUser: board.lastEditedBy?.username || board.ownerName || "",
+    });
     const sameTitle = String(nextTitle) === String(board.title || "");
     const presence = await touchBoardPresence(store, board, user, role, body);
     if (sameData && sameTitle) {
@@ -1477,7 +1549,7 @@ exports.handler = async (event) => {
     const targetUser = await getUserByUsername(store, usernameCheck.username);
     if (!targetUser) return errorResponse(404, "Utilisateur introuvable.");
 
-    const memberRole = sanitizeRole(body.role, ROLE_EDITOR);
+    const memberRole = sanitizeShareRole(body.role);
     const now = nowIso();
     board.members = withMember(board, {
       userId: targetUser.id,
@@ -1605,8 +1677,10 @@ exports.handler = async (event) => {
 };
 
 exports.__test = {
+  canonicalizeBoardPayloadByPage,
   normalizeMapBoardPayload,
   mergeMapBoardPayload,
   normalizeBoardPayload,
   mergeBoardPayload,
+  sanitizeShareRole,
 };

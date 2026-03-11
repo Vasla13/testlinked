@@ -46,9 +46,9 @@ const ACTION_LOG_STORAGE_KEY = 'bniLinkedActionLog_v1';
 const ACTION_LOG_MAX = 80;
 const COLLAB_NODE_FIELDS = ['name', 'type', 'color', 'manualColor', 'personStatus', 'num', 'accountNumber', 'citizenNumber', 'linkedMapPointId', 'description', 'notes', 'x', 'y', 'fixed'];
 const COLLAB_LINK_FIELDS = ['source', 'target', 'kind'];
-const COLLAB_PRESENCE_HEARTBEAT_MS = 4200;
-const COLLAB_PRESENCE_RETRY_MS = 2200;
-const COLLAB_SESSION_HEARTBEAT_MS = 12000;
+const COLLAB_PRESENCE_HEARTBEAT_MS = 6500;
+const COLLAB_PRESENCE_RETRY_MS = 3200;
+const COLLAB_SESSION_HEARTBEAT_MS = 18000;
 const COLLAB_SESSION_RETRY_MS = 5000;
 
 const collab = {
@@ -89,8 +89,8 @@ const collab = {
     homePanel: 'cloud'
 };
 
-const COLLAB_AUTOSAVE_DEBOUNCE_MS = 1100;
-const COLLAB_AUTOSAVE_RETRY_MS = 450;
+const COLLAB_AUTOSAVE_DEBOUNCE_MS = 1600;
+const COLLAB_AUTOSAVE_RETRY_MS = 700;
 const COLLAB_WATCH_TIMEOUT_MS = 7000;
 const COLLAB_WATCH_RETRY_MIN_MS = 300;
 const COLLAB_WATCH_RETRY_MAX_MS = 4000;
@@ -507,6 +507,20 @@ function canonicalizePointPayload(payload) {
     };
 }
 
+function collabValuesEqual(leftValue, rightValue) {
+    if (leftValue === rightValue) return true;
+
+    const leftIsObject = leftValue !== null && typeof leftValue === 'object';
+    const rightIsObject = rightValue !== null && typeof rightValue === 'object';
+    if (!leftIsObject && !rightIsObject) return false;
+
+    try {
+        return JSON.stringify(leftValue) === JSON.stringify(rightValue);
+    } catch (e) {
+        return false;
+    }
+}
+
 function buildCloudEntityMeta(currentEntity, shadowEntity, fields, nowIso, actor) {
     const shadowMeta = normalizeCloudEntityMeta(shadowEntity?._collab, fields, shadowEntity?._collab?.updatedAt || '', shadowEntity?._collab?.updatedBy || actor);
     const fieldTimes = {};
@@ -515,7 +529,7 @@ function buildCloudEntityMeta(currentEntity, shadowEntity, fields, nowIso, actor
     fields.forEach((field) => {
         const nextValue = currentEntity ? currentEntity[field] : undefined;
         const prevValue = shadowEntity ? shadowEntity[field] : undefined;
-        const sameValue = JSON.stringify(nextValue) === JSON.stringify(prevValue);
+        const sameValue = collabValuesEqual(nextValue, prevValue);
         if (!shadowEntity || !sameValue) {
             fieldTimes[field] = nowIso;
             changed = true;
@@ -531,8 +545,8 @@ function buildCloudEntityMeta(currentEntity, shadowEntity, fields, nowIso, actor
     };
 }
 
-function buildCloudBoardPayload() {
-    const plain = generateExportData();
+function buildCloudBoardPayload(plainData = null) {
+    const plain = plainData && typeof plainData === 'object' ? plainData : generateExportData();
     const shadow = normalizeCloudBoardData(collab.shadowData, {
         fallbackUpdatedAt: collab.activeBoardUpdatedAt || '',
         fallbackUser: collab.user?.username || ''
@@ -724,7 +738,6 @@ function presenceListsEqual(left = [], right = []) {
             String(a.activeNodeId || '') !== String(b.activeNodeId || '') ||
             String(a.activeNodeName || '') !== String(b.activeNodeName || '') ||
             String(a.mode || '') !== String(b.mode || '') ||
-            String(a.lastAt || '') !== String(b.lastAt || '') ||
             Boolean(a.isSelf) !== Boolean(b.isSelf)
         ) {
             return false;
@@ -818,7 +831,9 @@ function applyCloudBoardData(rawData, options = {}) {
     const quiet = Boolean(options.quiet);
     const plain = extractPlainPointPayloadFromCloud(rawData);
     const serverFingerprint = fingerprintFromPointPayload(plain);
-    const localFingerprint = fingerprintFromPointPayload(generateExportData());
+    const localFingerprint = hasLocalCloudChanges()
+        ? fingerprintFromPointPayload(generateExportData())
+        : String(collab.lastSavedFingerprint || '');
     const shouldReloadLocalState = serverFingerprint !== localFingerprint;
 
     if (shouldReloadLocalState) {
@@ -1262,8 +1277,14 @@ async function saveActiveCloudBoard(options = {}) {
     try {
         const title = (state.projectName || collab.activeBoardTitle || 'Tableau cloud').trim();
         const plainData = generateExportData();
-        const data = buildCloudBoardPayload();
         const localFingerprint = fingerprintFromPointPayload(plainData);
+        if (!force && !manual && localFingerprint === String(collab.lastSavedFingerprint || '')) {
+            captureCloudSavedState(collab.localChangeSeq, localFingerprint);
+            setCloudSyncState(canEditCloudBoard() ? 'live' : 'session', canEditCloudBoard() ? 'Synchronise' : 'Lecture live active');
+            return true;
+        }
+
+        const data = buildCloudBoardPayload(plainData);
         const savedChangeSeq = collab.localChangeSeq;
         const result = await collabBoardRequest('save_board', {
             boardId: collab.activeBoardId,
@@ -1319,11 +1340,12 @@ async function createCloudBoardFromCurrent() {
     });
     if (title === null) return;
     const cleanTitle = String(title || '').trim() || defaultTitle;
+    const plainData = generateExportData();
 
     const result = await collabBoardRequest('create_board', {
         title: cleanTitle,
         page: 'point',
-        data: buildCloudBoardPayload()
+        data: buildCloudBoardPayload(plainData)
     });
 
     if (!result.board) throw new Error('Creation cloud echouee.');
@@ -1431,7 +1453,6 @@ async function renderCloudMembers(boardId) {
                 <select id="cloud-share-role" class="compact-select cloud-inline-select">
                     <option value="editor">Editor</option>
                     <option value="viewer">Viewer</option>
-                    <option value="owner">Owner</option>
                 </select>
                 <button type="button" id="cloud-share-add" class="mini-btn">Ajouter</button>
             </div>

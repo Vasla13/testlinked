@@ -208,7 +208,7 @@ function getCloudMapPayload() {
 function computeCloudFingerprint() {
     try {
         if (!isCloudBoardActive()) return '';
-        return JSON.stringify(getCloudMapPayload());
+        return JSON.stringify(normalizeSharedMapBoardPayload(getCloudMapPayload()));
     } catch (e) {
         return '';
     }
@@ -525,7 +525,7 @@ export async function saveActiveCloudBoard(options = {}) {
 
     try {
         const title = (state.currentFileName || collab.activeBoardTitle || 'Carte cloud').trim();
-        const payload = getCloudMapPayload();
+        const payload = normalizeMapBoardData(getCloudMapPayload());
         const localFingerprint = JSON.stringify(payload);
         const result = await collabBoardRequest('save_board', {
             boardId: collab.activeBoardId,
@@ -596,7 +596,7 @@ async function createCloudBoardFromCurrent() {
     if (titleRaw === null) return false;
 
     const title = String(titleRaw || '').trim() || defaultTitle;
-    const payload = getCloudMapPayload();
+    const payload = normalizeMapBoardData(getCloudMapPayload());
     const result = await collabBoardRequest('create_board', {
         title,
         page: 'map',
@@ -754,7 +754,6 @@ async function renderCloudMembers(boardId) {
                 <select id="cloud-share-role" style="width:120px; margin-bottom:0;">
                     <option value="editor">editor</option>
                     <option value="viewer">viewer</option>
-                    <option value="owner">owner</option>
                 </select>
                 <button type="button" id="cloud-share-add" class="mini-btn">Ajouter</button>
             </div>
