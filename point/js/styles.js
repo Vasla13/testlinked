@@ -256,8 +256,8 @@ export function injectStyles() {
             left: auto;
             bottom: auto;
             transform: none;
-            width: min(320px, calc(100vw - 28px));
-            max-width: 320px;
+            width: min(292px, calc(100vw - 28px));
+            max-width: 292px;
             margin-top: 0;
             padding: 12px;
             border-radius: 18px;
@@ -265,8 +265,8 @@ export function injectStyles() {
                 linear-gradient(180deg, rgba(5, 11, 28, 0.96), rgba(3, 8, 20, 0.94)),
                 radial-gradient(circle at top right, rgba(115, 251, 247, 0.12), transparent 55%);
             border: 1px solid rgba(115, 251, 247, 0.22);
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+            display: flex;
+            flex-direction: column;
             gap: 8px;
             z-index: 70;
             backdrop-filter: blur(14px);
@@ -275,12 +275,11 @@ export function injectStyles() {
                 0 18px 36px rgba(0, 0, 0, 0.34);
         }
         .hud-panel-title {
-            grid-column: 1 / -1;
             display: flex;
             align-items: baseline;
             justify-content: space-between;
             gap: 10px;
-            padding: 0 2px 4px;
+            padding: 0 2px 2px;
         }
         .hud-panel-kicker {
             color: #d7efff;
@@ -302,6 +301,7 @@ export function injectStyles() {
             background: transparent; border: none; color: #8b9bb4; cursor: pointer;
             display: flex; align-items: center; gap: 10px; font-family: var(--font-main);
             font-size: 0.92rem; text-transform: uppercase; font-weight: 700;
+            width: 100%;
             padding: 6px; transition: all 0.2s; border-radius: 4px;
             letter-spacing: 0.8px;
             min-width: 0;
@@ -309,7 +309,7 @@ export function injectStyles() {
         #hud .hud-btn:hover { color: var(--accent-cyan); background: rgba(115, 251, 247, 0.05); }
         #hud .hud-btn.active { color: var(--accent-cyan); text-shadow: 0 0 8px rgba(115, 251, 247, 0.6); }
         #hud .hud-mode-btn {
-            min-height: 54px;
+            min-height: 50px;
             padding: 10px 12px;
             border: 1px solid rgba(115, 251, 247, 0.14);
             border-radius: 14px;
@@ -342,39 +342,58 @@ export function injectStyles() {
         }
         #hud .hud-btn-copy {
             display: flex;
-            flex-direction: column;
-            align-items: flex-start;
-            justify-content: center;
-            gap: 2px;
+            flex: 1 1 auto;
+            flex-direction: row;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
             min-width: 0;
         }
         #hud .hud-btn-label {
-            color: #6e87a4;
-            font-size: 0.52rem;
+            color: #d8eeff;
+            font-size: 0.72rem;
             line-height: 1;
-            letter-spacing: 1.7px;
+            letter-spacing: 1.3px;
             text-transform: uppercase;
             font-weight: 700;
         }
         #hud .hud-btn-value {
-            color: #d8eeff;
-            font-size: 0.8rem;
-            line-height: 1.1;
-            letter-spacing: 0.9px;
+            flex: 0 0 auto;
+            color: #bdefff;
+            font-size: 0.62rem;
+            line-height: 1;
+            letter-spacing: 1.1px;
             text-transform: uppercase;
             font-weight: 700;
             white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 100%;
+            padding: 5px 8px;
+            border-radius: 999px;
+            border: 1px solid rgba(115, 251, 247, 0.16);
+            background: rgba(115, 251, 247, 0.08);
         }
         #hud .hud-mode-btn.active .hud-btn-icon {
             background: rgba(115, 251, 247, 0.16);
             border-color: rgba(115, 251, 247, 0.38);
             box-shadow: 0 0 12px rgba(115, 251, 247, 0.12);
         }
+        #hud .hud-mode-btn.active .hud-btn-value {
+            background: rgba(115, 251, 247, 0.16);
+            border-color: rgba(115, 251, 247, 0.34);
+            color: #e9fdff;
+        }
         #hud .hud-mode-btn.is-off .hud-btn-value {
             color: #8ba1bb;
+        }
+        #hud .hud-action-btn {
+            border-color: rgba(115, 251, 247, 0.28);
+            background: linear-gradient(90deg, rgba(10, 20, 40, 0.94), rgba(8, 18, 32, 0.92));
+        }
+        #hud .hud-action-btn .hud-btn-icon {
+            background: rgba(115, 251, 247, 0.12);
+            border-color: rgba(115, 251, 247, 0.24);
+        }
+        #hud .hud-action-btn .hud-btn-value {
+            color: #d7f9ff;
         }
 
         .hud-toggle {
@@ -2128,15 +2147,15 @@ export function injectStyles() {
 
         .editor-panel-layout {
             display: grid;
-            grid-template-columns: 96px minmax(0, 1fr);
-            gap: 12px;
+            grid-template-columns: 72px minmax(0, 1fr);
+            gap: 10px;
             align-items: stretch;
         }
         .editor-side-rail {
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-            gap: 12px;
+            gap: 10px;
         }
         .editor-side-group {
             display: flex;
@@ -2145,11 +2164,11 @@ export function injectStyles() {
         }
         .editor-side-group .mini-btn {
             width: 100%;
-            min-height: 44px;
-            font-size: 0.76rem;
+            min-height: 38px;
+            font-size: 0.68rem;
             line-height: 1.15;
             font-family: var(--font-main);
-            letter-spacing: 1.6px;
+            letter-spacing: 1.3px;
             text-transform: uppercase;
             background: linear-gradient(90deg, rgba(16, 34, 52, 0.9), rgba(8, 17, 30, 0.92));
             color: var(--accent-cyan);
@@ -2163,7 +2182,7 @@ export function injectStyles() {
         }
         .editor-main-card {
             min-width: 0;
-            padding: 12px;
+            padding: 10px;
             border: 1px solid rgba(102, 243, 255, 0.14);
             border-radius: 14px;
             background: linear-gradient(180deg, rgba(5, 12, 28, 0.92), rgba(3, 9, 22, 0.84));
@@ -2172,19 +2191,19 @@ export function injectStyles() {
         .editor-sheet {
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 10px;
             color: var(--text-main);
         }
         .editor-sheet-head {
             grid-template-columns: minmax(0, 1fr) auto auto auto;
             align-items: center;
-            gap: 8px;
-            padding-bottom: 10px;
+            gap: 6px;
+            padding-bottom: 8px;
             border-bottom: 1px solid rgba(102, 243, 255, 0.14);
         }
         .editor-sheet-name {
             font-family: var(--font-main);
-            font-size: clamp(1.22rem, 2vw, 1.72rem);
+            font-size: clamp(1.04rem, 1.5vw, 1.28rem);
             line-height: 0.98;
             color: var(--text-light);
             letter-spacing: 0.06em;
@@ -2192,14 +2211,14 @@ export function injectStyles() {
         }
         .editor-sheet-type {
             min-width: auto;
-            padding: 6px 10px;
+            padding: 5px 8px;
             border: 1px solid rgba(102, 243, 255, 0.32);
             background: rgba(102, 243, 255, 0.12);
             color: var(--accent-cyan);
             font-family: var(--font-main);
-            font-size: 0.72rem;
+            font-size: 0.64rem;
             line-height: 1;
-            letter-spacing: 1.8px;
+            letter-spacing: 1.4px;
             text-transform: uppercase;
             border-radius: 8px;
         }
@@ -2211,12 +2230,12 @@ export function injectStyles() {
             letter-spacing: 0.12em;
         }
         .editor-sheet-status {
-            padding: 6px 10px;
+            padding: 5px 8px;
             border: 1px solid rgba(255, 255, 255, 0.12);
             border-radius: 8px;
-            font-size: 0.68rem;
+            font-size: 0.62rem;
             line-height: 1;
-            letter-spacing: 1.6px;
+            letter-spacing: 1.2px;
             text-transform: uppercase;
             white-space: nowrap;
         }
@@ -2233,22 +2252,22 @@ export function injectStyles() {
         .editor-priority-grid {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 10px;
+            gap: 8px;
         }
         .editor-status-strip {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 10px;
-            padding: 10px 12px;
+            gap: 8px;
+            padding: 8px 10px;
             border: 1px solid rgba(102, 243, 255, 0.12);
             border-radius: 10px;
             background: rgba(4, 11, 27, 0.68);
         }
         .editor-status-label {
             color: #8ba4c0;
-            letter-spacing: 1.6px;
-            font-size: 0.68rem;
+            letter-spacing: 1.3px;
+            font-size: 0.62rem;
             text-transform: uppercase;
             white-space: nowrap;
         }
@@ -2260,15 +2279,15 @@ export function injectStyles() {
             flex-wrap: wrap;
         }
         .editor-status-btn {
-            min-height: 34px;
-            padding: 7px 12px;
+            min-height: 30px;
+            padding: 6px 10px;
             border: 1px solid rgba(102, 243, 255, 0.14);
             border-radius: 999px;
             background: rgba(2, 8, 20, 0.92);
             color: #9bb0c7;
             font-family: var(--font-main);
-            font-size: 0.74rem;
-            letter-spacing: 1.4px;
+            font-size: 0.66rem;
+            letter-spacing: 1.1px;
             text-transform: uppercase;
             clip-path: none;
             box-shadow: none;
@@ -2296,27 +2315,27 @@ export function injectStyles() {
         .editor-quick-field {
             display: flex;
             flex-direction: column;
-            gap: 6px;
-            padding: 10px 12px;
+            gap: 5px;
+            padding: 8px 10px;
             border: 1px solid rgba(102, 243, 255, 0.12);
             border-radius: 10px;
             background: rgba(4, 11, 27, 0.72);
         }
         .editor-quick-field label {
             color: #8ba4c0;
-            letter-spacing: 1.6px;
-            font-size: 0.68rem;
+            letter-spacing: 1.3px;
+            font-size: 0.62rem;
             text-transform: uppercase;
         }
         .editor-quick-field input {
-            min-height: 42px;
+            min-height: 36px;
             border: 1px solid rgba(102, 243, 255, 0.16);
             border-radius: 8px;
-            padding: 10px 12px;
+            padding: 8px 10px;
             background: rgba(2, 8, 20, 0.92);
             color: var(--text-main);
             font-family: var(--font-main);
-            font-size: 0.98rem;
+            font-size: 0.88rem;
             line-height: 1.2;
         }
         .editor-quick-field input:focus {
@@ -2325,7 +2344,7 @@ export function injectStyles() {
             box-shadow: 0 0 0 3px rgba(102, 243, 255, 0.08);
         }
         .editor-priority-field input {
-            font-size: 1rem;
+            font-size: 0.9rem;
         }
         .editor-sheet-note {
             display: flex;
@@ -2336,20 +2355,20 @@ export function injectStyles() {
         }
         .editor-section-label {
             color: #8ba4c0;
-            letter-spacing: 1.6px;
-            font-size: 0.68rem;
+            letter-spacing: 1.3px;
+            font-size: 0.62rem;
             text-transform: uppercase;
         }
         .editor-sheet-note textarea {
-            min-height: 72px;
+            min-height: 60px;
             border: 1px solid rgba(102, 243, 255, 0.16);
             border-radius: 8px;
-            padding: 10px 12px;
+            padding: 8px 10px;
             background: rgba(2, 8, 20, 0.92);
             color: var(--text-main);
             font-family: var(--font-main);
-            font-size: 0.92rem;
-            line-height: 1.35;
+            font-size: 0.84rem;
+            line-height: 1.3;
         }
         .editor-sheet-note textarea::placeholder {
             color: #637996;
@@ -2358,33 +2377,33 @@ export function injectStyles() {
         .editor-meta-strip {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 10px;
+            gap: 8px;
         }
         .editor-meta-pill {
             min-width: 0;
             display: flex;
             flex-direction: column;
             gap: 4px;
-            padding: 9px 12px;
+            padding: 8px 10px;
             border: 1px solid rgba(102, 243, 255, 0.12);
             border-radius: 9px;
             background: rgba(4, 11, 27, 0.68);
         }
         .editor-meta-pill span {
             color: #7f9ab7;
-            font-size: 0.66rem;
-            letter-spacing: 1.5px;
+            font-size: 0.6rem;
+            letter-spacing: 1.2px;
             text-transform: uppercase;
         }
         .editor-meta-pill input {
-            min-height: 38px;
+            min-height: 34px;
             border: 1px solid rgba(102, 243, 255, 0.14);
             border-radius: 8px;
-            padding: 8px 10px;
+            padding: 7px 9px;
             background: rgba(2, 8, 20, 0.92);
             color: var(--text-light);
             font-family: var(--font-main);
-            font-size: 0.9rem;
+            font-size: 0.82rem;
             line-height: 1.2;
         }
         .editor-meta-pill input::placeholder {
@@ -2402,45 +2421,46 @@ export function injectStyles() {
             align-items: center;
             justify-content: space-between;
             color: #a8bed8;
-            letter-spacing: 2px;
+            font-size: 0.68rem;
+            letter-spacing: 1.5px;
         }
         .editor-links-count {
             color: #89a6c5;
-            font-size: 0.7rem;
-            letter-spacing: 1.6px;
+            font-size: 0.62rem;
+            letter-spacing: 1.2px;
         }
         #chipsLinks {
             min-height: 96px;
-            max-height: 264px;
+            max-height: 228px;
             overflow-y: auto;
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 8px;
             border: 1px dashed rgba(102, 243, 255, 0.22);
             border-radius: 10px;
             background: rgba(3, 10, 24, 0.74);
-            padding: 10px;
+            padding: 8px;
             margin-bottom: 0;
         }
         .editor-link-strip {
             display: flex;
             flex-direction: column;
-            gap: 8px;
-            padding: 10px 12px;
+            gap: 6px;
+            padding: 8px 10px;
             border: 1px solid rgba(102, 243, 255, 0.12);
             border-radius: 10px;
             background: rgba(4, 11, 27, 0.66);
         }
         .editor-inline-title {
             color: #a8bed8;
-            font-size: 0.7rem;
-            letter-spacing: 2px;
+            font-size: 0.62rem;
+            letter-spacing: 1.5px;
             text-transform: uppercase;
         }
         .link-group-section {
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 6px;
         }
         .link-group-head {
             display: flex;
@@ -2450,48 +2470,48 @@ export function injectStyles() {
         }
         .link-category {
             margin: 0;
-            font-size: 0.72rem;
+            font-size: 0.64rem;
             color: #86a7c8;
-            letter-spacing: 2px;
+            letter-spacing: 1.5px;
         }
         .link-group-count {
             color: #7f99b7;
-            font-size: 0.68rem;
-            letter-spacing: 1.4px;
+            font-size: 0.6rem;
+            letter-spacing: 1.1px;
         }
         .link-grid {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 8px;
+            gap: 6px;
         }
         .chip {
             background: linear-gradient(90deg, rgba(8, 18, 36, 0.94), rgba(4, 10, 22, 0.86));
             border: 1px solid rgba(102, 243, 255, 0.12);
             border-left-width: 1px;
             border-radius: 8px;
-            padding: 8px 10px;
+            padding: 7px 8px;
             margin-bottom: 0;
-            min-height: 40px;
+            min-height: 34px;
             clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
         }
         .chip:hover {
             background: linear-gradient(90deg, rgba(12, 24, 48, 0.96), rgba(6, 13, 27, 0.9));
         }
         .chip-content {
-            gap: 10px;
+            gap: 8px;
         }
         .chip-name {
             font-family: var(--font-main);
-            font-size: 0.95rem;
+            font-size: 0.84rem;
             line-height: 1.1;
             color: var(--text-light);
             letter-spacing: 0.04em;
         }
         .chip-badge {
-            font-size: 0.72rem;
+            font-size: 0.64rem;
             line-height: 1.1;
             font-family: var(--font-main);
-            letter-spacing: 1px;
+            letter-spacing: 0.8px;
         }
         .x {
             color: #7b90ab;
@@ -2505,33 +2525,33 @@ export function injectStyles() {
             border: 1px solid rgba(102, 243, 255, 0.14);
             border-radius: 12px;
             background: linear-gradient(180deg, rgba(5, 12, 28, 0.94), rgba(3, 9, 22, 0.86));
-            padding: 10px;
+            padding: 8px;
         }
         .editor-adv-section {
             display: flex;
             flex-direction: column;
-            gap: 8px;
-            margin-bottom: 10px;
-            padding: 10px;
+            gap: 6px;
+            margin-bottom: 8px;
+            padding: 8px;
             border: 1px solid rgba(102, 243, 255, 0.12);
             border-radius: 10px;
             background: rgba(3, 10, 24, 0.54);
         }
         .editor-adv-title {
             color: #a8bed8;
-            font-size: 0.72rem;
-            letter-spacing: 2px;
+            font-size: 0.64rem;
+            letter-spacing: 1.6px;
             text-transform: uppercase;
         }
         .editor-adv-grid {
-            gap: 10px;
-            margin-bottom: 10px;
+            gap: 8px;
+            margin-bottom: 8px;
         }
         .editor-adv-primary-row {
             display: flex;
             align-items: end;
-            gap: 10px;
-            margin-bottom: 10px;
+            gap: 8px;
+            margin-bottom: 8px;
         }
         .editor-adv-field {
             display: flex;
@@ -2547,15 +2567,15 @@ export function injectStyles() {
         }
         .editor-adv-grid label {
             color: #8ba4c0;
-            letter-spacing: 1.6px;
-            font-size: 0.68rem;
+            letter-spacing: 1.3px;
+            font-size: 0.62rem;
         }
         .editor-adv-grid-identity {
             grid-template-columns: repeat(3, minmax(0, 1fr));
         }
         .editor-adv-row {
-            gap: 10px;
-            margin-bottom: 10px;
+            gap: 8px;
+            margin-bottom: 8px;
         }
         .editor-adv-row-utility {
             justify-content: flex-end;
@@ -2568,8 +2588,8 @@ export function injectStyles() {
             min-width: 180px;
         }
         .editor-adv-links {
-            gap: 8px;
-            margin-bottom: 10px;
+            gap: 6px;
+            margin-bottom: 8px;
         }
         .editor-link-composer {
             display: flex;
@@ -2680,22 +2700,21 @@ export function injectStyles() {
             left: auto;
             bottom: auto;
             transform: none;
-            width: min(252px, calc(100vw - 18px));
-            max-width: 252px;
+            width: min(282px, calc(100vw - 20px));
+            max-width: 282px;
             margin-top: 0;
             padding: 8px;
             background: rgba(5, 12, 28, 0.82);
             border: 1px solid rgba(102, 243, 255, 0.18);
             border-radius: 14px;
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+            display: flex;
+            flex-direction: column;
             align-items: stretch;
             justify-content: flex-start;
             gap: 6px;
             box-shadow: inset 0 0 0 1px rgba(102, 243, 255, 0.04);
         }
         .hud-panel-title {
-            grid-column: 1 / -1;
             padding: 0 1px 2px;
         }
         #hud .hud-btn {
@@ -2705,7 +2724,7 @@ export function injectStyles() {
         }
         #hud .hud-mode-btn {
             width: 100%;
-            min-height: 48px;
+            min-height: 46px;
             justify-content: flex-start;
             border-radius: 10px;
             padding: 8px 9px;
@@ -2718,12 +2737,42 @@ export function injectStyles() {
             border-radius: 8px;
         }
         #hud .hud-btn-label {
-            font-size: 0.48rem;
-            letter-spacing: 1.4px;
+            color: var(--text-light);
+            font-size: 0.68rem;
+            letter-spacing: 1.2px;
         }
         #hud .hud-btn-value {
-            font-size: 0.64rem;
+            flex: 0 0 auto;
+            font-size: 0.58rem;
+            line-height: 1;
             letter-spacing: 1px;
+            padding: 4px 7px;
+            border-radius: 999px;
+            border: 1px solid rgba(102, 243, 255, 0.14);
+            background: rgba(102, 243, 255, 0.08);
+        }
+        #hud .hud-btn-copy {
+            flex: 1 1 auto;
+            flex-direction: row;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+        #hud .hud-mode-btn.active .hud-btn-value {
+            border-color: rgba(102, 243, 255, 0.28);
+            background: rgba(102, 243, 255, 0.14);
+            color: #eafcff;
+        }
+        #hud .hud-action-btn {
+            border-color: rgba(102, 243, 255, 0.24);
+            background: linear-gradient(90deg, rgba(10, 20, 40, 0.94), rgba(8, 18, 32, 0.92));
+        }
+        #hud .hud-action-btn .hud-btn-icon {
+            background: rgba(102, 243, 255, 0.12);
+            border-color: rgba(102, 243, 255, 0.22);
+        }
+        #hud .hud-action-btn .hud-btn-value {
+            color: #d8faff;
         }
         .hud-toggle {
             color: var(--text-muted);
@@ -2821,66 +2870,66 @@ export function injectStyles() {
             #hud {
                 top: max(10px, env(safe-area-inset-top));
                 right: max(10px, env(safe-area-inset-right));
-                width: min(236px, calc(100vw - 16px));
-                max-width: 236px;
+                width: min(258px, calc(100vw - 16px));
+                max-width: 258px;
                 padding: 7px;
                 gap: 6px;
             }
             #hud .hud-mode-btn {
-                min-height: 46px;
+                min-height: 44px;
                 padding: 7px 8px;
             }
             #hud .hud-btn-value {
                 font-size: 0.6rem;
             }
             .editor-sheet-name {
-                font-size: 3rem;
+                font-size: 0.98rem;
             }
             .editor-sheet-type,
             .editor-sheet-values,
             .editor-sheet-note textarea,
             .editor-sheet-actions .mini-btn {
-                font-size: 1.72rem;
+                font-size: 0.8rem;
             }
             .chip-name {
-                font-size: 1.65rem;
+                font-size: 0.76rem;
             }
         }
 
         @media (min-width: 1024px) and (min-height: 821px) and (max-width: 1439px) {
             #hud {
-                width: min(244px, calc(100vw - 18px));
-                max-width: 244px;
+                width: min(272px, calc(100vw - 18px));
+                max-width: 272px;
             }
         }
 
         @media (min-width: 1920px) {
             #hud {
-                width: min(296px, calc(100vw - 28px));
-                max-width: 296px;
+                width: min(308px, calc(100vw - 28px));
+                max-width: 308px;
                 padding: 10px;
             }
             #hud .hud-mode-btn {
                 min-height: 52px;
             }
             .editor-sheet-name {
-                font-size: 3.8rem;
+                font-size: 1.22rem;
             }
             .editor-sheet-type,
             .editor-sheet-values,
             .editor-sheet-note textarea,
             .editor-sheet-actions .mini-btn {
-                font-size: 2.12rem;
+                font-size: 0.88rem;
             }
         }
 
         @media (min-width: 2560px), (min-width: 1920px) and (min-aspect-ratio: 21/9) {
             #hud {
-                width: min(320px, calc(100vw - 32px));
-                max-width: 320px;
+                width: min(328px, calc(100vw - 32px));
+                max-width: 328px;
             }
             .editor-sheet-name {
-                font-size: 4rem;
+                font-size: 1.3rem;
             }
         }
 

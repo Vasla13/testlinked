@@ -2380,6 +2380,7 @@ export function initUI() {
     setupQuickActions();
 
     window.zoomToNode = zoomToNode;
+    window.recenterGraphView = recenterGraphView;
     window.updateHvtPanel = updateHvtPanel;
 }
 
@@ -3888,6 +3889,11 @@ function setupHudButtons() {
                 <path d="M4 5h16l-6.5 7.43V19l-3-1.6v-4.97z"/>
             </svg>
         `,
+        recenter: `
+            <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M11 2h2v3.07A7.002 7.002 0 0 1 18.93 11H22v2h-3.07A7.002 7.002 0 0 1 13 18.93V22h-2v-3.07A7.002 7.002 0 0 1 5.07 13H2v-2h3.07A7.002 7.002 0 0 1 11 5.07zm1 5a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0 3a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"/>
+            </svg>
+        `,
         info: `
             <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M11 10h2v7h-2zm0-3h2v2h-2zm1-5a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16z"/>
@@ -3909,7 +3915,7 @@ function setupHudButtons() {
     title.className = 'hud-panel-title';
     title.innerHTML = `
         <span class="hud-panel-kicker">Affichage</span>
-        <span class="hud-panel-sub">Commandes visuelles</span>
+        <span class="hud-panel-sub">Vue reseau</span>
     `;
     hud.appendChild(title);
 
@@ -3968,12 +3974,12 @@ function setupHudButtons() {
     };
     hud.appendChild(btnFilterMode);
 
-    const btnInfo = document.createElement('button');
-    btnInfo.className = 'hud-btn hud-mode-btn';
-    setHudButtonContent(btnInfo, 'info', 'Aide', 'Liens');
-    btnInfo.title = 'Ouvrir l aide sur les types de liens';
-    btnInfo.onclick = () => showLinkGuide();
-    hud.appendChild(btnInfo);
+    const btnRecenter = document.createElement('button');
+    btnRecenter.className = 'hud-btn hud-mode-btn hud-action-btn';
+    setHudButtonContent(btnRecenter, 'recenter', 'Recentrer', 'Reseau');
+    btnRecenter.title = 'Recentrer la vue sur l ensemble du reseau';
+    btnRecenter.onclick = () => recenterGraphView();
+    hud.appendChild(btnRecenter);
 }
 
 function ensureHvtPanel() {
@@ -4483,6 +4489,60 @@ function centerOnPair(aId, bId) {
     state.selection = a.id;
     renderEditor();
     draw();
+}
+
+function recenterGraphView(options = {}) {
+    const canvas = document.getElementById('graph');
+    if (!canvas) return;
+
+    resizeCanvas();
+
+    const viewportWidth = Number(canvas.clientWidth || canvas.width || 0);
+    const viewportHeight = Number(canvas.clientHeight || canvas.height || 0);
+    if (!viewportWidth || !viewportHeight) return;
+
+    const positionedNodes = state.nodes.filter((node) =>
+        Number.isFinite(Number(node?.x)) && Number.isFinite(Number(node?.y))
+    );
+
+    if (!positionedNodes.length) {
+        state.view.scale = 0.8;
+        state.view.x = 0;
+        state.view.y = 0;
+        draw();
+        if (options.save !== false) scheduleSave();
+        return;
+    }
+
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+
+    positionedNodes.forEach((node) => {
+        const x = Number(node.x);
+        const y = Number(node.y);
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+    });
+
+    const spanX = Math.max(220, maxX - minX);
+    const spanY = Math.max(180, maxY - minY);
+    const paddingPx = Math.max(54, Math.min(viewportWidth, viewportHeight) * 0.12);
+    const usableWidth = Math.max(180, viewportWidth - (paddingPx * 2));
+    const usableHeight = Math.max(180, viewportHeight - (paddingPx * 2));
+    const nextScale = clamp(Math.min(usableWidth / spanX, usableHeight / spanY), 0.32, 1.15);
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
+    state.view.scale = nextScale;
+    state.view.x = -centerX * nextScale;
+    state.view.y = -centerY * nextScale;
+    draw();
+
+    if (options.save !== false) scheduleSave();
 }
 
 function updateIntelPanel(force = false) {

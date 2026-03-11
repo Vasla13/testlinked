@@ -994,11 +994,19 @@ exports.handler = async (event) => {
     const accessibleBoards = loadedBoards.filter((board) => board && board.id && getRoleForUser(board, user.id));
     const accessibleIds = accessibleBoards.map((board) => String(board.id));
     if (!index.hydrated) {
-      await setUserBoardIndex(store, user.id, accessibleIds, { hydrated: true });
+      try {
+        await setUserBoardIndex(store, user.id, accessibleIds, { hydrated: true });
+      } catch (e) {
+        console.error("Failed to hydrate user board index", e);
+      }
     } else {
       const shouldHealIndex = accessibleIds.length !== index.boardIds.length || loadedBoards.some((board) => !board || !getRoleForUser(board, user.id));
       if (shouldHealIndex) {
-        await setUserBoardIndex(store, user.id, accessibleIds, { hydrated: true });
+        try {
+          await setUserBoardIndex(store, user.id, accessibleIds, { hydrated: true });
+        } catch (e) {
+          console.error("Failed to heal user board index", e);
+        }
       }
     }
 

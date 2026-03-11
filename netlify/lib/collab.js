@@ -117,8 +117,14 @@ function boardKey(boardId) {
   return `boards/${boardId}`;
 }
 
-function userBoardsKey(userId) {
+function legacyUserBoardsKey(userId) {
   return `users/${userId}/boards`;
+}
+
+function userBoardsKey(userId) {
+  // Kept outside of `users/<id>` because that path is already used by the user blob itself.
+  // Some blob backends do not behave well when a key is both a stored value and a prefix.
+  return `user-boards/${userId}`;
 }
 
 function getStoreClient() {
@@ -214,7 +220,10 @@ async function listKeysByPrefix(store, prefix, maxItems = 1000) {
 
 async function getUserBoardIndex(store, userId) {
   if (!userId) return { boardIds: [], hydrated: false };
-  const rawIndex = await store.get(userBoardsKey(userId), { type: "json" });
+  let rawIndex = await store.get(userBoardsKey(userId), { type: "json" }).catch(() => null);
+  if (!rawIndex) {
+    rawIndex = await store.get(legacyUserBoardsKey(userId), { type: "json" }).catch(() => null);
+  }
   const seen = new Set();
   const boardIds = (Array.isArray(rawIndex?.boardIds) ? rawIndex.boardIds : [])
     .map((boardId) => String(boardId || "").trim())
@@ -244,6 +253,7 @@ async function setUserBoardIndex(store, userId, boardIds = [], options = {}) {
     hydrated: options.hydrated !== undefined ? Boolean(options.hydrated) : true,
     updatedAt: nowIso(),
   });
+  await store.delete(legacyUserBoardsKey(userId)).catch(() => {});
 }
 
 async function addUserBoardRef(store, userId, boardId) {
