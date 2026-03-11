@@ -1,5 +1,5 @@
 import { restartSim } from './physics.js';
-import { getId, uid } from './utils.js';
+import { getId, uid, sanitizeNodeColor, normalizePersonStatus } from './utils.js';
 
 export const state = {
     nodes: [],
@@ -77,7 +77,9 @@ export function saveState() {
         const payload = {
             meta: { projectName: state.projectName }, // SAUVEGARDE DU NOM
             nodes: state.nodes.map(n => ({
-                id: n.id, name: n.name, type: n.type, color: n.color, 
+                id: n.id, name: n.name, type: n.type, color: sanitizeNodeColor(n.color),
+                manualColor: Boolean(n.manualColor),
+                personStatus: normalizePersonStatus(n.personStatus, n.type),
                 num: n.num,
                 accountNumber: n.accountNumber,
                 citizenNumber: n.citizenNumber,
@@ -113,6 +115,14 @@ export function scheduleSave(delay = 400) {
     }, delay);
 }
 
+export function flushPendingSave() {
+    if (saveTimer) {
+        clearTimeout(saveTimer);
+        saveTimer = null;
+    }
+    saveState();
+}
+
 export function loadState() {
     try {
         if (!localPersistenceEnabled) return false;
@@ -122,6 +132,9 @@ export function loadState() {
         if (data.nodes) state.nodes = data.nodes;
         state.nodes.forEach((node) => {
             if (!node || typeof node !== 'object') return;
+            node.color = sanitizeNodeColor(node.color);
+            if (typeof node.manualColor !== 'boolean') node.manualColor = false;
+            node.personStatus = normalizePersonStatus(node.personStatus, node.type);
             if (typeof node.accountNumber !== 'string') node.accountNumber = '';
             if (typeof node.citizenNumber !== 'string') node.citizenNumber = '';
             if (typeof node.description !== 'string') node.description = String(node.notes || '');
@@ -197,3 +210,12 @@ export function linkHasNode(link, nodeId) {
 export function isPerson(n) { return n.type === 'person'; }
 export function isGroup(n) { return n.type === 'group'; }
 export function isCompany(n) { return n.type === 'company'; }
+
+if (typeof window !== 'undefined') {
+    window.addEventListener('pagehide', () => {
+        flushPendingSave();
+    });
+    window.addEventListener('beforeunload', () => {
+        flushPendingSave();
+    });
+}

@@ -1,7 +1,7 @@
 import { state, nodeById, pushHistory } from './state.js';
 import { restartSim } from './physics.js';
-import { uid, randomPastel, hexToRgb, rgbToHex } from './utils.js';
-import { TYPES, KINDS } from './constants.js';
+import { uid, randomPastel, hexToRgb, rgbToHex, normalizePersonStatus } from './utils.js';
+import { TYPES, KINDS, PERSON_STATUS } from './constants.js';
 
 const HVT_LINK_WEIGHTS = {
     [KINDS.PATRON]: 2.6,
@@ -20,6 +20,12 @@ const HVT_LINK_WEIGHTS = {
     [KINDS.MEMBRE]: 1.0,
     [KINDS.RELATION]: 0.5
 };
+
+function personStatusPriority(status) {
+    if (status === PERSON_STATUS.DECEASED) return 2;
+    if (status === PERSON_STATUS.MISSING) return 1;
+    return 0;
+}
 
 // --- NOUVEAU : ALGORITHME HVT ---
 export function calculateHVT() {
@@ -65,7 +71,11 @@ export function calculateHVT() {
         const w = weighted.get(n.id) || 0;
         const dNorm = (maxDegree > 0) ? (d / maxDegree) : 0;
         const wNorm = (maxWeighted > 0) ? (w / maxWeighted) : 0;
-        n.hvtScore = (dNorm * 0.6) + (wNorm * 0.4);
+        let score = (dNorm * 0.6) + (wNorm * 0.4);
+        const personStatus = normalizePersonStatus(n.personStatus, n.type);
+        if (personStatus === PERSON_STATUS.MISSING) score *= 0.85;
+        if (personStatus === PERSON_STATUS.DECEASED) score *= 0.35;
+        n.hvtScore = score;
     });
 
     updateHvtTopSet();
@@ -91,6 +101,7 @@ export function updatePersonColors() {
 
     state.nodes.forEach(n => {
         if (n.type === TYPES.PERSON) {
+            if (n.manualColor) return;
             let totalR = 0, totalG = 0, totalB = 0, totalWeight = 0;
             state.links.forEach(l => {
                 const s = (typeof l.source === 'object') ? l.source : nodeById(l.source);
@@ -124,6 +135,8 @@ export function ensureNode(type, name) {
             id: uid(), name, type, 
             x: startX, y: startY, fx: startX, fy: startY, vx: 0, vy: 0, 
             color: (type === TYPES.PERSON ? '#ffffff' : randomPastel()),
+            manualColor: false,
+            personStatus: PERSON_STATUS.ACTIVE,
             accountNumber: '',
             citizenNumber: '',
             description: '',
@@ -171,6 +184,8 @@ export function addLink(a, b, kind) {
 export function mergeNodes(sourceId, targetId) {
     if (sourceId === targetId) return;
     pushHistory(); 
+    const sourceNode = nodeById(sourceId);
+    const targetNode = nodeById(targetId);
     const linksToMove = state.links.filter(l => {
         const s = (typeof l.source === 'object') ? l.source.id : l.source;
         const t = (typeof l.target === 'object') ? l.target.id : l.target;
@@ -196,6 +211,13 @@ export function mergeNodes(sourceId, targetId) {
         const t = (typeof l.target === 'object') ? l.target.id : l.target;
         return s !== sourceId && t !== sourceId;
     });
+    if (sourceNode && targetNode && sourceNode.type === TYPES.PERSON && targetNode.type === TYPES.PERSON) {
+        const sourceStatus = normalizePersonStatus(sourceNode.personStatus, sourceNode.type);
+        const targetStatus = normalizePersonStatus(targetNode.personStatus, targetNode.type);
+        if (personStatusPriority(sourceStatus) > personStatusPriority(targetStatus)) {
+            targetNode.personStatus = sourceStatus;
+        }
+    }
     state.nodes = state.nodes.filter(n => n.id !== sourceId);
     updatePersonColors();
     restartSim();

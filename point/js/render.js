@@ -1,6 +1,6 @@
 import { state, isGroup, isCompany } from './state.js';
-import { NODE_BASE_SIZE, DEG_SCALE, R_MIN, R_MAX, LINK_KIND_EMOJI, TYPES, KINDS, FILTERS, FILTER_RULES } from './constants.js';
-import { computeLinkColor, safeHex } from './utils.js';
+import { NODE_BASE_SIZE, DEG_SCALE, R_MIN, R_MAX, LINK_KIND_EMOJI, TYPES, KINDS, FILTERS, FILTER_RULES, PERSON_STATUS } from './constants.js';
+import { computeLinkColor, safeHex, sanitizeNodeColor, normalizePersonStatus } from './utils.js';
 
 const canvas = document.getElementById('graph');
 const ctx = canvas.getContext('2d');
@@ -25,6 +25,17 @@ function updateZoomDisplay(scale) {
 
 const degreeCache = new Map();
 const NODE_ICONS = { [TYPES.PERSON]: '👤', [TYPES.COMPANY]: '🏢', [TYPES.GROUP]: '👥' };
+
+function getPersonStatusVisual(node) {
+    const status = normalizePersonStatus(node?.personStatus, node?.type);
+    if (status === PERSON_STATUS.MISSING) {
+        return { status, accent: '#f4c35a', badge: '?', label: 'DISPARU' };
+    }
+    if (status === PERSON_STATUS.DECEASED) {
+        return { status, accent: '#ff6b81', badge: 'X', label: 'MORT' };
+    }
+    return null;
+}
 
 function splitDisplayName(name) {
     const raw = String(name || '').trim().replace(/\s+/g, ' ');
@@ -327,8 +338,8 @@ export function draw() {
              else {
                  try {
                     const grad = ctx.createLinearGradient(l.source.x, l.source.y, l.target.x, l.target.y);
-                    grad.addColorStop(0, safeHex(l.source.color));
-                    grad.addColorStop(1, safeHex(l.target.color));
+                    grad.addColorStop(0, sanitizeNodeColor(l.source.color));
+                    grad.addColorStop(1, sanitizeNodeColor(l.target.color));
                     ctx.strokeStyle = grad;
                  } catch(e) { ctx.strokeStyle = '#999'; }
              }
@@ -397,7 +408,8 @@ export function draw() {
         const dimmed = isDimmed('node', n);
         let rad = nodeRadius(n); 
         let alpha = dimmed ? 0.4 : 1.0;
-        let nodeColor = safeHex(n.color);
+        let nodeColor = sanitizeNodeColor(n.color);
+        const statusVisual = getPersonStatusVisual(n);
         const isTop = topSet ? topSet.has(n.id) : true;
         
         // --- LOGIQUE VISUELLE HVT ---
@@ -457,6 +469,35 @@ export function draw() {
         ctx.fill();
         ctx.shadowBlur = 0; // Reset important
 
+        if (statusVisual && n.type === TYPES.PERSON) {
+            ctx.save();
+            ctx.globalAlpha = Math.max(0.92, alpha);
+            ctx.beginPath();
+            ctx.setLineDash(statusVisual.status === PERSON_STATUS.MISSING ? [6 / Math.sqrt(p.scale), 5 / Math.sqrt(p.scale)] : []);
+            ctx.arc(n.x, n.y, rad + (5 / Math.sqrt(p.scale)), 0, Math.PI * 2);
+            ctx.strokeStyle = statusVisual.accent;
+            ctx.lineWidth = 2 / Math.sqrt(p.scale);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            const badgeX = n.x + (rad * 0.72);
+            const badgeY = n.y - (rad * 0.72);
+            const badgeR = Math.max(6, rad * 0.26);
+            ctx.beginPath();
+            ctx.fillStyle = 'rgba(3, 8, 18, 0.96)';
+            ctx.arc(badgeX, badgeY, badgeR, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = statusVisual.accent;
+            ctx.lineWidth = 1.6 / Math.sqrt(p.scale);
+            ctx.stroke();
+            ctx.fillStyle = '#ffffff';
+            ctx.font = `700 ${Math.max(10, badgeR * 1.25)}px "Rajdhani", sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(statusVisual.badge, badgeX, badgeY + 0.5);
+            ctx.restore();
+        }
+
         // Icônes
         if (!dimmed && (p.scale > 0.4 || rad > 15) && (!isHVT || n.hvtScore > 0.2)) {
             ctx.globalAlpha = 1; 
@@ -512,7 +553,9 @@ export function draw() {
             let fontSize = targetScreenFont / Math.max(p.scale, 0.18);
             fontSize = Math.min(fontSize, 84);
             ctx.font = `600 ${fontSize}px "Rajdhani", sans-serif`;
-            const label = compactNodeLabel(n, p.scale);
+            const statusVisual = getPersonStatusVisual(n);
+            const compactLabel = compactNodeLabel(n, p.scale);
+            const label = statusVisual ? `${compactLabel} · ${statusVisual.label}` : compactLabel;
             const metrics = ctx.measureText(label);
             const textW = metrics.width;
             const textH = fontSize * 1.18;
@@ -560,7 +603,8 @@ export function draw() {
             else ctx.rect(c.boxX, c.boxY, c.boxW, c.boxH);
             ctx.fill();
             
-            let strokeColor = safeHex(c.n.color);
+            const statusVisual = getPersonStatusVisual(c.n);
+            let strokeColor = statusVisual ? statusVisual.accent : sanitizeNodeColor(c.n.color);
             if (c.isPathfindingNode) strokeColor = '#00ffff';
             if (c.isPathStart) strokeColor = '#ffff00';
             

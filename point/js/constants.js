@@ -4,6 +4,18 @@ export const TYPES = {
     COMPANY: 'company'
 };
 
+export const PERSON_STATUS = {
+    ACTIVE: 'active',
+    MISSING: 'missing',
+    DECEASED: 'deceased'
+};
+
+export const PERSON_STATUS_LABELS = {
+    [PERSON_STATUS.ACTIVE]: 'Actif',
+    [PERSON_STATUS.MISSING]: 'Disparu',
+    [PERSON_STATUS.DECEASED]: 'Mort'
+};
+
 export const KINDS = {
     PATRON: 'patron',
     HAUT_GRADE: 'haut_grade',

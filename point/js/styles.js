@@ -841,14 +841,22 @@ export function injectStyles() {
         .quick-create-shell {
             display: flex;
             flex-direction: column;
-            gap: 10px;
-            padding: 14px;
+            gap: 12px;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 16px;
             border: 1px solid rgba(102, 243, 255, 0.34);
             border-radius: 16px;
             background:
                 linear-gradient(180deg, rgba(8, 18, 42, 0.94), rgba(4, 11, 26, 0.92)),
                 radial-gradient(circle at top right, rgba(102, 243, 255, 0.08), transparent 52%);
             box-shadow: inset 0 0 0 1px rgba(102, 243, 255, 0.04);
+        }
+        .quick-create-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
         }
         .quick-create-tabs {
             display: grid;
@@ -903,6 +911,15 @@ export function injectStyles() {
             line-height: 0.82;
             letter-spacing: 0.08em;
             text-transform: uppercase;
+        }
+        .quick-create-close-top {
+            width: auto;
+            min-width: 110px;
+            min-height: 38px;
+            margin-top: -2px;
+            padding: 8px 16px;
+            font-size: 0.72rem;
+            letter-spacing: 1.8px;
         }
         .quick-create-block {
             display: flex;
@@ -1027,12 +1044,18 @@ export function injectStyles() {
             align-items: center;
             gap: 6px;
             flex-wrap: wrap;
-            margin-bottom: 4px;
-            padding-bottom: 4px;
-            border-bottom: 1px solid rgba(102, 243, 255, 0.12);
+            margin-top: 2px;
+            padding: 8px 0 4px;
+            border-top: 1px solid rgba(102, 243, 255, 0.08);
+        }
+        .quick-create-search-create-wrap.is-active {
+            padding: 10px 12px;
+            border: 1px solid rgba(102, 243, 255, 0.18);
+            border-radius: 10px;
+            background: rgba(7, 18, 39, 0.72);
         }
         .quick-create-search-hit-create {
-            color: #f2fdff;
+            color: #9ff6ff;
             font-weight: 700;
         }
         .quick-create-search-hit-create::before {
@@ -1049,6 +1072,7 @@ export function injectStyles() {
             align-items: center;
             gap: 4px;
             flex-wrap: wrap;
+            width: 100%;
         }
         .quick-create-type-chip {
             margin: 0;
@@ -2083,7 +2107,7 @@ export function injectStyles() {
             color: var(--text-main);
         }
         .editor-sheet-head {
-            grid-template-columns: minmax(0, 1fr) auto auto;
+            grid-template-columns: minmax(0, 1fr) auto auto auto;
             align-items: center;
             gap: 8px;
             padding-bottom: 10px;
@@ -2117,10 +2141,88 @@ export function injectStyles() {
             color: #9fd8e1;
             letter-spacing: 0.12em;
         }
+        .editor-sheet-status {
+            padding: 6px 10px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 8px;
+            font-size: 0.68rem;
+            line-height: 1;
+            letter-spacing: 1.6px;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+        .editor-sheet-status.is-missing {
+            border-color: rgba(244, 195, 90, 0.34);
+            background: rgba(244, 195, 90, 0.12);
+            color: #ffd777;
+        }
+        .editor-sheet-status.is-deceased {
+            border-color: rgba(255, 120, 150, 0.34);
+            background: rgba(255, 120, 150, 0.12);
+            color: #ff9ab2;
+        }
         .editor-priority-grid {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 10px;
+        }
+        .editor-status-strip {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 10px 12px;
+            border: 1px solid rgba(102, 243, 255, 0.12);
+            border-radius: 10px;
+            background: rgba(4, 11, 27, 0.68);
+        }
+        .editor-status-label {
+            color: #8ba4c0;
+            letter-spacing: 1.6px;
+            font-size: 0.68rem;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+        .editor-status-actions {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .editor-status-btn {
+            min-height: 34px;
+            padding: 7px 12px;
+            border: 1px solid rgba(102, 243, 255, 0.14);
+            border-radius: 999px;
+            background: rgba(2, 8, 20, 0.92);
+            color: #9bb0c7;
+            font-family: var(--font-main);
+            font-size: 0.74rem;
+            letter-spacing: 1.4px;
+            text-transform: uppercase;
+            clip-path: none;
+            box-shadow: none;
+        }
+        .editor-status-btn:hover {
+            border-color: rgba(102, 243, 255, 0.3);
+            color: #e7f8ff;
+            background: rgba(10, 22, 42, 0.92);
+        }
+        .editor-status-btn.active.is-active {
+            border-color: rgba(102, 243, 255, 0.4);
+            background: rgba(102, 243, 255, 0.12);
+            color: var(--accent-cyan);
+        }
+        .editor-status-btn.active.is-missing {
+            border-color: rgba(244, 195, 90, 0.36);
+            background: rgba(244, 195, 90, 0.14);
+            color: #ffd777;
+        }
+        .editor-status-btn.active.is-deceased {
+            border-color: rgba(255, 120, 150, 0.36);
+            background: rgba(255, 120, 150, 0.14);
+            color: #ff9ab2;
         }
         .editor-quick-field {
             display: flex;
@@ -2685,6 +2787,14 @@ export function injectStyles() {
             .quick-create-block {
                 padding: 10px;
             }
+            .quick-create-head {
+                align-items: stretch;
+                flex-direction: column;
+            }
+            .quick-create-close-top {
+                width: 100%;
+                min-width: 0;
+            }
             .quick-create-target-input {
                 min-height: 42px;
                 font-size: 0.96rem;
@@ -2704,10 +2814,21 @@ export function injectStyles() {
             }
             .editor-panel-layout,
             .editor-priority-grid,
+            .editor-status-strip,
             .editor-meta-strip,
             .editor-adv-grid-identity,
             .link-grid {
                 grid-template-columns: 1fr;
+            }
+            .editor-sheet-head {
+                grid-template-columns: minmax(0, 1fr);
+                align-items: start;
+            }
+            .editor-status-strip {
+                align-items: flex-start;
+            }
+            .editor-status-actions {
+                justify-content: flex-start;
             }
             .editor-side-rail {
                 order: 2;

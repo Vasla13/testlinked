@@ -29,6 +29,8 @@ export function generateExportData() {
             name: n.name,
             type: n.type,
             color: n.color,
+            manualColor: Boolean(n.manualColor),
+            personStatus: n.personStatus,
             num: n.num,
             accountNumber: n.accountNumber,
             citizenNumber: n.citizenNumber,

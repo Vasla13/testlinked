@@ -1,5 +1,5 @@
-import { TYPES, KINDS, KIND_LABELS, PERSON_PERSON_KINDS, PERSON_ORG_KINDS, ORG_ORG_KINDS } from './constants.js';
-import { escapeHtml, safeHex, linkKindEmoji, kindToLabel } from './utils.js';
+import { TYPES, KINDS, KIND_LABELS, PERSON_PERSON_KINDS, PERSON_ORG_KINDS, ORG_ORG_KINDS, PERSON_STATUS, PERSON_STATUS_LABELS } from './constants.js';
+import { escapeHtml, safeHex, sanitizeNodeColor, linkKindEmoji, kindToLabel, normalizePersonStatus } from './utils.js';
 
 // Génère les options pour les listes déroulantes de liens
 function getAllowedKinds(sourceType, targetType) {
@@ -93,6 +93,24 @@ export function renderPathfindingSidebar(state, selectedNode) {
 // =============================================================================
 export function renderEditorHTML(n, state) {
     const kindsForPerson = getAllowedKinds(n.type, TYPES.PERSON);
+    const personStatus = normalizePersonStatus(n.personStatus, n.type);
+    const personStatusBadge = (n.type === TYPES.PERSON && personStatus !== PERSON_STATUS.ACTIVE)
+        ? `<div class="editor-sheet-status is-${escapeHtml(personStatus)}">${escapeHtml(PERSON_STATUS_LABELS[personStatus])}</div>`
+        : '';
+    const personStatusControls = n.type === TYPES.PERSON ? `
+        <div class="editor-status-strip">
+            <span class="editor-status-label">Statut</span>
+            <div class="editor-status-actions">
+                ${Object.values(PERSON_STATUS).map((status) => `
+                    <button
+                        type="button"
+                        class="editor-status-btn ${personStatus === status ? 'active' : ''} is-${escapeHtml(status)}"
+                        data-person-status="${escapeHtml(status)}"
+                    >${escapeHtml(PERSON_STATUS_LABELS[status])}</button>
+                `).join('')}
+            </div>
+        </div>
+    ` : '';
 
     // Options Type
     const typeOptions = `
@@ -125,6 +143,7 @@ export function renderEditorHTML(n, state) {
                 <div class="editor-sheet-head">
                     <div class="editor-sheet-name">${escapeHtml(n.name)}</div>
                     <div class="editor-sheet-type">${escapeHtml(typeLabel)}</div>
+                    ${personStatusBadge}
                     <div class="editor-sheet-id">${escapeHtml(identifier)}</div>
                 </div>
 
@@ -138,6 +157,8 @@ export function renderEditorHTML(n, state) {
                         <input id="edQuickNum" type="text" value="${escapeHtml(n.num || '')}" placeholder="555-...">
                     </div>
                 </div>
+
+                ${personStatusControls}
 
                 <div class="editor-sheet-note">
                     <label class="editor-section-label" for="edDescription">Description</label>
@@ -194,34 +215,15 @@ export function renderEditorHTML(n, state) {
 
                 <div id="editorAdvanced" class="editor-advanced">
                     <div class="editor-adv-section">
-                        <div class="editor-adv-title">Fiche</div>
+                        <div class="editor-adv-title">Parametres de fiche</div>
                         <div class="editor-adv-primary-row">
-                            <div class="editor-adv-field editor-adv-field-name">
-                                <label>Nom complet</label>
-                                <input id="edName" type="text" value="${escapeHtml(n.name)}" class="editor-name-input">
-                            </div>
                             <div class="editor-adv-field">
                                 <label>Type</label>
                                 <select id="edType">${typeOptions}</select>
                             </div>
                             <div class="editor-adv-field editor-adv-field-color">
                                 <label>Couleur</label>
-                                <input type="color" id="edColor" value="${safeHex(n.color)}" class="editor-color-input">
-                            </div>
-                        </div>
-
-                        <div class="editor-adv-grid editor-adv-grid-identity">
-                            <div>
-                                <label>Téléphone</label>
-                                <input type="text" id="edNum" value="${escapeHtml(n.num || '')}" placeholder="555-...">
-                            </div>
-                            <div>
-                                <label>Numéro de compte</label>
-                                <input type="text" id="edAccountNumber" value="${escapeHtml(n.accountNumber || '')}" placeholder="ACC-...">
-                            </div>
-                            <div>
-                                <label>Numéro citoyen</label>
-                                <input type="text" id="edCitizenNumber" value="${escapeHtml(n.citizenNumber || '')}" placeholder="CIT-...">
+                                <input type="color" id="edColor" value="${sanitizeNodeColor(safeHex(n.color))}" class="editor-color-input">
                             </div>
                         </div>
                     </div>

@@ -1,11 +1,11 @@
-import { state, nodeById, pushHistory, scheduleSave, linkHasNode } from './state.js';
+import { state, nodeById, pushHistory, scheduleSave, saveState, linkHasNode } from './state.js';
 import { ensureNode, mergeNodes, updatePersonColors } from './logic.js';
 import { renderEditorHTML } from './templates.js';
 import { restartSim } from './physics.js';
 import { draw, updateDegreeCache } from './render.js';
 import { addLink as addUILink, logNodeAdded, refreshLists, updatePathfindingPanel, selectNode, showCustomConfirm, showCustomAlert, showCustomPrompt, refreshHvt } from './ui.js';
-import { escapeHtml, kindToLabel, linkKindEmoji, computeLinkColor } from './utils.js';
-import { TYPES, KINDS, KIND_LABELS, PERSON_PERSON_KINDS, PERSON_ORG_KINDS, ORG_ORG_KINDS } from './constants.js';
+import { escapeHtml, kindToLabel, linkKindEmoji, computeLinkColor, sanitizeNodeColor, normalizePersonStatus } from './utils.js';
+import { TYPES, KINDS, KIND_LABELS, PERSON_PERSON_KINDS, PERSON_ORG_KINDS, ORG_ORG_KINDS, PERSON_STATUS, PERSON_STATUS_LABELS } from './constants.js';
 
 const ui = {
     editorTitle: document.getElementById('editorTitle'),
@@ -441,16 +441,12 @@ function setupEditorListeners(n) {
         if (headName) headName.textContent = safeName || 'Sans nom';
         const quickName = document.getElementById('edQuickName');
         if (quickName && quickName.value !== safeName) quickName.value = safeName;
-        const fullName = document.getElementById('edName');
-        if (fullName && fullName.value !== safeName) fullName.value = safeName;
     };
 
     const syncEditorPhoneDisplays = (nextPhone) => {
         const safePhone = String(nextPhone || '').trim();
         const quickPhone = document.getElementById('edQuickNum');
         if (quickPhone && quickPhone.value !== safePhone) quickPhone.value = safePhone;
-        const fullPhone = document.getElementById('edNum');
-        if (fullPhone && fullPhone.value !== safePhone) fullPhone.value = safePhone;
     };
 
     const syncMetaDisplays = () => {
@@ -458,14 +454,10 @@ function setupEditorListeners(n) {
         const citizenValue = String(n.citizenNumber || '').trim();
 
         const quickAccount = document.getElementById('edQuickAccountNumber');
-        const fullAccount = document.getElementById('edAccountNumber');
         const quickCitizen = document.getElementById('edQuickCitizenNumber');
-        const fullCitizen = document.getElementById('edCitizenNumber');
 
         if (quickAccount && quickAccount.value !== accountValue) quickAccount.value = accountValue;
-        if (fullAccount && fullAccount.value !== accountValue) fullAccount.value = accountValue;
         if (quickCitizen && quickCitizen.value !== citizenValue) quickCitizen.value = citizenValue;
-        if (fullCitizen && fullCitizen.value !== citizenValue) fullCitizen.value = citizenValue;
     };
 
     const applyNodeName = (nextName) => {
@@ -484,28 +476,38 @@ function setupEditorListeners(n) {
         scheduleSave();
     };
 
-    document.getElementById('edName').oninput = (e) => {
+    const inpName = document.getElementById('edName');
+    if (inpName) inpName.oninput = (e) => {
         applyNodeName(e.target.value);
     };
     const edQuickName = document.getElementById('edQuickName');
     if (edQuickName) edQuickName.oninput = (e) => applyNodeName(e.target.value);
     const edQuickNum = document.getElementById('edQuickNum');
     if (edQuickNum) edQuickNum.oninput = (e) => applyNodePhone(e.target.value);
-    document.getElementById('edType').onchange = (e) => { queueHistory(); n.type = e.target.value; updatePersonColors(); restartSim(); draw(); refreshLists(); renderEditor(); scheduleSave(); };
+    document.getElementById('edType').onchange = (e) => {
+        queueHistory();
+        n.type = e.target.value;
+        n.personStatus = normalizePersonStatus(n.personStatus, n.type);
+        updatePersonColors();
+        restartSim();
+        draw();
+        refreshLists();
+        renderEditor();
+        scheduleSave();
+    };
     const inpColor = document.getElementById('edColor');
-    if(inpColor) inpColor.oninput = (e) => { queueHistory(); n.color = e.target.value; updatePersonColors(); draw(); scheduleSave(); };
-    const inpNum = document.getElementById('edNum');
-    if(inpNum) inpNum.oninput = (e) => { applyNodePhone(e.target.value); };
-    const inpAccountNumber = document.getElementById('edAccountNumber');
+    if(inpColor) inpColor.oninput = (e) => {
+        queueHistory();
+        const nextColor = sanitizeNodeColor(e.target.value);
+        n.color = nextColor;
+        inpColor.value = nextColor;
+        n.manualColor = true;
+        updatePersonColors();
+        draw();
+        saveState();
+        scheduleSave();
+    };
     const inpQuickAccountNumber = document.getElementById('edQuickAccountNumber');
-    if (inpAccountNumber) {
-        inpAccountNumber.oninput = (e) => {
-            queueHistory();
-            n.accountNumber = e.target.value;
-            syncMetaDisplays();
-            scheduleSave();
-        };
-    }
     if (inpQuickAccountNumber) {
         inpQuickAccountNumber.oninput = (e) => {
             queueHistory();
@@ -514,16 +516,7 @@ function setupEditorListeners(n) {
             scheduleSave();
         };
     }
-    const inpCitizenNumber = document.getElementById('edCitizenNumber');
     const inpQuickCitizenNumber = document.getElementById('edQuickCitizenNumber');
-    if (inpCitizenNumber) {
-        inpCitizenNumber.oninput = (e) => {
-            queueHistory();
-            n.citizenNumber = e.target.value;
-            syncMetaDisplays();
-            scheduleSave();
-        };
-    }
     if (inpQuickCitizenNumber) {
         inpQuickCitizenNumber.oninput = (e) => {
             queueHistory();
@@ -541,6 +534,18 @@ function setupEditorListeners(n) {
             scheduleSave();
         };
     }
+    Array.from(document.querySelectorAll('[data-person-status]')).forEach((btn) => {
+        btn.onclick = () => {
+            const nextStatus = normalizePersonStatus(btn.getAttribute('data-person-status'), n.type);
+            if (nextStatus === normalizePersonStatus(n.personStatus, n.type)) return;
+            queueHistory();
+            n.personStatus = nextStatus;
+            refreshLists();
+            renderEditor();
+            draw();
+            scheduleSave();
+        };
+    });
 
     const linkNameInput = document.getElementById('editorLinkName');
     const linkTypeSelect = document.getElementById('editorLinkType');
@@ -669,6 +674,7 @@ function setupEditorListeners(n) {
 
     document.getElementById('btnExportRP').onclick = () => {
         const typeLabel = n.type === TYPES.PERSON ? "Individu" : (n.type === TYPES.COMPANY ? "Entreprise" : "Organisation");
+        const statusLabel = n.type === TYPES.PERSON ? PERSON_STATUS_LABELS[normalizePersonStatus(n.personStatus, n.type)] : '';
         const relations = [];
         state.links.forEach(l => {
             const s = (typeof l.source === 'object') ? l.source : nodeById(l.source);
@@ -682,7 +688,7 @@ function setupEditorListeners(n) {
             }
         });
         const reportDescription = n.description || n.notes || 'R.A.S';
-        const report = `📂 DOSSIER : ${n.name.toUpperCase()}\n================================\n🆔 ${typeLabel} ${n.num ? '| 📞 ' + n.num : ''}\n🧾 COMPTE : ${n.accountNumber || 'N/A'}\n🪪 CITOYEN : ${n.citizenNumber || 'N/A'}\n📝 DESCRIPTION :\n${reportDescription}\n--------------------------------\n🔗 RÉSEAU (${relations.length}) :\n${relations.length > 0 ? relations.join('\n') : "Aucun lien connu."}\n================================`.trim();
+        const report = `📂 DOSSIER : ${n.name.toUpperCase()}\n================================\n🆔 ${typeLabel} ${n.num ? '| 📞 ' + n.num : ''}${statusLabel ? ' | ⚑ ' + statusLabel.toUpperCase() : ''}\n🧾 COMPTE : ${n.accountNumber || 'N/A'}\n🪪 CITOYEN : ${n.citizenNumber || 'N/A'}\n📝 DESCRIPTION :\n${reportDescription}\n--------------------------------\n🔗 RÉSEAU (${relations.length}) :\n${relations.length > 0 ? relations.join('\n') : "Aucun lien connu."}\n================================`.trim();
         navigator.clipboard.writeText(report).then(() => { showCustomAlert("✅ Dossier copié !"); });
     };
 }

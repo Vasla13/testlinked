@@ -1,4 +1,4 @@
-import { LINK_KIND_EMOJI, KINDS, KIND_LABELS } from './constants.js';
+import { LINK_KIND_EMOJI, KINDS, KIND_LABELS, PERSON_STATUS, TYPES } from './constants.js';
 
 // Normalise un ID (objet D3 ou valeur primitive) en string
 export function getId(value) {
@@ -26,6 +26,20 @@ export function safeHex(color) {
     if (!color) return '#ffffff';
     if (/^#[0-9A-F]{6}$/i.test(color)) return color;
     return '#ffffff';
+}
+
+export function sanitizeNodeColor(color) {
+    const hex = safeHex(color);
+    if (hex.toLowerCase() === '#000000') return '#4c617a';
+    return hex;
+}
+
+export function normalizePersonStatus(value, type = TYPES.PERSON) {
+    if (type !== TYPES.PERSON) return PERSON_STATUS.ACTIVE;
+    const raw = String(value || '').trim().toLowerCase();
+    if (raw === PERSON_STATUS.MISSING) return PERSON_STATUS.MISSING;
+    if (raw === PERSON_STATUS.DECEASED) return PERSON_STATUS.DECEASED;
+    return PERSON_STATUS.ACTIVE;
 }
 
 export function hexToRgb(hex) {

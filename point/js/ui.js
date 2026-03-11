@@ -3,8 +3,8 @@ import { ensureNode, addLink as logicAddLink, calculatePath, clearPath, calculat
 import { renderPathfindingSidebar } from './templates.js';
 import { restartSim } from './physics.js';
 import { draw, updateDegreeCache, resizeCanvas } from './render.js';
-import { escapeHtml, linkKindEmoji, kindToLabel, clamp, uid } from './utils.js';
-import { TYPES, FILTERS, FILTER_RULES } from './constants.js';
+import { escapeHtml, linkKindEmoji, kindToLabel, clamp, uid, sanitizeNodeColor, normalizePersonStatus } from './utils.js';
+import { TYPES, FILTERS, FILTER_RULES, KINDS, PERSON_STATUS } from './constants.js';
 import { injectStyles } from './styles.js';
 import { setupCanvasEvents } from './interaction.js';
 import { showSettings, showContextMenu, hideContextMenu } from './ui-settings.js';
@@ -34,7 +34,7 @@ const COLLAB_ACTIVE_BOARD_STORAGE_KEY = 'bniLinkedActiveBoard_v1';
 const POINT_LOCAL_CHANGE_EVENT = 'bni:point-local-change';
 const ACTION_LOG_STORAGE_KEY = 'bniLinkedActionLog_v1';
 const ACTION_LOG_MAX = 80;
-const COLLAB_NODE_FIELDS = ['name', 'type', 'color', 'num', 'accountNumber', 'citizenNumber', 'description', 'notes', 'x', 'y', 'fixed'];
+const COLLAB_NODE_FIELDS = ['name', 'type', 'color', 'manualColor', 'personStatus', 'num', 'accountNumber', 'citizenNumber', 'description', 'notes', 'x', 'y', 'fixed'];
 const COLLAB_LINK_FIELDS = ['source', 'target', 'kind'];
 const COLLAB_PRESENCE_HEARTBEAT_MS = 4200;
 const COLLAB_PRESENCE_RETRY_MS = 2200;
@@ -407,7 +407,9 @@ function normalizeCloudNode(rawNode) {
         id,
         name: String(rawNode.name || '').trim(),
         type: String(rawNode.type || TYPES.PERSON),
-        color: String(rawNode.color || ''),
+        color: sanitizeNodeColor(String(rawNode.color || '')),
+        manualColor: Boolean(rawNode.manualColor),
+        personStatus: normalizePersonStatus(rawNode.personStatus, rawNode.type || TYPES.PERSON),
         num: String(rawNode.num || ''),
         accountNumber: String(rawNode.accountNumber || ''),
         citizenNumber: String(rawNode.citizenNumber || ''),
@@ -632,6 +634,8 @@ function extractPlainPointPayloadFromCloud(rawData) {
             name: node.name,
             type: node.type,
             color: node.color,
+            manualColor: Boolean(node.manualColor),
+            personStatus: normalizePersonStatus(node.personStatus, node.type),
             num: node.num,
             accountNumber: node.accountNumber,
             citizenNumber: node.citizenNumber,
@@ -1926,6 +1930,109 @@ const TYPE_LABEL = {
     [TYPES.GROUP]: 'Groupe'
 };
 
+const LINK_GUIDE_SECTIONS = [
+    {
+        title: 'Personne <> Personne',
+        subtitle: 'Relations directes entre deux individus.',
+        items: [
+            { kind: KINDS.FAMILLE, when: 'Parent, enfant, frere, soeur, cousin ou foyer.' },
+            { kind: KINDS.COUPLE, when: 'Relation officielle ou vie de couple stable.' },
+            { kind: KINDS.AMOUR, when: 'Relation sentimentale floue, liaison ou crush connu.' },
+            { kind: KINDS.AMI, when: 'Lien amical clair, proche, sorties ensemble.' },
+            { kind: KINDS.COLLEGUE, when: 'Ils bossent ensemble au meme niveau.' },
+            { kind: KINDS.CONNAISSANCE, when: 'Ils se connaissent mais sans lien fort confirme.' },
+            { kind: KINDS.RIVAL, when: 'Concurrence, tension, conflit froid ou lutte d influence.' },
+            { kind: KINDS.ENNEMI, when: 'Hostilite ouverte, menace, guerre ou vendetta.' }
+        ]
+    },
+    {
+        title: 'Personne <> Organisation',
+        subtitle: 'Entre une personne et une entreprise ou un groupe.',
+        items: [
+            { kind: KINDS.PATRON, when: 'La personne dirige ou possede la structure.' },
+            { kind: KINDS.HAUT_GRADE, when: 'Cadre haut place, chef interne, bras droit, lieutenant.' },
+            { kind: KINDS.EMPLOYE, when: 'Travaille pour la structure sans etre dirigeant.' },
+            { kind: KINDS.MEMBRE, when: 'Appartient au groupe, gang, club ou organisation.' },
+            { kind: KINDS.AFFILIATION, when: 'Lien de proximite, soutien, contact regulier sans appartenance nette.' },
+            { kind: KINDS.PARTENAIRE, when: 'Business ou alliance ponctuelle avec la structure.' },
+            { kind: KINDS.ENNEMI, when: 'La personne s oppose a la structure ou la cible.' }
+        ]
+    },
+    {
+        title: 'Organisation <> Organisation',
+        subtitle: 'Entreprises, groupes et institutions entre eux.',
+        items: [
+            { kind: KINDS.PARTENAIRE, when: 'Alliance, deal, accord, cooperation ou business commun.' },
+            { kind: KINDS.AFFILIATION, when: 'Rattachement, tutelle, reseau commun ou proximite durable.' },
+            { kind: KINDS.RIVAL, when: 'Concurrence, guerre de territoire, lutte economique.' },
+            { kind: KINDS.ENNEMI, when: 'Conflit ouvert, operations contre l autre structure.' }
+        ]
+    },
+    {
+        title: 'Lien generique',
+        subtitle: 'Quand tu sais qu il y a un lien mais pas encore sa vraie nature.',
+        items: [
+            { kind: KINDS.RELATION, when: 'Utilise-le comme lien temporaire, puis remplace-le plus tard par le bon type.' }
+        ]
+    }
+];
+
+function renderLinkGuideMarkup() {
+    const sections = LINK_GUIDE_SECTIONS.map((section) => `
+        <section class="link-guide-section">
+            <div class="link-guide-section-head">
+                <div class="link-guide-section-title">${escapeHtml(section.title)}</div>
+                <div class="link-guide-section-subtitle">${escapeHtml(section.subtitle)}</div>
+            </div>
+            <div class="link-guide-grid">
+                ${section.items.map((item) => `
+                    <article class="link-guide-card">
+                        <div class="link-guide-card-head">
+                            <span class="link-guide-emoji">${escapeHtml(linkKindEmoji(item.kind))}</span>
+                            <span class="link-guide-kind">${escapeHtml(kindToLabel(item.kind))}</span>
+                        </div>
+                        <div class="link-guide-when">${escapeHtml(item.when)}</div>
+                    </article>
+                `).join('')}
+            </div>
+        </section>
+    `).join('');
+
+    return `
+        <div class="link-guide-shell">
+            <div class="link-guide-topline">Aide liaison</div>
+            <h3 class="link-guide-title">Comment choisir le bon type de lien</h3>
+            <p class="link-guide-intro">
+                Choisis le lien le plus precis possible. Si tu hesites, commence par <strong>${escapeHtml(kindToLabel(KINDS.RELATION))}</strong>
+                puis remplace-le des que tu as une info plus fiable.
+            </p>
+            <div class="link-guide-tips">
+                <div class="link-guide-tip">Patron / Haut grade / Employe servent a poser la hierarchie dans une structure.</div>
+                <div class="link-guide-tip">Membre / Affiliation servent quand le lien existe mais que le role exact reste flou.</div>
+                <div class="link-guide-tip">Rival et Ennemi ne veulent pas dire la meme chose: Rival = tension, Ennemi = conflit ouvert.</div>
+            </div>
+            ${sections}
+        </div>
+    `;
+}
+
+function showLinkGuide() {
+    if (!modalOverlay) createModal();
+    setModalMode('info');
+    const msgEl = document.getElementById('modal-msg');
+    const actEl = document.getElementById('modal-actions');
+    if (!msgEl || !actEl) return;
+
+    msgEl.innerHTML = renderLinkGuideMarkup();
+    actEl.innerHTML = '<button id="btn-link-guide-close" class="grow">Fermer</button>';
+
+    const closeBtn = document.getElementById('btn-link-guide-close');
+    if (closeBtn) closeBtn.onclick = () => { modalOverlay.style.display = 'none'; };
+
+    modalOverlay.style.display = 'flex';
+    if (closeBtn) closeBtn.focus();
+}
+
 // EXPORTS
 export { renderEditor, showSettings, showContextMenu, hideContextMenu };
 
@@ -1980,7 +2087,7 @@ function createModal() {
                 padding: 20px 20px 18px;
             }
             #custom-modal[data-mode="create"] .modal-card {
-                width: min(1120px, calc(100vw - 28px));
+                width: min(920px, calc(100vw - 140px));
                 min-height: 0;
                 padding: 16px 18px 14px;
                 overflow: visible;
@@ -1989,11 +2096,18 @@ function createModal() {
                 margin-bottom: 10px;
             }
             #custom-modal[data-mode="create"] #modal-actions {
-                gap: 8px;
+                display: none;
             }
             #custom-modal[data-mode="search"] .modal-card {
                 width: min(700px, calc(100vw - 300px));
                 min-height: 320px;
+            }
+            #custom-modal[data-mode="info"] .modal-card {
+                width: min(980px, calc(100vw - 40px));
+                min-height: 0;
+                max-height: calc(100vh - 44px);
+                padding: 18px 20px 16px;
+                overflow: hidden;
             }
             #custom-modal[data-mode="datahub"] .modal-card {
                 width: min(860px, calc(100vw - 32px));
@@ -2026,17 +2140,116 @@ function createModal() {
                 width: min(560px, calc(100vw - 28px));
                 min-height: 170px;
             }
+            #custom-modal[data-mode="info"] #modal-msg {
+                margin-bottom: 12px;
+                max-height: calc(100vh - 170px);
+                overflow-y: auto;
+                padding-right: 6px;
+            }
+            .link-guide-shell {
+                display: flex;
+                flex-direction: column;
+                gap: 14px;
+            }
+            .link-guide-topline {
+                color: #7ec8d5;
+                font-size: 0.72rem;
+                letter-spacing: 2px;
+                text-transform: uppercase;
+            }
+            .link-guide-title {
+                margin: 0;
+                color: #fff;
+                font-size: 1.5rem;
+                letter-spacing: 0.03em;
+            }
+            .link-guide-intro {
+                margin: 0;
+                color: #b6c7df;
+                line-height: 1.55;
+            }
+            .link-guide-tips {
+                display: grid;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                gap: 10px;
+            }
+            .link-guide-tip {
+                padding: 10px 12px;
+                border: 1px solid rgba(115, 251, 247, 0.16);
+                background: rgba(7, 18, 39, 0.82);
+                color: #a9bbd5;
+                line-height: 1.45;
+                border-radius: 10px;
+            }
+            .link-guide-section {
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+            }
+            .link-guide-section-head {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+            }
+            .link-guide-section-title {
+                color: #e7f6ff;
+                font-size: 1rem;
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
+            }
+            .link-guide-section-subtitle {
+                color: #7f95b0;
+                font-size: 0.84rem;
+                line-height: 1.45;
+            }
+            .link-guide-grid {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 10px;
+            }
+            .link-guide-card {
+                padding: 12px 14px;
+                border: 1px solid rgba(115, 251, 247, 0.16);
+                background: linear-gradient(180deg, rgba(7, 18, 39, 0.9), rgba(4, 11, 24, 0.9));
+                border-radius: 12px;
+                box-shadow: inset 0 0 0 1px rgba(115, 251, 247, 0.04);
+            }
+            .link-guide-card-head {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                margin-bottom: 6px;
+            }
+            .link-guide-emoji {
+                font-size: 1.1rem;
+                line-height: 1;
+            }
+            .link-guide-kind {
+                color: #f0fbff;
+                font-weight: 700;
+                letter-spacing: 0.03em;
+                text-transform: uppercase;
+            }
+            .link-guide-when {
+                color: #a7bbd4;
+                line-height: 1.5;
+            }
             @media (max-width: 900px) {
                 #custom-modal[data-mode="cloud"] .modal-card,
                 #custom-modal[data-mode="datahub"] .modal-card,
                 #custom-modal[data-mode="create"] .modal-card,
                 #custom-modal[data-mode="search"] .modal-card,
-                #custom-modal[data-mode="aihub"] .modal-card {
+                #custom-modal[data-mode="aihub"] .modal-card,
+                #custom-modal[data-mode="info"] .modal-card {
                     width: calc(100vw - 18px);
                     min-height: 260px;
                 }
                 #custom-modal[data-mode="create"] .modal-card {
                     padding: 12px;
+                }
+                .link-guide-tips,
+                .link-guide-grid {
+                    grid-template-columns: 1fr;
                 }
             }
         `;
@@ -2426,28 +2639,16 @@ function openQuickCreateModal() {
 
     msgEl.innerHTML = `
         <div class="quick-create-shell">
-            <h3 class="quick-create-title">Creer</h3>
+            <div class="quick-create-head">
+                <h3 class="quick-create-title">Creer</h3>
+                <button type="button" id="quick-create-close" class="mini-btn quick-create-close-top">Fermer</button>
+            </div>
             <div class="quick-create-tabs" role="tablist" aria-label="Creation rapide">
-                <button type="button" class="quick-create-tab active" data-create-tab="node" aria-selected="true">Nouvelle fiche</button>
-                <button type="button" class="quick-create-tab" data-create-tab="link" aria-selected="false">Nouvelle liaison</button>
+                <button type="button" class="quick-create-tab active" data-create-tab="link" aria-selected="true">Nouvelle liaison</button>
+                <button type="button" class="quick-create-tab" data-create-tab="node" aria-selected="false">Nouvelle fiche</button>
             </div>
             <div class="quick-create-panels">
-                <section class="quick-create-block quick-create-panel" data-panel="node">
-                    <div class="quick-create-block-head">Creer une nouvelle fiche</div>
-                    <div class="quick-create-node-row">
-                        <button type="button" class="mini-btn quick-create-node-btn active" data-create-type="${TYPES.PERSON}">Personne</button>
-                        <button type="button" class="mini-btn quick-create-node-btn" data-create-type="${TYPES.GROUP}">Groupe</button>
-                        <button type="button" class="mini-btn quick-create-node-btn" data-create-type="${TYPES.COMPANY}">Entreprise</button>
-                    </div>
-                    <div class="quick-create-field-stack">
-                        <label class="quick-create-field-label" for="quick-create-node-name">Nom</label>
-                        <input id="quick-create-node-name" type="text" placeholder="Nom de la fiche" class="quick-create-target-input" />
-                    </div>
-                    <div id="quick-create-node-context" class="quick-create-context"></div>
-                    <button type="button" id="quick-create-node-apply" class="mini-btn primary quick-create-panel-action">Creer la fiche</button>
-                </section>
-
-                <section class="quick-create-block quick-create-panel is-hidden" data-panel="link">
+                <section class="quick-create-block quick-create-panel" data-panel="link">
                     <div class="quick-create-block-head">Relier deux fiches</div>
                     <div class="quick-create-link-flow">
                         <div class="quick-create-field-stack">
@@ -2469,11 +2670,26 @@ function openQuickCreateModal() {
                     <div id="quick-link-context" class="quick-create-context"></div>
                     <button type="button" id="quick-link-apply" class="mini-btn primary quick-create-panel-action">Lier</button>
                 </section>
+
+                <section class="quick-create-block quick-create-panel is-hidden" data-panel="node">
+                    <div class="quick-create-block-head">Creer une nouvelle fiche</div>
+                    <div class="quick-create-node-row">
+                        <button type="button" class="mini-btn quick-create-node-btn active" data-create-type="${TYPES.PERSON}">Personne</button>
+                        <button type="button" class="mini-btn quick-create-node-btn" data-create-type="${TYPES.GROUP}">Groupe</button>
+                        <button type="button" class="mini-btn quick-create-node-btn" data-create-type="${TYPES.COMPANY}">Entreprise</button>
+                    </div>
+                    <div class="quick-create-field-stack">
+                        <label class="quick-create-field-label" for="quick-create-node-name">Nom</label>
+                        <input id="quick-create-node-name" type="text" placeholder="Nom de la fiche" class="quick-create-target-input" />
+                    </div>
+                    <div id="quick-create-node-context" class="quick-create-context"></div>
+                    <button type="button" id="quick-create-node-apply" class="mini-btn primary quick-create-panel-action">Creer la fiche</button>
+                </section>
             </div>
         </div>
     `;
 
-    actEl.innerHTML = '<button type="button" id="quick-create-close">Fermer</button>';
+    actEl.innerHTML = '';
 
     const actorName = collab.user?.username || '';
     let draftTargetType = TYPES.PERSON;
@@ -2492,6 +2708,10 @@ function openQuickCreateModal() {
     const linkDraftTypes = {
         source: TYPES.PERSON,
         target: TYPES.PERSON
+    };
+    const linkCreateState = {
+        source: false,
+        target: false
     };
 
     const defaultBaseName = () => (
@@ -2568,12 +2788,15 @@ function openQuickCreateModal() {
         if (!resultsEl) return;
         const cleanQuery = normalizeNodeName(query);
         if (!cleanQuery) {
+            linkCreateState[field] = false;
             hideLinkResults(resultsEl);
             return;
         }
 
         const exactMatch = findNodeByName(cleanQuery);
+        if (exactMatch) linkCreateState[field] = false;
         const draftType = getLinkDraftType(field);
+        const createExpanded = !exactMatch && !!linkCreateState[field];
         const existingHits = nodes.map((node) => `
             <button
                 type="button"
@@ -2584,30 +2807,32 @@ function openQuickCreateModal() {
             </button>
         `).join('');
         const createMarkup = exactMatch ? '' : `
-            <div class="quick-create-search-create-wrap">
+            <div class="quick-create-search-create-wrap ${createExpanded ? 'is-active' : ''}">
                 <button type="button" class="quick-create-search-hit quick-create-search-hit-create" data-create-field="${escapeHtml(field)}">
-                    Creer "${escapeHtml(cleanQuery)}"
+                    Ou creer "${escapeHtml(cleanQuery)}"
                 </button>
-                <span class="quick-create-search-create-label">Type</span>
-                <div class="quick-create-type-switch" role="group" aria-label="Type de creation">
-                    ${[TYPES.PERSON, TYPES.GROUP, TYPES.COMPANY].map((type) => `
-                        <button
-                            type="button"
-                            class="quick-create-type-chip ${draftType === type ? 'active' : ''}"
-                            data-create-field-type="${escapeHtml(field)}"
-                            data-type="${escapeHtml(type)}"
-                        >${escapeHtml(TYPE_LABEL[type] || type)}</button>
-                    `).join('')}
-                </div>
+                ${createExpanded ? `
+                    <span class="quick-create-search-create-label">Type</span>
+                    <div class="quick-create-type-switch" role="group" aria-label="Type de creation">
+                        ${[TYPES.PERSON, TYPES.GROUP, TYPES.COMPANY].map((type) => `
+                            <button
+                                type="button"
+                                class="quick-create-type-chip ${draftType === type ? 'active' : ''}"
+                                data-create-field-type="${escapeHtml(field)}"
+                                data-type="${escapeHtml(type)}"
+                            >${escapeHtml(TYPE_LABEL[type] || type)}</button>
+                        `).join('')}
+                    </div>
+                ` : ''}
             </div>
         `;
-        const existingMarkup = existingHits ? `<div class="quick-create-search-list">${existingHits}</div>` : '';
+        const existingMarkup = (existingHits && !createExpanded) ? `<div class="quick-create-search-list">${existingHits}</div>` : '';
         const emptyMarkup = (!existingHits && !createMarkup)
             ? '<span class="quick-create-search-empty">Aucun resultat</span>'
             : '';
 
         resultsEl.hidden = false;
-        resultsEl.innerHTML = `${createMarkup}${existingMarkup}${emptyMarkup}`;
+        resultsEl.innerHTML = `${existingMarkup}${createMarkup}${emptyMarkup}`;
 
         Array.from(resultsEl.querySelectorAll('.quick-create-search-hit')).forEach((btn) => {
             btn.onmousedown = (event) => {
@@ -2618,14 +2843,17 @@ function openQuickCreateModal() {
                 if (createField) {
                     const input = createField === 'source' ? linkSourceInput : linkTargetInput;
                     if (input) input.value = cleanQuery;
-                    hideLinkResults(resultsEl);
+                    linkCreateState[createField] = !linkCreateState[createField];
+                    renderLinkResults(resultsEl, createField, cleanQuery, nodes, onPick);
                     updateLinkState();
-                    if (createField === 'source') linkTargetInput?.focus();
                     return;
                 }
                 const nodeId = btn.getAttribute('data-id') || '';
                 const pickedNode = state.nodes.find((node) => String(node.id) === String(nodeId)) || null;
-                if (pickedNode && typeof onPick === 'function') onPick(pickedNode);
+                if (pickedNode) {
+                    linkCreateState[field] = false;
+                    if (typeof onPick === 'function') onPick(pickedNode);
+                }
             };
         });
 
@@ -2785,6 +3013,7 @@ function openQuickCreateModal() {
 
     if (linkSourceInput) {
         linkSourceInput.oninput = () => {
+            linkCreateState.source = false;
             renderLinkResults(
                 linkSourceResultEl,
                 'source',
@@ -2830,6 +3059,7 @@ function openQuickCreateModal() {
 
     if (linkTargetInput) {
         linkTargetInput.oninput = () => {
+            linkCreateState.target = false;
             renderLinkResults(
                 linkTargetResultEl,
                 'target',
@@ -2947,15 +3177,15 @@ function openQuickCreateModal() {
         };
     }
 
-    updateNodeState();
-    updateLinkState();
-    setActiveCreateTab('node');
-
     const closeBtn = document.getElementById('quick-create-close');
     if (closeBtn) closeBtn.onclick = () => { modalOverlay.style.display = 'none'; };
 
+    updateNodeState();
+    updateLinkState();
+    setActiveCreateTab('link');
+
     modalOverlay.style.display = 'flex';
-    nodeInput?.focus();
+    linkSourceInput?.focus();
 }
 
 function openHvtAssistant() {
@@ -3272,8 +3502,10 @@ function normalizeImportedNode(rawNode, fallbackId = `node_${uid()}`) {
         name: String(source.name || '').trim() || 'Sans nom',
         type,
         color: (typeof source.color === 'string' && source.color.trim())
-            ? source.color.trim()
+            ? sanitizeNodeColor(source.color.trim())
             : (type === TYPES.PERSON ? '#ffffff' : '#cfd8e3'),
+        manualColor: Boolean(source.manualColor),
+        personStatus: normalizePersonStatus(source.personStatus, type),
         num: typeof source.num === 'string' ? source.num : String(source.num ?? ''),
         accountNumber: typeof source.accountNumber === 'string' ? source.accountNumber : '',
         citizenNumber: typeof source.citizenNumber === 'string' ? source.citizenNumber : '',
@@ -3373,6 +3605,17 @@ function mergeImportedNodeIntoExisting(existingNode, incomingNode) {
     if (!existingNode.type && incomingNode.type) {
         existingNode.type = incomingNode.type;
         changed = true;
+    }
+
+    if (existingNode.type === TYPES.PERSON && incomingNode.type === TYPES.PERSON) {
+        const currentStatus = normalizePersonStatus(existingNode.personStatus, existingNode.type);
+        const incomingStatus = normalizePersonStatus(incomingNode.personStatus, incomingNode.type);
+        const currentPriority = currentStatus === PERSON_STATUS.DECEASED ? 2 : (currentStatus === PERSON_STATUS.MISSING ? 1 : 0);
+        const incomingPriority = incomingStatus === PERSON_STATUS.DECEASED ? 2 : (incomingStatus === PERSON_STATUS.MISSING ? 1 : 0);
+        if (incomingPriority > currentPriority) {
+            existingNode.personStatus = incomingStatus;
+            changed = true;
+        }
     }
 
     return changed;
@@ -3686,6 +3929,13 @@ function setupHudButtons() {
         scheduleSave();
     };
     hud.appendChild(btnFilterMode);
+
+    const btnInfo = document.createElement('button');
+    btnInfo.className = 'hud-btn hud-mode-btn';
+    btnInfo.innerHTML = '<span>Info · Liens</span>';
+    btnInfo.title = 'Ouvrir l aide sur les types de liens';
+    btnInfo.onclick = () => showLinkGuide();
+    hud.appendChild(btnInfo);
 }
 
 function ensureHvtPanel() {
@@ -4316,14 +4566,59 @@ export function refreshIntelPanel() {
     updateIntelPanel(true);
 }
 
+function normalizeSearchText(value) {
+    return String(value ?? '').trim().toLowerCase();
+}
+
+function normalizeSearchPhone(value) {
+    return String(value ?? '').replace(/\D+/g, '');
+}
+
+function findSearchMatches(query) {
+    const normalizedQuery = normalizeSearchText(query);
+    const normalizedPhoneQuery = normalizeSearchPhone(query);
+
+    return state.nodes
+        .map((node) => {
+            const name = normalizeSearchText(node?.name || '');
+            const phone = String(node?.num || '').trim();
+            const normalizedPhone = normalizeSearchPhone(phone);
+            const nameStarts = normalizedQuery ? name.startsWith(normalizedQuery) : false;
+            const nameMatch = normalizedQuery ? name.includes(normalizedQuery) : false;
+            const phoneStarts = normalizedPhoneQuery ? normalizedPhone.startsWith(normalizedPhoneQuery) : false;
+            const phoneMatch = normalizedPhoneQuery ? normalizedPhone.includes(normalizedPhoneQuery) : false;
+
+            if (!nameMatch && !phoneMatch) return null;
+
+            let score = 0;
+            if (nameStarts) score += 40;
+            else if (nameMatch) score += 20;
+            if (phoneStarts) score += 35;
+            else if (phoneMatch) score += 15;
+
+            return { node, score };
+        })
+        .filter(Boolean)
+        .sort((a, b) => {
+            if (b.score !== a.score) return b.score - a.score;
+            return String(a.node?.name || '').localeCompare(String(b.node?.name || ''), 'fr', { sensitivity: 'base' });
+        })
+        .slice(0, 10)
+        .map((entry) => entry.node);
+}
+
 function setupSearch() {
     document.getElementById('searchInput').addEventListener('input', (e) => {
-        const q = e.target.value.trim().toLowerCase();
+        const q = String(e.target.value || '').trim();
         const res = document.getElementById('searchResult');
         if(!q) { res.textContent = ''; return; }
-        const found = state.nodes.filter(n => n.name.toLowerCase().includes(q));
+        const found = findSearchMatches(q);
         if(found.length === 0) { res.innerHTML = '<span style="color:#666;">Aucun résultat</span>'; return; }
-        res.innerHTML = found.slice(0, 10).map(n => `<span class="search-hit" data-id="${n.id}">${escapeHtml(n.name)}</span>`).join(' · ');
+        res.innerHTML = found.map((n) => {
+            const phone = String(n.num || '').trim();
+            const label = phone ? `${escapeHtml(n.name)} · ${escapeHtml(phone)}` : escapeHtml(n.name);
+            return `<span class="search-hit" data-id="${n.id}" title="${escapeHtml(phone || n.name)}">${label}</span>`;
+        }).join(' · ');
         res.querySelectorAll('.search-hit').forEach(el => el.onclick = () => { zoomToNode(el.dataset.id); e.target.value = ''; res.textContent = ''; });
     });
 }
