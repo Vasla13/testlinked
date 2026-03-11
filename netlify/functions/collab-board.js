@@ -62,6 +62,8 @@ const COLLAB_NODE_FIELDS = [
   "name",
   "type",
   "color",
+  "manualColor",
+  "personStatus",
   "num",
   "accountNumber",
   "citizenNumber",
@@ -237,10 +239,127 @@ function normalizeMapBoardPayload(data) {
   };
 }
 
-function mergeMapBoardPayload(existingData, incomingData) {
+function normalizeOptionalMapBoardPayload(data) {
+  if (!data || typeof data !== "object" || !Array.isArray(data.groups)) {
+    return {
+      meta: {},
+      groups: [],
+      tacticalLinks: [],
+    };
+  }
+  return normalizeMapBoardPayload(data);
+}
+
+function buildMapDeletionSets(existingPayload, incomingPayload, basePayload) {
+  const existing = normalizeOptionalMapBoardPayload(existingPayload);
+  const incoming = normalizeOptionalMapBoardPayload(incomingPayload);
+  const base = normalizeOptionalMapBoardPayload(basePayload);
+
+  const deletedGroupKeys = new Set();
+  const deletedPointIds = new Set();
+  const deletedZoneIds = new Set();
+  const deletedLinkKeys = new Set();
+
+  const existingGroupKeys = new Set(
+    existing.groups.map((group) => String(group?.name || "").trim().toLowerCase()).filter(Boolean)
+  );
+  const incomingGroupKeys = new Set(
+    incoming.groups.map((group) => String(group?.name || "").trim().toLowerCase()).filter(Boolean)
+  );
+
+  const existingPointIds = new Set();
+  const incomingPointIds = new Set();
+  const existingZoneIds = new Set();
+  const incomingZoneIds = new Set();
+
+  existing.groups.forEach((group) => {
+    (Array.isArray(group?.points) ? group.points : []).forEach((point) => {
+      const pointId = String(point?.id || "").trim();
+      if (pointId) existingPointIds.add(pointId);
+    });
+    (Array.isArray(group?.zones) ? group.zones : []).forEach((zone) => {
+      const zoneId = String(zone?.id || "").trim();
+      if (zoneId) existingZoneIds.add(zoneId);
+    });
+  });
+
+  incoming.groups.forEach((group) => {
+    (Array.isArray(group?.points) ? group.points : []).forEach((point) => {
+      const pointId = String(point?.id || "").trim();
+      if (pointId) incomingPointIds.add(pointId);
+    });
+    (Array.isArray(group?.zones) ? group.zones : []).forEach((zone) => {
+      const zoneId = String(zone?.id || "").trim();
+      if (zoneId) incomingZoneIds.add(zoneId);
+    });
+  });
+
+  base.groups.forEach((group) => {
+    const groupKey = String(group?.name || "").trim().toLowerCase();
+    if (groupKey && (!existingGroupKeys.has(groupKey) || !incomingGroupKeys.has(groupKey))) {
+      deletedGroupKeys.add(groupKey);
+    }
+
+    (Array.isArray(group?.points) ? group.points : []).forEach((point) => {
+      const pointId = String(point?.id || "").trim();
+      if (pointId && (!existingPointIds.has(pointId) || !incomingPointIds.has(pointId))) {
+        deletedPointIds.add(pointId);
+      }
+    });
+
+    (Array.isArray(group?.zones) ? group.zones : []).forEach((zone) => {
+      const zoneId = String(zone?.id || "").trim();
+      if (zoneId && (!existingZoneIds.has(zoneId) || !incomingZoneIds.has(zoneId))) {
+        deletedZoneIds.add(zoneId);
+      }
+    });
+  });
+
+  const existingLinkKeys = new Set(
+    existing.tacticalLinks.map((link) => mapPairKey(link?.from, link?.to)).filter(Boolean)
+  );
+  const incomingLinkKeys = new Set(
+    incoming.tacticalLinks.map((link) => mapPairKey(link?.from, link?.to)).filter(Boolean)
+  );
+
+  base.tacticalLinks.forEach((link) => {
+    const linkKey = mapPairKey(link?.from, link?.to);
+    if (linkKey && (!existingLinkKeys.has(linkKey) || !incomingLinkKeys.has(linkKey))) {
+      deletedLinkKeys.add(linkKey);
+    }
+  });
+
+  return {
+    deletedGroupKeys,
+    deletedPointIds,
+    deletedZoneIds,
+    deletedLinkKeys,
+  };
+}
+
+function mergeMapBoardPayload(existingData, incomingData, baseData = null) {
   const existing = normalizeMapBoardPayload(existingData);
   const incoming = normalizeMapBoardPayload(incomingData);
-  const mergedGroups = cloneJson(existing.groups, []);
+  const deletionSets = buildMapDeletionSets(existing, incoming, baseData);
+  const mergedGroups = cloneJson(
+    existing.groups
+      .filter((group) => {
+        const key = String(group?.name || "").trim().toLowerCase();
+        return !key || !deletionSets.deletedGroupKeys.has(key);
+      })
+      .map((group) => ({
+        ...group,
+        points: (Array.isArray(group?.points) ? group.points : []).filter((point) => {
+          const pointId = String(point?.id || "").trim();
+          return !pointId || !deletionSets.deletedPointIds.has(pointId);
+        }),
+        zones: (Array.isArray(group?.zones) ? group.zones : []).filter((zone) => {
+          const zoneId = String(zone?.id || "").trim();
+          return !zoneId || !deletionSets.deletedZoneIds.has(zoneId);
+        }),
+      })),
+    []
+  );
   const pointIndex = new Map();
   const zoneIndex = new Map();
   const groupByName = new Map();
@@ -251,13 +370,13 @@ function mergeMapBoardPayload(existingData, incomingData) {
 
     (Array.isArray(group?.points) ? group.points : []).forEach((point, pointIdx) => {
       const pointId = String(point?.id || "").trim();
-      if (!pointId || pointIndex.has(pointId)) return;
+      if (!pointId || deletionSets.deletedPointIds.has(pointId) || pointIndex.has(pointId)) return;
       pointIndex.set(pointId, { groupIdx, pointIdx });
     });
 
     (Array.isArray(group?.zones) ? group.zones : []).forEach((zone, zoneIdx) => {
       const zoneId = String(zone?.id || "").trim();
-      if (!zoneId || zoneIndex.has(zoneId)) return;
+      if (!zoneId || deletionSets.deletedZoneIds.has(zoneId) || zoneIndex.has(zoneId)) return;
       zoneIndex.set(zoneId, { groupIdx, zoneIdx });
     });
   });
@@ -265,6 +384,7 @@ function mergeMapBoardPayload(existingData, incomingData) {
   incoming.groups.forEach((incomingGroup, incomingIdx) => {
     const groupName = String(incomingGroup?.name || "").trim();
     const key = groupName.toLowerCase();
+    if (key && deletionSets.deletedGroupKeys.has(key)) return;
     let targetIdx = key && groupByName.has(key) ? groupByName.get(key) : -1;
 
     if (targetIdx < 0) {
@@ -289,7 +409,7 @@ function mergeMapBoardPayload(existingData, incomingData) {
     (Array.isArray(incomingGroup?.points) ? incomingGroup.points : []).forEach((point, pointIdx) => {
       const normalizedPoint = normalizeMapPoint(point, pointIdx);
       const pointId = String(normalizedPoint?.id || "").trim();
-      if (!normalizedPoint || !pointId) return;
+      if (!normalizedPoint || !pointId || deletionSets.deletedPointIds.has(pointId)) return;
 
       if (pointIndex.has(pointId)) {
         const loc = pointIndex.get(pointId);
@@ -304,7 +424,7 @@ function mergeMapBoardPayload(existingData, incomingData) {
     (Array.isArray(incomingGroup?.zones) ? incomingGroup.zones : []).forEach((zone, zoneIdx) => {
       const normalizedZone = normalizeMapZone(zone, zoneIdx);
       const zoneId = String(normalizedZone?.id || "").trim();
-      if (!normalizedZone || !zoneId) return;
+      if (!normalizedZone || !zoneId || deletionSets.deletedZoneIds.has(zoneId)) return;
 
       if (zoneIndex.has(zoneId)) {
         const loc = zoneIndex.get(zoneId);
@@ -330,6 +450,7 @@ function mergeMapBoardPayload(existingData, incomingData) {
     (Array.isArray(linkList) ? linkList : []).forEach((link, linkIdx) => {
       const normalizedLink = normalizeMapLink(link, linkIdx);
       if (!normalizedLink) return;
+      if (deletionSets.deletedLinkKeys.has(mapPairKey(normalizedLink.from, normalizedLink.to))) return;
       if (!validPointIds.has(String(normalizedLink.from)) || !validPointIds.has(String(normalizedLink.to))) return;
       links.set(mapPairKey(normalizedLink.from, normalizedLink.to), normalizedLink);
     });
@@ -392,6 +513,8 @@ function normalizeNode(node) {
     name: String(node.name || "").trim(),
     type: String(node.type || "person"),
     color: String(node.color || ""),
+    manualColor: Boolean(node.manualColor),
+    personStatus: String(node.personStatus || "active"),
     num: String(node.num || ""),
     accountNumber: String(node.accountNumber || ""),
     citizenNumber: String(node.citizenNumber || ""),
@@ -1095,6 +1218,12 @@ exports.handler = async (event) => {
     if (!validateBoardData(data, page)) {
       return errorResponse(400, "Donnees du tableau invalides.");
     }
+    const baseData = page === "map" && body.baseData && typeof body.baseData === "object"
+      ? body.baseData
+      : null;
+    if (page === "map" && body.baseData !== undefined && body.baseData !== null && !validateMapBoardData(baseData)) {
+      return errorResponse(400, "Base de fusion map invalide.");
+    }
 
     const expectedUpdatedAt = String(body.expectedUpdatedAt || "").trim();
     const hadVersionDrift = Boolean(expectedUpdatedAt && String(board.updatedAt || "") !== expectedUpdatedAt);
@@ -1105,7 +1234,7 @@ exports.handler = async (event) => {
       fallbackUser: board.lastEditedBy?.username || board.ownerName || "",
     });
     const mergedData = page === "map"
-      ? (hadVersionDrift ? mergeMapBoardPayload(board.data, data) : normalizeMapBoardPayload(data))
+      ? (hadVersionDrift ? mergeMapBoardPayload(board.data, data, baseData) : normalizeMapBoardPayload(data))
       : mergeBoardPayload(board.data, data, {
           existingUpdatedAt: board.updatedAt || "",
           incomingUpdatedAt: expectedUpdatedAt || nowIso(),

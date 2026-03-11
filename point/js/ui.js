@@ -2359,7 +2359,7 @@ export function initUI() {
 
     document.addEventListener('keydown', (e) => {
         if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-            e.preventDefault(); undo(); refreshLists();
+            e.preventDefault(); undo(); saveState(); refreshLists();
             if (state.selection) renderEditor();
             draw();
         }

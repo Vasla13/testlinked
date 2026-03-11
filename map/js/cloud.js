@@ -37,6 +37,7 @@ const collab = {
     autosaveListenerBound: false,
     syncInFlight: false,
     lastSavedFingerprint: '',
+    shadowData: null,
     saveInFlight: false,
     homePanel: 'cloud'
 };
@@ -368,11 +369,136 @@ function makeLinkPairKey(a, b) {
     return x < y ? `${x}|${y}` : `${y}|${x}`;
 }
 
-function mergeMapBoardData(remoteRaw, localRaw) {
+function normalizeOptionalMapBoardData(rawData) {
+    if (!rawData || typeof rawData !== 'object' || !Array.isArray(rawData.groups)) {
+        return { groups: [], tacticalLinks: [] };
+    }
+    try {
+        return normalizeMapBoardData(rawData);
+    } catch (e) {
+        return { groups: [], tacticalLinks: [] };
+    }
+}
+
+function buildMapDeletionSets(remoteRaw, localRaw, baseRaw = null) {
+    const remote = normalizeOptionalMapBoardData(remoteRaw);
+    const local = normalizeOptionalMapBoardData(localRaw);
+    const base = normalizeOptionalMapBoardData(baseRaw);
+
+    const deletedGroupKeys = new Set();
+    const deletedPointIds = new Set();
+    const deletedZoneIds = new Set();
+    const deletedLinkKeys = new Set();
+
+    const remoteGroupKeys = new Set(
+        remote.groups.map((group) => String(group?.name || '').trim().toLowerCase()).filter(Boolean)
+    );
+    const localGroupKeys = new Set(
+        local.groups.map((group) => String(group?.name || '').trim().toLowerCase()).filter(Boolean)
+    );
+
+    const remotePointIds = new Set();
+    const localPointIds = new Set();
+    const remoteZoneIds = new Set();
+    const localZoneIds = new Set();
+
+    remote.groups.forEach((group) => {
+        (Array.isArray(group?.points) ? group.points : []).forEach((point) => {
+            const pointId = String(point?.id || '').trim();
+            if (pointId) remotePointIds.add(pointId);
+        });
+        (Array.isArray(group?.zones) ? group.zones : []).forEach((zone) => {
+            const zoneId = String(zone?.id || '').trim();
+            if (zoneId) remoteZoneIds.add(zoneId);
+        });
+    });
+
+    local.groups.forEach((group) => {
+        (Array.isArray(group?.points) ? group.points : []).forEach((point) => {
+            const pointId = String(point?.id || '').trim();
+            if (pointId) localPointIds.add(pointId);
+        });
+        (Array.isArray(group?.zones) ? group.zones : []).forEach((zone) => {
+            const zoneId = String(zone?.id || '').trim();
+            if (zoneId) localZoneIds.add(zoneId);
+        });
+    });
+
+    base.groups.forEach((group) => {
+        const groupKey = String(group?.name || '').trim().toLowerCase();
+        if (groupKey && (!remoteGroupKeys.has(groupKey) || !localGroupKeys.has(groupKey))) {
+            deletedGroupKeys.add(groupKey);
+        }
+
+        (Array.isArray(group?.points) ? group.points : []).forEach((point) => {
+            const pointId = String(point?.id || '').trim();
+            if (pointId && (!remotePointIds.has(pointId) || !localPointIds.has(pointId))) {
+                deletedPointIds.add(pointId);
+            }
+        });
+
+        (Array.isArray(group?.zones) ? group.zones : []).forEach((zone) => {
+            const zoneId = String(zone?.id || '').trim();
+            if (zoneId && (!remoteZoneIds.has(zoneId) || !localZoneIds.has(zoneId))) {
+                deletedZoneIds.add(zoneId);
+            }
+        });
+    });
+
+    const remoteLinkKeys = new Set(
+        remote.tacticalLinks.map((link) => makeLinkPairKey(link?.from, link?.to)).filter(Boolean)
+    );
+    const localLinkKeys = new Set(
+        local.tacticalLinks.map((link) => makeLinkPairKey(link?.from, link?.to)).filter(Boolean)
+    );
+
+    base.tacticalLinks.forEach((link) => {
+        const linkKey = makeLinkPairKey(link?.from, link?.to);
+        if (linkKey && (!remoteLinkKeys.has(linkKey) || !localLinkKeys.has(linkKey))) {
+            deletedLinkKeys.add(linkKey);
+        }
+    });
+
+    return {
+        deletedGroupKeys,
+        deletedPointIds,
+        deletedZoneIds,
+        deletedLinkKeys
+    };
+}
+
+function setCloudShadowData(rawData) {
+    collab.shadowData = cloneJsonSafe(
+        normalizeOptionalMapBoardData(rawData),
+        { groups: [], tacticalLinks: [] }
+    );
+    return collab.shadowData;
+}
+
+function mergeMapBoardData(remoteRaw, localRaw, baseRaw = null) {
     const remote = normalizeMapBoardData(remoteRaw);
     const local = normalizeMapBoardData(localRaw);
+    const deletionSets = buildMapDeletionSets(remote, local, baseRaw);
 
-    const mergedGroups = cloneJsonSafe(remote.groups, []);
+    const mergedGroups = cloneJsonSafe(
+        remote.groups
+            .filter((group) => {
+                const key = String(group?.name || '').trim().toLowerCase();
+                return !key || !deletionSets.deletedGroupKeys.has(key);
+            })
+            .map((group) => ({
+                ...group,
+                points: (Array.isArray(group?.points) ? group.points : []).filter((point) => {
+                    const pointId = String(point?.id || '').trim();
+                    return !pointId || !deletionSets.deletedPointIds.has(pointId);
+                }),
+                zones: (Array.isArray(group?.zones) ? group.zones : []).filter((zone) => {
+                    const zoneId = String(zone?.id || '').trim();
+                    return !zoneId || !deletionSets.deletedZoneIds.has(zoneId);
+                })
+            })),
+        []
+    );
     const pointIndex = new Map();
     const zoneIndex = new Map();
     const groupByName = new Map();
@@ -384,7 +510,7 @@ function mergeMapBoardData(remoteRaw, localRaw) {
         const points = Array.isArray(group.points) ? group.points : [];
         points.forEach((point, pointIdx) => {
             const pointId = String(point?.id || '').trim();
-            if (!pointId || pointIndex.has(pointId)) return;
+            if (!pointId || deletionSets.deletedPointIds.has(pointId) || pointIndex.has(pointId)) return;
             pointIndex.set(pointId, { groupIdx, pointIdx });
         });
 
@@ -395,7 +521,7 @@ function mergeMapBoardData(remoteRaw, localRaw) {
                 zoneId = generateID();
                 zone.id = zoneId;
             }
-            if (zoneIndex.has(zoneId)) return;
+            if (deletionSets.deletedZoneIds.has(zoneId) || zoneIndex.has(zoneId)) return;
             zoneIndex.set(zoneId, { groupIdx, zoneIdx });
         });
     });
@@ -403,6 +529,7 @@ function mergeMapBoardData(remoteRaw, localRaw) {
     local.groups.forEach((localGroup, localIdx) => {
         const localName = String(localGroup?.name || '').trim();
         const key = localName.toLowerCase();
+        if (key && deletionSets.deletedGroupKeys.has(key)) return;
         let targetIdx = key && groupByName.has(key) ? groupByName.get(key) : -1;
         if (targetIdx < 0) {
             const created = {
@@ -428,7 +555,7 @@ function mergeMapBoardData(remoteRaw, localRaw) {
         localPoints.forEach((rawPoint) => {
             const pointCopy = cloneJsonSafe(rawPoint, null);
             const pointId = String(pointCopy?.id || '').trim();
-            if (!pointCopy || !pointId) return;
+            if (!pointCopy || !pointId || deletionSets.deletedPointIds.has(pointId)) return;
 
             if (pointIndex.has(pointId)) {
                 const loc = pointIndex.get(pointId);
@@ -451,6 +578,7 @@ function mergeMapBoardData(remoteRaw, localRaw) {
                 zoneId = generateID();
                 zoneCopy.id = zoneId;
             }
+            if (deletionSets.deletedZoneIds.has(zoneId)) return;
 
             if (zoneIndex.has(zoneId)) {
                 const loc = zoneIndex.get(zoneId);
@@ -481,6 +609,7 @@ function mergeMapBoardData(remoteRaw, localRaw) {
         if (!from || !to || from === to) return;
         if (!validPointIds.has(from) || !validPointIds.has(to)) return;
         const pairKey = makeLinkPairKey(from, to);
+        if (deletionSets.deletedLinkKeys.has(pairKey)) return;
         mergedLinkMap.set(pairKey, cloneJsonSafe(rawLink, null));
     });
 
@@ -491,6 +620,7 @@ function mergeMapBoardData(remoteRaw, localRaw) {
         if (!from || !to || from === to) return;
         if (!validPointIds.has(from) || !validPointIds.has(to)) return;
         const pairKey = makeLinkPairKey(from, to);
+        if (deletionSets.deletedLinkKeys.has(pairKey)) return;
         mergedLinkMap.set(pairKey, cloneJsonSafe(rawLink, null));
     });
 
@@ -545,7 +675,8 @@ async function syncActiveCloudBoard(options = {}) {
 
         if (localChanged && canEditCloudBoard()) {
             const localSnapshot = getCloudMapPayload();
-            const mergedPayload = mergeMapBoardData(result.board.data, localSnapshot);
+            const mergedPayload = mergeMapBoardData(result.board.data, localSnapshot, collab.shadowData);
+            setCloudShadowData(result.board.data);
             applyCloudMapData(mergedPayload);
             state.currentFileName = remoteSummary.title;
             const mergedSaved = await saveActiveCloudBoard({ manual: false, quiet: true, force: true });
@@ -555,6 +686,7 @@ async function syncActiveCloudBoard(options = {}) {
         }
 
         applyCloudMapData(result.board.data);
+        setCloudShadowData(result.board.data);
         state.currentFileName = remoteSummary.title;
         captureCloudSavedFingerprint();
         return true;
@@ -634,6 +766,7 @@ function setActiveCloudBoardFromSummary(summary = null) {
         collab.ownerId = '';
         collab.activeBoardUpdatedAt = '';
         collab.lastSavedFingerprint = '';
+        collab.shadowData = null;
         syncSharedMapSnapshot(null);
     } else {
         collab.activeBoardId = String(summary.id || '');
@@ -722,6 +855,7 @@ async function openCloudBoard(boardId, options = {}) {
 
     setActiveCloudBoardFromSummary(summary);
     applyCloudMapData(result.board.data);
+    setCloudShadowData(result.board.data);
     state.currentFileName = summary.title;
     captureCloudSavedFingerprint();
     setBoardQueryParam(summary.id);
@@ -761,6 +895,7 @@ export async function saveActiveCloudBoard(options = {}) {
             boardId: collab.activeBoardId,
             title,
             data: payload,
+            ...(collab.shadowData ? { baseData: cloneJsonSafe(collab.shadowData, null) } : {}),
             ...(collab.activeBoardUpdatedAt ? { expectedUpdatedAt: collab.activeBoardUpdatedAt } : {})
         });
 
@@ -775,6 +910,7 @@ export async function saveActiveCloudBoard(options = {}) {
                 const serverPayload = normalizeMapBoardData(result.board.data);
                 const serverFingerprint = JSON.stringify(serverPayload);
                 collab.lastSavedFingerprint = serverFingerprint;
+                setCloudShadowData(serverPayload);
 
                 if (serverFingerprint !== localFingerprint) {
                     applyCloudMapData(serverPayload);
@@ -783,6 +919,7 @@ export async function saveActiveCloudBoard(options = {}) {
                 }
             } else {
                 collab.lastSavedFingerprint = localFingerprint;
+                setCloudShadowData(payload);
                 syncSharedMapSnapshot(payload);
             }
         }
@@ -841,6 +978,7 @@ async function createCloudBoardFromCurrent() {
     });
 
     state.currentFileName = collab.activeBoardTitle;
+    setCloudShadowData(result.board.data || payload);
     captureCloudSavedFingerprint();
     syncSharedMapSnapshot(payload);
     setBoardQueryParam(result.board.id);
