@@ -41,6 +41,26 @@ test('normalizeAlert nettoie la whitelist et resume les cercles en une alerte pu
   assert.equal(normalized.radius, 3.5);
 });
 
+test('normalizeAlert conserve le trait global et les rayons des cercles', () => {
+  const normalized = __test.normalizeAlert({
+    title: 'Multi cercle',
+    description: 'Deux zones de surveillance',
+    strokeWidth: 0.23,
+    circles: [
+      { xPercent: 20, yPercent: 25, gpsX: 10.1, gpsY: 44.1, radius: 1.8 },
+      { xPercent: 42, yPercent: 48, gpsX: 12.4, gpsY: 46.8, radius: 4.6 },
+    ],
+    activeCircleIndex: 0,
+    active: true,
+  });
+
+  assert.equal(normalized.strokeWidth, 0.23);
+  assert.equal(normalized.activeCircleIndex, 0);
+  assert.equal(normalized.circles.length, 2);
+  assert.equal(normalized.circles[0].radius, 1.8);
+  assert.equal(normalized.circles[1].radius, 4.6);
+});
+
 test('listPublicAlerts expose une alerte future si showBeforeStart est actif', () => {
   const futureDate = new Date(Date.now() + (48 * 60 * 60 * 1000)).toISOString();
   const visibleAlert = __test.normalizeAlert({

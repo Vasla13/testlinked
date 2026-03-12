@@ -50,7 +50,7 @@
                         <strong id="staffSelectionMode">Aucune</strong>
                     </div>
                 </div>
-                <div id="staffDrawStatus" class="staff-draw-status">Clique sur la carte pour poser un cercle rapide, ou clic droit pour une zone.</div>
+                <div id="staffDrawStatus" class="staff-draw-status">Utilise Nouvelle alerte pour un cercle, ou clic droit pour une zone.</div>
                 <div class="staff-position-meta">Position: <strong id="staffAlertCoords">--</strong></div>
                 <div id="staffStatusMessage" class="staff-status-message">Console verrouillee.</div>
             </div>
@@ -58,26 +58,34 @@
             <div class="panel-section shell-section staff-help-panel">
                 <span class="section-title shell-title">Creation</span>
                 <div class="staff-helper-copy">
-                    1. Clique sur la carte pour un cercle rapide.<br>
+                    1. Clique sur Nouvelle alerte pour tracer un cercle.<br>
                     2. Utilise Shift+clic pour ajouter un cercle ou clic droit pour une zone.<br>
                     3. Termine puis remplis la fenetre d’alerte.
                 </div>
                 <div class="staff-draw-controls">
                     <div class="staff-draw-control">
                         <label class="staff-control-label" for="alertRadius">
-                            Rayon cercle
+                            Rayon du cercle actif
                             <span id="alertRadiusValue">2.6</span>
                         </label>
                         <input id="alertRadius" class="staff-slider" type="range" min="0.8" max="12" step="0.1" value="2.6">
                     </div>
                     <div class="staff-draw-control">
                         <label class="staff-control-label" for="alertStrokeWidth">
-                            Epaisseur trait
+                            Epaisseur du trait
                             <span id="alertStrokeWidthValue">0.06</span>
                         </label>
                         <input id="alertStrokeWidth" class="staff-slider" type="range" min="0.02" max="0.5" step="0.01" value="0.06">
                     </div>
-                    <div class="staff-control-hint">Les changements s appliquent en direct pendant le trace.</div>
+                    <div class="staff-control-hint">Le rayon agit sur le cercle actif. Le trait s applique a toute l alerte.</div>
+                    <div id="staffCircleTools" class="staff-circle-tools" hidden>
+                        <div class="staff-circle-tools-head">
+                            <span class="staff-circle-tools-title">Cercle actif</span>
+                            <span id="staffCircleCount" class="staff-circle-count">0</span>
+                        </div>
+                        <div id="staffCircleToolsHint" class="staff-circle-tools-hint">Selectionne un cercle pour regler son rayon.</div>
+                        <div id="staffCirclePicker" class="staff-circle-picker"></div>
+                    </div>
                 </div>
                 <button id="btnNewAlert" class="action-btn" type="button">Nouvelle alerte</button>
             </div>

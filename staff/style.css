@@ -304,6 +304,130 @@ body.staff-shell input[type="datetime-local"].cyber-input::-webkit-datetime-edit
     line-height: 1.45;
 }
 
+.staff-circle-tools {
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid rgba(102, 243, 255, 0.14);
+    background: linear-gradient(180deg, rgba(8, 17, 37, 0.8), rgba(4, 10, 22, 0.72));
+}
+
+.staff-circle-tools[hidden] {
+    display: none !important;
+}
+
+.staff-circle-tools-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.staff-circle-tools-title {
+    color: #dff5ff;
+    font-size: 0.74rem;
+    font-weight: 700;
+    letter-spacing: 1.3px;
+    text-transform: uppercase;
+}
+
+.staff-circle-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    min-height: 26px;
+    padding: 0 10px;
+    border: 1px solid rgba(102, 243, 255, 0.2);
+    border-radius: 999px;
+    background: rgba(9, 19, 42, 0.9);
+    color: #dffbff;
+    font-size: 0.74rem;
+    font-weight: 800;
+}
+
+.staff-circle-tools-hint {
+    color: #8fa7c6;
+    font-size: 0.76rem;
+    line-height: 1.45;
+}
+
+.staff-circle-picker {
+    display: grid;
+    gap: 8px;
+}
+
+.staff-circle-chip {
+    display: grid;
+    gap: 4px;
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid rgba(102, 243, 255, 0.14);
+    border-radius: 12px;
+    background: rgba(7, 15, 34, 0.72);
+    color: #d7ebf7;
+    text-align: left;
+    transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease, color 160ms ease;
+}
+
+.staff-circle-chip:hover {
+    border-color: rgba(102, 243, 255, 0.34);
+    background: rgba(10, 22, 46, 0.92);
+    color: #f5fdff;
+}
+
+.staff-circle-chip.is-active {
+    border-color: rgba(255, 77, 103, 0.4);
+    background: linear-gradient(180deg, rgba(255, 77, 103, 0.18), rgba(47, 12, 24, 0.56));
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04) inset, 0 0 18px rgba(255, 77, 103, 0.12);
+    color: #fff2f5;
+}
+
+.staff-circle-chip-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.staff-circle-chip-title {
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+}
+
+.staff-circle-chip-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 22px;
+    padding: 0 9px;
+    border: 1px solid rgba(102, 243, 255, 0.18);
+    border-radius: 999px;
+    background: rgba(9, 19, 42, 0.78);
+    color: #bfefff;
+    font-size: 0.66rem;
+    font-weight: 800;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+}
+
+.staff-circle-chip.is-active .staff-circle-chip-badge {
+    border-color: rgba(255, 209, 188, 0.28);
+    background: rgba(44, 11, 20, 0.82);
+    color: #ffd9c9;
+}
+
+.staff-circle-chip-meta {
+    color: #8fa7c6;
+    font-size: 0.74rem;
+    line-height: 1.4;
+}
+
+.staff-circle-chip.is-active .staff-circle-chip-meta {
+    color: rgba(255, 233, 238, 0.86);
+}
+
 .staff-helper-copy {
     color: #9bb4d0;
     font-size: 0.78rem;

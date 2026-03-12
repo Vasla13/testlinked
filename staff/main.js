@@ -20,6 +20,10 @@ const dom = {
     publishBtn: document.getElementById('btnPublishAlert'),
     radius: document.getElementById('alertRadius'),
     radiusValue: document.getElementById('alertRadiusValue'),
+    circleTools: document.getElementById('staffCircleTools'),
+    circleToolsHint: document.getElementById('staffCircleToolsHint'),
+    circleCount: document.getElementById('staffCircleCount'),
+    circlePicker: document.getElementById('staffCirclePicker'),
     drawStatus: document.getElementById('staffDrawStatus'),
     statusState: document.getElementById('staffAlertState'),
     statusCoords: document.getElementById('staffAlertCoords'),
@@ -815,6 +819,38 @@ function getActiveCircle(selection = state.selection) {
     return index >= 0 ? circles[index] : null;
 }
 
+function selectActiveCircle(index, options = {}) {
+    const selection = cloneSelection(state.selection);
+    if (!selection || selection.shapeType === 'zone') return false;
+    const circles = getSelectionCircles(selection);
+    if (!circles.length) return false;
+
+    const nextIndex = Math.min(circles.length - 1, Math.max(0, Number(index)));
+    if (!Number.isInteger(nextIndex)) return false;
+
+    const nextSelection = buildCircleSelection(circles, nextIndex, {
+        strokeWidth: selection.strokeWidth,
+    });
+    if (!nextSelection) return false;
+
+    setSelection(nextSelection, {
+        syncForm: options.syncForm !== false,
+        resetDraft: false,
+    });
+
+    if (options.status !== false) {
+        const activeCircle = getActiveCircle(nextSelection);
+        if (activeCircle) {
+            setStatusMessage(
+                `Cercle ${nextIndex + 1} selectionne. Rayon ${activeCircle.radius.toFixed(1)} • Trait ${nextSelection.strokeWidth.toFixed(2)}.`,
+                'ok'
+            );
+        }
+    }
+
+    return true;
+}
+
 function getCircleBounds(selection = state.selection) {
     const circles = getSelectionCircles(selection);
     if (!circles.length) return null;
@@ -955,9 +991,60 @@ function updateStrokeWidthUi(strokeWidth = getCurrentStrokeWidth()) {
     if (dom.strokeWidthValue) dom.strokeWidthValue.textContent = value.toFixed(2);
 }
 
+function renderCircleTools() {
+    if (!dom.circleTools || !dom.circlePicker || !dom.circleToolsHint || !dom.circleCount) return;
+
+    const selection = state.selection;
+    const circles = getSelectionCircles(selection);
+    const isCircleSelection = Boolean(selection && selection.shapeType !== 'zone' && circles.length);
+    dom.circleTools.hidden = !isCircleSelection || state.drawMode;
+
+    if (!isCircleSelection || state.drawMode) {
+        dom.circleCount.textContent = '0';
+        dom.circlePicker.innerHTML = '';
+        return;
+    }
+
+    const activeIndex = getActiveCircleIndex(selection);
+    const strokeWidth = clampStrokeWidth(selection.strokeWidth || DEFAULT_STROKE_WIDTH);
+
+    dom.circleCount.textContent = String(circles.length);
+    dom.circleToolsHint.textContent = circles.length > 1
+        ? 'Choisis le cercle a regler. Le rayon suit ce choix, le trait reste global.'
+        : 'Un seul cercle actif. Le rayon agit ici, le trait reste global.';
+
+    dom.circlePicker.innerHTML = circles.map((circle, index) => {
+        const isActive = index === activeIndex;
+        return `
+            <button
+                type="button"
+                class="staff-circle-chip${isActive ? ' is-active' : ''}"
+                data-circle-pick="${index}"
+                aria-pressed="${isActive ? 'true' : 'false'}"
+            >
+                <span class="staff-circle-chip-top">
+                    <span class="staff-circle-chip-title">Cercle ${index + 1}</span>
+                    <span class="staff-circle-chip-badge">${isActive ? 'Actif' : 'Choisir'}</span>
+                </span>
+                <span class="staff-circle-chip-meta">GPS ${circle.gpsX.toFixed(2)} / ${circle.gpsY.toFixed(2)} • Rayon ${circle.radius.toFixed(1)}</span>
+                <span class="staff-circle-chip-meta">Trait global ${strokeWidth.toFixed(2)}</span>
+            </button>
+        `;
+    }).join('');
+
+    Array.from(dom.circlePicker.querySelectorAll('[data-circle-pick]')).forEach((button) => {
+        button.onclick = () => {
+            const index = Number(button.getAttribute('data-circle-pick'));
+            if (!Number.isInteger(index)) return;
+            selectActiveCircle(index, { syncForm: true, status: false });
+        };
+    });
+}
+
 function renderInteractivePreview() {
     renderSelection();
     renderBanner();
+    renderCircleTools();
     refreshStatusCards();
 }
 
@@ -1042,6 +1129,7 @@ function stopDrawingMode(options = {}) {
     }
     renderSelection();
     renderBanner();
+    renderCircleTools();
     refreshStatusCards();
 }
 
@@ -1202,8 +1290,8 @@ function refreshModeControls() {
 
     setDrawStatus(
         circleCount > 0
-            ? 'Clique pour replacer le cercle actif. Shift+clic ajoute un cercle. Clic droit ouvre les outils de zone.'
-            : 'Clique sur la carte pour poser un cercle rapide, ou clic droit pour creer une zone.',
+            ? 'Glisse le cercle actif pour le deplacer. Shift+clic ajoute un cercle. Clic droit ouvre les outils de zone.'
+            : 'Utilise Nouvelle alerte pour un cercle, ou clic droit pour creer une zone.',
         'circle'
     );
 }
@@ -1224,10 +1312,7 @@ function beginCircleDrag(event) {
     const circle = circles[circleIndex];
     if (!circle) return;
 
-    setSelection(buildCircleSelection(circles, circleIndex), {
-        syncForm: true,
-        resetDraft: false,
-    });
+    selectActiveCircle(circleIndex, { syncForm: true, status: false });
     state.selectionDrag = {
         radius: clampRadius(circle.radius || getCurrentRadius()),
         circleIndex,
@@ -1309,10 +1394,7 @@ function appendSelectionToLayer(selection, options = {}) {
             ring.addEventListener('click', (event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                setSelection(buildCircleSelection(getSelectionCircles(), index), {
-                    syncForm: true,
-                    resetDraft: false,
-                });
+                selectActiveCircle(index, { syncForm: true, status: false });
             });
         }
         dom.alertLayer.appendChild(ring);
@@ -1438,7 +1520,7 @@ function renderBanner() {
         return;
     }
 
-    let meta = 'Clique sur la carte pour choisir la position';
+    let meta = 'Utilise Nouvelle alerte ou clic droit pour choisir la position';
     if (state.drawMode && state.drawType === 'circle') {
         const draft = state.drawCircleDraft;
         const draftGps = draft ? percentageToGps(draft.cx, draft.cy) : null;
@@ -1456,7 +1538,7 @@ function renderBanner() {
         const circleCount = getSelectionCircles(selection).length;
         meta = circleCount > 1
             ? `${circleCount} cercles • Actif ${getActiveCircleIndex(selection) + 1} • GPS ${activeCircle.gpsX.toFixed(2)} / ${activeCircle.gpsY.toFixed(2)} • Rayon ${activeCircle.radius.toFixed(1)} • Trait ${getCurrentStrokeWidth().toFixed(2)}`
-            : `GPS ${activeCircle.gpsX.toFixed(2)} / ${activeCircle.gpsY.toFixed(2)} • Rayon ${activeCircle.radius.toFixed(1)} • Trait ${getCurrentStrokeWidth().toFixed(2)} • Glisse pour ajuster • Clique pour replacer`;
+            : `GPS ${activeCircle.gpsX.toFixed(2)} / ${activeCircle.gpsY.toFixed(2)} • Rayon ${activeCircle.radius.toFixed(1)} • Trait ${getCurrentStrokeWidth().toFixed(2)} • Glisse pour ajuster`;
     } else if (state.drawDraftPoints.length > 0) {
         meta = `Dessin en cours • ${state.drawDraftPoints.length} points`;
     }
@@ -1490,6 +1572,7 @@ function setSelection(selection, options = {}) {
         }
         renderSelection();
         renderBanner();
+        renderCircleTools();
         refreshStatusCards();
         return;
     }
@@ -1512,6 +1595,7 @@ function setSelection(selection, options = {}) {
     updateStrokeWidthUi(state.selection.strokeWidth || DEFAULT_STROKE_WIDTH);
     renderSelection();
     renderBanner();
+    renderCircleTools();
     refreshStatusCards();
 }
 
@@ -1637,6 +1721,7 @@ function fillForm(alert, options = {}) {
         } else {
             renderSelection();
             renderBanner();
+            renderCircleTools();
             refreshStatusCards();
         }
         refreshStartVisibilityUi();
@@ -1864,7 +1949,7 @@ function resetToNewAlertDraft(options = {}) {
     });
     renderAlertsList();
     updateAlertModalTitle();
-    setStatusMessage('Trace une nouvelle alerte sur la carte.', 'ok');
+    setStatusMessage('Choisis un mode de creation: Nouvelle alerte pour un cercle ou clic droit pour une zone.', 'ok');
 }
 
 async function loadCurrentAlert() {
@@ -1946,6 +2031,7 @@ async function deleteAlert(targetId = getAlertId()) {
 }
 
 function choosePositionOnMap(event) {
+    if (Number(event?.button) !== 0) return;
     if (!state.unlocked || !state.mapSelectionEnabled || state.drawMode) return;
 
     const coords = getMapPercentCoords(event.clientX, event.clientY);
@@ -2057,6 +2143,9 @@ function initMap() {
         if (!state.unlocked) return;
         if (state.drawMode || state.selectionDrag) return;
         event.preventDefault();
+        event.stopPropagation();
+        state.pointer.active = false;
+        state.pointer.moved = false;
         state.contextMenuMapCoords = getMapPercentCoords(event.clientX, event.clientY);
         openContextMenu(event.clientX, event.clientY);
     });
@@ -2188,10 +2277,16 @@ function initMap() {
             return;
         }
 
+        if (event.button !== 0) {
+            state.pointer.active = false;
+            state.pointer.moved = false;
+            return;
+        }
+
         if (!state.pointer.active) return;
         const moved = state.pointer.moved;
         state.pointer.active = false;
-        if (!moved && dom.viewport?.contains(event.target)) choosePositionOnMap(event);
+        if (!moved && event.shiftKey && dom.viewport?.contains(event.target)) choosePositionOnMap(event);
     });
 }
 
@@ -2221,9 +2316,7 @@ function bindEvents() {
 
     dom.newAlertBtn?.addEventListener('click', () => {
         if (!state.unlocked) return;
-        stopDrawingMode({ restoreBackup: false });
-        closeAlertModal({ restore: false });
-        resetToNewAlertDraft({ keepSelection: false });
+        startCircleDraw();
     });
 
     dom.publishBtn?.addEventListener('click', saveAlert);
