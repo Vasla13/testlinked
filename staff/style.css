@@ -434,6 +434,17 @@ body.staff-shell input[type="datetime-local"].cyber-input::-webkit-datetime-edit
     line-height: 1.5;
 }
 
+.staff-draw-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.staff-draw-cancel {
+    grid-column: 1 / -1;
+    margin-top: 0;
+}
+
 .staff-alerts-shell {
     display: flex;
     flex-direction: column;
@@ -1023,12 +1034,6 @@ body.staff-shell input[type="datetime-local"].cyber-input::-webkit-datetime-edit
 .staff-alert-ring.is-draft,
 .staff-alert-draft {
     filter: drop-shadow(0 0 12px rgba(255, 136, 154, 0.28));
-}
-
-.staff-alert-anchor {
-    fill: rgba(255, 255, 255, 0.96);
-    opacity: 0.96;
-    filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.38));
 }
 
 #staff-map-banner {

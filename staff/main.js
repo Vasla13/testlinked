@@ -17,6 +17,8 @@ const dom = {
     accessError: document.getElementById('staff-access-error'),
     accessSubmit: document.getElementById('staff-access-submit'),
     newAlertBtn: document.getElementById('btnNewAlert'),
+    startFreeDrawBtn: document.getElementById('btnStartFreeDraw'),
+    cancelDrawBtn: document.getElementById('btnCancelDrawMode'),
     publishBtn: document.getElementById('btnPublishAlert'),
     radius: document.getElementById('alertRadius'),
     radiusValue: document.getElementById('alertRadiusValue'),
@@ -1041,6 +1043,29 @@ function renderCircleTools() {
     });
 }
 
+function updateDrawActionButtons() {
+    const isCircleMode = state.drawMode && state.drawType === 'circle';
+    const isZoneMode = state.drawMode && state.drawType === 'free';
+    const canCancel = state.drawMode;
+
+    dom.newAlertBtn?.classList.toggle('is-active', isCircleMode);
+    dom.startFreeDrawBtn?.classList.toggle('is-active', isZoneMode);
+
+    if (dom.newAlertBtn) {
+        dom.newAlertBtn.textContent = isCircleMode ? 'Mode cercle' : 'Tracer cercle';
+        dom.newAlertBtn.setAttribute('aria-pressed', isCircleMode ? 'true' : 'false');
+    }
+
+    if (dom.startFreeDrawBtn) {
+        dom.startFreeDrawBtn.textContent = isZoneMode ? 'Mode zone' : 'Tracer zone';
+        dom.startFreeDrawBtn.setAttribute('aria-pressed', isZoneMode ? 'true' : 'false');
+    }
+
+    if (dom.cancelDrawBtn) {
+        dom.cancelDrawBtn.disabled = !canCancel;
+    }
+}
+
 function renderInteractivePreview() {
     renderSelection();
     renderBanner();
@@ -1130,6 +1155,7 @@ function stopDrawingMode(options = {}) {
     renderSelection();
     renderBanner();
     renderCircleTools();
+    updateDrawActionButtons();
     refreshStatusCards();
 }
 
@@ -1177,6 +1203,7 @@ function startCircleDraw() {
     );
     renderSelection();
     renderBanner();
+    updateDrawActionButtons();
     refreshStatusCards();
 }
 
@@ -1185,6 +1212,7 @@ function startFreeDraw() {
     setStatusMessage('Maintiens clic gauche pour dessiner la zone de la nouvelle alerte.', 'ok');
     renderSelection();
     renderBanner();
+    updateDrawActionButtons();
     refreshStatusCards();
 }
 
@@ -1272,8 +1300,8 @@ function refreshModeControls() {
         if (state.drawType === 'circle') {
             setDrawStatus(
                 state.drawCircleHoverMode
-                    ? 'Nouvelle zone. Bouge la souris pour regler le rayon puis clique gauche pour valider.'
-                    : 'Nouvelle zone. Clique puis glisse pour regler le rayon.',
+                    ? 'Nouveau cercle. Bouge la souris pour regler le rayon puis clique gauche pour valider.'
+                    : 'Nouveau cercle. Clique puis glisse pour regler le rayon.',
                 'circle'
             );
         } else {
@@ -1291,7 +1319,7 @@ function refreshModeControls() {
     setDrawStatus(
         circleCount > 0
             ? 'Glisse le cercle actif pour le deplacer. Shift+clic ajoute un cercle. Clic droit ouvre les outils de zone.'
-            : 'Utilise Nouvelle alerte pour un cercle, ou clic droit pour creer une zone.',
+            : 'Utilise Tracer cercle ou Tracer zone pour commencer.',
         'circle'
     );
 }
@@ -1430,13 +1458,6 @@ function renderSelection() {
         draftCircle.setAttribute('stroke-dasharray', '0.45 0.22');
         draftCircle.setAttribute('class', 'staff-alert-ring is-draft');
         dom.alertLayer.appendChild(draftCircle);
-
-        const anchor = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        anchor.setAttribute('cx', state.drawCircleDraft.cx);
-        anchor.setAttribute('cy', state.drawCircleDraft.cy);
-        anchor.setAttribute('r', '0.32');
-        anchor.setAttribute('class', 'staff-alert-anchor');
-        dom.alertLayer.appendChild(anchor);
     }
 
     if (state.drawDraftPoints.length > 0) {
@@ -1448,14 +1469,6 @@ function renderSelection() {
         draft.setAttribute('stroke-dasharray', '0.5 0.26');
         draft.setAttribute('class', 'staff-alert-draft');
         dom.alertLayer.appendChild(draft);
-
-        const draftCenter = computePolygonCenter(state.drawDraftPoints);
-        const anchor = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        anchor.setAttribute('cx', draftCenter.x);
-        anchor.setAttribute('cy', draftCenter.y);
-        anchor.setAttribute('r', '0.32');
-        anchor.setAttribute('class', 'staff-alert-anchor');
-        dom.alertLayer.appendChild(anchor);
     }
 
     if (state.drawMode) return;
@@ -1495,7 +1508,7 @@ function refreshStatusCards() {
 
     if (dom.selectionMode) {
         if (!state.mapSelectionEnabled) dom.selectionMode.textContent = 'Pause';
-        else if (state.drawMode && state.drawType === 'circle') dom.selectionMode.textContent = 'Nouvelle zone';
+        else if (state.drawMode && state.drawType === 'circle') dom.selectionMode.textContent = 'Nouveau cercle';
         else if (state.drawMode) dom.selectionMode.textContent = 'Dessin libre';
         else if (!selection) dom.selectionMode.textContent = 'Aucune';
         else if (selection?.shapeType === 'zone') dom.selectionMode.textContent = 'Zone';
@@ -1520,15 +1533,15 @@ function renderBanner() {
         return;
     }
 
-    let meta = 'Utilise Nouvelle alerte ou clic droit pour choisir la position';
+    let meta = 'Utilise Tracer cercle ou Tracer zone pour choisir la position';
     if (state.drawMode && state.drawType === 'circle') {
         const draft = state.drawCircleDraft;
         const draftGps = draft ? percentageToGps(draft.cx, draft.cy) : null;
         const draftRadius = draft ? Number((draft.r || 0).toFixed(2)) : 0;
         const displayRadius = draft ? getDraftCircleDisplayRadius(draft) : getCurrentRadius();
         meta = draft && draftGps
-            ? `Nouvelle zone • GPS ${draftGps.x.toFixed(2)} / ${draftGps.y.toFixed(2)} • Rayon ${Math.max(draftRadius, displayRadius).toFixed(1)} • Trait ${getCurrentStrokeWidth().toFixed(2)}`
-            : `Nouvelle zone • Clic droit puis pointeur • Rayon ${getCurrentRadius().toFixed(1)} • Trait ${getCurrentStrokeWidth().toFixed(2)}`;
+            ? `Nouveau cercle • GPS ${draftGps.x.toFixed(2)} / ${draftGps.y.toFixed(2)} • Rayon ${Math.max(draftRadius, displayRadius).toFixed(1)} • Trait ${getCurrentStrokeWidth().toFixed(2)}`
+            : `Nouveau cercle • Clique puis glisse • Rayon ${getCurrentRadius().toFixed(1)} • Trait ${getCurrentStrokeWidth().toFixed(2)}`;
     }
     const startDate = getDraftStartDate();
     if (!state.drawMode && selection?.shapeType === 'zone') {
@@ -1596,6 +1609,7 @@ function setSelection(selection, options = {}) {
     renderSelection();
     renderBanner();
     renderCircleTools();
+    updateDrawActionButtons();
     refreshStatusCards();
 }
 
@@ -1949,7 +1963,7 @@ function resetToNewAlertDraft(options = {}) {
     });
     renderAlertsList();
     updateAlertModalTitle();
-    setStatusMessage('Choisis un mode de creation: Nouvelle alerte pour un cercle ou clic droit pour une zone.', 'ok');
+    setStatusMessage('Choisis un mode de creation: Tracer cercle ou Tracer zone.', 'ok');
 }
 
 async function loadCurrentAlert() {
@@ -2318,6 +2332,15 @@ function bindEvents() {
         if (!state.unlocked) return;
         startCircleDraw();
     });
+    dom.startFreeDrawBtn?.addEventListener('click', () => {
+        if (!state.unlocked) return;
+        startFreeDraw();
+    });
+    dom.cancelDrawBtn?.addEventListener('click', () => {
+        if (!state.drawMode) return;
+        stopDrawingMode({ restoreBackup: true });
+        setStatusMessage('Trace annule.', 'warn');
+    });
 
     dom.publishBtn?.addEventListener('click', saveAlert);
     dom.modalCloseBtn?.addEventListener('click', () => closeAlertModal({ restore: true }));
@@ -2466,6 +2489,11 @@ function bindEvents() {
             closeConfirmModal(false);
             return;
         }
+        if (event.key === 'Escape' && state.drawMode) {
+            stopDrawingMode({ restoreBackup: true });
+            setStatusMessage('Trace annule.', 'warn');
+            return;
+        }
         if (event.key === 'Escape' && isAlertModalOpen()) {
             closeAlertModal({ restore: true });
         }
@@ -2483,6 +2511,7 @@ document.addEventListener('DOMContentLoaded', () => {
     updateAlertModalTitle();
     refreshStartVisibilityUi();
     refreshAlertModePill();
+    updateDrawActionButtons();
     refreshStatusCards();
     renderBanner();
     if (dom.accessInput) dom.accessInput.focus();

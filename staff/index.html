@@ -12,8 +12,8 @@
 </head>
 <body class="map-shell staff-shell">
     <div id="context-menu" class="context-menu">
-        <button id="ctx-new-zone">Nouvelle zone</button>
-        <button id="ctx-new-free-zone">Dessin libre</button>
+        <button id="ctx-new-zone">Nouveau cercle</button>
+        <button id="ctx-new-free-zone">Nouvelle zone</button>
         <div class="separator-h"></div>
         <button id="ctx-cancel">Fermer</button>
     </div>
@@ -50,7 +50,7 @@
                         <strong id="staffSelectionMode">Aucune</strong>
                     </div>
                 </div>
-                <div id="staffDrawStatus" class="staff-draw-status">Utilise Nouvelle alerte pour un cercle, ou clic droit pour une zone.</div>
+                <div id="staffDrawStatus" class="staff-draw-status">Utilise Tracer cercle ou Tracer zone pour commencer.</div>
                 <div class="staff-position-meta">Position: <strong id="staffAlertCoords">--</strong></div>
                 <div id="staffStatusMessage" class="staff-status-message">Console verrouillee.</div>
             </div>
@@ -58,9 +58,14 @@
             <div class="panel-section shell-section staff-help-panel">
                 <span class="section-title shell-title">Creation</span>
                 <div class="staff-helper-copy">
-                    1. Clique sur Nouvelle alerte pour tracer un cercle.<br>
-                    2. Utilise Shift+clic pour ajouter un cercle ou clic droit pour une zone.<br>
+                    1. Choisis Cercle ou Zone.<br>
+                    2. Trace sur la carte puis ajuste les reglages utiles.<br>
                     3. Termine puis remplis la fenetre d’alerte.
+                </div>
+                <div class="staff-draw-actions">
+                    <button id="btnNewAlert" class="action-btn" type="button">Tracer cercle</button>
+                    <button id="btnStartFreeDraw" class="action-btn" type="button">Tracer zone</button>
+                    <button id="btnCancelDrawMode" class="btn-close-editor staff-draw-cancel" type="button" disabled>Annuler trace</button>
                 </div>
                 <div class="staff-draw-controls">
                     <div class="staff-draw-control">
@@ -87,7 +92,6 @@
                         <div id="staffCirclePicker" class="staff-circle-picker"></div>
                     </div>
                 </div>
-                <button id="btnNewAlert" class="action-btn" type="button">Nouvelle alerte</button>
             </div>
         </div>
 
