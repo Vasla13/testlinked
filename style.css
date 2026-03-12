@@ -1396,45 +1396,47 @@ body.app-loading .site-alert-popup {
     }
 
     .top-hud {
-        margin-bottom: 1.6vh;
-        padding: 8px 16px;
+        margin-bottom: 1.3vh;
+        padding: 8px 14px;
     }
 
     .header-hero {
-        margin-bottom: 2.4vh;
+        margin-bottom: 1.8vh;
     }
 
     .main-logo {
-        height: clamp(72px, 12vh, 112px);
-        margin-bottom: 1.2vh;
+        height: clamp(70px, 10.5vh, 96px);
+        margin-bottom: 0.8vh;
     }
 
     .welcome-msg {
-        font-size: clamp(1.2rem, 2vw, 1.7rem);
+        font-size: clamp(1.08rem, 1.7vw, 1.42rem);
     }
 
     .modules-grid {
-        max-width: 920px;
-        gap: clamp(16px, 2vw, 28px);
+        max-width: 780px;
+        gap: clamp(14px, 1.8vw, 22px);
     }
 
     .module-card {
-        width: clamp(210px, 22vw, 250px);
-        height: clamp(220px, 30vh, 300px);
+        width: clamp(204px, 20vw, 232px);
+        height: clamp(204px, 27vh, 248px);
     }
 
     .card-title {
-        margin-top: 18px;
-        letter-spacing: 3px;
+        margin-top: 14px;
+        letter-spacing: 2.4px;
     }
 
     .welcome-link-block {
-        margin-top: 10px;
+        width: min(760px, calc(100vw - 36px));
+        margin-top: 8px;
+        padding: 8px 10px;
     }
 
     .footer-info {
-        margin-top: 1vh;
-        font-size: 0.74rem;
+        margin-top: 0.6vh;
+        font-size: 0.7rem;
     }
 }
 
@@ -1448,12 +1450,13 @@ body.app-loading .site-alert-popup {
     }
 
     .module-card {
-        width: clamp(220px, 23vw, 260px);
-        height: clamp(250px, 33vh, 320px);
+        width: clamp(214px, 22vw, 248px);
+        height: clamp(236px, 31vh, 296px);
     }
 
     .welcome-link-block {
-        width: min(880px, calc(100vw - 48px));
+        width: min(820px, calc(100vw - 40px));
+        padding: 9px 11px;
     }
 }
 

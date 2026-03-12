@@ -3602,28 +3602,28 @@ export function injectStyles() {
             #hud {
                 top: max(10px, env(safe-area-inset-top));
                 right: max(10px, env(safe-area-inset-right));
-                width: min(148px, calc(100vw - 16px));
-                max-width: 148px;
-                padding: 6px;
-                gap: 5px;
+                width: min(140px, calc(100vw - 14px));
+                max-width: 140px;
+                padding: 5px;
+                gap: 4px;
             }
             #hud .hud-stack-btn,
             #hud .hud-mode-btn {
-                min-height: 45px;
-                padding: 7px;
+                min-height: 42px;
+                padding: 6px;
             }
             #hud .hud-btn-label {
-                font-size: 0.45rem;
+                font-size: 0.42rem;
             }
             #hud .hud-btn-value {
-                font-size: 0.7rem;
+                font-size: 0.66rem;
             }
             #hud .hud-filter-option {
-                padding: 5px;
-                font-size: 0.58rem;
+                padding: 4px;
+                font-size: 0.54rem;
             }
             #hud .hud-filter-title {
-                font-size: 0.48rem;
+                font-size: 0.46rem;
             }
             .editor-sheet-name {
                 font-size: 0.98rem;
@@ -3641,8 +3641,8 @@ export function injectStyles() {
 
         @media (min-width: 1024px) and (min-height: 821px) and (max-width: 1439px) {
             #hud {
-                width: min(152px, calc(100vw - 18px));
-                max-width: 152px;
+                width: min(144px, calc(100vw - 16px));
+                max-width: 144px;
             }
         }
 

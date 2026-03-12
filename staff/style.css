@@ -1,7 +1,7 @@
 body.staff-shell {
     overflow: hidden;
-    --staff-left-width: 258px;
-    --staff-right-width: 320px;
+    --staff-left-width: clamp(212px, 20vw, 280px);
+    --staff-right-width: clamp(252px, 24vw, 336px);
     --staff-panel-padding: 12px;
     --staff-editor-padding: 12px;
     --staff-control-min-height: 38px;
@@ -13,11 +13,11 @@ body.staff-shell #app-container {
 
 body.staff-shell #sidebar-left,
 body.staff-shell #sidebar-right {
-    width: var(--staff-right-width);
+    width: min(var(--staff-right-width), calc(100vw - var(--staff-left-width) - 28px));
 }
 
 body.staff-shell #sidebar-left {
-    width: var(--staff-left-width);
+    width: min(var(--staff-left-width), calc(100vw - 32px));
 }
 
 body.staff-shell #sidebar-right {
@@ -1129,8 +1129,8 @@ body.staff-shell input[type="datetime-local"].cyber-input::-webkit-datetime-edit
 /* --- RESPONSIVE DESKTOP --- */
 @media (min-width: 1024px) and (max-height: 820px) {
     body.staff-shell {
-        --staff-left-width: 232px;
-        --staff-right-width: 296px;
+        --staff-left-width: clamp(208px, 19vw, 236px);
+        --staff-right-width: clamp(244px, 23vw, 288px);
         --staff-panel-padding: 10px;
         --staff-editor-padding: 10px;
         --staff-control-min-height: 36px;
@@ -1150,15 +1150,15 @@ body.staff-shell input[type="datetime-local"].cyber-input::-webkit-datetime-edit
 
 @media (min-width: 1024px) and (min-height: 821px) and (max-width: 1439px) {
     body.staff-shell {
-        --staff-left-width: 244px;
-        --staff-right-width: 306px;
+        --staff-left-width: clamp(216px, 20vw, 248px);
+        --staff-right-width: clamp(252px, 23vw, 300px);
     }
 }
 
 @media (min-width: 1440px) and (max-width: 1919px) {
     body.staff-shell {
-        --staff-left-width: 272px;
-        --staff-right-width: 332px;
+        --staff-left-width: clamp(236px, 18vw, 268px);
+        --staff-right-width: clamp(288px, 22vw, 324px);
         --staff-panel-padding: 13px;
         --staff-editor-padding: 13px;
     }
@@ -1166,8 +1166,8 @@ body.staff-shell input[type="datetime-local"].cyber-input::-webkit-datetime-edit
 
 @media (min-width: 1920px) {
     body.staff-shell {
-        --staff-left-width: 286px;
-        --staff-right-width: 356px;
+        --staff-left-width: 280px;
+        --staff-right-width: 344px;
         --staff-panel-padding: 14px;
         --staff-editor-padding: 14px;
         --staff-control-min-height: 40px;
@@ -1180,8 +1180,8 @@ body.staff-shell input[type="datetime-local"].cyber-input::-webkit-datetime-edit
 
 @media (min-width: 2560px), (min-width: 1920px) and (min-aspect-ratio: 21/9) {
     body.staff-shell {
-        --staff-left-width: 304px;
-        --staff-right-width: 384px;
+        --staff-left-width: 296px;
+        --staff-right-width: 368px;
     }
 
     #staff-map-banner {

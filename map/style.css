@@ -1214,10 +1214,10 @@ body.map-shell {
     position: relative;
     margin: 0;
     overflow: hidden;
-    --map-shell-sidebar-width: 318px;
-    --map-shell-sidebar-offset: 14px;
-    --map-shell-floating-left: 340px;
-    --map-shell-floating-width: min(330px, calc(100vw - 32px));
+    --map-shell-sidebar-width: 304px;
+    --map-shell-sidebar-offset: 12px;
+    --map-shell-floating-left: 324px;
+    --map-shell-floating-width: min(316px, calc(100vw - 28px));
     background:
         radial-gradient(circle at 16% 18%, rgba(102, 243, 255, 0.08), transparent 26%),
         radial-gradient(circle at 84% 14%, rgba(255, 204, 138, 0.06), transparent 24%),
@@ -2747,10 +2747,10 @@ body.map-shell .loader-step.is-complete {
 /* --- RESPONSIVE DESKTOP --- */
 @media (min-width: 1024px) and (max-height: 820px) {
     body.map-shell {
-        --map-shell-sidebar-width: 286px;
+        --map-shell-sidebar-width: 268px;
         --map-shell-sidebar-offset: 10px;
-        --map-shell-floating-left: 304px;
-        --map-shell-floating-width: min(308px, calc(100vw - 24px));
+        --map-shell-floating-left: 286px;
+        --map-shell-floating-width: min(296px, calc(100vw - 22px));
     }
 
     body.map-shell #top-bar {
@@ -2793,17 +2793,17 @@ body.map-shell .loader-step.is-complete {
 
 @media (min-width: 1024px) and (min-height: 821px) and (max-width: 1439px) {
     body.map-shell {
-        --map-shell-sidebar-width: 300px;
-        --map-shell-floating-left: 320px;
-        --map-shell-floating-width: min(320px, calc(100vw - 28px));
+        --map-shell-sidebar-width: 284px;
+        --map-shell-floating-left: 304px;
+        --map-shell-floating-width: min(304px, calc(100vw - 24px));
     }
 }
 
 @media (min-width: 1440px) and (max-width: 1919px) {
     body.map-shell {
-        --map-shell-sidebar-width: 326px;
-        --map-shell-floating-left: 348px;
-        --map-shell-floating-width: min(348px, calc(100vw - 40px));
+        --map-shell-sidebar-width: 316px;
+        --map-shell-floating-left: 338px;
+        --map-shell-floating-width: min(336px, calc(100vw - 36px));
     }
 }
 
