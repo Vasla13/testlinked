@@ -437,18 +437,9 @@
 
             function setupModuleAccessGate() {
                 loadModuleSession();
-                ensureModuleSession().catch(() => {});
                 moduleCards.forEach((card) => {
-                    card.addEventListener('click', async (event) => {
-                        if (moduleGate.guestMode) return;
-                        event.preventDefault();
-                        const targetHref = card.href || card.getAttribute('href') || '';
-                        if (!targetHref) return;
-                        if (await ensureModuleSession()) {
-                            window.location.href = targetHref;
-                            return;
-                        }
-                        showAuthOverlay(targetHref);
+                    card.addEventListener('click', () => {
+                        moduleGate.pendingHref = '';
                     });
                 });
             }

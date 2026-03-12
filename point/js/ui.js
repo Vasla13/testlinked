@@ -432,7 +432,17 @@ function triggerFileInput(inputId) {
     const input = document.getElementById(inputId);
     if (!(input instanceof HTMLInputElement)) return false;
     try {
-        if (typeof input.showPicker === 'function') {
+        input.value = '';
+    } catch (e) {}
+    const computed = typeof window !== 'undefined' && typeof window.getComputedStyle === 'function'
+        ? window.getComputedStyle(input)
+        : null;
+    const isActuallyVisible = Boolean(computed)
+        && computed.display !== 'none'
+        && computed.visibility !== 'hidden'
+        && computed.opacity !== '0';
+    try {
+        if (isActuallyVisible && typeof input.showPicker === 'function') {
             input.showPicker();
             return true;
         }
@@ -1875,9 +1885,39 @@ async function logoutCollab() {
 
 async function renderCloudMembers(boardId) {
     if (!modalOverlay) createModal();
+    setModalMode('cloud');
     const msgEl = document.getElementById('modal-msg');
     const actEl = document.getElementById('modal-actions');
     if (!msgEl || !actEl) return;
+
+    msgEl.innerHTML = `
+        <div class="modal-tool cloud-manage-shell cloud-manage-loading">
+            <div class="cloud-board-manage-head">
+                <div>
+                    <h3 class="modal-tool-title">Gestion du board</h3>
+                    <div class="modal-note">Chargement des acces et des membres...</div>
+                </div>
+            </div>
+            <div class="cloud-loading-card">
+                <div class="cloud-loading-bar cloud-loading-bar-lg"></div>
+                <div class="cloud-loading-bar"></div>
+                <div class="cloud-loading-bar cloud-loading-bar-sm"></div>
+            </div>
+            <div class="cloud-loading-card">
+                <div class="cloud-loading-bar cloud-loading-bar-lg"></div>
+                <div class="cloud-loading-bar"></div>
+                <div class="cloud-loading-bar cloud-loading-bar-sm"></div>
+            </div>
+        </div>
+    `;
+    actEl.innerHTML = `
+        <button type="button" id="cloud-members-back">Retour</button>
+        <button type="button" id="cloud-members-close">Fermer</button>
+    `;
+    const preBackBtn = document.getElementById('cloud-members-back');
+    const preCloseBtn = document.getElementById('cloud-members-close');
+    if (preBackBtn) preBackBtn.onclick = () => renderCloudHome();
+    if (preCloseBtn) preCloseBtn.onclick = () => { modalOverlay.style.display = 'none'; };
 
     await flushPendingCloudAutosave(boardId).catch(() => {});
 
@@ -1890,12 +1930,13 @@ async function renderCloudMembers(boardId) {
     }
 
     if (!result || !result.board) return;
-    if (result.role !== 'owner') {
+    const board = result.board;
+    const resolvedRole = String(result.role || board.role || collab.activeRole || '').trim();
+    if (resolvedRole !== 'owner') {
         showCustomAlert('Seul le lead peut gerer les membres.');
         return;
     }
 
-    const board = result.board;
     const members = Array.isArray(board.members) ? board.members : [];
     const onlineUsers = new Set(Array.isArray(result.onlineUsers) ? result.onlineUsers.map((id) => String(id)) : []);
     const presenceByUser = new Map(
@@ -1926,7 +1967,7 @@ async function renderCloudMembers(boardId) {
     }).join('');
 
     msgEl.innerHTML = `
-        <div class="modal-tool">
+        <div class="modal-tool cloud-manage-shell">
             <div class="cloud-board-manage-head">
                 <div>
                     <h3 class="modal-tool-title">Gestion du board</h3>
@@ -2106,6 +2147,35 @@ function buildCloudLocalPanelMarkup(localSaveLocked) {
     `;
 }
 
+function bindImmediateActionButton(button, handler) {
+    if (!button || typeof handler !== 'function') return;
+    let pointerHandled = false;
+
+    const runHandler = async (event) => {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+        await handler();
+    };
+
+    button.onpointerdown = (event) => {
+        if (event.button !== 0) return;
+        pointerHandled = true;
+        runHandler(event).catch(() => {});
+    };
+
+    button.onclick = (event) => {
+        if (pointerHandled) {
+            pointerHandled = false;
+            event.preventDefault();
+            event.stopPropagation();
+            return;
+        }
+        runHandler(event).catch(() => {});
+    };
+}
+
 function bindCloudLocalActions(localSaveLocked) {
     const runLockedLocalAction = () => {
         showCustomAlert('Export local interdit pour les membres partages.');
@@ -2133,8 +2203,10 @@ function bindCloudLocalActions(localSaveLocked) {
                 return;
             }
             if (action === 'open-file') {
-                modalOverlay.style.display = 'none';
-                triggerFileInput('fileImport');
+                const opened = triggerFileInput('fileImport');
+                if (opened) {
+                    setTimeout(() => { modalOverlay.style.display = 'none'; }, 0);
+                }
                 return;
             }
             if (action === 'open-text') {
@@ -2142,8 +2214,10 @@ function bindCloudLocalActions(localSaveLocked) {
                 return;
             }
             if (action === 'merge-file') {
-                modalOverlay.style.display = 'none';
-                triggerFileInput('fileMerge');
+                const opened = triggerFileInput('fileMerge');
+                if (opened) {
+                    setTimeout(() => { modalOverlay.style.display = 'none'; }, 0);
+                }
                 return;
             }
             if (action === 'merge-text') {
@@ -2181,7 +2255,7 @@ async function runCloudAuth(action) {
     const username = userInput ? userInput.value.trim() : '';
     const password = passInput ? passInput.value : '';
     if (!username || !password) {
-        showCustomAlert('Renseigne username + mot de passe.');
+        showCustomAlert('Renseigne l identifiant et le mot de passe.');
         return false;
     }
     try {
@@ -2202,6 +2276,48 @@ async function runCloudAuth(action) {
         showCustomAlert(`Erreur: ${escapeHtml(e.message || 'inconnue')}`);
         return false;
     }
+}
+
+function bindCloudBoardListActions() {
+    Array.from(document.querySelectorAll('.cloud-open-board')).forEach((btn) => {
+        bindImmediateActionButton(btn, async () => {
+            const boardId = btn.getAttribute('data-board') || '';
+            if (!boardId) return;
+            try {
+                await openCloudBoard(boardId, { quiet: false });
+                await renderCloudHome();
+            } catch (e) {
+                showCustomAlert(`Erreur ouverture cloud: ${escapeHtml(e.message || 'inconnue')}`);
+            }
+        });
+    });
+
+    Array.from(document.querySelectorAll('.cloud-manage-board')).forEach((btn) => {
+        bindImmediateActionButton(btn, async () => {
+            const boardId = btn.getAttribute('data-board') || '';
+            if (!boardId) return;
+            await renderCloudMembers(boardId);
+        });
+    });
+
+    Array.from(document.querySelectorAll('.cloud-leave-board')).forEach((btn) => {
+        bindImmediateActionButton(btn, async () => {
+            const boardId = btn.getAttribute('data-board') || '';
+            if (!boardId) return;
+            showCustomConfirm('Quitter ce board partage ?', async () => {
+                try {
+                    await collabBoardRequest('leave_board', { boardId });
+                    if (boardId === collab.activeBoardId) {
+                        setActiveCloudBoardFromSummary(null);
+                        setBoardQueryParam('');
+                    }
+                    await renderCloudHome();
+                } catch (e) {
+                    showCustomAlert(`Erreur: ${escapeHtml(e.message || 'inconnue')}`);
+                }
+            });
+        });
+    });
 }
 
 async function renderCloudHome() {
@@ -2228,42 +2344,43 @@ async function renderCloudHome() {
             <div class="cloud-local-panel cloud-guest-panel">
                 <div class="cloud-local-note">Tu gardes toutes les actions locales. Pour creer, ouvrir ou sauvegarder dans le cloud, reconnecte-toi avec ton mot de passe.</div>
                 <div class="modal-tool cloud-auth-shell cloud-auth-shell-inline">
-                    <div class="cloud-auth-badge">Acces cloud</div>
-                    <h3 class="cloud-auth-title">Compte BNI Connect</h3>
-                    <div class="cloud-auth-copy">Le menu garde le meme shell cloud/local que la session connectee, mais le cloud reste verrouille tant que tu es en invite.</div>
+                    <div class="cloud-auth-badge">Cloud</div>
+                    <h3 class="cloud-auth-title">Connexion au cloud</h3>
+                    <div class="cloud-auth-copy">Entre simplement un identifiant et un mot de passe. Si le compte n existe pas encore, tu peux le creer ici.</div>
                     <div class="cloud-auth-grid">
                         <label class="cloud-auth-field">
-                            <span class="cloud-auth-label">Username</span>
-                            <input id="cloud-auth-user" type="text" placeholder="ex: operateur_nord" class="modal-input-standalone cloud-auth-input" autocomplete="username" />
+                            <span class="cloud-auth-label">Identifiant</span>
+                            <input id="cloud-auth-user" type="text" placeholder="operateur_nord" class="modal-input-standalone cloud-auth-input" autocomplete="username" />
                         </label>
                         <label class="cloud-auth-field">
                             <span class="cloud-auth-label">Mot de passe</span>
                             <input id="cloud-auth-pass" type="password" placeholder="Mot de passe" class="modal-input-standalone cloud-auth-input" autocomplete="current-password" />
                         </label>
                     </div>
-                    <div class="cloud-auth-meta">
-                        <span class="cloud-auth-pill">Point</span>
-                        <span class="cloud-auth-pill">Map</span>
-                        <span class="cloud-auth-pill">Sync live</span>
-                    </div>
-                    <div class="cloud-auth-hint">Connecte-toi d abord, puis choisis ou cree un board pour sauver le graphe.</div>
+                    <div class="cloud-auth-hint">Le meme compte fonctionne aussi sur la carte. Sans connexion, tu restes en local.</div>
                 </div>
             </div>
         `;
         const panelBody = localPanel === 'local' ? localRows : guestCloudPanel;
 
         msgEl.innerHTML = `
-            <div class="cloud-home-head">
-                <div class="cloud-home-tab-group">
-                    <button type="button" id="cloud-home-tab-cloud" class="cloud-home-tab cloud-home-word ${localPanel === 'cloud' ? 'is-active' : ''}">cloud</button>
-                    <button type="button" id="cloud-home-tab-local" class="cloud-home-tab cloud-home-word cloud-home-word-alt ${localPanel === 'local' ? 'is-active' : ''}">local</button>
+            <div class="cloud-shell">
+                <div class="cloud-home-head">
+                    <div class="cloud-home-heading">
+                        <div class="cloud-home-kicker">Donnees</div>
+                        <div class="cloud-home-title">Session invite</div>
+                    </div>
+                    <div class="cloud-home-tab-group">
+                        <button type="button" id="cloud-home-tab-cloud" class="cloud-home-tab ${localPanel === 'cloud' ? 'is-active' : ''}">Cloud</button>
+                        <button type="button" id="cloud-home-tab-local" class="cloud-home-tab cloud-home-tab-alt ${localPanel === 'local' ? 'is-active' : ''}">Local</button>
+                    </div>
+                    <button type="button" id="cloud-modal-close-x" class="mini-btn cloud-close-btn">×</button>
                 </div>
-                <button type="button" id="cloud-modal-close-x" class="mini-btn cloud-close-btn">×</button>
-            </div>
-            <div class="cloud-column cloud-panel-shell">${panelBody}</div>
-            <div class="cloud-status-bar">
-                <span>Session: invite</span>
-                <span id="cloudModalSyncInfo">Cloud verrouille jusqu a connexion</span>
+                <div class="cloud-column cloud-panel-shell">${panelBody}</div>
+                <div class="cloud-status-bar">
+                    <span class="cloud-status-pill">Session: invite</span>
+                    <span id="cloudModalSyncInfo" class="cloud-status-pill">Cloud verrouille jusqu a connexion</span>
+                </div>
             </div>
         `;
         actEl.innerHTML = localPanel === 'cloud'
@@ -2329,19 +2446,25 @@ async function renderCloudHome() {
         : (boardRows || '<div class="modal-empty-state">Aucun board cloud.</div>');
 
     msgEl.innerHTML = `
-        <div class="cloud-home-head">
-            <div class="cloud-home-tab-group">
-                <button type="button" id="cloud-home-tab-cloud" class="cloud-home-tab cloud-home-word ${localPanel === 'cloud' ? 'is-active' : ''}">cloud</button>
-                <button type="button" id="cloud-home-tab-local" class="cloud-home-tab cloud-home-word cloud-home-word-alt ${localPanel === 'local' ? 'is-active' : ''}">local</button>
+        <div class="cloud-shell">
+            <div class="cloud-home-head">
+                <div class="cloud-home-heading">
+                    <div class="cloud-home-kicker">Donnees</div>
+                    <div class="cloud-home-title">${escapeHtml(collab.user.username)}</div>
+                </div>
+                <div class="cloud-home-tab-group">
+                    <button type="button" id="cloud-home-tab-cloud" class="cloud-home-tab ${localPanel === 'cloud' ? 'is-active' : ''}">Cloud</button>
+                    <button type="button" id="cloud-home-tab-local" class="cloud-home-tab cloud-home-tab-alt ${localPanel === 'local' ? 'is-active' : ''}">Local</button>
+                </div>
+                <button type="button" id="cloud-modal-close-x" class="mini-btn cloud-close-btn">×</button>
             </div>
-            <button type="button" id="cloud-modal-close-x" class="mini-btn cloud-close-btn">×</button>
-        </div>
-        <div class="cloud-column cloud-panel-shell">${panelBody}</div>
-        <div class="cloud-status-bar">
-            <span>Connecte: ${escapeHtml(collab.user.username)}</span>
-            <span id="cloudModalSyncInfo" class="${isCloudBoardActive() ? 'cloud-status-active' : ''}">
-                ${isCloudBoardActive() ? `Board actif: ${escapeHtml(collab.activeBoardTitle || collab.activeBoardId)} (${escapeHtml(collab.activeRole || '')})` : 'Aucun board cloud actif'}
-            </span>
+            <div class="cloud-column cloud-panel-shell">${panelBody}</div>
+            <div class="cloud-status-bar">
+                <span class="cloud-status-pill">Connecte: ${escapeHtml(collab.user.username)}</span>
+                <span id="cloudModalSyncInfo" class="cloud-status-pill ${isCloudBoardActive() ? 'cloud-status-active' : ''}">
+                    ${isCloudBoardActive() ? `Board actif: ${escapeHtml(collab.activeBoardTitle || collab.activeBoardId)} (${escapeHtml(collab.activeRole || '')})` : 'Aucun board cloud actif'}
+                </span>
+            </div>
         </div>
     `;
 
@@ -2387,45 +2510,7 @@ async function renderCloudHome() {
     bindCloudHomeTabs();
     bindCloudLocalActions(localSaveLocked);
 
-    Array.from(document.querySelectorAll('.cloud-open-board')).forEach((btn) => {
-        btn.onclick = async () => {
-            const boardId = btn.getAttribute('data-board') || '';
-            if (!boardId) return;
-            try {
-                await openCloudBoard(boardId, { quiet: false });
-                await renderCloudHome();
-            } catch (e) {
-                showCustomAlert(`Erreur ouverture cloud: ${escapeHtml(e.message || 'inconnue')}`);
-            }
-        };
-    });
-
-    Array.from(document.querySelectorAll('.cloud-manage-board')).forEach((btn) => {
-        btn.onclick = async () => {
-            const boardId = btn.getAttribute('data-board') || '';
-            if (!boardId) return;
-            await renderCloudMembers(boardId);
-        };
-    });
-
-    Array.from(document.querySelectorAll('.cloud-leave-board')).forEach((btn) => {
-        btn.onclick = async () => {
-            const boardId = btn.getAttribute('data-board') || '';
-            if (!boardId) return;
-            showCustomConfirm('Quitter ce board partage ?', async () => {
-                try {
-                    await collabBoardRequest('leave_board', { boardId });
-                    if (boardId === collab.activeBoardId) {
-                        setActiveCloudBoardFromSummary(null);
-                        setBoardQueryParam('');
-                    }
-                    await renderCloudHome();
-                } catch (e) {
-                    showCustomAlert(`Erreur: ${escapeHtml(e.message || 'inconnue')}`);
-                }
-            });
-        };
-    });
+    bindCloudBoardListActions();
 
     syncCloudLivePanels();
 }
@@ -2645,9 +2730,16 @@ function createModal() {
                 flex-wrap: wrap;
             }
             #custom-modal[data-mode="cloud"] .modal-card {
-                width: min(980px, calc(100vw - 290px));
-                min-height: 510px;
-                padding: 20px 20px 18px;
+                width: min(1040px, calc(100vw - 220px));
+                min-height: 540px;
+                padding: 22px 22px 18px;
+                border-radius: 18px;
+                background:
+                    linear-gradient(180deg, rgba(5, 12, 30, 0.98), rgba(4, 10, 22, 0.98)),
+                    radial-gradient(circle at top right, rgba(102, 243, 255, 0.08), transparent 28%);
+                box-shadow:
+                    0 0 0 1px rgba(115, 251, 247, 0.14),
+                    0 28px 90px rgba(0, 0, 0, 0.7);
             }
             #custom-modal[data-mode="create"] .modal-card {
                 width: min(736px, calc(100vw - 120px));

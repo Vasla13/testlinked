@@ -1449,30 +1449,25 @@ async function renderCloudHome() {
             'CLOUD COLLABORATIF',
             `
                 <div class="cloud-auth-shell">
-                    <div class="cloud-auth-badge">Acces cloud</div>
-                    <h3 class="cloud-auth-title">Compte BNI Connect</h3>
-                    <div class="cloud-auth-copy">Cree un compte ou reconnecte-toi pour partager la carte, retrouver tes boards et synchroniser les alertes et positions en direct.</div>
+                    <div class="cloud-auth-badge">Cloud</div>
+                    <h3 class="cloud-auth-title">Connexion au cloud</h3>
+                    <div class="cloud-auth-copy">Entre simplement un identifiant et un mot de passe. Si le compte n existe pas encore, tu peux le creer ici.</div>
                     <div class="cloud-auth-grid">
                         <label class="cloud-auth-field">
-                            <span class="cloud-auth-label">Username</span>
-                            <input id="cloud-auth-user" type="text" placeholder="ex: operateur_nord" class="cloud-auth-input" autocomplete="username" />
+                            <span class="cloud-auth-label">Identifiant</span>
+                            <input id="cloud-auth-user" type="text" placeholder="operateur_nord" class="cloud-auth-input" autocomplete="username" />
                         </label>
                         <label class="cloud-auth-field">
                             <span class="cloud-auth-label">Mot de passe</span>
                             <input id="cloud-auth-pass" type="password" placeholder="Mot de passe" class="cloud-auth-input" autocomplete="current-password" />
                         </label>
                     </div>
-                    <div class="cloud-auth-meta">
-                        <span class="cloud-auth-pill">Map</span>
-                        <span class="cloud-auth-pill">Point</span>
-                        <span class="cloud-auth-pill">Sync live</span>
-                    </div>
-                    <div class="cloud-auth-hint">Le meme compte cloud fonctionne aussi sur l interface reseau.</div>
+                    <div class="cloud-auth-hint">Le meme compte fonctionne aussi sur l interface reseau. Sans connexion, la carte reste en local.</div>
                 </div>
             `,
             `
-                <button type="button" id="cloud-auth-register" class="btn-modal-cancel cloud-auth-secondary">Creer compte</button>
-                <button type="button" id="cloud-auth-login" class="btn-modal-confirm">Connexion</button>
+                <button type="button" id="cloud-auth-register" class="btn-modal-cancel cloud-auth-secondary">Creer un compte</button>
+                <button type="button" id="cloud-auth-login" class="btn-modal-confirm cloud-auth-primary">Se connecter</button>
                 <button type="button" id="cloud-auth-close" class="btn-modal-cancel cloud-auth-tertiary">Fermer</button>
             `
         );
@@ -1484,7 +1479,7 @@ async function renderCloudHome() {
             const password = String(passEl?.value || '');
 
             if (!username || !password) {
-                await customAlert('AUTH', 'Renseigne username + mot de passe.');
+                await customAlert('AUTH', 'Renseigne l identifiant et le mot de passe.');
                 return;
             }
 

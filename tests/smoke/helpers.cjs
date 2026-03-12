@@ -18,10 +18,16 @@ function jsonResponse(route, status, payload) {
 
 async function installNetlifyMocks(page, options = {}) {
     const requests = [];
+    const authUser = options.authUser && typeof options.authUser === 'object'
+        ? clone(options.authUser)
+        : { username: 'smoke-user' };
     const alertsStore = {
         nextId: 1,
         alerts: Array.isArray(options.alerts) ? clone(options.alerts) : [],
         users: Array.isArray(options.users) ? clone(options.users) : ['atlas', 'delta', 'helix'],
+    };
+    const boardsStore = {
+        boards: Array.isArray(options.boards) ? clone(options.boards) : [],
     };
 
     await page.route('**/.netlify/functions/**', async (route) => {
@@ -47,7 +53,7 @@ async function installNetlifyMocks(page, options = {}) {
                 if (options.authSession === true) {
                     return jsonResponse(route, 200, {
                         ok: true,
-                        user: { username: 'smoke-user' },
+                        user: authUser,
                     });
                 }
                 return jsonResponse(route, 401, {
@@ -60,7 +66,7 @@ async function installNetlifyMocks(page, options = {}) {
                 return jsonResponse(route, 200, {
                     ok: true,
                     token: 'smoke-token',
-                    user: { username: String(body.username || 'smoke-user') },
+                    user: { ...authUser, username: String(body.username || authUser.username || 'smoke-user') },
                 });
             }
 
@@ -74,6 +80,54 @@ async function installNetlifyMocks(page, options = {}) {
         if (pathname.endsWith('/collab-board')) {
             const action = String(body.action || url.searchParams.get('action') || 'list');
             requests.push({ endpoint: 'collab-board', action, payload: clone(body) });
+
+             if (action === 'list_boards') {
+                return jsonResponse(route, 200, {
+                    ok: true,
+                    boards: boardsStore.boards.map((board) => ({
+                        id: String(board.id || ''),
+                        title: String(board.title || 'Sans nom'),
+                        role: String(board.role || 'editor'),
+                        page: String(board.page || 'point'),
+                        ownerId: String(board.ownerId || ''),
+                        ownerName: String(board.ownerName || ''),
+                        updatedAt: String(board.updatedAt || ''),
+                    })),
+                    board: null,
+                    shares: [],
+                    presence: [],
+                    activity: [],
+                });
+            }
+
+            if (action === 'get_board') {
+                const boardId = String(body.boardId || '').trim();
+                const board = boardsStore.boards.find((entry) => String(entry?.id || '') === boardId);
+                if (!board) {
+                    return jsonResponse(route, 404, {
+                        ok: false,
+                        error: 'Board introuvable',
+                    });
+                }
+                return jsonResponse(route, 200, {
+                    ok: true,
+                    role: String(board.role || 'editor'),
+                    board: {
+                        id: String(board.id || ''),
+                        title: String(board.title || 'Sans nom'),
+                        page: String(board.page || 'point'),
+                        role: String(board.role || 'editor'),
+                        ownerId: String(board.ownerId || ''),
+                        ownerName: String(board.ownerName || ''),
+                        members: Array.isArray(board.members) ? clone(board.members) : [],
+                        data: board.data && typeof board.data === 'object' ? clone(board.data) : { nodes: [], links: [] },
+                        activity: Array.isArray(board.activity) ? clone(board.activity) : [],
+                    },
+                    presence: Array.isArray(board.presence) ? clone(board.presence) : [],
+                    onlineUsers: Array.isArray(board.onlineUsers) ? clone(board.onlineUsers) : [],
+                });
+            }
+
             return jsonResponse(route, 200, {
                 ok: true,
                 boards: [],

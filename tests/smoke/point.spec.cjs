@@ -12,6 +12,12 @@ test('point guest file menu keeps local actions and auth-gated cloud access', as
     await expect(page.locator('#cloud-home-tab-local')).toBeVisible();
     await expect(page.locator('#cloud-home-tab-cloud')).toBeVisible();
     await expect(page.locator('[data-local-action="save-file"]')).toBeVisible();
+    const chooserPromise = page.waitForEvent('filechooser');
+    await page.click('[data-local-action="open-file"]');
+    const chooser = await chooserPromise;
+    expect(chooser).toBeTruthy();
+
+    await page.click('#btnDataFileToggle');
 
     await page.click('#cloud-home-tab-cloud');
 
@@ -56,4 +62,36 @@ test('point settings presets remain clickable and update the panel state', async
 
     await expect(page.locator('.settings-preset-btn.active .settings-preset-name')).toContainText('Ennemis tres eloignes');
     await expect(page.locator('#val-repulsion')).toHaveText('1520');
+});
+
+test('point owner can open the Gerer board panel', async ({ page }) => {
+    await page.addInitScript(() => {
+        localStorage.setItem('bniLinkedCollabSession_v1', JSON.stringify({
+            token: 'smoke-token',
+            user: { username: 'smoke-user' },
+        }));
+    });
+
+    await installNetlifyMocks(page, {
+        authSession: true,
+        authUser: { username: 'smoke-user' },
+        boards: [{
+            id: 'board-owner',
+            title: 'Board Owner',
+            role: 'owner',
+            page: 'point',
+            members: [{ userId: 'u-smoke', username: 'smoke-user', role: 'owner' }],
+            onlineUsers: ['u-smoke'],
+        }],
+    });
+
+    await page.goto('/point/');
+    await waitForPointReady(page);
+
+    await page.click('#btnDataFileToggle');
+    await expect(page.locator('.cloud-manage-board')).toBeVisible();
+    await page.click('.cloud-manage-board');
+
+    await expect(page.locator('.cloud-board-manage-head')).toBeVisible();
+    await expect(page.locator('.modal-tool-title')).toContainText('Gestion du board');
 });
