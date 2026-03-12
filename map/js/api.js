@@ -1,4 +1,15 @@
 export const api = {
+    getCollabToken() {
+        try {
+            const raw = localStorage.getItem('bniLinkedCollabSession_v1');
+            if (!raw) return '';
+            const parsed = JSON.parse(raw);
+            return typeof parsed?.token === 'string' ? parsed.token.trim() : '';
+        } catch (e) {
+            return '';
+        }
+    },
+
     getApiKey() {
         const fromWindow = typeof window !== 'undefined' ? window.BNI_LINKED_KEY : null;
         if (typeof fromWindow === 'string' && fromWindow.trim()) {
@@ -17,6 +28,8 @@ export const api = {
         const headers = { 'Content-Type': 'application/json' };
         const apiKey = this.getApiKey();
         if (apiKey) headers['x-api-key'] = apiKey;
+        const collabToken = this.getCollabToken();
+        if (collabToken) headers['x-collab-token'] = collabToken;
         return headers;
     },
 

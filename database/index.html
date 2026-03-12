@@ -140,6 +140,7 @@
   };
   const globalStatus = document.getElementById('global-status');
   const API_KEY_STORAGE_KEY = 'bniLinkedApiKey';
+  const COLLAB_SESSION_STORAGE_KEY = 'bniLinkedCollabSession_v1';
   const PAGE_SIZE = 50;
   const archiveState = {
     point: createArchiveState(),
@@ -167,10 +168,26 @@
     return '';
   }
 
-  function withApiKey(headers = {}) {
+  function readViewerSession() {
+    try {
+      const raw = localStorage.getItem(COLLAB_SESSION_STORAGE_KEY);
+      if (!raw) return { token: '', user: null };
+      const parsed = JSON.parse(raw);
+      return {
+        token: String(parsed?.token || ''),
+        user: parsed?.user && typeof parsed.user === 'object' ? parsed.user : null
+      };
+    } catch (e) {
+      return { token: '', user: null };
+    }
+  }
+
+  function withViewerAuth(headers = {}) {
     const merged = { ...headers };
     const key = getApiKey();
     if (key) merged['x-api-key'] = key;
+    const session = readViewerSession();
+    if (session.token) merged['x-collab-token'] = session.token;
     return merged;
   }
 
@@ -221,27 +238,27 @@
     });
     const res = await fetch(
       `/.netlify/functions/db-list?${params.toString()}`,
-      { headers: withApiKey() }
+      { headers: withViewerAuth() }
     );
-    if (!res.ok) throw new Error('Erreur réseau');
-    const out = await res.json();
-    if (!out.ok) throw new Error(out.error || 'Erreur API');
+    const out = await res.json().catch(() => ({}));
+    if (!res.ok || !out.ok) throw new Error(out.error || `Erreur API (${res.status})`);
     return out; 
   }
 
   async function apiGet(key) {
     const res = await fetch(
       `/.netlify/functions/db-get?key=${encodeURIComponent(key)}`,
-      { headers: withApiKey() }
+      { headers: withViewerAuth() }
     );
-    if (!res.ok) throw new Error('Erreur récupération');
-    return await res.json();
+    const out = await res.json().catch(() => ({}));
+    if (!res.ok || out?.ok === false) throw new Error(out.error || `Erreur récupération (${res.status})`);
+    return out;
   }
 
   async function apiDelete(key) {
     const res = await fetch(`/.netlify/functions/db-delete`, {
       method: 'POST',
-      headers: withApiKey({ 'Content-Type': 'application/json' }),
+      headers: withViewerAuth({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ key })
     });
     const out = await res.json().catch(()=>({ok:false}));
@@ -409,9 +426,9 @@
 
       render(page);
     } catch (e) {
-      statusEl.textContent = "ERREUR DE CONNEXION (DATA LINK)";
+      statusEl.textContent = e?.message || "ERREUR DE CONNEXION (DATA LINK)";
       console.warn("Erreur DB:", e);
-      document.getElementById(`cards-${page}`).innerHTML = '<div class="error-state">CONNEXION SERVEUR ÉCHOUÉE</div>';
+      document.getElementById(`cards-${page}`).innerHTML = `<div class="error-state">${escapeHtml(e?.message || 'CONNEXION SERVEUR ÉCHOUÉE')}</div>`;
       const btn = document.getElementById(`load-more-${page}`);
       if (btn) btn.hidden = true;
     } finally {

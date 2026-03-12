@@ -53,13 +53,16 @@ export async function createRealtimeBoardSession(options = {}) {
     const buildPresence = typeof options.buildPresence === 'function' ? options.buildPresence : () => ({});
 
     const tokenBase = String(options.tokenBase || (typeof window !== 'undefined' ? window.location.origin : '')).trim();
-    const wsBase = String(options.wsBase || resolveRealtimeWsBase()).trim();
     const tokenEndpoint = String(options.tokenEndpoint || '/.netlify/functions/collab-realtime-token').trim();
-    if (!page || !boardId || !collabToken || !tokenBase || !wsBase) {
+    if (!page || !boardId || !collabToken || !tokenBase) {
         throw new Error('Configuration realtime incomplete.');
     }
 
     const tokenData = await requestRealtimeToken(joinUrl(tokenBase, tokenEndpoint), collabToken, boardId, page);
+    const wsBase = String(options.wsBase || tokenData.wsBase || resolveRealtimeWsBase()).trim();
+    if (!wsBase) {
+        throw new Error('Configuration realtime incomplete.');
+    }
     let shadowSnapshot = canonicalizeSnapshot(getCurrentSnapshot());
     let flushTimer = null;
     let closed = false;

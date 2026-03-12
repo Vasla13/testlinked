@@ -1030,7 +1030,7 @@ function refreshModeControls() {
     const circleCount = getSelectionCircles(selection).length;
 
     if (!state.mapSelectionEnabled) {
-        setDrawStatus('Placement en pause. Reactive le bouton du HUD pour modifier la carte.', 'circle');
+        setDrawStatus('Placement en pause. Reactive la selection pour modifier la carte.', 'circle');
         return;
     }
 
@@ -1056,8 +1056,8 @@ function refreshModeControls() {
 
     setDrawStatus(
         circleCount > 0
-            ? 'Clic droit pour creer une zone ou un dessin libre. Glisse un cercle pour le deplacer.'
-            : 'Clic droit sur la carte pour creer une zone ou lancer un dessin libre.',
+            ? 'Clique pour replacer le cercle actif. Shift+clic ajoute un cercle. Clic droit ouvre les outils de zone.'
+            : 'Clique sur la carte pour poser un cercle rapide, ou clic droit pour creer une zone.',
         'circle'
     );
 }
@@ -1306,7 +1306,7 @@ function renderBanner() {
         const circleCount = getSelectionCircles(selection).length;
         meta = circleCount > 1
             ? `${circleCount} cercles • Actif ${getActiveCircleIndex(selection) + 1} • GPS ${activeCircle.gpsX.toFixed(2)} / ${activeCircle.gpsY.toFixed(2)} • Rayon ${activeCircle.radius.toFixed(1)} • Trait ${getCurrentStrokeWidth().toFixed(2)}`
-            : `GPS ${activeCircle.gpsX.toFixed(2)} / ${activeCircle.gpsY.toFixed(2)} • Rayon ${activeCircle.radius.toFixed(1)} • Trait ${getCurrentStrokeWidth().toFixed(2)} • Glisse pour ajuster`;
+            : `GPS ${activeCircle.gpsX.toFixed(2)} / ${activeCircle.gpsY.toFixed(2)} • Rayon ${activeCircle.radius.toFixed(1)} • Trait ${getCurrentStrokeWidth().toFixed(2)} • Glisse pour ajuster • Clique pour replacer`;
     } else if (state.drawDraftPoints.length > 0) {
         meta = `Dessin en cours • ${state.drawDraftPoints.length} points`;
     }
@@ -1812,7 +1812,80 @@ async function deleteAlert(targetId = getAlertId()) {
 }
 
 function choosePositionOnMap(event) {
-    if (!state.mapSelectionEnabled || state.drawMode) return;
+    if (!state.unlocked || !state.mapSelectionEnabled || state.drawMode) return;
+
+    const coords = getMapPercentCoords(event.clientX, event.clientY);
+    const gps = percentageToGps(coords.x, coords.y);
+    const previousAlert = cloneAlertRecord(state.currentAlert);
+    const previousSelection = cloneSelection(state.selection);
+    const currentSelection = cloneSelection(state.selection);
+    const shouldAppendCircle = Boolean(event.shiftKey && currentSelection && currentSelection.shapeType !== 'zone');
+
+    let nextSelection = null;
+    if (currentSelection && currentSelection.shapeType !== 'zone') {
+        const circles = getSelectionCircles(currentSelection);
+        const activeIndex = getActiveCircleIndex(currentSelection);
+        const nextIndex = shouldAppendCircle
+            ? circles.length
+            : Math.max(0, activeIndex);
+
+        const radius = shouldAppendCircle
+            ? getCurrentRadius()
+            : clampRadius(circles[nextIndex]?.radius ?? getCurrentRadius());
+        const nextCircle = {
+            xPercent: Number(coords.x.toFixed(4)),
+            yPercent: Number(coords.y.toFixed(4)),
+            gpsX: Number(gps.x.toFixed(2)),
+            gpsY: Number(gps.y.toFixed(2)),
+            radius,
+        };
+
+        if (shouldAppendCircle) {
+            circles.push(nextCircle);
+        } else if (circles.length) {
+            circles[nextIndex] = nextCircle;
+        } else {
+            circles.push(nextCircle);
+        }
+
+        nextSelection = buildCircleSelection(circles, Math.min(circles.length - 1, nextIndex), {
+            strokeWidth: currentSelection.strokeWidth || getCurrentStrokeWidth(),
+        });
+    } else {
+        nextSelection = buildCircleSelection([{
+            xPercent: Number(coords.x.toFixed(4)),
+            yPercent: Number(coords.y.toFixed(4)),
+            gpsX: Number(gps.x.toFixed(2)),
+            gpsY: Number(gps.y.toFixed(2)),
+            radius: getCurrentRadius(),
+        }], 0, {
+            strokeWidth: currentSelection?.strokeWidth || getCurrentStrokeWidth(),
+        });
+    }
+
+    if (!nextSelection) {
+        setStatusMessage('Impossible de positionner l alerte.', 'error');
+        return;
+    }
+
+    setSelection(nextSelection, {
+        syncForm: true,
+        resetDraft: true,
+    });
+    focusSelection();
+
+    if (!isAlertModalOpen()) {
+        openAlertModal({
+            openedFromDraw: false,
+            originAlert: previousAlert,
+            originSelection: previousSelection,
+        });
+    }
+
+    const message = shouldAppendCircle
+        ? 'Cercle ajoute depuis la carte. Complete puis enregistre.'
+        : 'Position de l alerte mise a jour. Complete puis enregistre.';
+    setStatusMessage(message, 'ok');
 }
 
 function initMap() {
