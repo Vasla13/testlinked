@@ -2,6 +2,7 @@ import { state, saveLocalState } from './state.js';
 import { renderAll, getMapPercentCoords } from './render.js';
 import { handlePointClick } from './ui.js';
 import { percentageToGps } from './utils.js';
+import { handleMapMouseDown, handleMapMouseMove, handleMapMouseUp } from './zone-editor.js';
 
 const viewport = document.getElementById('viewport');
 const mapWorld = document.getElementById('map-world');
@@ -156,7 +157,10 @@ export function initEngine() {
     // Gestion du CLIC (Drag Map start)
     viewport.addEventListener('mousedown', (e) => {
         if (state.draggingMarker) return; 
-        if (state.drawingMode) return; 
+        if (state.drawingMode || state.draggingItem) {
+            handleMapMouseDown(e);
+            return;
+        }
         
         // Outil Mesure
         if (state.measuringMode && e.button === 0) {
@@ -205,6 +209,12 @@ export function initEngine() {
         
         // 1. Mise à jour HUD (optimisée)
         updateHUDCoords(e);
+
+        if (state.drawingMode || state.draggingItem) {
+            handleMapMouseMove(e);
+            isMouseMovePending = false;
+            return;
+        }
         
         // 2. Drag d'un marqueur
         if (state.draggingMarker) {
@@ -245,7 +255,11 @@ export function initEngine() {
     }
 
     // Gestion RELACHEMENT CLIC
-    window.addEventListener('mouseup', () => {
+    window.addEventListener('mouseup', (e) => {
+        if (state.drawingMode || state.draggingItem) {
+            handleMapMouseUp(e);
+            return;
+        }
         if (state.draggingMarker) {
             if (!state.draggingMarker.hasMoved) {
                 handlePointClick(state.draggingMarker.groupIndex, state.draggingMarker.pointIndex);

@@ -34,6 +34,7 @@ function setupDrawingMode(type, groupIndex, msg) {
     
     showNotification(msg);
     initToolbarEvents(); 
+    renderAll();
 }
 
 function showNotification(msg) {

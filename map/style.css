@@ -1734,6 +1734,53 @@ body.map-shell #hud-bottom {
     box-shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
 }
 
+body.map-shell .map-interaction-mode {
+    position: absolute;
+    top: 18px;
+    left: 18px;
+    z-index: 25;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 48px;
+    max-width: min(480px, calc(100% - 36px));
+    padding: 8px 10px;
+    border: 1px solid rgba(102, 243, 255, 0.2);
+    border-radius: 16px;
+    background: rgba(5, 12, 27, 0.9);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.34);
+}
+
+body.map-shell .map-interaction-mode[hidden] {
+    display: none !important;
+}
+
+body.map-shell .map-interaction-mode-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+body.map-shell .map-interaction-mode-label {
+    color: #dff7ff;
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 1.8px;
+    text-transform: uppercase;
+}
+
+body.map-shell .map-interaction-mode-hint {
+    color: #93a9c5;
+    font-size: 0.72rem;
+    line-height: 1.25;
+}
+
+body.map-shell .map-interaction-mode-cancel {
+    flex: 0 0 auto;
+}
+
 body.map-shell #coords-display {
     min-width: 108px;
     color: #9bb3d0;

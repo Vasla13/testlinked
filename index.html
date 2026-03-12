@@ -121,6 +121,7 @@
             const tabletInterface = document.getElementById('tablet-interface');
             const welcomeLinkInput = document.getElementById('welcome-link-input');
             const welcomeLinkCopy = document.getElementById('welcome-link-copy');
+            const moduleCards = Array.from(document.querySelectorAll('.module-card[href]'));
             const COLLAB_AUTH_ENDPOINT = '/.netlify/functions/collab-auth';
             const COLLAB_SESSION_STORAGE_KEY = 'bniLinkedCollabSession_v1';
             const MODULE_GUEST_STORAGE_KEY = 'bniLinkedGuestMode_v1';
@@ -437,10 +438,26 @@
             function setupModuleAccessGate() {
                 loadModuleSession();
                 ensureModuleSession().catch(() => {});
+                moduleCards.forEach((card) => {
+                    card.addEventListener('click', async (event) => {
+                        if (moduleGate.guestMode) return;
+                        event.preventDefault();
+                        const targetHref = card.href || card.getAttribute('href') || '';
+                        if (!targetHref) return;
+                        if (await ensureModuleSession()) {
+                            window.location.href = targetHref;
+                            return;
+                        }
+                        showAuthOverlay(targetHref);
+                    });
+                });
             }
 
             function setupWelcomeLinkCopy() {
                 if (!welcomeLinkInput || !welcomeLinkCopy) return;
+                try {
+                    welcomeLinkInput.value = new URL('./', window.location.href).href;
+                } catch (e) {}
                 welcomeLinkCopy.addEventListener('click', async () => {
                     const target = welcomeLinkInput.value || '';
                     if (!target) return;

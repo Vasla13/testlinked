@@ -1039,6 +1039,26 @@ export function injectStyles() {
             background:
                 linear-gradient(180deg, rgba(102, 243, 255, 0.05), transparent 14%, transparent 86%, rgba(102, 243, 255, 0.04));
         }
+        .ai-hub-card-pill {
+            position: absolute;
+            top: 14px;
+            right: 16px;
+            min-height: 24px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            border: 1px solid rgba(102, 243, 255, 0.26);
+            background: rgba(102, 243, 255, 0.12);
+            color: #dff7ff;
+            font-size: 0.62rem;
+            font-weight: 700;
+            letter-spacing: 1.6px;
+            text-transform: uppercase;
+        }
+        .ai-hub-card-pill.is-locked {
+            border-color: rgba(255, 204, 138, 0.32);
+            background: rgba(255, 204, 138, 0.12);
+            color: #ffd79c;
+        }
         .ai-hub-card-corner {
             position: absolute;
             width: 32px;

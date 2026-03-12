@@ -11,6 +11,8 @@ import { showSettings, showContextMenu, hideContextMenu } from './ui-settings.js
 import { renderEditor } from './ui-editor.js';
 import { computeLinkSuggestions, getAllowedKinds } from './intel.js';
 import { generateExportData, buildExportFilename, downloadExportData } from './data-transfer.js';
+import { openPointDataHubModal } from './ui-data-hub.js';
+import { openPointAiHub, bindPointQuickActions } from './ui-ai.js';
 import {
     updateBoardQueryParam,
     createStoredCollabStateBridge,
@@ -21,6 +23,14 @@ import {
     stopRetriableLoop,
     scheduleRetriableLoop
 } from '../../shared/js/collab-browser.mjs';
+import {
+    isCloudBoardActive as isSharedCloudBoardActive,
+    isCloudOwner as isSharedCloudOwner,
+    isLocalSaveLocked as isSharedLocalSaveLocked,
+    canEditCloudBoard as canSharedEditCloudBoard,
+    shouldUseRealtimeCloud as shouldSharedUseRealtimeCloud,
+    isRealtimeCloudActive as isSharedRealtimeCloudActive
+} from '../../shared/js/collab-state.mjs';
 import { createRealtimeBoardSession } from '../../shared/realtime/board-session.mjs';
 import { canUseRealtimeTransport } from '../../shared/realtime/config.mjs';
 import { canonicalizePointPayload, diffPointOps, applyPointOps } from '../../shared/realtime/point-doc.mjs';
@@ -165,6 +175,10 @@ const POINT_REALTIME_TEXT_FIELDS = {
         awarenessId: 'awDescription'
     }
 };
+
+function getModalOverlay() {
+    return modalOverlay;
+}
 
 function sanitizeLogText(value, fallback = '') {
     const compact = String(value || '').replace(/\s+/g, ' ').trim();
@@ -380,27 +394,27 @@ function withApiKey(headers = {}) {
 }
 
 function isCloudBoardActive() {
-    return Boolean(collab.activeBoardId);
+    return isSharedCloudBoardActive(collab);
 }
 
 function isCloudOwner() {
-    return isCloudBoardActive() && collab.activeRole === 'owner';
+    return isSharedCloudOwner(collab);
 }
 
 function isLocalSaveLocked() {
-    return isCloudBoardActive() && collab.activeRole !== 'owner';
+    return isSharedLocalSaveLocked(collab);
 }
 
 function canEditCloudBoard() {
-    return isCloudBoardActive() && (collab.activeRole === 'owner' || collab.activeRole === 'editor');
+    return canSharedEditCloudBoard(collab);
 }
 
 function shouldUseRealtimeCloud() {
-    return isCloudBoardActive() && Boolean(collab.user && collab.token) && canUseRealtimeTransport();
+    return shouldSharedUseRealtimeCloud(collab, canUseRealtimeTransport());
 }
 
 function isRealtimeCloudActive() {
-    return Boolean(collab.realtimeSession);
+    return isSharedRealtimeCloudActive(collab);
 }
 
 function setBoardQueryParam(boardId) {
@@ -2902,152 +2916,23 @@ function resetAllPointData() {
 }
 
 function openDataHubModal() {
-    if (!modalOverlay) createModal();
-    setModalMode('datahub');
-    const msgEl = document.getElementById('modal-msg');
-    const actEl = document.getElementById('modal-actions');
-    if (!msgEl || !actEl) return;
-
-    const localSaveLocked = isLocalSaveLocked();
-    const cloudSummary = isCloudBoardActive()
-        ? `${collab.activeBoardTitle || collab.activeBoardId} · ${collab.activeRole || 'cloud'}`
-        : (collab.user ? 'Session cloud ouverte' : 'Cloud non connecte');
-    const localSummary = localSaveLocked ? 'Local verrouille' : 'Local actif';
-
-    msgEl.innerHTML = `
-        <div class="modal-tool data-hub">
-            <div class="data-hub-head">
-                <h3 class="modal-tool-title">Fichier</h3>
-            </div>
-
-            <div class="data-hub-panels">
-                <div class="data-hub-section data-hub-section-local">
-                    <div class="data-hub-kicker">Local</div>
-                    <div class="data-hub-grid">
-                        <button type="button" class="data-hub-card data-hub-card-local" data-action="open-file">
-                            <span class="data-hub-card-title">Ouvrir</span>
-                            <span class="data-hub-card-meta">JSON</span>
-                        </button>
-                        <button type="button" class="data-hub-card data-hub-card-local ${localSaveLocked ? 'is-disabled-visual' : ''}" data-action="save-file">
-                            <span class="data-hub-card-title">Sauvegarder</span>
-                            <span class="data-hub-card-meta">JSON</span>
-                        </button>
-                    </div>
-                </div>
-
-                <div class="data-hub-section data-hub-section-cloud">
-                    <div class="data-hub-kicker">Cloud</div>
-                    <div class="data-hub-grid ${isCloudBoardActive() ? '' : 'data-hub-grid-single'}">
-                        <button type="button" class="data-hub-card data-hub-card-cloud" data-action="cloud-open">
-                            <span class="data-hub-card-title">${collab.user ? 'Boards' : 'Se connecter'}</span>
-                            <span class="data-hub-card-meta">${isCloudBoardActive() ? escapeHtml(collab.activeRole || 'actif') : 'cloud'}</span>
-                        </button>
-                        ${isCloudBoardActive() ? `
-                            <button type="button" class="data-hub-card data-hub-card-cloud" data-action="cloud-save">
-                                <span class="data-hub-card-title">Synchroniser</span>
-                                <span class="data-hub-card-meta">board</span>
-                            </button>
-                        ` : ''}
-                    </div>
-                </div>
-            </div>
-
-            <details class="data-hub-advanced">
-                <summary class="data-hub-summary">Options avancees</summary>
-                <div class="data-hub-advanced-grid">
-                    <button type="button" class="data-hub-card data-hub-card-local ${localSaveLocked ? 'is-disabled-visual' : ''}" data-action="save-text">
-                        <span class="data-hub-card-title">Copier JSON</span>
-                    </button>
-                    <button type="button" class="data-hub-card data-hub-card-local" data-action="open-text">
-                        <span class="data-hub-card-title">Coller JSON</span>
-                    </button>
-                    <button type="button" class="data-hub-card data-hub-card-local" data-action="merge-file">
-                        <span class="data-hub-card-title">Fusionner</span>
-                    </button>
-                    <button type="button" class="data-hub-card data-hub-card-local" data-action="merge-text">
-                        <span class="data-hub-card-title">Fusion texte</span>
-                    </button>
-                    <button type="button" class="data-hub-card data-hub-card-danger" data-action="reset-all">
-                        <span class="data-hub-card-title">Reset</span>
-                    </button>
-                </div>
-            </details>
-
-            <div class="data-hub-status">
-                <span class="data-hub-status-pill data-hub-status-pill-local"><strong>${escapeHtml(localSummary)}</strong></span>
-                <span class="data-hub-status-pill data-hub-status-pill-cloud">${escapeHtml(cloudSummary)}</span>
-                <span class="data-hub-status-pill data-hub-status-pill-sync">${escapeHtml(collab.syncLabel || 'Local')}</span>
-            </div>
-        </div>
-    `;
-
-    actEl.innerHTML = '<button type="button" id="data-hub-close">Fermer</button>';
-
-    const runLockedLocalAction = () => {
-        showCustomAlert('Export local interdit pour les membres partages.');
-    };
-
-    Array.from(msgEl.querySelectorAll('[data-action]')).forEach((btn) => {
-        btn.onclick = () => {
-            const action = btn.getAttribute('data-action') || '';
-
-            if (action === 'save-file') {
-                if (localSaveLocked) return runLockedLocalAction();
-                modalOverlay.style.display = 'none';
-                downloadJSON();
-                return;
-            }
-            if (action === 'save-text') {
-                if (localSaveLocked) return runLockedLocalAction();
-                const data = generateExportData();
-                navigator.clipboard.writeText(JSON.stringify(data, null, 2))
-                    .then(() => {
-                        modalOverlay.style.display = 'none';
-                        showCustomAlert('JSON copie dans le presse-papier.');
-                    })
-                    .catch(() => showCustomAlert('Erreur copie clipboard'));
-                return;
-            }
-            if (action === 'open-file') {
-                modalOverlay.style.display = 'none';
-                triggerFileInput('fileImport');
-                return;
-            }
-            if (action === 'open-text') {
-                showRawDataInput('load');
-                return;
-            }
-            if (action === 'merge-file') {
-                modalOverlay.style.display = 'none';
-                triggerFileInput('fileMerge');
-                return;
-            }
-            if (action === 'merge-text') {
-                showRawDataInput('merge');
-                return;
-            }
-            if (action === 'cloud-open') {
-                showCloudMenu();
-                return;
-            }
-            if (action === 'cloud-save') {
-                if (!isCloudBoardActive()) {
-                    showCloudMenu();
-                    return;
-                }
-                saveActiveCloudBoard({ manual: true, quiet: false }).catch(() => {});
-                return;
-            }
-            if (action === 'reset-all') {
-                modalOverlay.style.display = 'none';
-                resetAllPointData();
-            }
-        };
+    openPointDataHubModal({
+        ensureModal: createModal,
+        setModalMode,
+        getModalOverlay,
+        collab,
+        escapeHtml,
+        isLocalSaveLocked,
+        isCloudBoardActive,
+        showCloudMenu,
+        saveActiveCloudBoard,
+        downloadJSON,
+        generateExportData,
+        showCustomAlert,
+        showRawDataInput,
+        triggerFileInput,
+        resetAllPointData,
     });
-
-    const closeBtn = document.getElementById('data-hub-close');
-    if (closeBtn) closeBtn.onclick = () => { modalOverlay.style.display = 'none'; };
-    modalOverlay.style.display = 'flex';
 }
 
 function setupTopButtons() {
@@ -3056,7 +2941,11 @@ function setupTopButtons() {
     document.getElementById('createCompany').onclick = () => createNode(TYPES.COMPANY, 'Nouvelle entreprise', { actor: collab.user?.username || '' });
 
     const btnDataFileToggle = document.getElementById('btnDataFileToggle');
-    if (btnDataFileToggle) btnDataFileToggle.onclick = () => showCloudMenu();
+    if (btnDataFileToggle) {
+        btnDataFileToggle.textContent = 'Donnees';
+        btnDataFileToggle.title = 'Ouvrir le hub local / cloud';
+        btnDataFileToggle.onclick = () => openDataHubModal();
+    }
 
     document.getElementById('fileImport').onchange = (e) => handleFileProcess(e.target.files[0], 'load');
     document.getElementById('fileMerge').onchange = (e) => handleFileProcess(e.target.files[0], 'merge');
@@ -3065,14 +2954,11 @@ function setupTopButtons() {
 }
 
 function setupQuickActions() {
-    const btnQuickSearch = document.getElementById('btnQuickSearch');
-    if (btnQuickSearch) btnQuickSearch.onclick = () => openQuickSearchModal();
-
-    const btnQuickCreate = document.getElementById('btnQuickCreate');
-    if (btnQuickCreate) btnQuickCreate.onclick = () => openQuickCreateModal();
-
-    const btnQuickIntel = document.getElementById('btnQuickIntel');
-    if (btnQuickIntel) btnQuickIntel.onclick = () => openOperatorIAMode();
+    bindPointQuickActions({
+        onSearch: openQuickSearchModal,
+        onCreate: openQuickCreateModal,
+        onAi: openOperatorIAMode,
+    });
 }
 
 function openQuickSearchModal() {
@@ -3717,7 +3603,10 @@ function deactivateHvtMode() {
 }
 
 function openIntelAssistant(scope = 'selection') {
-    state.aiSettings.intelUnlocked = true;
+    if (!state.aiSettings?.intelUnlocked) {
+        showIntelUnlock(() => openIntelAssistant(scope));
+        return;
+    }
     state.aiSettings.scope = (scope === 'selection' && state.selection) ? 'selection' : 'global';
     scheduleSave();
 
@@ -3731,211 +3620,21 @@ function openIntelAssistant(scope = 'selection') {
 }
 
 function openOperatorIAMode() {
-    if (!modalOverlay) createModal();
-    setModalMode('aihub');
-    const msgEl = document.getElementById('modal-msg');
-    const actEl = document.getElementById('modal-actions');
-    if (!msgEl || !actEl) return;
-
-    msgEl.innerHTML = `
-        <div class="ai-hub">
-            <div class="ai-hub-head">
-                <div class="ai-hub-copy">
-                    <div class="ai-hub-kicker">Operateur IA</div>
-                    <div class="ai-hub-title">Choisis un assistant</div>
-                </div>
-                <button type="button" class="ai-hub-close" id="ai-hub-close">Fermer</button>
-            </div>
-            <div class="ai-hub-grid">
-                <button type="button" class="ai-hub-card" data-ai-open="intel-global">
-                    <span class="ai-hub-card-corner ai-hub-card-corner-tl" aria-hidden="true"></span>
-                    <span class="ai-hub-card-corner ai-hub-card-corner-br" aria-hidden="true"></span>
-                    <span class="ai-hub-card-icon" aria-hidden="true">
-                        <svg viewBox="0 0 120 120" role="presentation">
-                            <g fill="none" stroke="currentColor" stroke-width="2.15" stroke-linecap="round" stroke-linejoin="round" transform="translate(25 26) scale(2.85)">
-                                <g transform="rotate(38 12 12)">
-                                    <path d="M9 17H7A5 5 0 0 1 7 7h2"/>
-                                    <path d="M15 7h2a5 5 0 1 1 0 10h-2"/>
-                                    <path d="M8.5 12h7"/>
-                                </g>
-                            </g>
-                            <path d="m81 20 3.4 9.3L94 32.7l-9.3 3.4L81 45.4l-3.4-9.3-9.3-3.4 9.3-3.4L81 20Z" fill="currentColor"/>
-                            <path d="m44 60 5.4 2-3 2.9 6.3 2.3" fill="none" stroke="currentColor" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                    </span>
-                    <span class="ai-hub-card-title">Prediction IA</span>
-                    <span class="ai-hub-card-desc">Cherche des liaisons utiles sur l'ensemble du graphe.</span>
-                </button>
-                <button type="button" class="ai-hub-card" data-ai-open="hvt">
-                    <span class="ai-hub-card-corner ai-hub-card-corner-tl" aria-hidden="true"></span>
-                    <span class="ai-hub-card-corner ai-hub-card-corner-br" aria-hidden="true"></span>
-                    <span class="ai-hub-card-icon" aria-hidden="true">
-                        <svg viewBox="0 0 120 120" role="presentation">
-                            <circle cx="60" cy="50" r="10" fill="currentColor"/>
-                            <circle cx="35" cy="28" r="5.8" fill="currentColor"/>
-                            <circle cx="92" cy="24" r="5.8" fill="currentColor"/>
-                            <circle cx="100" cy="76" r="5.8" fill="currentColor"/>
-                            <circle cx="40" cy="82" r="5.8" fill="currentColor"/>
-                            <circle cx="30" cy="60" r="5.8" fill="currentColor"/>
-                            <path d="M60 50 35 28M60 50 92 24M60 50 100 76M60 50 40 82M60 50 30 60" fill="none" stroke="currentColor" stroke-width="4.8" stroke-linecap="round"/>
-                        </svg>
-                    </span>
-                    <span class="ai-hub-card-title">Cible importante</span>
-                    <span class="ai-hub-card-desc">Affiche directement le classement HVT.</span>
-                </button>
-            </div>
-        </div>
-    `;
-
-    actEl.innerHTML = '';
-
-    const closeBtn = document.getElementById('ai-hub-close');
-    if (closeBtn) closeBtn.onclick = () => { modalOverlay.style.display = 'none'; };
-
-    Array.from(document.querySelectorAll('[data-ai-open]')).forEach((btn) => {
-        btn.onclick = () => {
-            const action = btn.getAttribute('data-ai-open') || '';
-            modalOverlay.style.display = 'none';
-            if (action === 'hvt') {
-                openHvtAssistant();
-                return;
-            }
-            if (action === 'intel-global') {
-                openIntelAssistant('global');
-                return;
-            }
-        };
+    openPointAiHub({
+        ensureModal: createModal,
+        setModalMode,
+        getModalOverlay,
+        onOpenIntel: () => openIntelAssistant('global'),
+        onOpenHvt: openHvtAssistant,
+        intelUnlocked: Boolean(state.aiSettings?.intelUnlocked),
     });
-
-    modalOverlay.style.display = 'flex';
 }
 
 // --- SYSTÈME DE GESTION DES DONNÉES (MENU) ---
 
 function showDataMenu(mode) {
-    if(!modalOverlay) createModal();
-    setModalMode('default');
-    const msgEl = document.getElementById('modal-msg');
-    const actEl = document.getElementById('modal-actions');
-    if (!msgEl || !actEl) return;
-
-    const localSaveLocked = mode === 'save' && isLocalSaveLocked();
-    let storageMode = 'local';
-
-    let title = "";
-    if(mode === 'save') title = `SAUVEGARDER`;
-    if(mode === 'load') title = "OUVRIR UN RÉSEAU";
-    if(mode === 'merge') title = "FUSIONNER DES DONNÉES";
-
-    const renderMenu = () => {
-        const isLocalMode = storageMode === 'local';
-        const isCloudMode = storageMode === 'cloud';
-        const localModeInfo = `
-            <div class="modal-note">
-                Les fichiers doivent etre partages via Discord.<br>
-                Impossible de sauvegarder en ville depuis la tablette, copiez et transpetez le texte brute.
-            </div>
-        `;
-
-        msgEl.innerHTML = `
-            <div class="modal-tool">
-                <h3 class="modal-tool-title">${title}</h3>
-                <div class="modal-segment">
-                    <button type="button" id="data-mode-local" class="${isLocalMode ? 'primary ' : ''}modal-segment-btn">Sauvegarde locale</button>
-                    <button type="button" id="data-mode-cloud" class="${isCloudMode ? 'primary ' : ''}modal-segment-btn">Sauvegarde cloud</button>
-                </div>
-                ${isLocalMode ? localModeInfo : '<div class="modal-note">Le mode cloud utilise les boards et les droits de compte.</div>'}
-                ${localSaveLocked && isLocalMode ? '<div class="modal-note modal-note-warning">Mode partage: export local bloque (owner only).</div>' : ''}
-            </div>
-        `;
-
-        actEl.innerHTML = '';
-
-        const closeBtn = document.createElement('button');
-        closeBtn.innerHTML = 'Fermer';
-        closeBtn.onclick = () => { modalOverlay.style.display = 'none'; };
-
-        if (isCloudMode) {
-            const cloudBtn = document.createElement('button');
-            cloudBtn.className = 'primary';
-            cloudBtn.innerHTML = 'Ouvrir menu cloud';
-            cloudBtn.onclick = () => showCloudMenu();
-
-            if (mode === 'save' && isCloudBoardActive()) {
-                const saveCloudBtn = document.createElement('button');
-                saveCloudBtn.className = 'primary';
-                saveCloudBtn.innerHTML = 'Sauver board cloud';
-                saveCloudBtn.onclick = async () => {
-                    await saveActiveCloudBoard({ manual: true, quiet: false });
-                };
-                actEl.appendChild(saveCloudBtn);
-            }
-
-            actEl.appendChild(cloudBtn);
-            actEl.appendChild(closeBtn);
-        } else {
-            const btnFile = document.createElement('button');
-            btnFile.innerHTML = (mode === 'save') ? 'Fichier (.json)' : 'Depuis ordi';
-            btnFile.className = 'primary';
-            btnFile.onclick = () => {
-                if (localSaveLocked) {
-                    showCustomAlert("Export local interdit pour les membres partages.");
-                    return;
-                }
-                modalOverlay.style.display = 'none';
-                if(mode === 'save') downloadJSON();
-                if(mode === 'load') triggerFileInput('fileImport');
-                if(mode === 'merge') triggerFileInput('fileMerge');
-            };
-
-            const btnText = document.createElement('button');
-            btnText.innerHTML = (mode === 'save') ? 'Copier texte' : 'Coller texte';
-            btnText.onclick = () => {
-                if (localSaveLocked) {
-                    showCustomAlert("Duplication locale interdite pour les membres partages.");
-                    return;
-                }
-                if (mode === 'save') {
-                    const data = generateExportData();
-                    navigator.clipboard.writeText(JSON.stringify(data, null, 2))
-                        .then(() => {
-                            modalOverlay.style.display='none';
-                            showCustomAlert("JSON copie dans le presse-papier.");
-                        })
-                        .catch(() => showCustomAlert("Erreur copie clipboard"));
-                } else {
-                    showRawDataInput(mode);
-                }
-            };
-
-            if (localSaveLocked) {
-                btnFile.classList.add('is-disabled-visual');
-                btnText.classList.add('is-disabled-visual');
-            }
-
-            actEl.appendChild(btnFile);
-            actEl.appendChild(btnText);
-            actEl.appendChild(closeBtn);
-        }
-
-        const localModeBtn = document.getElementById('data-mode-local');
-        const cloudModeBtn = document.getElementById('data-mode-cloud');
-        if (localModeBtn) {
-            localModeBtn.onclick = () => {
-                storageMode = 'local';
-                renderMenu();
-            };
-        }
-        if (cloudModeBtn) {
-            cloudModeBtn.onclick = () => {
-                storageMode = 'cloud';
-                renderMenu();
-            };
-        }
-    };
-
-    renderMenu();
-    modalOverlay.style.display = 'flex';
+    void mode;
+    openDataHubModal();
 }
 
 function showRawDataInput(mode) {

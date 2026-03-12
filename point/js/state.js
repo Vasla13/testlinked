@@ -37,7 +37,7 @@ export const state = {
         sources: { graph: true, text: true, tags: true, profile: true, bridge: true, lex: true, geo: true },
         showReasons: true,
         showPredicted: false,
-        intelUnlocked: true
+        intelUnlocked: false
     },
     aiFeedback: {},
     aiPredictedLinks: []
@@ -162,7 +162,6 @@ export function loadState() {
                 state.aiSettings.sources = { ...state.aiSettings.sources, ...data.aiSettings.sources };
             }
         }
-        state.aiSettings.intelUnlocked = true;
         state.aiSettings.showPredicted = false;
         if (data.aiFeedback) state.aiFeedback = data.aiFeedback;
         if (data.aiPredictedLinks) state.aiPredictedLinks = data.aiPredictedLinks;

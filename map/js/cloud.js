@@ -37,6 +37,14 @@ import {
     normalizeOptionalMapBoardPayload as normalizeSharedOptionalMapBoardPayload,
     mergeMapBoardPayload as mergeSharedMapBoardPayload
 } from '../../shared/js/map-board.mjs';
+import {
+    isCloudBoardActive as isSharedCloudBoardActive,
+    isCloudOwner as isSharedCloudOwner,
+    isLocalSaveLocked as isSharedLocalSaveLocked,
+    canEditCloudBoard as canSharedEditCloudBoard,
+    shouldUseRealtimeCloud as shouldSharedUseRealtimeCloud,
+    isRealtimeCloudActive as isSharedRealtimeCloudActive
+} from '../../shared/js/collab-state.mjs';
 
 const COLLAB_AUTH_ENDPOINT = '/.netlify/functions/collab-auth';
 const COLLAB_BOARD_ENDPOINT = '/.netlify/functions/collab-board';
@@ -140,27 +148,27 @@ function setBoardQueryParam(boardId) {
 }
 
 function isCloudBoardActive() {
-    return Boolean(collab.activeBoardId);
+    return isSharedCloudBoardActive(collab);
 }
 
 function isCloudOwner() {
-    return isCloudBoardActive() && collab.activeRole === 'owner';
+    return isSharedCloudOwner(collab);
 }
 
 export function isLocalSaveLocked() {
-    return isCloudBoardActive() && collab.activeRole !== 'owner';
+    return isSharedLocalSaveLocked(collab);
 }
 
 export function canEditCloudBoard() {
-    return isCloudBoardActive() && (collab.activeRole === 'owner' || collab.activeRole === 'editor');
+    return canSharedEditCloudBoard(collab);
 }
 
 function shouldUseRealtimeCloud() {
-    return isCloudBoardActive() && Boolean(collab.user && collab.token) && canUseRealtimeTransport();
+    return shouldSharedUseRealtimeCloud(collab, canUseRealtimeTransport());
 }
 
 function isRealtimeCloudActive() {
-    return Boolean(collab.realtimeSession);
+    return isSharedRealtimeCloudActive(collab);
 }
 
 function getMapSelectedEntity() {

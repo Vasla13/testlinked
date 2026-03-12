@@ -1,6 +1,6 @@
 import { state } from './state.js';
 import { ICONS, MAP_SCALE_UNIT } from './constants.js';
-import { handleLinkClick, handleLinkHover, handleLinkOut, moveTooltip, selectItem } from './ui.js';
+import { handleLinkClick, handleLinkHover, handleLinkOut, moveTooltip, selectItem, syncInteractionModeHud } from './ui.js';
 import { startMarkerDrag } from './engine.js';
 import { handleZoneMouseDown } from './zone-editor.js';
 import { escapeHtml } from './utils.js';
@@ -319,6 +319,7 @@ export function renderAll(options = {}) {
     renderTacticalLinks();
     renderMarkersAndClusters();
     renderMeasureTool();
+    syncInteractionModeHud();
 }
 
 function renderZones() {

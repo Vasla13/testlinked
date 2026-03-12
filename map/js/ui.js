@@ -4,22 +4,105 @@ import { renderEditor, closeEditor } from './ui-editor.js';
 import { customAlert } from './ui-modals.js';
 import { renderGroupsList } from './ui-list.js'; 
 import { initContextMenu, handleLinkClick, handleLinkHover, handleLinkOut, moveTooltip } from './ui-menus.js';
-import { handleMapMouseDown, handleMapMouseMove, handleMapMouseUp } from './zone-editor.js';
+import { stopDrawing } from './zone-editor.js';
 import { addTacticalLink } from './state.js'; // Correction import
 import { updateMapCloudPresence } from './cloud.js';
 
 export { handleLinkClick, handleLinkHover, handleLinkOut, moveTooltip };
 
+function ensureInteractionModeHud() {
+    let hud = document.getElementById('map-interaction-mode');
+    if (hud) return hud;
+
+    const viewport = document.getElementById('viewport');
+    if (!viewport) return null;
+
+    hud = document.createElement('div');
+    hud.id = 'map-interaction-mode';
+    hud.className = 'map-interaction-mode';
+    hud.hidden = true;
+    hud.innerHTML = `
+        <div class="map-interaction-mode-copy">
+            <span id="mapInteractionModeLabel" class="map-interaction-mode-label"></span>
+            <span id="mapInteractionModeHint" class="map-interaction-mode-hint"></span>
+        </div>
+        <button id="mapInteractionModeCancel" class="hud-btn map-interaction-mode-cancel" type="button">Quitter</button>
+    `;
+    viewport.appendChild(hud);
+    return hud;
+}
+
+function describeInteractionMode() {
+    if (state.drawingMode && state.drawingType === 'CIRCLE') {
+        return {
+            label: 'Mode cercle',
+            hint: state.drawingPending ? 'Valide ou annule la zone active.' : 'Clique puis glisse sur la carte.',
+            cancel: () => {
+                stopDrawing();
+            }
+        };
+    }
+    if (state.drawingMode && state.drawingType === 'POLYGON') {
+        return {
+            label: 'Mode zone',
+            hint: state.drawingPending ? 'Valide ou annule la zone active.' : 'Trace la zone puis valide.',
+            cancel: () => {
+                stopDrawing();
+            }
+        };
+    }
+    if (state.linkingMode) {
+        return {
+            label: 'Mode liaison',
+            hint: 'Clique sur une autre cible pour creer le lien.',
+            cancel: () => {
+                state.linkingMode = false;
+                state.linkStartId = null;
+                document.body.style.cursor = 'default';
+                renderAll();
+            }
+        };
+    }
+    if (state.measuringMode) {
+        return {
+            label: 'Mode mesure',
+            hint: 'Pose deux points pour mesurer, puis quitte.',
+            cancel: () => {
+                state.measuringMode = false;
+                state.measureStep = 0;
+                state.measurePoints = [];
+                renderAll();
+            }
+        };
+    }
+    return null;
+}
+
+export function syncInteractionModeHud() {
+    const hud = ensureInteractionModeHud();
+    if (!hud) return;
+
+    const mode = describeInteractionMode();
+    if (!mode) {
+        hud.hidden = true;
+        hud.dataset.mode = 'idle';
+        return;
+    }
+
+    hud.hidden = false;
+    hud.dataset.mode = 'active';
+    const label = document.getElementById('mapInteractionModeLabel');
+    const hint = document.getElementById('mapInteractionModeHint');
+    const cancel = document.getElementById('mapInteractionModeCancel');
+    if (label) label.textContent = mode.label;
+    if (hint) hint.textContent = mode.hint;
+    if (cancel) cancel.onclick = () => mode.cancel();
+}
+
 export function initUI() {
     initContextMenu(); 
-    
-    // Gestionnaire Souris Global
-    const viewport = document.getElementById('viewport');
-    if (viewport) {
-        viewport.addEventListener('mousedown', (e) => handleMapMouseDown(e));
-        window.addEventListener('mousemove', (e) => handleMapMouseMove(e));
-        window.addEventListener('mouseup', (e) => handleMapMouseUp(e));
-    }
+    ensureInteractionModeHud();
+    syncInteractionModeHud();
 
     // Menu Mobile
     const btnMobileMenu = document.getElementById('btnMobileMenu');
@@ -74,6 +157,8 @@ export function initUI() {
             }
         };
     }
+
+    syncInteractionModeHud();
 }
 
 export function handlePointClick(gIndex, pIndex) {
@@ -116,6 +201,7 @@ export function selectItem(type, gIndex, index) {
     renderAll(); 
     renderEditor(); 
     updateMapCloudPresence().catch(() => {});
+    syncInteractionModeHud();
 }
 
 export function selectPoint(gIndex, pIndex) { selectItem('point', gIndex, pIndex); }
@@ -126,6 +212,7 @@ export function deselect() {
     renderAll(); 
     closeEditor(); 
     updateMapCloudPresence().catch(() => {});
+    syncInteractionModeHud();
 }
 
 export { renderGroupsList };

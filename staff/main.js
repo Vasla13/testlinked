@@ -1,4 +1,7 @@
 import { gpsToPercentage, percentageToGps } from '../map/js/utils.js';
+import { createStaffAlertsApi } from './alerts-api.js';
+import { escapeText, toValidDate, formatAlertDateTime, toLocalDateTimeInputValue } from './date-utils.js';
+import { normalizeAudienceUsername, normalizeAudienceQuery, sanitizeAllowedUsers } from './audience-utils.js';
 
 const STAFF_CODE = 'staff';
 const ALERTS_ENDPOINT = '/.netlify/functions/alerts';
@@ -6,6 +9,12 @@ const ALERT_REFRESH_EVENT_KEY = 'bniAlertRefresh_v1';
 const ALERT_REFRESH_CHANNEL = 'bni-alert-refresh';
 const DEFAULT_RADIUS = 2.6;
 const DEFAULT_STROKE_WIDTH = 0.06;
+const alertsApi = createStaffAlertsApi({
+    endpoint: ALERTS_ENDPOINT,
+    staffCode: STAFF_CODE,
+    refreshEventKey: ALERT_REFRESH_EVENT_KEY,
+    refreshChannel: ALERT_REFRESH_CHANNEL,
+});
 
 const dom = {
     contextMenu: document.getElementById('context-menu'),
@@ -117,29 +126,6 @@ const state = {
     },
 };
 
-function escapeText(value) {
-    return String(value ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
-}
-
-function toValidDate(value) {
-    const date = value instanceof Date ? value : new Date(value);
-    return Number.isFinite(date.getTime()) ? date : null;
-}
-
-function formatAlertDateTime(value) {
-    const date = toValidDate(value);
-    if (!date) return '';
-    return new Intl.DateTimeFormat('fr-FR', {
-        dateStyle: 'short',
-        timeStyle: 'short',
-    }).format(date);
-}
-
 function cloneAlertRecord(alert) {
     if (!alert || typeof alert !== 'object') return null;
     try {
@@ -175,17 +161,6 @@ function getAlertStateTone(alert) {
 
 function getAlertStamp(alert) {
     return formatAlertDateTime(alert?.startsAt || alert?.updatedAt || alert?.createdAt || '');
-}
-
-function toLocalDateTimeInputValue(value) {
-    const date = toValidDate(value);
-    if (!date) return '';
-    const pad = (num) => String(num).padStart(2, '0');
-    return [
-        date.getFullYear(),
-        pad(date.getMonth() + 1),
-        pad(date.getDate()),
-    ].join('-') + `T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 function readScheduledAtInput() {
@@ -272,32 +247,6 @@ function refreshAlertModePill() {
     }
 
     dom.alertMode.textContent = state.currentAlert ? 'Live' : 'Nouveau';
-}
-
-function normalizeAudienceUsername(value) {
-    const raw = String(value || '').trim().toLowerCase();
-    const clean = raw.replace(/[^a-z0-9._-]/g, '');
-    return clean.length >= 3 ? clean : '';
-}
-
-function normalizeAudienceQuery(value) {
-    return String(value || '')
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9._-]/g, '');
-}
-
-function sanitizeAllowedUsers(list) {
-    if (!Array.isArray(list)) return [];
-    const seen = new Set();
-    const clean = [];
-    list.forEach((value) => {
-        const username = normalizeAudienceUsername(value);
-        if (!username || seen.has(username)) return;
-        seen.add(username);
-        clean.push(username);
-    });
-    return clean;
 }
 
 function audienceSummary() {
@@ -1092,19 +1041,6 @@ function setDrawStatus(text, mode = 'circle') {
     dom.drawStatus.dataset.mode = mode;
 }
 
-function notifyPublicAlertRefresh() {
-    try {
-        localStorage.setItem(ALERT_REFRESH_EVENT_KEY, String(Date.now()));
-    } catch (e) {}
-    try {
-        if (typeof BroadcastChannel === 'function') {
-            const channel = new BroadcastChannel(ALERT_REFRESH_CHANNEL);
-            channel.postMessage({ type: 'refresh', at: Date.now() });
-            channel.close();
-        }
-    } catch (e) {}
-}
-
 function setLockState(locked) {
     state.unlocked = !locked;
     if (!dom.accessOverlay) return;
@@ -1896,20 +1832,7 @@ function updateHudCoords(event) {
 }
 
 function requestAdmin(action, payload = {}) {
-    return fetch(ALERTS_ENDPOINT, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'x-staff-code': STAFF_CODE,
-        },
-        body: JSON.stringify({ action, accessCode: STAFF_CODE, ...payload }),
-    }).then(async (response) => {
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok || !data.ok) {
-            throw new Error(data.error || `Erreur alerte (${response.status})`);
-        }
-        return data;
-    });
+    return alertsApi.requestAdmin(action, payload);
 }
 
 function selectAlert(alertId, options = {}) {
@@ -1997,7 +1920,7 @@ async function saveAlert() {
         });
         closeAlertModal({ restore: false });
         refreshStatusCards();
-        notifyPublicAlertRefresh();
+        alertsApi.notifyPublicAlertRefresh();
         if (state.currentAlert?.active === false) {
             setStatusMessage('Alerte sauvegardee en brouillon.', 'warn');
         } else if (isAlertPreview(state.currentAlert)) {
@@ -2037,7 +1960,7 @@ async function deleteAlert(targetId = getAlertId()) {
         await loadAlerts({ keepCurrent: !wasCurrent, focus: false });
         closeAlertModal({ restore: false });
         refreshStatusCards();
-        notifyPublicAlertRefresh();
+        alertsApi.notifyPublicAlertRefresh();
         setStatusMessage('Alerte supprimee.', 'ok');
     } catch (error) {
         setStatusMessage(error.message || 'Suppression impossible.', 'error');
