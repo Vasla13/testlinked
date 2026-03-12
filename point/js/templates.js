@@ -106,11 +106,21 @@ export function renderEditorHTML(n, state) {
         </div>
     ` : '';
 
-    // Options Type
     const typeOptions = `
         <option value="${TYPES.PERSON}" ${n.type===TYPES.PERSON?'selected':''}>Personne</option>
         <option value="${TYPES.GROUP}" ${n.type===TYPES.GROUP?'selected':''}>Groupe</option>
         <option value="${TYPES.COMPANY}" ${n.type===TYPES.COMPANY?'selected':''}>Entreprise</option>
+    `;
+    const headMetaControls = `
+        <div class="editor-status-inline editor-status-inline-meta">
+            <select id="edQuickType" class="editor-type-select" aria-label="Type de fiche">
+                ${typeOptions}
+            </select>
+            <label class="editor-color-pill editor-color-pill-head" title="Couleur de la fiche">
+                <span class="editor-inline-label">Couleur</span>
+                <input type="color" id="edColorQuick" value="${sanitizeNodeColor(safeHex(n.color))}" class="editor-color-input editor-color-input-inline">
+            </label>
+        </div>
     `;
 
     return `
@@ -141,17 +151,8 @@ export function renderEditorHTML(n, state) {
                     <div class="editor-sheet-head-main">
                         <div class="editor-sheet-identity-row">
                             <div class="editor-sheet-title-block">
-                                <input id="edQuickNameInline" class="editor-sheet-name editor-sheet-name-input" type="text" value="${escapeHtml(n.name)}" placeholder="Nom de la fiche">
+                                <textarea id="edQuickNameInline" class="editor-sheet-name editor-sheet-name-input editor-sheet-name-textarea" rows="1" placeholder="Nom de la fiche">${escapeHtml(n.name)}</textarea>
                                 <div id="awName" class="editor-realtime-presence" style="display:none; min-height:14px; margin-top:4px; font-size:0.68rem; color:#ffcc8a;"></div>
-                            </div>
-                            <div class="editor-head-pills">
-                                <select id="edQuickType" class="editor-type-select" aria-label="Type de fiche">
-                                    ${typeOptions}
-                                </select>
-                                <label class="editor-color-pill editor-color-pill-head" title="Couleur de la fiche">
-                                    <span class="editor-inline-label">Couleur</span>
-                                    <input type="color" id="edColorQuick" value="${sanitizeNodeColor(safeHex(n.color))}" class="editor-color-input editor-color-input-inline">
-                                </label>
                             </div>
                             ${n.type === TYPES.PERSON ? `
                                 <div class="editor-inline-phone editor-inline-phone-head">
@@ -162,11 +163,10 @@ export function renderEditorHTML(n, state) {
                             ` : ''}
                         </div>
                     </div>
-                    ${personStatusControls ? `
-                        <div class="editor-sheet-topbar">
-                            ${personStatusControls}
-                        </div>
-                    ` : ''}
+                    <div class="editor-sheet-topbar ${personStatusControls ? '' : 'editor-sheet-topbar-meta-only'}">
+                        ${personStatusControls}
+                        ${headMetaControls}
+                    </div>
                 </div>
 
                 <div class="editor-sheet-note">

@@ -471,10 +471,22 @@ function setupEditorListeners(n) {
         });
     };
 
+    const syncEditorNameLayout = () => {
+        const headName = document.getElementById('edQuickNameInline');
+        if (!headName) return;
+        headName.style.height = 'auto';
+        const nextHeight = Math.min(Math.max(headName.scrollHeight, 36), 96);
+        headName.style.height = `${nextHeight}px`;
+        headName.classList.toggle('is-multiline', nextHeight > 42);
+        const sheetEl = headName.closest('.editor-sheet');
+        if (sheetEl) sheetEl.classList.toggle('editor-sheet-name-expanded', nextHeight > 42);
+    };
+
     const syncEditorNameDisplays = (nextName) => {
         const safeName = String(nextName || '').trim();
         const headName = document.getElementById('edQuickNameInline');
         if (headName && headName.value !== safeName) headName.value = safeName;
+        syncEditorNameLayout();
     };
 
     const syncEditorPhoneDisplays = (nextPhone) => {
@@ -512,9 +524,14 @@ function setupEditorListeners(n) {
 
     const edQuickName = document.getElementById('edQuickNameInline');
     if (edQuickName) {
+        edQuickName.addEventListener('input', syncEditorNameLayout);
+        edQuickName.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') event.preventDefault();
+        });
         if (!bindRealtimePointField(n, 'name', edQuickName)) {
             edQuickName.oninput = (e) => applyNodeName(e.target.value);
         }
+        syncEditorNameLayout();
     }
     const edQuickNum = document.getElementById('edQuickNum');
     if (edQuickNum) {

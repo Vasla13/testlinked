@@ -11,7 +11,6 @@ import { showSettings, showContextMenu, hideContextMenu } from './ui-settings.js
 import { renderEditor } from './ui-editor.js';
 import { computeLinkSuggestions, getAllowedKinds } from './intel.js';
 import { generateExportData, buildExportFilename, downloadExportData } from './data-transfer.js';
-import { openPointDataHubModal } from './ui-data-hub.js';
 import { openPointAiHub, bindPointQuickActions } from './ui-ai.js';
 import {
     updateBoardQueryParam,
@@ -2063,111 +2062,8 @@ async function renderCloudMembers(boardId) {
     document.getElementById('cloud-members-close').onclick = () => { modalOverlay.style.display = 'none'; };
 }
 
-async function renderCloudHome() {
-    if (!modalOverlay) createModal();
-    setModalMode('cloud');
-    const msgEl = document.getElementById('modal-msg');
-    const actEl = document.getElementById('modal-actions');
-    if (!msgEl || !actEl) return;
-
-    await flushPendingCloudAutosave(collab.activeBoardId).catch(() => {});
-
-    if (!collab.user) {
-        msgEl.innerHTML = `
-            <div class="modal-tool cloud-auth-shell">
-                <div class="cloud-auth-badge">Acces cloud</div>
-                <h3 class="cloud-auth-title">Compte BNI Connect</h3>
-                <div class="cloud-auth-copy">Cree un compte ou reconnecte-toi pour retrouver tes boards, partager des dossiers et synchroniser les donnees en direct.</div>
-                <div class="cloud-auth-grid">
-                    <label class="cloud-auth-field">
-                        <span class="cloud-auth-label">Username</span>
-                        <input id="cloud-auth-user" type="text" placeholder="ex: operateur_nord" class="modal-input-standalone cloud-auth-input" autocomplete="username" />
-                    </label>
-                    <label class="cloud-auth-field">
-                        <span class="cloud-auth-label">Mot de passe</span>
-                        <input id="cloud-auth-pass" type="password" placeholder="Mot de passe" class="modal-input-standalone cloud-auth-input" autocomplete="current-password" />
-                    </label>
-                </div>
-                <div class="cloud-auth-meta">
-                    <span class="cloud-auth-pill">Point</span>
-                    <span class="cloud-auth-pill">Map</span>
-                    <span class="cloud-auth-pill">Sync live</span>
-                </div>
-                <div class="cloud-auth-hint">Le meme compte fonctionne sur les deux interfaces BNI.</div>
-            </div>
-        `;
-        actEl.innerHTML = `
-            <button type="button" id="cloud-auth-register" class="cloud-auth-secondary">Creer un compte</button>
-            <button type="button" id="cloud-auth-login" class="primary cloud-auth-primary">Se connecter</button>
-            <button type="button" id="cloud-auth-close" class="cloud-auth-tertiary">Fermer</button>
-        `;
-
-        const runAuth = async (action) => {
-            const userInput = document.getElementById('cloud-auth-user');
-            const passInput = document.getElementById('cloud-auth-pass');
-            const username = userInput ? userInput.value.trim() : '';
-            const password = passInput ? passInput.value : '';
-            if (!username || !password) {
-                showCustomAlert('Renseigne username + mot de passe.');
-                return;
-            }
-            try {
-                const res = await collabAuthRequest(action, { username, password });
-                collab.token = String(res.token || '');
-                collab.user = res.user || null;
-                persistCollabState();
-                startCollabSessionHeartbeat();
-                setCloudSyncState('session', 'Session cloud ouverte');
-                if (collab.pendingBoardId) {
-                    const targetBoard = collab.pendingBoardId;
-                    collab.pendingBoardId = '';
-                    await openCloudBoard(targetBoard, { quiet: true });
-                }
-                await renderCloudHome();
-            } catch (e) {
-                showCustomAlert(`Erreur: ${escapeHtml(e.message || 'inconnue')}`);
-            }
-        };
-
-        document.getElementById('cloud-auth-register').onclick = () => runAuth('register');
-        document.getElementById('cloud-auth-login').onclick = () => runAuth('login');
-        document.getElementById('cloud-auth-close').onclick = () => { modalOverlay.style.display = 'none'; };
-        document.getElementById('cloud-auth-pass').onkeydown = (event) => {
-            if (event.key === 'Enter') runAuth('login');
-        };
-        return;
-    }
-
-    let boards = [];
-    try {
-        const res = await collabBoardRequest('list_boards', {});
-        boards = Array.isArray(res.boards) ? res.boards : [];
-    } catch (e) {
-        showCustomAlert(`Erreur cloud: ${escapeHtml(e.message || 'inconnue')}`);
-        return;
-    }
-
-    const boardRows = boards.map((b) => {
-        const active = b.id === collab.activeBoardId;
-        const role = b.role || '';
-        return `
-            <div class="cloud-board-row ${active ? 'is-active' : ''}">
-                <div class="cloud-row-main">
-                    <div class="cloud-row-title">${escapeHtml(b.title || 'Sans nom')}</div>
-                    <div class="cloud-row-sub">${escapeHtml(role)} · ${escapeHtml(b.page || 'point')}</div>
-                </div>
-                <div class="cloud-row-actions">
-                    <button type="button" class="mini-btn cloud-open-board" data-board="${escapeHtml(b.id)}">Ouvrir</button>
-                    ${role === 'owner' ? `<button type="button" class="mini-btn cloud-manage-board" data-board="${escapeHtml(b.id)}">Gerer</button>` : ''}
-                    ${role !== 'owner' ? `<button type="button" class="mini-btn cloud-leave-board" data-board="${escapeHtml(b.id)}">Quitter</button>` : ''}
-                </div>
-            </div>
-        `;
-    }).join('');
-
-    const localSaveLocked = isLocalSaveLocked();
-    const localPanel = collab.homePanel === 'local' ? 'local' : 'cloud';
-    const localRows = `
+function buildCloudLocalPanelMarkup(localSaveLocked) {
+    return `
         <div class="cloud-board-row cloud-board-row-local is-active">
             <div class="cloud-row-main">
                 <div class="cloud-row-title">${escapeHtml(state.projectName || 'Session locale')}</div>
@@ -2208,84 +2104,12 @@ async function renderCloudHome() {
             </div>
         </div>
     `;
-    const panelBody = localPanel === 'local'
-        ? localRows
-        : (boardRows || '<div class="modal-empty-state">Aucun board cloud.</div>');
+}
 
-    msgEl.innerHTML = `
-        <div class="cloud-home-head">
-            <div class="cloud-home-tab-group">
-                <button type="button" id="cloud-home-tab-cloud" class="cloud-home-tab cloud-home-word ${localPanel === 'cloud' ? 'is-active' : ''}">cloud</button>
-                <button type="button" id="cloud-home-tab-local" class="cloud-home-tab cloud-home-word cloud-home-word-alt ${localPanel === 'local' ? 'is-active' : ''}">local</button>
-            </div>
-            <button type="button" id="cloud-modal-close-x" class="mini-btn cloud-close-btn">×</button>
-        </div>
-        <div class="cloud-column cloud-panel-shell">${panelBody}</div>
-        <div class="cloud-status-bar">
-            <span>Connecte: ${escapeHtml(collab.user.username)}</span>
-            <span id="cloudModalSyncInfo" class="${isCloudBoardActive() ? 'cloud-status-active' : ''}">
-                ${isCloudBoardActive() ? `Board actif: ${escapeHtml(collab.activeBoardTitle || collab.activeBoardId)} (${escapeHtml(collab.activeRole || '')})` : 'Aucun board cloud actif'}
-            </span>
-        </div>
-    `;
-
-    actEl.innerHTML = localPanel === 'cloud'
-        ? `
-            <button type="button" id="cloud-create-board" class="primary">Nouveau</button>
-            <button type="button" id="cloud-save-active">Sauver</button>
-            <button type="button" id="cloud-logout">Deconnexion</button>
-        `
-        : `<button type="button" id="cloud-logout">Deconnexion</button>`;
-
+function bindCloudLocalActions(localSaveLocked) {
     const runLockedLocalAction = () => {
         showCustomAlert('Export local interdit pour les membres partages.');
     };
-
-    const createBtn = document.getElementById('cloud-create-board');
-    if (createBtn) {
-        createBtn.onclick = async () => {
-            try {
-                await createCloudBoardFromCurrent();
-                showCustomAlert(`Board cree: ${escapeHtml(collab.activeBoardTitle || '')}`);
-                await renderCloudHome();
-            } catch (e) {
-                showCustomAlert(`Erreur creation cloud: ${escapeHtml(e.message || 'inconnue')}`);
-            }
-        };
-    }
-
-    const saveBtn = document.getElementById('cloud-save-active');
-    if (saveBtn) {
-        saveBtn.onclick = async () => {
-            await saveActiveCloudBoard({ manual: true, quiet: false });
-            await renderCloudHome();
-        };
-    }
-    const logoutBtn = document.getElementById('cloud-logout');
-    logoutBtn.onclick = async () => {
-        await logoutCollab();
-        await renderCloudHome();
-    };
-    if (saveBtn && (!isCloudBoardActive() || !canEditCloudBoard())) {
-        saveBtn.disabled = true;
-        saveBtn.title = isCloudBoardActive() ? 'Droits insuffisants' : 'Aucun board actif';
-    }
-    const closeX = document.getElementById('cloud-modal-close-x');
-    if (closeX) closeX.onclick = () => { modalOverlay.style.display = 'none'; };
-    const tabCloud = document.getElementById('cloud-home-tab-cloud');
-    if (tabCloud) {
-        tabCloud.onclick = () => {
-            collab.homePanel = 'cloud';
-            renderCloudHome().catch(() => {});
-        };
-    }
-    const tabLocal = document.getElementById('cloud-home-tab-local');
-    if (tabLocal) {
-        tabLocal.onclick = () => {
-            collab.homePanel = 'local';
-            renderCloudHome().catch(() => {});
-        };
-    }
 
     Array.from(document.querySelectorAll('[data-local-action]')).forEach((btn) => {
         btn.onclick = () => {
@@ -2332,6 +2156,236 @@ async function renderCloudHome() {
             }
         };
     });
+}
+
+function bindCloudHomeTabs() {
+    const tabCloud = document.getElementById('cloud-home-tab-cloud');
+    if (tabCloud) {
+        tabCloud.onclick = () => {
+            collab.homePanel = 'cloud';
+            renderCloudHome().catch(() => {});
+        };
+    }
+    const tabLocal = document.getElementById('cloud-home-tab-local');
+    if (tabLocal) {
+        tabLocal.onclick = () => {
+            collab.homePanel = 'local';
+            renderCloudHome().catch(() => {});
+        };
+    }
+}
+
+async function runCloudAuth(action) {
+    const userInput = document.getElementById('cloud-auth-user');
+    const passInput = document.getElementById('cloud-auth-pass');
+    const username = userInput ? userInput.value.trim() : '';
+    const password = passInput ? passInput.value : '';
+    if (!username || !password) {
+        showCustomAlert('Renseigne username + mot de passe.');
+        return false;
+    }
+    try {
+        const res = await collabAuthRequest(action, { username, password });
+        collab.token = String(res.token || '');
+        collab.user = res.user || null;
+        persistCollabState();
+        startCollabSessionHeartbeat();
+        setCloudSyncState('session', 'Session cloud ouverte');
+        if (collab.pendingBoardId) {
+            const targetBoard = collab.pendingBoardId;
+            collab.pendingBoardId = '';
+            await openCloudBoard(targetBoard, { quiet: true });
+        }
+        await renderCloudHome();
+        return true;
+    } catch (e) {
+        showCustomAlert(`Erreur: ${escapeHtml(e.message || 'inconnue')}`);
+        return false;
+    }
+}
+
+async function renderCloudHome() {
+    if (!modalOverlay) createModal();
+    setModalMode('cloud');
+    const msgEl = document.getElementById('modal-msg');
+    const actEl = document.getElementById('modal-actions');
+    if (!msgEl || !actEl) return;
+
+    await flushPendingCloudAutosave(collab.activeBoardId).catch(() => {});
+    const localSaveLocked = isLocalSaveLocked();
+    const localPanel = collab.homePanel === 'local' ? 'local' : 'cloud';
+    const localRows = buildCloudLocalPanelMarkup(localSaveLocked);
+
+    if (!collab.user) {
+        const guestCloudPanel = `
+            <div class="cloud-board-row">
+                <div class="cloud-row-main">
+                    <div class="cloud-row-title">Cloud verrouille</div>
+                    <div class="cloud-row-sub">connexion requise · point</div>
+                </div>
+                <div class="cloud-local-badge">Invite</div>
+            </div>
+            <div class="cloud-local-panel cloud-guest-panel">
+                <div class="cloud-local-note">Tu gardes toutes les actions locales. Pour creer, ouvrir ou sauvegarder dans le cloud, reconnecte-toi avec ton mot de passe.</div>
+                <div class="modal-tool cloud-auth-shell cloud-auth-shell-inline">
+                    <div class="cloud-auth-badge">Acces cloud</div>
+                    <h3 class="cloud-auth-title">Compte BNI Connect</h3>
+                    <div class="cloud-auth-copy">Le menu garde le meme shell cloud/local que la session connectee, mais le cloud reste verrouille tant que tu es en invite.</div>
+                    <div class="cloud-auth-grid">
+                        <label class="cloud-auth-field">
+                            <span class="cloud-auth-label">Username</span>
+                            <input id="cloud-auth-user" type="text" placeholder="ex: operateur_nord" class="modal-input-standalone cloud-auth-input" autocomplete="username" />
+                        </label>
+                        <label class="cloud-auth-field">
+                            <span class="cloud-auth-label">Mot de passe</span>
+                            <input id="cloud-auth-pass" type="password" placeholder="Mot de passe" class="modal-input-standalone cloud-auth-input" autocomplete="current-password" />
+                        </label>
+                    </div>
+                    <div class="cloud-auth-meta">
+                        <span class="cloud-auth-pill">Point</span>
+                        <span class="cloud-auth-pill">Map</span>
+                        <span class="cloud-auth-pill">Sync live</span>
+                    </div>
+                    <div class="cloud-auth-hint">Connecte-toi d abord, puis choisis ou cree un board pour sauver le graphe.</div>
+                </div>
+            </div>
+        `;
+        const panelBody = localPanel === 'local' ? localRows : guestCloudPanel;
+
+        msgEl.innerHTML = `
+            <div class="cloud-home-head">
+                <div class="cloud-home-tab-group">
+                    <button type="button" id="cloud-home-tab-cloud" class="cloud-home-tab cloud-home-word ${localPanel === 'cloud' ? 'is-active' : ''}">cloud</button>
+                    <button type="button" id="cloud-home-tab-local" class="cloud-home-tab cloud-home-word cloud-home-word-alt ${localPanel === 'local' ? 'is-active' : ''}">local</button>
+                </div>
+                <button type="button" id="cloud-modal-close-x" class="mini-btn cloud-close-btn">×</button>
+            </div>
+            <div class="cloud-column cloud-panel-shell">${panelBody}</div>
+            <div class="cloud-status-bar">
+                <span>Session: invite</span>
+                <span id="cloudModalSyncInfo">Cloud verrouille jusqu a connexion</span>
+            </div>
+        `;
+        actEl.innerHTML = localPanel === 'cloud'
+            ? `
+                <button type="button" id="cloud-auth-register" class="cloud-auth-secondary">Creer un compte</button>
+                <button type="button" id="cloud-auth-login" class="primary cloud-auth-primary">Se connecter</button>
+                <button type="button" id="cloud-auth-close" class="cloud-auth-tertiary">Fermer</button>
+            `
+            : `<button type="button" id="cloud-auth-close" class="cloud-auth-tertiary">Fermer</button>`;
+
+        bindCloudHomeTabs();
+        bindCloudLocalActions(localSaveLocked);
+
+        const closeX = document.getElementById('cloud-modal-close-x');
+        if (closeX) closeX.onclick = () => { modalOverlay.style.display = 'none'; };
+
+        const closeBtn = document.getElementById('cloud-auth-close');
+        if (closeBtn) closeBtn.onclick = () => { modalOverlay.style.display = 'none'; };
+
+        const registerBtn = document.getElementById('cloud-auth-register');
+        const loginBtn = document.getElementById('cloud-auth-login');
+        if (registerBtn) registerBtn.onclick = () => { runCloudAuth('register').catch(() => {}); };
+        if (loginBtn) loginBtn.onclick = () => { runCloudAuth('login').catch(() => {}); };
+
+        const passInput = document.getElementById('cloud-auth-pass');
+        if (passInput) {
+            passInput.onkeydown = (event) => {
+                if (event.key === 'Enter') runCloudAuth('login').catch(() => {});
+            };
+        }
+        return;
+    }
+
+    let boards = [];
+    try {
+        const res = await collabBoardRequest('list_boards', {});
+        boards = Array.isArray(res.boards) ? res.boards : [];
+    } catch (e) {
+        showCustomAlert(`Erreur cloud: ${escapeHtml(e.message || 'inconnue')}`);
+        return;
+    }
+
+    const boardRows = boards.map((b) => {
+        const active = b.id === collab.activeBoardId;
+        const role = b.role || '';
+        return `
+            <div class="cloud-board-row ${active ? 'is-active' : ''}">
+                <div class="cloud-row-main">
+                    <div class="cloud-row-title">${escapeHtml(b.title || 'Sans nom')}</div>
+                    <div class="cloud-row-sub">${escapeHtml(role)} · ${escapeHtml(b.page || 'point')}</div>
+                </div>
+                <div class="cloud-row-actions">
+                    <button type="button" class="mini-btn cloud-open-board" data-board="${escapeHtml(b.id)}">Ouvrir</button>
+                    ${role === 'owner' ? `<button type="button" class="mini-btn cloud-manage-board" data-board="${escapeHtml(b.id)}">Gerer</button>` : ''}
+                    ${role !== 'owner' ? `<button type="button" class="mini-btn cloud-leave-board" data-board="${escapeHtml(b.id)}">Quitter</button>` : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    const panelBody = localPanel === 'local'
+        ? localRows
+        : (boardRows || '<div class="modal-empty-state">Aucun board cloud.</div>');
+
+    msgEl.innerHTML = `
+        <div class="cloud-home-head">
+            <div class="cloud-home-tab-group">
+                <button type="button" id="cloud-home-tab-cloud" class="cloud-home-tab cloud-home-word ${localPanel === 'cloud' ? 'is-active' : ''}">cloud</button>
+                <button type="button" id="cloud-home-tab-local" class="cloud-home-tab cloud-home-word cloud-home-word-alt ${localPanel === 'local' ? 'is-active' : ''}">local</button>
+            </div>
+            <button type="button" id="cloud-modal-close-x" class="mini-btn cloud-close-btn">×</button>
+        </div>
+        <div class="cloud-column cloud-panel-shell">${panelBody}</div>
+        <div class="cloud-status-bar">
+            <span>Connecte: ${escapeHtml(collab.user.username)}</span>
+            <span id="cloudModalSyncInfo" class="${isCloudBoardActive() ? 'cloud-status-active' : ''}">
+                ${isCloudBoardActive() ? `Board actif: ${escapeHtml(collab.activeBoardTitle || collab.activeBoardId)} (${escapeHtml(collab.activeRole || '')})` : 'Aucun board cloud actif'}
+            </span>
+        </div>
+    `;
+
+    actEl.innerHTML = localPanel === 'cloud'
+        ? `
+            <button type="button" id="cloud-create-board" class="primary">Nouveau</button>
+            <button type="button" id="cloud-save-active">Sauver</button>
+            <button type="button" id="cloud-logout">Deconnexion</button>
+        `
+        : `<button type="button" id="cloud-logout">Deconnexion</button>`;
+
+    const createBtn = document.getElementById('cloud-create-board');
+    if (createBtn) {
+        createBtn.onclick = async () => {
+            try {
+                await createCloudBoardFromCurrent();
+                showCustomAlert(`Board cree: ${escapeHtml(collab.activeBoardTitle || '')}`);
+                await renderCloudHome();
+            } catch (e) {
+                showCustomAlert(`Erreur creation cloud: ${escapeHtml(e.message || 'inconnue')}`);
+            }
+        };
+    }
+
+    const saveBtn = document.getElementById('cloud-save-active');
+    if (saveBtn) {
+        saveBtn.onclick = async () => {
+            await saveActiveCloudBoard({ manual: true, quiet: false });
+            await renderCloudHome();
+        };
+    }
+    const logoutBtn = document.getElementById('cloud-logout');
+    logoutBtn.onclick = async () => {
+        await logoutCollab();
+        await renderCloudHome();
+    };
+    if (saveBtn && (!isCloudBoardActive() || !canEditCloudBoard())) {
+        saveBtn.disabled = true;
+        saveBtn.title = isCloudBoardActive() ? 'Droits insuffisants' : 'Aucun board actif';
+    }
+    const closeX = document.getElementById('cloud-modal-close-x');
+    if (closeX) closeX.onclick = () => { modalOverlay.style.display = 'none'; };
+    bindCloudHomeTabs();
+    bindCloudLocalActions(localSaveLocked);
 
     Array.from(document.querySelectorAll('.cloud-open-board')).forEach((btn) => {
         btn.onclick = async () => {
@@ -2379,7 +2433,7 @@ async function renderCloudHome() {
 function showCloudMenu() {
     if (!modalOverlay) createModal();
     setModalMode('cloud');
-    collab.homePanel = 'cloud';
+    collab.homePanel = collab.user ? 'cloud' : 'local';
     modalOverlay.style.display = 'flex';
     renderCloudHome();
 }
@@ -2916,23 +2970,7 @@ function resetAllPointData() {
 }
 
 function openDataHubModal() {
-    openPointDataHubModal({
-        ensureModal: createModal,
-        setModalMode,
-        getModalOverlay,
-        collab,
-        escapeHtml,
-        isLocalSaveLocked,
-        isCloudBoardActive,
-        showCloudMenu,
-        saveActiveCloudBoard,
-        downloadJSON,
-        generateExportData,
-        showCustomAlert,
-        showRawDataInput,
-        triggerFileInput,
-        resetAllPointData,
-    });
+    showCloudMenu();
 }
 
 function setupTopButtons() {
@@ -4425,6 +4463,7 @@ function renderHvtDetails(n) {
         const t = (typeof l.target === 'object') ? l.target.id : l.target;
         return s === n.id || t === n.id;
     });
+    const influenceLinks = links.filter((link) => (Number(link.hvtInfluence) || 0) > 0.18);
     const neighbors = new Map();
     const kindCounts = {};
     links.forEach(l => {
@@ -4446,22 +4485,27 @@ function renderHvtDetails(n) {
         .map(([id, c]) => {
             const other = nodeById(id);
             if (!other) return '';
-            return `<span class="hvt-tag">${escapeHtml(other.name)} ×${c}</span>`;
+            const influence = Math.round((Number(other.hvtInfluence) || 0) * 100);
+            const suffix = influence > 0 ? ` · ${influence}%` : '';
+            return `<span class="hvt-tag">${escapeHtml(other.name)} ×${c}${suffix}</span>`;
         })
         .filter(Boolean)
         .join('') || '<span class="hvt-tag">Aucun</span>';
 
     const score = Math.round((n.hvtScore || 0) * 100);
+    const influence = Math.round((Number(n.hvtInfluence) || 0) * 100);
     return `
         <div class="hvt-detail-title">Détails</div>
         <div class="hvt-detail-name">${escapeHtml(n.name)}</div>
         <div class="hvt-detail-row"><span>Type</span><span>${TYPE_LABEL[n.type] || n.type}</span></div>
         <div class="hvt-detail-row"><span>Score HVT</span><span>${score}%</span></div>
+        <div class="hvt-detail-row"><span>Influence visible</span><span>${influence}%</span></div>
         <div class="hvt-detail-row"><span>Liens</span><span>${links.length}</span></div>
         <div class="hvt-detail-row"><span>Relations uniques</span><span>${neighbors.size}</span></div>
+        <div class="hvt-detail-row"><span>Ruissellement</span><span>${influenceLinks.length}</span></div>
         <div class="hvt-detail-sub">Types dominants</div>
         <div class="hvt-tags">${topKinds}</div>
-        <div class="hvt-detail-sub">Top connexions</div>
+        <div class="hvt-detail-sub">Propagation visible</div>
         <div class="hvt-tags">${topNeighbors}</div>
     `;
 }

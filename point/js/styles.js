@@ -24,9 +24,9 @@ export function injectStyles() {
             line-height: 0.85;
             color: var(--accent-cyan);
             letter-spacing: 1px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            white-space: normal;
+            overflow-wrap: anywhere;
+            text-overflow: clip;
         }
         .editor-sheet-type {
             padding: 4px 10px 3px;
@@ -1507,6 +1507,13 @@ export function injectStyles() {
             gap: 14px;
             padding: 4px 0 2px;
         }
+        .cloud-auth-shell-inline {
+            max-width: none;
+            padding: 14px;
+            border: 1px solid rgba(102, 243, 255, 0.12);
+            border-radius: 12px;
+            background: rgba(3, 10, 24, 0.74);
+        }
         .cloud-auth-badge {
             align-self: flex-start;
             padding: 6px 10px;
@@ -1800,6 +1807,11 @@ export function injectStyles() {
         }
         .cloud-local-panel {
             margin-top: 10px;
+        }
+        .cloud-guest-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
         }
         .cloud-local-grid {
             display: grid;
@@ -2357,7 +2369,7 @@ export function injectStyles() {
         }
         .settings-preset-grid {
             display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
             gap: 8px;
         }
         .settings-preset-btn {
@@ -2373,7 +2385,12 @@ export function injectStyles() {
             cursor: pointer;
             text-align: left;
             font-family: var(--font-main);
+            min-height: 80px;
+            clip-path: none;
             transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, transform 0.16s ease;
+        }
+        .settings-preset-btn::after {
+            display: none;
         }
         .settings-preset-btn:hover {
             transform: translateY(-1px);
@@ -2689,16 +2706,16 @@ export function injectStyles() {
         }
         .editor-sheet-identity-row {
             display: flex;
-            align-items: center;
+            align-items: flex-start;
             justify-content: flex-start;
             gap: 8px;
             width: 100%;
             min-width: 0;
-            flex-wrap: nowrap;
+            flex-wrap: wrap;
         }
         .editor-sheet-title-block {
             min-width: 0;
-            flex: 1 1 auto;
+            flex: 1 1 100%;
         }
         .editor-head-pills {
             display: inline-flex;
@@ -2709,18 +2726,26 @@ export function injectStyles() {
         .editor-sheet-name {
             font-family: var(--font-main);
             font-size: clamp(1.1rem, 1.45vw, 1.3rem);
-            line-height: 1;
+            line-height: 0.96;
             color: var(--text-light);
-            letter-spacing: 0.06em;
+            letter-spacing: 0.04em;
             text-transform: uppercase;
+            white-space: normal;
+            overflow-wrap: anywhere;
         }
         .editor-sheet-name-input {
             width: 100%;
-            padding: 2px 0;
+            min-height: 36px;
+            padding: 4px 0 2px;
             border: none;
             background: transparent;
             box-shadow: none;
             outline: none;
+        }
+        .editor-sheet-name-textarea {
+            resize: none;
+            overflow: hidden;
+            text-overflow: clip;
         }
         .editor-sheet-name-input::placeholder {
             color: #6c84a0;
@@ -2728,9 +2753,13 @@ export function injectStyles() {
         .editor-sheet-topbar {
             display: flex;
             align-items: center;
-            gap: 6px;
+            justify-content: space-between;
+            gap: 8px;
             flex-wrap: wrap;
             padding-top: 0;
+        }
+        .editor-sheet-topbar-meta-only {
+            justify-content: flex-end;
         }
         .editor-type-select,
         .editor-inline-phone,
@@ -2744,12 +2773,12 @@ export function injectStyles() {
         .editor-type-select {
             flex: 0 0 auto;
             width: auto;
-            min-width: 88px;
-            padding: 3px 22px 3px 10px;
+            min-width: 74px;
+            padding: 3px 20px 3px 8px;
             color: var(--accent-cyan);
             font-family: var(--font-main);
-            font-size: 0.5rem;
-            letter-spacing: 0.9px;
+            font-size: 0.48rem;
+            letter-spacing: 0.8px;
             text-transform: uppercase;
             cursor: pointer;
         }
@@ -2770,9 +2799,9 @@ export function injectStyles() {
             min-width: 0;
         }
         .editor-inline-phone-head {
-            flex: 0 0 128px;
-            min-width: 128px;
-            margin-left: auto;
+            flex: 1 1 140px;
+            min-width: 118px;
+            margin-left: 0;
             min-height: auto;
             padding: 0;
             border: none;
@@ -2813,6 +2842,12 @@ export function injectStyles() {
             align-items: center;
             gap: 4px;
             flex-wrap: wrap;
+            min-width: 0;
+        }
+        .editor-status-inline-meta {
+            margin-left: auto;
+            justify-content: flex-end;
+            gap: 6px;
         }
         .editor-color-pill {
             margin-left: 0;
@@ -2820,28 +2855,45 @@ export function injectStyles() {
         }
         .editor-color-pill-head {
             margin-left: 0;
-            width: 26px;
-            min-width: 26px;
-            min-height: 26px;
+            width: 28px;
+            min-width: 28px;
+            min-height: 28px;
             padding: 2px;
             justify-content: center;
-            border-radius: 8px;
+            border-radius: 6px;
         }
         .editor-color-input-inline {
-            width: 100%;
-            min-width: 0;
-            height: 20px;
+            width: 22px;
+            min-width: 22px;
+            height: 22px;
             padding: 0;
             border: none;
             background: transparent;
             cursor: pointer;
+            border-radius: 4px;
+            appearance: none;
+            -webkit-appearance: none;
         }
         .editor-color-input-inline::-webkit-color-swatch-wrapper {
             padding: 0;
         }
         .editor-color-input-inline::-webkit-color-swatch {
             border: 1px solid rgba(255, 255, 255, 0.16);
-            border-radius: 9px;
+            border-radius: 4px;
+        }
+        .editor-color-input-inline::-moz-color-swatch {
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            border-radius: 4px;
+        }
+        .editor-color-input.editor-color-input-inline {
+            width: 22px;
+            min-width: 22px;
+            max-width: 22px;
+            height: 22px;
+            min-height: 22px;
+            max-height: 22px;
+            line-height: 0;
+            font-size: 0;
         }
         .editor-sheet-type {
             min-width: auto;
@@ -3367,12 +3419,27 @@ export function injectStyles() {
             white-space: nowrap;
         }
         .editor-color-input {
+            width: 38px;
+            min-width: 38px;
             height: 38px;
             padding: 0;
             cursor: pointer;
-            border-radius: 8px;
+            border-radius: 6px;
             border: 1px solid rgba(102, 243, 255, 0.18);
             background: rgba(2, 8, 20, 0.92);
+            appearance: none;
+            -webkit-appearance: none;
+        }
+        .editor-color-input::-webkit-color-swatch-wrapper {
+            padding: 0;
+        }
+        .editor-color-input::-webkit-color-swatch {
+            border: none;
+            border-radius: 5px;
+        }
+        .editor-color-input::-moz-color-swatch {
+            border: none;
+            border-radius: 5px;
         }
 
         #hud {

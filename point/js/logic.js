@@ -27,6 +27,98 @@ function personStatusPriority(status) {
     return 0;
 }
 
+function getLinkEndpointIds(link) {
+    return {
+        sId: String((typeof link.source === 'object') ? link.source.id : link.source),
+        tId: String((typeof link.target === 'object') ? link.target.id : link.target)
+    };
+}
+
+function getNodeFromLinkEndpoint(link, sideId, endpointKey) {
+    if (typeof link[endpointKey] === 'object') return link[endpointKey];
+    return nodeById(sideId);
+}
+
+function normalizeHvtEdgeWeight(kind) {
+    const base = HVT_LINK_WEIGHTS[kind] ?? 0.8;
+    return Math.max(0.35, Math.min(1, base / 2.6));
+}
+
+function updateHvtInfluenceFlow() {
+    const adjacency = new Map();
+    const ranked = [...state.nodes].sort((a, b) => (b.hvtScore || 0) - (a.hvtScore || 0));
+    const seedIds = state.hvtTopIds && state.hvtTopIds.size
+        ? [...state.hvtTopIds].map((id) => String(id))
+        : ranked.filter((node) => (node.hvtScore || 0) >= 0.55).slice(0, 8).map((node) => String(node.id));
+
+    state.nodes.forEach((node) => {
+        node.hvtInfluence = 0;
+        node.hvtInfluenceDepth = null;
+        adjacency.set(String(node.id), []);
+    });
+
+    state.links.forEach((link) => {
+        link.hvtInfluence = 0;
+        const { sId, tId } = getLinkEndpointIds(link);
+        if (!adjacency.has(sId)) adjacency.set(sId, []);
+        if (!adjacency.has(tId)) adjacency.set(tId, []);
+        const edgeWeight = normalizeHvtEdgeWeight(link.kind);
+        adjacency.get(sId).push({ otherId: tId, link, edgeWeight });
+        adjacency.get(tId).push({ otherId: sId, link, edgeWeight });
+    });
+
+    if (!seedIds.length) return;
+
+    const queue = [];
+    seedIds.forEach((seedId) => {
+        const seedNode = nodeById(seedId);
+        if (!seedNode) return;
+        const seedInfluence = Math.max(0.58, Number(seedNode.hvtScore) || 0);
+        seedNode.hvtInfluence = seedInfluence;
+        seedNode.hvtInfluenceDepth = 0;
+        queue.push({ id: seedId, influence: seedInfluence, depth: 0 });
+    });
+
+    while (queue.length) {
+        const current = queue.shift();
+        if (!current || current.depth >= 4 || current.influence < 0.12) continue;
+        const neighbors = adjacency.get(current.id) || [];
+        neighbors.forEach(({ otherId, link, edgeWeight }) => {
+            const nextDepth = current.depth + 1;
+            const nextInfluence = current.influence * (0.54 + (edgeWeight * 0.26));
+            if (nextInfluence < 0.12) return;
+
+            link.hvtInfluence = Math.max(link.hvtInfluence || 0, nextInfluence);
+
+            const targetNode = nodeById(otherId);
+            if (!targetNode) return;
+            const previousInfluence = Number(targetNode.hvtInfluence) || 0;
+            const previousDepth = typeof targetNode.hvtInfluenceDepth === 'number' ? targetNode.hvtInfluenceDepth : Infinity;
+            const shouldUpdate = nextInfluence > (previousInfluence + 0.025)
+                || (Math.abs(nextInfluence - previousInfluence) <= 0.025 && nextDepth < previousDepth);
+
+            if (!shouldUpdate) return;
+
+            targetNode.hvtInfluence = nextInfluence;
+            targetNode.hvtInfluenceDepth = nextDepth;
+            queue.push({ id: otherId, influence: nextInfluence, depth: nextDepth });
+        });
+    }
+
+    state.links.forEach((link) => {
+        const { sId, tId } = getLinkEndpointIds(link);
+        const sourceNode = getNodeFromLinkEndpoint(link, sId, 'source');
+        const targetNode = getNodeFromLinkEndpoint(link, tId, 'target');
+        const sourceInfluence = Number(sourceNode?.hvtInfluence) || 0;
+        const targetInfluence = Number(targetNode?.hvtInfluence) || 0;
+        link.hvtInfluence = Math.max(
+            Number(link.hvtInfluence) || 0,
+            sourceInfluence * 0.82,
+            targetInfluence * 0.82
+        );
+    });
+}
+
 // --- NOUVEAU : ALGORITHME HVT ---
 export function calculateHVT() {
     const degrees = new Map();
@@ -79,6 +171,7 @@ export function calculateHVT() {
     });
 
     updateHvtTopSet();
+    updateHvtInfluenceFlow();
 }
 
 export function updateHvtTopSet() {

@@ -121,6 +121,17 @@ function cloneDefaultPhysicsSettings() {
     return { ...DEFAULT_PHYSICS_SETTINGS };
 }
 
+function ensurePhysicsSettingsShape() {
+    const nextSettings = {
+        ...cloneDefaultPhysicsSettings(),
+        ...(state.physicsSettings && typeof state.physicsSettings === 'object' ? state.physicsSettings : {})
+    };
+    const presetId = String(nextSettings.presetId || 'custom');
+    nextSettings.presetId = PHYSICS_PRESETS.some((entry) => entry.id === presetId) ? presetId : 'custom';
+    state.physicsSettings = nextSettings;
+    return nextSettings;
+}
+
 function formatSettingValue(key, value) {
     const numeric = Number(value);
     if (!Number.isFinite(numeric)) return String(value ?? '');
@@ -142,6 +153,7 @@ function buildPresetButtonsMarkup() {
 }
 
 function applyPhysicsPreset(presetId) {
+    ensurePhysicsSettingsShape();
     const preset = PHYSICS_PRESETS.find((entry) => entry.id === presetId);
     if (!preset) return;
     state.physicsSettings = {
@@ -198,6 +210,7 @@ function attachDraggablePanel(panel, handle, closeSelector = '') {
 
 // --- GESTION DU PANNEAU REGLAGES ---
 export function showSettings() {
+    ensurePhysicsSettingsShape();
     if (!settingsPanel) createSettingsPanel();
     updateSettingsUI();
     const isHidden = (settingsPanel.style.display === 'none');
@@ -311,7 +324,7 @@ function bindSlider(id, key) {
 
 function updateSettingsUI() {
     if(!settingsPanel) return;
-    const S = state.physicsSettings;
+    const S = ensurePhysicsSettingsShape();
     const updateVal = (id, key) => {
         const sl = document.getElementById(id);
         const val = document.getElementById(id.replace('sl-', 'val-'));

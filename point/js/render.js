@@ -344,13 +344,13 @@ export function draw() {
         
         let dimmed = isLinkDimmed(l);
         let globalAlpha = dimmed ? 0.2 : 0.8;
+        const sourceInfluence = Number(l.source?.hvtInfluence) || 0;
+        const targetInfluence = Number(l.target?.hvtInfluence) || 0;
+        const linkInfluence = Math.max(Number(l.hvtInfluence) || 0, sourceInfluence, targetInfluence);
 
-        // Optimisation HVT : On rend très transparents les liens faibles
         if (isHVT) {
-            const sScore = l.source.hvtScore || 0;
-            const tScore = l.target.hvtScore || 0;
-            if (sScore < 0.2 && tScore < 0.2) globalAlpha = 0.05; 
-            else globalAlpha = 0.4;
+            if (linkInfluence < 0.08) continue;
+            globalAlpha = Math.min(0.9, Math.max(0.12, 0.08 + (linkInfluence * 0.78)));
         }
 
         const key = pairKey(sId, tId);
@@ -379,17 +379,29 @@ export function draw() {
         if (topSet) {
             sTop = topSet.has(sId);
             tTop = topSet.has(tId);
-            if (!sTop && !tTop) continue;
+            if (!sTop && !tTop && linkInfluence < 0.18) continue;
         }
 
-        if (showTypes || isPathLink) {
+        if (showTypes || isPathLink || isHVT) {
              const color = isPathLink ? '#00ffff' : computeLinkColor(l);
              ctx.strokeStyle = color;
-             ctx.lineWidth = (isPathLink ? 4 : (dimmed ? 1 : 2)) / Math.sqrt(p.scale);
-             // On enlève le shadowBlur en mode HVT pour la perf
-             if(isPathLink) { ctx.shadowBlur = 15; ctx.shadowColor = '#00ffff'; }
-             else if(useGlow && !dimmed && !isHVT) { ctx.shadowBlur = 8; ctx.shadowColor = color; }
-             else { ctx.shadowBlur = 0; }
+             ctx.lineWidth = (
+                isPathLink
+                    ? 4
+                    : (isHVT ? (0.8 + (linkInfluence * 3.2)) : (dimmed ? 1 : 2))
+             ) / Math.sqrt(p.scale);
+             if (isPathLink) {
+                 ctx.shadowBlur = 15;
+                 ctx.shadowColor = '#00ffff';
+             } else if (isHVT && linkInfluence > 0.42) {
+                 ctx.shadowBlur = 8;
+                 ctx.shadowColor = color;
+             } else if (useGlow && !dimmed && !isHVT) {
+                 ctx.shadowBlur = 8;
+                 ctx.shadowColor = color;
+             } else {
+                 ctx.shadowBlur = 0;
+             }
         } else {
              if (state.performance) ctx.strokeStyle = "rgba(255,255,255,0.2)";
              else {
@@ -403,7 +415,7 @@ export function draw() {
              ctx.lineWidth = (dimmed ? 1 : 1.5) / Math.sqrt(p.scale);
              ctx.shadowBlur = 0;
         }
-        if (topSet && (sTop ^ tTop)) globalAlpha = Math.min(globalAlpha, 0.25);
+        if (topSet && (sTop ^ tTop) && !isHVT) globalAlpha = Math.min(globalAlpha, 0.25);
         ctx.globalAlpha = globalAlpha;
         ctx.stroke();
 
@@ -466,18 +478,23 @@ export function draw() {
         let isBoss = false;
         if (isHVT) {
             const score = n.hvtScore || 0;
-            if (topSet && !isTop) {
-                alpha = 0.06;
-                rad *= 0.75;
-            } else if (score > 0.6) { 
+            const influence = Number(n.hvtInfluence) || 0;
+            if (isTop) {
                 isBoss = true;
-                rad = rad * (1 + score * 0.8); 
+                rad = rad * (1 + Math.max(score, influence) * 0.8);
                 alpha = 1.0;
-            } else if (score < 0.2) { 
-                alpha = 0.15; 
+            } else if (influence > 0.5) {
+                alpha = 0.88;
+                rad *= 1.18;
+            } else if (influence > 0.24) {
+                alpha = 0.58;
+                rad *= 1.02;
+            } else if (influence > 0.12) {
+                alpha = 0.34;
+                rad *= 0.9;
+            } else {
+                alpha = 0.08;
                 rad *= 0.8;
-            } else { 
-                alpha = 0.6;
             }
         }
 
@@ -549,7 +566,7 @@ export function draw() {
         }
 
         // Icônes
-        if (!dimmed && (p.scale > 0.4 || rad > 15) && (!isHVT || n.hvtScore > 0.2)) {
+        if (!dimmed && (p.scale > 0.4 || rad > 15) && (!isHVT || Math.max(n.hvtScore || 0, n.hvtInfluence || 0) > 0.2)) {
             ctx.globalAlpha = 1; 
             ctx.fillStyle = 'rgba(0,0,0,0.5)';
             ctx.font = `${rad}px sans-serif`;
@@ -565,9 +582,10 @@ export function draw() {
         const drawnBoxes = [];
 
         for (const n of renderableNodes) {
+            const influence = Number(n.hvtInfluence) || 0;
             if (isHVT) {
-                if (topSet && !topSet.has(n.id)) continue;
-                if (!topSet && (n.hvtScore || 0) < 0.5) continue;
+                if (topSet && !topSet.has(n.id) && influence < 0.24) continue;
+                if (!topSet && Math.max(n.hvtScore || 0, influence) < 0.42) continue;
             }
 
             const rad = nodeRadius(n);
@@ -586,11 +604,11 @@ export function draw() {
             if (labelMode === 2) showName = true;
             else if (labelMode === 1) {
                 showName = isSelected || isHover || isPathfindingNode || isPathStart;
-                if (!showName) showName = (hvtScore > 0.55) || (degree > 4) || (isImportant && p.scale > 0.28) || (p.scale > 0.55);
+                if (!showName) showName = (hvtScore > 0.55) || (influence > 0.46) || (degree > 4) || (isImportant && p.scale > 0.28) || (p.scale > 0.55);
             }
             
             if (isHVT && topSet && topSet.has(n.id)) showName = true;
-            else if (isHVT && hvtScore > 0.6) showName = true;
+            else if (isHVT && (hvtScore > 0.6 || influence > 0.48)) showName = true;
 
             if (!showName) continue;
 
@@ -617,6 +635,7 @@ export function draw() {
             if (isHover) priority += 90;
             if (isPathfindingNode || isPathStart) priority += 80;
             if (hvtScore > 0.6) priority += 60;
+            priority += Math.min(26, Math.round(influence * 32));
             priority += Math.min(30, Math.round(hvtScore * 30));
             priority += Math.min(20, degree);
             if (isImportant) priority += 10;
