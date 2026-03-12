@@ -36,7 +36,7 @@ export const state = {
         noveltyRatio: 0.25,
         sources: { graph: true, text: true, tags: true, profile: true, bridge: true, lex: true, geo: true },
         showReasons: true,
-        showPredicted: true,
+        showPredicted: false,
         intelUnlocked: true
     },
     aiFeedback: {},
@@ -163,6 +163,7 @@ export function loadState() {
             }
         }
         state.aiSettings.intelUnlocked = true;
+        state.aiSettings.showPredicted = false;
         if (data.aiFeedback) state.aiFeedback = data.aiFeedback;
         if (data.aiPredictedLinks) state.aiPredictedLinks = data.aiPredictedLinks;
         if (data.meta && data.meta.projectName) state.projectName = data.meta.projectName; // CHARGEMENT DU NOM

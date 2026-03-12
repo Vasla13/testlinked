@@ -838,8 +838,8 @@ export function injectStyles() {
             box-shadow: inset 0 0 0 1px rgba(102, 243, 255, 0.04);
         }
         .modal-input-standalone {
-            min-height: 46px;
-            padding: 10px 12px;
+            min-height: 42px;
+            padding: 9px 11px;
         }
         .modal-input-standalone::placeholder,
         .modal-raw-input::placeholder {
@@ -855,9 +855,9 @@ export function injectStyles() {
             display: flex;
             flex-direction: column;
             gap: 8px;
-            max-height: 300px;
+            max-height: 240px;
             overflow: auto;
-            padding: 8px;
+            padding: 7px;
             border: 1px solid rgba(102, 243, 255, 0.12);
             border-radius: 10px;
             background: rgba(3, 10, 24, 0.72);
@@ -879,7 +879,7 @@ export function injectStyles() {
         .quick-search-meta {
             color: var(--text-muted);
             font-family: var(--font-code);
-            font-size: 0.78rem;
+            font-size: 0.72rem;
             letter-spacing: 0.04em;
         }
         .modal-empty-state {
@@ -949,8 +949,8 @@ export function injectStyles() {
             display: flex;
             align-items: flex-start;
             justify-content: space-between;
-            gap: 18px;
-            padding: 22px 22px 18px;
+            gap: 14px;
+            padding: 18px 18px 14px;
             border-bottom: 1px solid rgba(102, 243, 255, 0.12);
         }
         .ai-hub-copy {
@@ -968,15 +968,15 @@ export function injectStyles() {
         .ai-hub-title {
             color: var(--text-light);
             font-family: var(--font-main);
-            font-size: clamp(2.8rem, 5vw, 4.2rem);
+            font-size: clamp(2.1rem, 4.1vw, 3.2rem);
             line-height: 0.86;
             letter-spacing: 0.08em;
             text-transform: uppercase;
         }
         .ai-hub-close {
-            min-width: 156px;
-            min-height: 52px;
-            padding: 0 20px;
+            min-width: 126px;
+            min-height: 44px;
+            padding: 0 16px;
             align-self: flex-start;
             justify-content: center;
             border: 1px solid rgba(102, 243, 255, 0.72);
@@ -997,19 +997,19 @@ export function injectStyles() {
             z-index: 1;
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 22px;
-            padding: 22px;
+            gap: 16px;
+            padding: 16px;
             flex: 1;
         }
         .ai-hub-card {
             position: relative;
-            min-height: 320px;
+            min-height: 252px;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            gap: 26px;
-            padding: 34px 22px 28px;
+            gap: 18px;
+            padding: 24px 18px 20px;
             border: 1px solid rgba(132, 169, 212, 0.22);
             border-radius: 0;
             background:
@@ -1078,8 +1078,8 @@ export function injectStyles() {
             bottom: 0;
         }
         .ai-hub-card-icon {
-            width: 110px;
-            height: 110px;
+            width: 84px;
+            height: 84px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
@@ -1092,7 +1092,7 @@ export function injectStyles() {
         }
         .ai-hub-card-title {
             color: var(--text-light);
-            font-size: clamp(2rem, 3.4vw, 3rem);
+            font-size: clamp(1.55rem, 2.7vw, 2.2rem);
             line-height: 1.04;
             font-weight: 700;
             text-align: center;
@@ -1100,9 +1100,9 @@ export function injectStyles() {
         .ai-hub-card-desc {
             max-width: 360px;
             color: #95aac8;
-            font-size: 0.94rem;
-            line-height: 1.55;
-            letter-spacing: 2.3px;
+            font-size: 0.82rem;
+            line-height: 1.45;
+            letter-spacing: 1.6px;
             text-align: center;
             text-transform: uppercase;
         }
@@ -1110,10 +1110,10 @@ export function injectStyles() {
         .quick-create-shell {
             display: flex;
             flex-direction: column;
-            gap: 12px;
-            max-width: 900px;
+            gap: 10px;
+            max-width: 720px;
             margin: 0 auto;
-            padding: 16px;
+            padding: 12px;
             border: 1px solid rgba(102, 243, 255, 0.34);
             border-radius: 16px;
             background:
@@ -1134,13 +1134,13 @@ export function injectStyles() {
         }
         .quick-create-tab {
             appearance: none;
-            padding: 11px 14px;
+            padding: 9px 12px;
             border: 1px solid rgba(102, 243, 255, 0.16);
             border-radius: 12px;
             background: rgba(3, 10, 24, 0.82);
             color: #6d88aa;
             font-family: var(--font-main);
-            font-size: clamp(1.1rem, 2vw, 1.5rem);
+            font-size: clamp(0.96rem, 1.6vw, 1.22rem);
             line-height: 0.92;
             letter-spacing: 0.08em;
             text-align: left;
@@ -1176,26 +1176,26 @@ export function injectStyles() {
             margin: 0;
             color: var(--accent-cyan);
             font-family: var(--font-main);
-            font-size: clamp(1.9rem, 3.2vw, 2.7rem);
+            font-size: clamp(1.55rem, 2.5vw, 2.1rem);
             line-height: 0.82;
             letter-spacing: 0.08em;
             text-transform: uppercase;
         }
         .quick-create-close-top {
             width: auto;
-            min-width: 110px;
-            min-height: 38px;
+            min-width: 96px;
+            min-height: 34px;
             margin-top: -2px;
-            padding: 8px 16px;
-            font-size: 0.72rem;
-            letter-spacing: 1.8px;
+            padding: 7px 13px;
+            font-size: 0.68rem;
+            letter-spacing: 1.5px;
         }
         .quick-create-block {
             display: flex;
             flex-direction: column;
             gap: 8px;
             min-height: 100%;
-            padding: 12px;
+            padding: 10px;
             border: 1px solid rgba(102, 243, 255, 0.14);
             border-radius: 12px;
             background: rgba(2, 8, 20, 0.58);
@@ -1217,9 +1217,9 @@ export function injectStyles() {
             align-items: center;
             justify-content: center;
             min-width: 42px;
-            min-height: 46px;
+            min-height: 40px;
             color: var(--accent-cyan);
-            font-size: clamp(1.6rem, 3vw, 2.2rem);
+            font-size: clamp(1.3rem, 2.2vw, 1.8rem);
             line-height: 1;
             text-shadow: 0 0 16px rgba(102, 243, 255, 0.2);
         }
@@ -1229,14 +1229,14 @@ export function injectStyles() {
             gap: 6px;
         }
         .quick-create-target-input {
-            min-height: 46px;
-            padding: 8px 11px;
+            min-height: 42px;
+            padding: 8px 10px;
             border: 1px solid rgba(102, 243, 255, 0.26);
             border-radius: 10px;
             background: rgba(2, 8, 20, 0.92);
             color: var(--text-light);
             font-family: var(--font-main);
-            font-size: clamp(0.98rem, 1.8vw, 1.24rem);
+            font-size: clamp(0.9rem, 1.4vw, 1.02rem);
             line-height: 1.1;
             letter-spacing: 0.04em;
         }

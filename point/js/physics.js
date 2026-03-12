@@ -1,7 +1,7 @@
 import { state } from './state.js';
 import { KINDS, TYPES } from './constants.js';
 import { nodeRadius, draw } from './render.js';
-import { clamp } from './utils.js';
+import { clamp, getId } from './utils.js';
 
 let simulation;
 
@@ -31,8 +31,281 @@ const BUSINESS_LINK_KINDS = new Set([
     KINDS.RIVAL
 ]);
 
+const HOSTILE_LINK_KINDS = new Set([KINDS.ENNEMI, KINDS.RIVAL]);
+const COMPANY_LAYOUT_KINDS = new Set([
+    KINDS.PATRON,
+    KINDS.HAUT_GRADE,
+    KINDS.EMPLOYE,
+    KINDS.COLLEGUE,
+    KINDS.PARTENAIRE,
+    KINDS.AFFILIATION,
+    KINDS.MEMBRE,
+    KINDS.RELATION,
+    KINDS.RIVAL
+]);
+const GROUP_LAYOUT_KINDS = new Set([
+    KINDS.MEMBRE,
+    KINDS.AFFILIATION,
+    KINDS.FAMILLE,
+    KINDS.AMI,
+    KINDS.CONNAISSANCE,
+    KINDS.COLLEGUE,
+    KINDS.RELATION,
+    KINDS.ENNEMI,
+    KINDS.RIVAL
+]);
+
 function numSetting(value, fallback) {
     return Number.isFinite(Number(value)) ? Number(value) : fallback;
+}
+
+function stableUnit(seed) {
+    const text = String(seed || '');
+    let hash = 2166136261;
+    for (let index = 0; index < text.length; index += 1) {
+        hash ^= text.charCodeAt(index);
+        hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0) / 4294967295;
+}
+
+function stableAngle(seed, offset = 0) {
+    return (stableUnit(seed) * Math.PI * 2) + offset;
+}
+
+function nudgeNodeTowards(node, targetX, targetY, alpha, strength) {
+    if (!node || node.fx != null || node.fy != null) return;
+    if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) return;
+    node.vx += (targetX - node.x) * strength * alpha;
+    node.vy += (targetY - node.y) * strength * alpha;
+}
+
+function pushNodeToRing(node, radius, alpha, strength, salt = '') {
+    const angle = stableAngle(`${salt}:${node?.id || ''}`);
+    nudgeNodeTowards(node, Math.cos(angle) * radius, Math.sin(angle) * radius, alpha, strength);
+}
+
+function pushNodeToAngle(node, radius, angle, alpha, strength) {
+    nudgeNodeTowards(node, Math.cos(angle) * radius, Math.sin(angle) * radius, alpha, strength);
+}
+
+function pushNodeToOrbit(node, anchor, radius, alpha, strength, salt = '') {
+    if (!anchor || !Number.isFinite(anchor.x) || !Number.isFinite(anchor.y)) return;
+    const angle = stableAngle(`${salt}:${node?.id || ''}:${anchor.id || ''}`);
+    const targetX = anchor.x + (Math.cos(angle) * radius);
+    const targetY = anchor.y + (Math.sin(angle) * radius);
+    nudgeNodeTowards(node, targetX, targetY, alpha, strength);
+}
+
+function addAssociationScore(targetMap, nodeId, structureId, weight = 1) {
+    const cleanNodeId = String(nodeId || '');
+    const cleanStructureId = String(structureId || '');
+    if (!cleanNodeId || !cleanStructureId || cleanNodeId === cleanStructureId) return;
+    let nodeScores = targetMap.get(cleanNodeId);
+    if (!nodeScores) {
+        nodeScores = new Map();
+        targetMap.set(cleanNodeId, nodeScores);
+    }
+    nodeScores.set(cleanStructureId, (nodeScores.get(cleanStructureId) || 0) + weight);
+}
+
+function resolveStrongestAssociations(scoreMap, nodeMap) {
+    const resolved = new Map();
+    scoreMap.forEach((scores, nodeId) => {
+        let bestId = '';
+        let bestScore = -Infinity;
+        scores.forEach((score, structureId) => {
+            if (score > bestScore && nodeMap.has(structureId)) {
+                bestScore = score;
+                bestId = structureId;
+            }
+        });
+        if (bestId) {
+            resolved.set(nodeId, nodeMap.get(bestId));
+        }
+    });
+    return resolved;
+}
+
+function buildSectorAngles(nodes = [], salt = '') {
+    const cleanNodes = [...nodes].sort((a, b) => String(a?.name || a?.id || '').localeCompare(String(b?.name || b?.id || '')));
+    const total = Math.max(1, cleanNodes.length);
+    const offset = stableAngle(`${salt}:offset`);
+    const angleMap = new Map();
+    cleanNodes.forEach((node, index) => {
+        angleMap.set(String(node.id), offset + ((index / total) * Math.PI * 2));
+    });
+    return angleMap;
+}
+
+function createPresetLayoutForce(nodes, links, nodeMap) {
+    const presetId = String(state.physicsSettings?.presetId || 'standard');
+    if (!nodes.length || presetId === 'standard' || presetId === 'custom') return null;
+
+    const nodeSignals = new Map(nodes.map((node) => [String(node.id), {
+        hostile: 0,
+        social: 0,
+        business: 0
+    }]));
+    const companyScores = new Map();
+    const groupScores = new Map();
+
+    const bumpSignal = (nodeId, key) => {
+        const signal = nodeSignals.get(String(nodeId || ''));
+        if (!signal) return;
+        signal[key] += 1;
+    };
+
+    links.forEach((link) => {
+        const sourceId = getId(link.source);
+        const targetId = getId(link.target);
+        const sourceNode = nodeMap.get(sourceId);
+        const targetNode = nodeMap.get(targetId);
+        if (!sourceNode || !targetNode) return;
+
+        const kind = String(link.kind || '');
+        if (HOSTILE_LINK_KINDS.has(kind)) {
+            bumpSignal(sourceId, 'hostile');
+            bumpSignal(targetId, 'hostile');
+        }
+        if (SOCIAL_LINK_KINDS.has(kind)) {
+            bumpSignal(sourceId, 'social');
+            bumpSignal(targetId, 'social');
+        }
+        if (BUSINESS_LINK_KINDS.has(kind) || kind === KINDS.AFFILIATION || kind === KINDS.MEMBRE) {
+            bumpSignal(sourceId, 'business');
+            bumpSignal(targetId, 'business');
+        }
+
+        let associationWeight = 1;
+        if (kind === KINDS.MEMBRE) associationWeight = 3;
+        else if (kind === KINDS.AFFILIATION) associationWeight = 2.4;
+        else if (kind === KINDS.PATRON || kind === KINDS.HAUT_GRADE || kind === KINDS.EMPLOYE) associationWeight = 1.9;
+        else if (kind === KINDS.PARTENAIRE || kind === KINDS.COLLEGUE) associationWeight = 1.35;
+
+        if (sourceNode.type === TYPES.COMPANY && COMPANY_LAYOUT_KINDS.has(kind)) {
+            addAssociationScore(companyScores, targetId, sourceId, associationWeight);
+        }
+        if (targetNode.type === TYPES.COMPANY && COMPANY_LAYOUT_KINDS.has(kind)) {
+            addAssociationScore(companyScores, sourceId, targetId, associationWeight);
+        }
+        if (sourceNode.type === TYPES.GROUP && GROUP_LAYOUT_KINDS.has(kind)) {
+            addAssociationScore(groupScores, targetId, sourceId, associationWeight);
+        }
+        if (targetNode.type === TYPES.GROUP && GROUP_LAYOUT_KINDS.has(kind)) {
+            addAssociationScore(groupScores, sourceId, targetId, associationWeight);
+        }
+    });
+
+    const companyNodes = nodes.filter((node) => node.type === TYPES.COMPANY);
+    const groupNodes = nodes.filter((node) => node.type === TYPES.GROUP);
+    const companyAngles = buildSectorAngles(companyNodes, 'company-sector');
+    const groupAngles = buildSectorAngles(groupNodes, 'group-sector');
+    const companyAnchors = resolveStrongestAssociations(companyScores, nodeMap);
+    const groupAnchors = resolveStrongestAssociations(groupScores, nodeMap);
+
+    companyNodes.forEach((node) => companyAnchors.set(String(node.id), node));
+    groupNodes.forEach((node) => groupAnchors.set(String(node.id), node));
+
+    const hasHostileNodes = [...nodeSignals.values()].some((signal) => signal.hostile > 0);
+    const hasSocialNodes = [...nodeSignals.values()].some((signal) => signal.social > 0);
+    if ((presetId === 'enemy_near' || presetId === 'enemy_far') && !hasHostileNodes) return null;
+    if (presetId === 'friends_close' && !hasSocialNodes) return null;
+    if ((presetId === 'companies_far') && !companyNodes.length) return null;
+    if ((presetId === 'groups_far' || presetId === 'group_cluster') && !groupNodes.length) return null;
+
+    return (alpha) => {
+        if (alpha <= 0) return;
+        if (String(state.physicsSettings?.presetId || presetId) !== presetId) return;
+
+        nodes.forEach((node) => {
+            const nodeId = String(node.id);
+            const signal = nodeSignals.get(nodeId) || { hostile: 0, social: 0, business: 0 };
+
+            if (presetId === 'enemy_near') {
+                if (signal.hostile > 0) {
+                    const radius = node.type === TYPES.COMPANY ? 420 : (node.type === TYPES.GROUP ? 320 : 220);
+                    pushNodeToRing(node, radius, alpha, 0.24, 'enemy-near-core');
+                    return;
+                }
+                const radius = node.type === TYPES.COMPANY ? 2350 : (node.type === TYPES.GROUP ? 1820 : 1480);
+                pushNodeToRing(node, radius + (stableUnit(`enemy-near:${nodeId}`) * 180), alpha, 0.18, 'enemy-near-outer');
+                return;
+            }
+
+            if (presetId === 'enemy_far') {
+                if (signal.hostile > 0) {
+                    const radius = node.type === TYPES.COMPANY ? 2400 : (node.type === TYPES.GROUP ? 2140 : 1920);
+                    pushNodeToRing(node, radius + (stableUnit(`enemy-far:${nodeId}`) * 140), alpha, 0.2, 'enemy-far-hostile');
+                    return;
+                }
+                const radius = node.type === TYPES.COMPANY ? 1280 : (node.type === TYPES.GROUP ? 1120 : 920);
+                pushNodeToRing(node, radius + (stableUnit(`enemy-far-neutral:${nodeId}`) * 120), alpha, 0.12, 'enemy-far-neutral');
+                return;
+            }
+
+            if (presetId === 'friends_close') {
+                if (signal.social > 0) {
+                    const radius = node.type === TYPES.COMPANY ? 620 : (node.type === TYPES.GROUP ? 340 : 200);
+                    pushNodeToRing(node, radius + (stableUnit(`social-core:${nodeId}`) * 70), alpha, 0.22, 'social-core');
+                    return;
+                }
+                const radius = node.type === TYPES.COMPANY ? 1900 : (node.type === TYPES.GROUP ? 1420 : 1120);
+                pushNodeToRing(node, radius + (stableUnit(`social-outer:${nodeId}`) * 140), alpha, 0.15, 'social-outer');
+                return;
+            }
+
+            if (presetId === 'group_cluster') {
+                if (node.type === TYPES.GROUP) {
+                    const angle = groupAngles.get(nodeId);
+                    if (typeof angle === 'number') pushNodeToAngle(node, 760, angle, alpha, 0.24);
+                    return;
+                }
+                const anchor = groupAnchors.get(nodeId);
+                if (anchor && anchor.id !== node.id) {
+                    const orbitRadius = node.type === TYPES.COMPANY ? 320 : 190;
+                    pushNodeToOrbit(node, anchor, orbitRadius + (stableUnit(`group-cluster:${nodeId}`) * 48), alpha, 0.28, 'group-cluster');
+                    return;
+                }
+                const radius = node.type === TYPES.COMPANY ? 1480 : 1020;
+                pushNodeToRing(node, radius, alpha, 0.13, 'group-cluster-outer');
+                return;
+            }
+
+            if (presetId === 'companies_far') {
+                if (node.type === TYPES.COMPANY) {
+                    const angle = companyAngles.get(nodeId);
+                    if (typeof angle === 'number') pushNodeToAngle(node, 2140, angle, alpha, 0.26);
+                    return;
+                }
+                const anchor = companyAnchors.get(nodeId);
+                if (anchor && anchor.id !== node.id) {
+                    const orbitRadius = node.type === TYPES.GROUP ? 360 : 250;
+                    pushNodeToOrbit(node, anchor, orbitRadius + (stableUnit(`company-orbit:${nodeId}`) * 62), alpha, 0.26, 'company-orbit');
+                    return;
+                }
+                const radius = signal.business > 0 ? 1220 : 900;
+                pushNodeToRing(node, radius + (stableUnit(`company-mid:${nodeId}`) * 110), alpha, 0.14, 'company-mid');
+                return;
+            }
+
+            if (presetId === 'groups_far') {
+                if (node.type === TYPES.GROUP) {
+                    const angle = groupAngles.get(nodeId);
+                    if (typeof angle === 'number') pushNodeToAngle(node, 1980, angle, alpha, 0.25);
+                    return;
+                }
+                const anchor = groupAnchors.get(nodeId);
+                if (anchor && anchor.id !== node.id) {
+                    const orbitRadius = node.type === TYPES.COMPANY ? 360 : 215;
+                    pushNodeToOrbit(node, anchor, orbitRadius + (stableUnit(`groups-far:${nodeId}`) * 56), alpha, 0.24, 'groups-far');
+                    return;
+                }
+                const radius = node.type === TYPES.COMPANY ? 1280 : 980;
+                pushNodeToRing(node, radius, alpha, 0.13, 'groups-far-outer');
+            }
+        });
+    };
 }
 
 function getLinkDistance(link, settings) {
@@ -112,9 +385,13 @@ export function restartSim() {
     
     const nodeDegree = new Map();
     const connectedPairs = new Set();
+    const nodeMap = new Map();
     let maxDegree = 0;
 
-    state.nodes.forEach(n => nodeDegree.set(n.id, 0));
+    state.nodes.forEach((n) => {
+        nodeDegree.set(n.id, 0);
+        nodeMap.set(String(n.id), n);
+    });
     state.links.forEach(l => {
         const s = (typeof l.source === 'object') ? l.source.id : l.source;
         const t = (typeof l.target === 'object') ? l.target.id : l.target;
@@ -296,6 +573,8 @@ export function restartSim() {
             }
         }
     });
+
+    simulation.force("presetLayout", createPresetLayoutForce(state.nodes, state.links, nodeMap));
 
     simulation.alpha(1).restart();
 }

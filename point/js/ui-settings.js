@@ -39,75 +39,80 @@ const PHYSICS_PRESETS = [
     {
         id: 'enemy_far',
         label: 'Ennemis tres eloignes',
-        hint: 'Ouvre fortement les conflits et les guerres.',
+        hint: 'Eclate les hostiles en premier plan et desserre le reste.',
         patch: {
-            enemyForce: 760,
-            enemyDistanceMultiplier: 1.75,
-            repulsion: 1350,
-            gravity: 0.003
+            enemyForce: 960,
+            enemyDistanceMultiplier: 2.6,
+            repulsion: 1520,
+            gravity: 0.0025,
+            linkLength: 240
         }
     },
     {
         id: 'enemy_near',
         label: 'Ennemis proches',
-        hint: 'Garde les tensions visibles sans tout exploser.',
+        hint: 'Concentre les hostiles et expulse les non-hostiles en peripherie.',
         patch: {
-            enemyForce: 140,
-            enemyDistanceMultiplier: 0.55,
-            gravity: 0.008,
-            linkLength: 200
+            enemyForce: 90,
+            enemyDistanceMultiplier: 0.32,
+            gravity: 0.011,
+            linkLength: 180,
+            repulsion: 1440
         }
     },
     {
         id: 'friends_close',
         label: 'Amis proches',
-        hint: 'Le social colle plus fort que le business.',
+        hint: 'Regroupe le social au coeur et eloigne les autres circuits.',
         patch: {
-            socialLinkStrength: 0.78,
-            socialLinkDistanceMult: 0.46,
-            businessLinkStrength: 0.18,
-            businessLinkDistanceMult: 1.25,
-            companyChargeMultiplier: 6,
-            repulsion: 1280
+            socialLinkStrength: 0.98,
+            socialLinkDistanceMult: 0.3,
+            businessLinkStrength: 0.14,
+            businessLinkDistanceMult: 1.4,
+            companyChargeMultiplier: 7,
+            repulsion: 1360,
+            gravity: 0.008
         }
     },
     {
         id: 'group_cluster',
         label: 'Groupuscule fort',
-        hint: 'Les groupes se resserrent en noyaux plus nets.',
+        hint: 'Dessine des noyaux de groupe beaucoup plus lisibles.',
         patch: {
-            groupChargeMultiplier: 1.65,
-            groupTerritoryRadius: 230,
-            businessLinkStrength: 0.4,
-            businessLinkDistanceMult: 0.76,
-            structureRepulsion: 0.06,
-            gravity: 0.007
+            groupChargeMultiplier: 1.2,
+            groupTerritoryRadius: 200,
+            businessLinkStrength: 0.48,
+            businessLinkDistanceMult: 0.62,
+            structureRepulsion: 0.05,
+            gravity: 0.009,
+            linkLength: 190
         }
     },
     {
         id: 'companies_far',
         label: 'Entreprises tres loin',
-        hint: 'Ecarte fortement les blocs business.',
+        hint: 'Etire les blocs business et place les entreprises comme des poles.',
         patch: {
-            companyChargeMultiplier: 8.5,
-            companyTerritoryRadius: 720,
-            structureRepulsion: 0.18,
-            businessLinkDistanceMult: 1.34,
-            repulsion: 1550,
-            gravity: 0.0035
+            companyChargeMultiplier: 11,
+            companyTerritoryRadius: 820,
+            structureRepulsion: 0.22,
+            businessLinkDistanceMult: 1.46,
+            repulsion: 1680,
+            gravity: 0.0028,
+            linkLength: 250
         }
     },
     {
         id: 'groups_far',
         label: 'Groupes tres loin',
-        hint: 'Separation plus dure entre factions et groupes.',
+        hint: 'Separe les factions tres loin avec des satellites plus lisibles.',
         patch: {
-            groupChargeMultiplier: 5.8,
-            groupTerritoryRadius: 620,
-            structureRepulsion: 0.16,
-            linkLength: 250,
-            repulsion: 1450,
-            gravity: 0.0035
+            groupChargeMultiplier: 6.4,
+            groupTerritoryRadius: 700,
+            structureRepulsion: 0.18,
+            linkLength: 270,
+            repulsion: 1560,
+            gravity: 0.003
         }
     }
 ];
@@ -146,6 +151,9 @@ function applyPhysicsPreset(presetId) {
     };
     updateSettingsUI();
     restartSim();
+    if (typeof window !== 'undefined' && typeof window.recenterGraphView === 'function') {
+        window.recenterGraphView({ save: false });
+    }
     draw();
     scheduleSave();
 }
@@ -351,6 +359,9 @@ function resetPhysicsDefaults() {
     state.globeMode = true;
     updateSettingsUI();
     restartSim();
+    if (typeof window !== 'undefined' && typeof window.recenterGraphView === 'function') {
+        window.recenterGraphView({ save: false });
+    }
     draw();
     scheduleSave();
 }

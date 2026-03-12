@@ -2582,9 +2582,9 @@ function createModal() {
                 padding: 20px 20px 18px;
             }
             #custom-modal[data-mode="create"] .modal-card {
-                width: min(920px, calc(100vw - 140px));
+                width: min(736px, calc(100vw - 120px));
                 min-height: 0;
-                padding: 16px 18px 14px;
+                padding: 14px 16px 12px;
                 overflow: visible;
             }
             #custom-modal[data-mode="create"] #modal-msg {
@@ -2594,8 +2594,8 @@ function createModal() {
                 display: none;
             }
             #custom-modal[data-mode="search"] .modal-card {
-                width: min(700px, calc(100vw - 300px));
-                min-height: 320px;
+                width: min(560px, calc(100vw - 220px));
+                min-height: 260px;
             }
             #custom-modal[data-mode="info"] .modal-card {
                 width: min(980px, calc(100vw - 40px));
@@ -2609,8 +2609,8 @@ function createModal() {
                 min-height: 420px;
             }
             #custom-modal[data-mode="aihub"] .modal-card {
-                width: min(980px, calc(100vw - 18px));
-                min-height: 520px;
+                width: min(784px, calc(100vw - 18px));
+                min-height: 420px;
                 padding: 0;
                 overflow: hidden;
                 border-radius: 18px;
@@ -3082,29 +3082,35 @@ function openQuickSearchModal() {
     const actEl = document.getElementById('modal-actions');
     if (!msgEl || !actEl) return;
 
-    const people = state.nodes
-        .filter((node) => node.type === TYPES.PERSON)
+    const searchableNodes = state.nodes
+        .filter((node) => String(node?.name || '').trim())
         .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
 
     msgEl.innerHTML = `
         <div class="modal-tool">
             <h3 class="modal-tool-title">Recherche</h3>
-            <input id="quick-search-input" type="text" placeholder="Rechercher une personne..." class="modal-input-standalone modal-search-input">
+            <input id="quick-search-input" type="text" placeholder="Nom ou telephone..." class="modal-input-standalone modal-search-input">
             <div id="quick-search-results" class="modal-search-results"></div>
         </div>
     `;
 
     const resultsEl = document.getElementById('quick-search-results');
     const inputEl = document.getElementById('quick-search-input');
+    const formatQuickSearchMeta = (node) => {
+        const phone = String(node?.num || '').trim();
+        return phone ? `${nodeTypeLabel(node?.type)} · ${phone}` : nodeTypeLabel(node?.type);
+    };
 
     const renderResults = () => {
         if (!resultsEl) return;
-        const query = String(inputEl?.value || '').trim().toLowerCase();
-        const filtered = people.filter((node) => String(node.name || '').toLowerCase().includes(query));
+        const rawQuery = String(inputEl?.value || '').trim();
+        const filtered = rawQuery
+            ? findSearchMatches(rawQuery, { includePhone: true, limit: 18 })
+            : searchableNodes.slice(0, 18);
         resultsEl.innerHTML = filtered.map((node) => `
             <button type="button" class="mini-btn quick-search-hit" data-id="${escapeHtml(String(node.id))}">
                 <span class="quick-search-name">${escapeHtml(node.name || 'Sans nom')}</span>
-                <span class="quick-search-meta">${escapeHtml(node.citizenNumber || '')}</span>
+                <span class="quick-search-meta">${escapeHtml(formatQuickSearchMeta(node))}</span>
             </button>
         `).join('') || '<div class="modal-empty-state">Aucun resultat</div>';
 
@@ -3697,6 +3703,17 @@ function openHvtAssistant() {
     showHvtPanel();
     const btnHVT = document.getElementById('btnHVT');
     if (btnHVT) btnHVT.classList.add('active');
+}
+
+function deactivateHvtMode() {
+    state.hvtMode = false;
+    state.hvtTopIds = new Set();
+    hvtSelectedId = null;
+    const btnHVT = document.getElementById('btnHVT');
+    if (btnHVT) btnHVT.classList.remove('active');
+    if (hvtPanel) hvtPanel.style.display = 'none';
+    draw();
+    scheduleSave();
 }
 
 function openIntelAssistant(scope = 'selection') {
@@ -4598,11 +4615,7 @@ function ensureHvtPanel() {
     `;
     document.body.appendChild(hvtPanel);
     const closeBtn = document.getElementById('btnHvtPanelClose');
-    if (closeBtn) closeBtn.onclick = () => {
-        const btn = document.getElementById('btnHVT');
-        if (btn) btn.click();
-        else hideHvtPanel();
-    };
+    if (closeBtn) closeBtn.onclick = () => deactivateHvtMode();
 
     const header = hvtPanel.querySelector('.hvt-header');
     if (header) {
@@ -4649,8 +4662,7 @@ function showHvtPanel() {
 }
 
 function hideHvtPanel() {
-    if (hvtPanel) hvtPanel.style.display = 'none';
-    hvtSelectedId = null;
+    deactivateHvtMode();
 }
 
 export function updateHvtPanel() {
@@ -5051,7 +5063,12 @@ function setupIntelControls() {
         };
     });
 
-    if (btnRun) btnRun.onclick = () => updateIntelPanel(true);
+    if (btnRun) btnRun.onclick = () => {
+        state.aiSettings.showPredicted = true;
+        if (showPredicted) showPredicted.checked = true;
+        scheduleSave();
+        updateIntelPanel(true);
+    };
     if (btnClear) btnClear.onclick = () => {
         intelSuggestions = [];
         state.aiPredictedLinks = [];
@@ -5305,9 +5322,11 @@ function normalizeSearchPhone(value) {
     return String(value ?? '').replace(/\D+/g, '');
 }
 
-function findSearchMatches(query) {
+function findSearchMatches(query, options = {}) {
     const normalizedQuery = normalizeSearchText(query);
-    const normalizedPhoneQuery = normalizeSearchPhone(query);
+    const includePhone = options.includePhone === true;
+    const normalizedPhoneQuery = includePhone ? normalizeSearchPhone(query) : '';
+    const limit = Math.max(1, Number(options.limit) || 10);
 
     return state.nodes
         .map((node) => {
@@ -5334,7 +5353,7 @@ function findSearchMatches(query) {
             if (b.score !== a.score) return b.score - a.score;
             return String(a.node?.name || '').localeCompare(String(b.node?.name || ''), 'fr', { sensitivity: 'base' });
         })
-        .slice(0, 10)
+        .slice(0, limit)
         .map((entry) => entry.node);
 }
 
@@ -5343,12 +5362,12 @@ function setupSearch() {
         const q = String(e.target.value || '').trim();
         const res = document.getElementById('searchResult');
         if(!q) { res.textContent = ''; return; }
-        const found = findSearchMatches(q);
+        const found = findSearchMatches(q, { includePhone: false, limit: 8 });
         if(found.length === 0) { res.innerHTML = '<span style="color:#666;">Aucun résultat</span>'; return; }
         res.innerHTML = found.map((n) => {
-            const phone = String(n.num || '').trim();
-            const label = phone ? `${escapeHtml(n.name)} · ${escapeHtml(phone)}` : escapeHtml(n.name);
-            return `<span class="search-hit" data-id="${n.id}" title="${escapeHtml(phone || n.name)}">${label}</span>`;
+            const rawName = String(n.name || 'Sans nom');
+            const label = escapeHtml(rawName);
+            return `<span class="search-hit" data-id="${n.id}" title="${escapeHtml(rawName)}">${label}</span>`;
         }).join(' · ');
         res.querySelectorAll('.search-hit').forEach(el => el.onclick = () => { zoomToNode(el.dataset.id); e.target.value = ''; res.textContent = ''; });
     });
@@ -5411,19 +5430,29 @@ function zoomToNode(id) {
 
 export function updateLinkLegend() {
     const el = ui.linkLegend;
-    if(!state.showLinkTypes) { el.innerHTML = ''; return; }
+    if (!el) return;
+    if(!state.showLinkTypes) {
+        el.hidden = true;
+        el.innerHTML = '';
+        return;
+    }
     const allowedKinds = FILTER_RULES[state.activeFilter];
     const usedKinds = new Set(
         state.links
             .filter((link) => !allowedKinds || allowedKinds.has(link.kind))
             .map((link) => link.kind)
     );
-    if(usedKinds.size === 0) { el.innerHTML = ''; return; }
-    const html = [];
-    usedKinds.forEach(k => {
-        html.push(`<div class="legend-item"><span class="legend-emoji">${linkKindEmoji(k)}</span><span>${kindToLabel(k)}</span></div>`);
-    });
-    el.innerHTML = html.join('');
+    const orderedKinds = [...usedKinds].sort((a, b) => kindToLabel(a).localeCompare(kindToLabel(b), 'fr', { sensitivity: 'base' }));
+    if(orderedKinds.length === 0) {
+        el.hidden = false;
+        el.innerHTML = '<div class="legend-title">Types de liaisons</div><div class="legend-empty">Aucun type visible</div>';
+        return;
+    }
+    el.hidden = false;
+    el.innerHTML = `
+        <div class="legend-title">Types de liaisons</div>
+        ${orderedKinds.map((kind) => `<div class="legend-item"><span class="legend-emoji">${linkKindEmoji(kind)}</span><span>${kindToLabel(kind)}</span></div>`).join('')}
+    `;
 }
 
 export function refreshLists() {
