@@ -121,8 +121,17 @@ export function renderEditorHTML(n, state) {
                 <button id="btnCenterNode" class="mini-btn">centrer</button>
             </div>
             <div class="editor-side-group editor-side-group-bottom">
+                <button id="btnExportRP" class="mini-btn" type="button">Copier</button>
+                <button id="btnMergeLaunch" class="mini-btn" type="button">Fusion</button>
                 <button id="btnDelete" class="mini-btn danger" type="button">Supprimer</button>
-                <button id="btnExportRP" class="mini-btn" type="button">Dossier</button>
+                <div id="editorMergeRail" class="editor-side-popover" hidden>
+                    <div class="editor-side-popover-title">Fusionner cette fiche</div>
+                    <div class="editor-autocomplete-field">
+                        <input id="mergeTarget" type="text" autocomplete="off" spellcheck="false" placeholder="Vers qui fusionner ?" class="flex-grow-input">
+                        <div id="mergeTargetResults" class="editor-autocomplete-results" hidden></div>
+                    </div>
+                    <button id="btnMergeApply" class="mini-btn primary" type="button">Fusionner</button>
+                </div>
             </div>
         </div>
 
@@ -135,6 +144,15 @@ export function renderEditorHTML(n, state) {
                                 <input id="edQuickNameInline" class="editor-sheet-name editor-sheet-name-input" type="text" value="${escapeHtml(n.name)}" placeholder="Nom de la fiche">
                                 <div id="awName" class="editor-realtime-presence" style="display:none; min-height:14px; margin-top:4px; font-size:0.68rem; color:#ffcc8a;"></div>
                             </div>
+                            <div class="editor-head-pills">
+                                <select id="edQuickType" class="editor-type-select" aria-label="Type de fiche">
+                                    ${typeOptions}
+                                </select>
+                                <label class="editor-color-pill editor-color-pill-head" title="Couleur de la fiche">
+                                    <span class="editor-inline-label">Couleur</span>
+                                    <input type="color" id="edColorQuick" value="${sanitizeNodeColor(safeHex(n.color))}" class="editor-color-input editor-color-input-inline">
+                                </label>
+                            </div>
                             ${n.type === TYPES.PERSON ? `
                                 <div class="editor-inline-phone editor-inline-phone-head">
                                     <span class="editor-inline-label">Tel</span>
@@ -142,13 +160,6 @@ export function renderEditorHTML(n, state) {
                                     <div id="awPhone" class="editor-realtime-presence" style="display:none; min-height:12px; margin-top:4px; font-size:0.64rem; color:#ffcc8a;"></div>
                                 </div>
                             ` : ''}
-                            <select id="edQuickType" class="editor-type-select" aria-label="Type de fiche">
-                                ${typeOptions}
-                            </select>
-                            <label class="editor-color-pill editor-color-pill-head" title="Couleur de la fiche">
-                                <span class="editor-inline-label">Couleur</span>
-                                <input type="color" id="edColorQuick" value="${sanitizeNodeColor(safeHex(n.color))}" class="editor-color-input editor-color-input-inline">
-                            </label>
                         </div>
                     </div>
                     ${personStatusControls ? `
@@ -214,19 +225,6 @@ export function renderEditorHTML(n, state) {
                     <div id="editorLinkHint" class="editor-link-hint">Si la fiche existe deja, son type est repris automatiquement.</div>
                 </div>
 
-                <div id="editorAdvanced" class="editor-advanced editor-advanced-open">
-                    <div id="editorMergeSection" class="editor-adv-section">
-                        <div class="editor-adv-title">Fusionner cette fiche</div>
-                        <div class="editor-adv-row editor-merge-row">
-                            <div class="editor-autocomplete-field flex-grow-input">
-                                <input id="mergeTarget" type="text" autocomplete="off" spellcheck="false" placeholder="Vers qui fusionner ?" class="flex-grow-input">
-                                <div id="mergeTargetResults" class="editor-autocomplete-results" hidden></div>
-                            </div>
-                            <button id="btnMergeApply" class="mini-btn primary" type="button">Fusionner</button>
-                        </div>
-                        <div class="editor-link-hint">La fiche actuelle sera fusionnee dans la cible choisie.</div>
-                    </div>
-                </div>
             </div>
         </div>
     </div>

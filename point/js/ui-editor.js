@@ -601,7 +601,7 @@ function setupEditorListeners(n) {
     const mergeInput = document.getElementById('mergeTarget');
     const mergeResults = document.getElementById('mergeTargetResults');
     const btnMergeApply = document.getElementById('btnMergeApply');
-    const mergeSection = document.getElementById('editorMergeSection');
+    const mergeRail = document.getElementById('editorMergeRail');
 
     const resolveQuickLinkTarget = () => {
         const rawName = normalizeNodeLookupName(linkNameInput?.value || '');
@@ -701,19 +701,44 @@ function setupEditorListeners(n) {
         onSubmit: submitMergeTarget
     });
 
+    const closeMergeRail = () => {
+        if (!mergeRail) return;
+        mergeRail.hidden = true;
+        btnMergeLaunch?.classList.remove('active');
+    };
+    const openMergeRail = () => {
+        if (!mergeRail) return;
+        mergeRail.hidden = false;
+        btnMergeLaunch?.classList.add('active');
+        requestAnimationFrame(() => {
+            mergeInput?.focus();
+            mergeInput?.select();
+        });
+    };
+
+    if (document.__pointMergeOutsideHandler) {
+        document.removeEventListener('mousedown', document.__pointMergeOutsideHandler, true);
+    }
+    document.__pointMergeOutsideHandler = (event) => {
+        if (!mergeRail || mergeRail.hidden) return;
+        if (mergeRail.contains(event.target)) return;
+        if (btnMergeLaunch && btnMergeLaunch.contains(event.target)) return;
+        closeMergeRail();
+    };
+    document.addEventListener('mousedown', document.__pointMergeOutsideHandler, true);
+
     if (btnMergeLaunch) {
         btnMergeLaunch.onclick = () => {
-            requestAnimationFrame(() => {
-                mergeSection?.scrollIntoView({ block: 'nearest' });
-                mergeInput?.focus();
-                mergeInput?.select();
-            });
+            if (!mergeRail) return;
+            if (mergeRail.hidden) openMergeRail();
+            else closeMergeRail();
         };
     }
 
     if (btnMergeApply) btnMergeApply.onclick = () => {
         mergeAutocomplete.hide();
         submitMergeTarget();
+        closeMergeRail();
     };
 
     document.getElementById('btnExportRP').onclick = () => {

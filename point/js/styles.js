@@ -2497,15 +2497,16 @@ export function injectStyles() {
 
         .editor-panel-layout {
             display: grid;
-            grid-template-columns: 52px minmax(0, 1fr);
+            grid-template-columns: 58px minmax(0, 1fr);
             gap: 8px;
             align-items: start;
         }
         .editor-side-rail {
             display: flex;
             flex-direction: column;
+            justify-content: space-between;
             gap: 8px;
-            align-self: start;
+            align-self: stretch;
         }
         .editor-side-group {
             display: flex;
@@ -2513,12 +2514,13 @@ export function injectStyles() {
             gap: 6px;
         }
         .editor-side-group-bottom {
-            margin-top: 2px;
+            margin-top: auto;
+            position: relative;
         }
         .editor-side-group .mini-btn {
             width: 100%;
             min-height: 34px;
-            padding: 6px 4px;
+            padding: 6px 3px;
             font-size: 0.58rem;
             line-height: 1.15;
             font-family: var(--font-main);
@@ -2553,34 +2555,40 @@ export function injectStyles() {
             display: flex;
             flex-direction: column;
             align-items: stretch;
-            gap: 6px;
+            gap: 5px;
             margin: -8px -8px 2px;
-            padding: 10px 12px 8px;
+            padding: 9px 11px 7px;
             border-bottom: 1px solid rgba(102, 243, 255, 0.18);
             background: linear-gradient(90deg, rgba(102, 243, 255, 0.16), rgba(7, 18, 39, 0.96) 28%, rgba(3, 9, 24, 0.98));
             box-shadow: inset 0 1px 0 rgba(140, 250, 255, 0.08);
         }
         .editor-sheet-head-main {
             display: flex;
-            align-items: stretch;
+            align-items: center;
             min-width: 0;
         }
         .editor-sheet-identity-row {
             display: flex;
             align-items: center;
-            justify-content: space-between;
+            justify-content: flex-start;
             gap: 8px;
             width: 100%;
             min-width: 0;
-            flex-wrap: wrap;
+            flex-wrap: nowrap;
         }
         .editor-sheet-title-block {
             min-width: 0;
-            flex: 1 1 280px;
+            flex: 1 1 auto;
+        }
+        .editor-head-pills {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            flex: 0 0 auto;
         }
         .editor-sheet-name {
             font-family: var(--font-main);
-            font-size: clamp(1.18rem, 1.65vw, 1.46rem);
+            font-size: clamp(1.1rem, 1.45vw, 1.3rem);
             line-height: 1;
             color: var(--text-light);
             letter-spacing: 0.06em;
@@ -2607,21 +2615,21 @@ export function injectStyles() {
         .editor-type-select,
         .editor-inline-phone,
         .editor-color-pill {
-            min-height: 38px;
+            min-height: 26px;
             border: 1px solid rgba(102, 243, 255, 0.2);
-            border-radius: 11px;
+            border-radius: 999px;
             background: rgba(4, 11, 27, 0.88);
             box-shadow: inset 0 0 0 1px rgba(102, 243, 255, 0.04);
         }
         .editor-type-select {
-            flex: 0 0 116px;
-            width: 116px;
-            min-width: 116px;
-            padding: 7px 28px 7px 10px;
+            flex: 0 0 auto;
+            width: auto;
+            min-width: 88px;
+            padding: 3px 22px 3px 10px;
             color: var(--accent-cyan);
             font-family: var(--font-main);
-            font-size: 0.68rem;
-            letter-spacing: 1.15px;
+            font-size: 0.5rem;
+            letter-spacing: 0.9px;
             text-transform: uppercase;
             cursor: pointer;
         }
@@ -2634,16 +2642,22 @@ export function injectStyles() {
         .editor-color-pill {
             display: inline-flex;
             align-items: center;
-            gap: 7px;
-            padding: 6px 9px;
+            gap: 6px;
+            padding: 3px 7px;
         }
         .editor-inline-phone {
-            flex: 0 0 100px;
-            min-width: 100px;
+            flex: 0 0 auto;
+            min-width: 0;
         }
         .editor-inline-phone-head {
-            flex: 0 0 96px;
-            min-width: 96px;
+            flex: 0 0 128px;
+            min-width: 128px;
+            margin-left: auto;
+            min-height: auto;
+            padding: 0;
+            border: none;
+            background: transparent;
+            box-shadow: none;
         }
         .editor-inline-label {
             color: #7f9ab7;
@@ -2663,11 +2677,13 @@ export function injectStyles() {
             background: transparent;
             color: var(--text-light);
             font-family: var(--font-main);
-            font-size: 0.84rem;
+            font-size: clamp(1.1rem, 1.45vw, 1.3rem);
             line-height: 1;
             padding: 0;
             box-shadow: none;
             outline: none;
+            text-align: right;
+            letter-spacing: 0.04em;
         }
         .editor-inline-phone input::placeholder {
             color: #637996;
@@ -2679,20 +2695,22 @@ export function injectStyles() {
             flex-wrap: wrap;
         }
         .editor-color-pill {
-            margin-left: auto;
+            margin-left: 0;
             flex: 0 0 auto;
         }
         .editor-color-pill-head {
             margin-left: 0;
-            width: 40px;
-            min-width: 40px;
-            padding: 4px;
+            width: 26px;
+            min-width: 26px;
+            min-height: 26px;
+            padding: 2px;
             justify-content: center;
+            border-radius: 8px;
         }
         .editor-color-input-inline {
             width: 100%;
             min-width: 0;
-            height: 30px;
+            height: 20px;
             padding: 0;
             border: none;
             background: transparent;
@@ -2775,8 +2793,8 @@ export function injectStyles() {
             flex-wrap: wrap;
         }
         .editor-status-btn {
-            min-height: 24px;
-            padding: 3px 7px;
+            min-height: 26px;
+            padding: 4px 9px;
             border: 1px solid rgba(102, 243, 255, 0.14);
             border-radius: 999px;
             background: rgba(2, 8, 20, 0.92);
@@ -2787,6 +2805,33 @@ export function injectStyles() {
             text-transform: uppercase;
             clip-path: none;
             box-shadow: none;
+        }
+        .editor-side-popover {
+            position: absolute;
+            left: calc(100% + 10px);
+            top: 40px;
+            width: 218px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding: 8px;
+            border: 1px solid rgba(102, 243, 255, 0.16);
+            border-radius: 12px;
+            background: linear-gradient(180deg, rgba(8, 18, 36, 0.96), rgba(4, 10, 22, 0.98));
+            box-shadow: 0 16px 32px rgba(0, 0, 0, 0.34);
+            z-index: 8;
+        }
+        .editor-side-popover[hidden] {
+            display: none;
+        }
+        .editor-side-popover-title {
+            color: #a8bed8;
+            font-size: 0.6rem;
+            letter-spacing: 1.4px;
+            text-transform: uppercase;
+        }
+        .editor-side-popover .mini-btn {
+            width: 100%;
         }
         .editor-status-btn:hover {
             border-color: rgba(102, 243, 255, 0.3);
@@ -3633,10 +3678,16 @@ export function injectStyles() {
             .editor-sheet-head-main {
                 gap: 6px;
             }
+            .editor-head-pills {
+                justify-content: flex-start;
+            }
             .editor-type-select,
             .editor-inline-phone {
                 width: 100%;
                 min-width: 0;
+            }
+            .editor-inline-phone-head {
+                margin-left: 0;
             }
             .editor-color-pill {
                 margin-left: 0;
@@ -3644,6 +3695,11 @@ export function injectStyles() {
             }
             .editor-status-inline {
                 width: 100%;
+            }
+            .editor-side-popover {
+                position: static;
+                width: 100%;
+                margin-top: 6px;
             }
             .editor-status-strip {
                 align-items: flex-start;
