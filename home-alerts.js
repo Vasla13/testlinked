@@ -10,6 +10,30 @@ let pendingRefresh = false;
 let currentAlerts = [];
 let currentAlertIndex = 0;
 
+function getAlertPhase(alert) {
+    if (!alert || typeof alert !== 'object') {
+        return {
+            phase: 'live',
+            kicker: 'Alerte BNI',
+            state: 'Signal actif'
+        };
+    }
+
+    if (alert.scheduled === true) {
+        return {
+            phase: 'scheduled',
+            kicker: 'Prediction BNI',
+            state: alert.showBeforeStart === true ? 'Projection active' : 'Diffusion planifiee'
+        };
+    }
+
+    return {
+        phase: 'live',
+        kicker: 'Alerte BNI',
+        state: 'Signal actif'
+    };
+}
+
 function readViewerSession() {
     try {
         const raw = localStorage.getItem(COLLAB_SESSION_STORAGE_KEY);
@@ -160,12 +184,17 @@ function injectPopup() {
         <div id="site-alert-popup" class="site-alert-popup" hidden>
             <button id="site-alert-close" class="site-alert-close" type="button" aria-label="Fermer">×</button>
             <div class="site-alert-head">
-                <div class="site-alert-kicker">Alertes BNI</div>
+                <div class="site-alert-title-block">
+                    <div id="site-alert-kicker" class="site-alert-kicker">Alerte BNI</div>
+                    <div id="site-alert-state" class="site-alert-state">
+                        <span class="site-alert-state-dot" aria-hidden="true"></span>
+                        <span id="site-alert-state-label">Signal actif</span>
+                    </div>
+                </div>
                 <div id="site-alert-counter" class="site-alert-counter" hidden></div>
             </div>
             <div id="site-alert-title" class="site-alert-title"></div>
             <div id="site-alert-desc" class="site-alert-desc"></div>
-            <div id="site-alert-meta" class="site-alert-meta"></div>
             <div id="site-alert-nav" class="site-alert-nav" hidden>
                 <button id="site-alert-prev" class="site-alert-nav-btn" type="button" aria-label="Alerte precedente">‹</button>
                 <div id="site-alert-nav-label" class="site-alert-nav-label"></div>
@@ -215,11 +244,12 @@ function renderPopup() {
     const popup = document.getElementById('site-alert-popup');
     const title = document.getElementById('site-alert-title');
     const desc = document.getElementById('site-alert-desc');
-    const meta = document.getElementById('site-alert-meta');
     const counter = document.getElementById('site-alert-counter');
     const nav = document.getElementById('site-alert-nav');
     const navLabel = document.getElementById('site-alert-nav-label');
-    if (!popup || !title || !desc || !meta || !counter || !nav || !navLabel) return;
+    const kicker = document.getElementById('site-alert-kicker');
+    const stateLabel = document.getElementById('site-alert-state-label');
+    if (!popup || !title || !desc || !counter || !nav || !navLabel || !kicker || !stateLabel) return;
 
     if (!homeReady) {
         popup.hidden = true;
@@ -236,7 +266,11 @@ function renderPopup() {
 
     title.textContent = String(alert.title || 'Alerte BNI');
     desc.textContent = String(alert.description || '');
-    meta.textContent = `GPS ${Number(alert.gpsX || 0).toFixed(2)} / ${Number(alert.gpsY || 0).toFixed(2)}`;
+    const phase = getAlertPhase(alert);
+
+    kicker.textContent = phase.kicker;
+    stateLabel.textContent = phase.state;
+    popup.dataset.phase = phase.phase;
 
     counter.hidden = false;
     counter.textContent = visibleAlerts.length > 1 ? `${visibleAlerts.length} actives` : '1 active';

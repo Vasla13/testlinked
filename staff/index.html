@@ -127,9 +127,15 @@
                     <input id="alertTitle" class="cyber-input" type="text" maxlength="120" placeholder="Ex: Intervention BNI secteur nord">
                 </div>
                 <div class="editor-col">
-                    <label for="alertStartAt">Date d affichage</label>
+                    <div class="staff-date-head">
+                        <label for="alertStartAt">Date d affichage</label>
+                        <div id="staffStartVisibilitySwitch" class="staff-start-visibility-switch" role="group" aria-label="Visibilite avant la date" hidden>
+                            <button id="btnAlertStartWait" class="staff-start-visibility-btn" type="button">Attendre</button>
+                            <button id="btnAlertStartShowNow" class="staff-start-visibility-btn" type="button">Afficher deja</button>
+                        </div>
+                    </div>
                     <input id="alertStartAt" class="cyber-input" type="datetime-local">
-                    <div class="staff-helper-copy">Laisse vide pour afficher tout de suite.</div>
+                    <div id="staffStartVisibilityHint" class="staff-helper-copy">Laisse vide pour afficher tout de suite.</div>
                 </div>
                 <div class="editor-col staff-modal-grid-wide">
                     <label for="alertDescription">Description</label>
@@ -138,36 +144,57 @@
                 <div class="editor-col staff-modal-grid-wide">
                     <div class="staff-modal-inline-note">
                         Reglages dessin: utilise Rayon cercle et Epaisseur trait dans la colonne gauche.
-                        Les valeurs sont appliquees en direct sur la forme active.
+                        Positionne l alerte directement sur la carte, puis finalise ici.
                     </div>
-                    <button id="btnPickAlertOnMap" class="action-btn" type="button">Choisir sur carte</button>
                 </div>
             </div>
 
-            <div class="staff-modal-section">
-                <div class="staff-modal-section-head">
+            <div class="staff-modal-section staff-audience-section">
+                <div class="staff-modal-section-head staff-audience-head">
                     <span>Audience</span>
-                    <span id="staffAudienceMode" class="editor-pill staff-mini-pill">Tous</span>
                 </div>
-                <div class="staff-action-grid staff-action-grid-compact">
-                    <button id="btnAudienceAll" class="action-btn" type="button">Tous</button>
-                    <button id="btnAudienceWhitelist" class="action-btn" type="button">Whitelist</button>
+                <div id="staffAudienceMode" class="staff-audience-copy">Tout le monde voit cette alerte.</div>
+                <div class="staff-audience-switch" role="group" aria-label="Audience de l alerte">
+                    <button id="btnAudienceAll" class="staff-audience-toggle" type="button">Tous</button>
+                    <button id="btnAudienceWhitelist" class="staff-audience-toggle" type="button">Whitelist</button>
                 </div>
                 <div id="staffWhitelistPanel" class="staff-whitelist-panel" hidden>
-                    <div class="staff-whitelist-row">
-                        <input id="staffWhitelistInput" class="cyber-input" type="text" placeholder="username cloud">
-                        <button id="btnAddWhitelistUser" class="action-btn" type="button">Ajouter</button>
+                    <div class="staff-whitelist-card">
+                        <div class="staff-whitelist-row">
+                            <div class="staff-whitelist-search">
+                                <input id="staffWhitelistInput" class="cyber-input" type="text" placeholder="Tape un username cloud">
+                                <div id="staffWhitelistSuggestions" class="staff-whitelist-suggestions" hidden></div>
+                            </div>
+                            <button id="btnAddWhitelistUser" class="action-btn" type="button">Ajouter</button>
+                        </div>
+                        <div class="staff-helper-copy staff-whitelist-hint">Active ce mode seulement si l alerte doit etre reservee a certains comptes.</div>
                     </div>
-                    <div id="staffWhitelistSuggestions" class="staff-whitelist-suggestions"></div>
+                    <div class="staff-whitelist-summary">
+                        <span class="staff-whitelist-summary-label">Utilisateurs autorises</span>
+                        <span id="staffWhitelistCount" class="staff-whitelist-count">0</span>
+                    </div>
                     <div id="staffWhitelistList" class="staff-whitelist-list"></div>
                 </div>
             </div>
 
             <input id="alertActive" type="checkbox" checked hidden>
+            <input id="alertShowBeforeStart" type="checkbox" hidden>
 
             <div class="staff-alert-modal-actions">
                 <button id="btnAlertModalCancel" class="btn-close-editor" type="button">Annuler</button>
                 <button id="btnPublishAlert" class="action-btn" type="button">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="staff-confirm-modal" class="staff-confirm-modal" hidden>
+        <div class="staff-confirm-card" role="dialog" aria-modal="true" aria-labelledby="staffConfirmTitle">
+            <div class="staff-confirm-kicker">Confirmation</div>
+            <div id="staffConfirmTitle" class="staff-confirm-title">Supprimer l alerte ?</div>
+            <div id="staffConfirmMessage" class="staff-confirm-copy">Cette action est definitive.</div>
+            <div class="staff-confirm-actions">
+                <button id="btnStaffConfirmCancel" class="btn-close-editor" type="button">Annuler</button>
+                <button id="btnStaffConfirmOk" class="action-btn staff-confirm-danger" type="button">Supprimer</button>
             </div>
         </div>
     </div>

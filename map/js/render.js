@@ -248,12 +248,15 @@ function syncZoneElement(el, zone, group, gIndex, zIndex, isSelected) {
 }
 
 function syncAlertZoneElement(el, alert, alertStrokeWidth) {
+    const scheduled = isScheduledAlertState(alert);
     el.setAttribute('points', alert.zonePoints.map((point) => `${point.x},${point.y}`).join(' '));
     el.setAttribute('fill', '#ff4d67');
-    el.setAttribute('fill-opacity', '0.16');
+    el.setAttribute('fill-opacity', scheduled ? '0.08' : '0.16');
     el.setAttribute('stroke', '#ff4d67');
     el.setAttribute('stroke-width', alertStrokeWidth.toFixed(2));
-    el.setAttribute('class', 'map-alert-zone');
+    el.setAttribute('class', `map-alert-zone${scheduled ? ' is-scheduled' : ''}`);
+    if (scheduled) el.setAttribute('stroke-dasharray', '0.9 0.42');
+    else el.removeAttribute('stroke-dasharray');
     el.style.pointerEvents = 'auto';
     el.style.cursor = 'pointer';
     el.onmousedown = (event) => {
@@ -268,6 +271,7 @@ function syncAlertZoneElement(el, alert, alertStrokeWidth) {
 }
 
 function syncAlertCircleElement(el, alert, entry, alertStrokeWidth) {
+    const scheduled = isScheduledAlertState(alert);
     const x = Number(entry.xPercent);
     const y = Number(entry.yPercent);
     const radius = Math.max(0.5, Number(entry.radius || alert.radius || 2.6));
@@ -276,10 +280,12 @@ function syncAlertCircleElement(el, alert, entry, alertStrokeWidth) {
     el.setAttribute('cy', y);
     el.setAttribute('r', radius.toFixed(2));
     el.setAttribute('fill', '#ff4d67');
-    el.setAttribute('fill-opacity', '0.14');
+    el.setAttribute('fill-opacity', scheduled ? '0.07' : '0.14');
     el.setAttribute('stroke', '#ff4d67');
     el.setAttribute('stroke-width', alertStrokeWidth.toFixed(2));
-    el.setAttribute('class', 'map-alert-ring');
+    el.setAttribute('class', `map-alert-ring${scheduled ? ' is-scheduled' : ''}`);
+    if (scheduled) el.setAttribute('stroke-dasharray', '0.9 0.4');
+    else el.removeAttribute('stroke-dasharray');
     el.style.pointerEvents = 'auto';
     el.style.cursor = 'pointer';
     el.onmousedown = (event) => {
@@ -292,6 +298,11 @@ function syncAlertCircleElement(el, alert, entry, alertStrokeWidth) {
         }));
     };
     return true;
+}
+
+function isScheduledAlertState(alert) {
+    const startsAt = Date.parse(String(alert?.startsAt || '').trim());
+    return Number.isFinite(startsAt) && startsAt > Date.now();
 }
 
 export function renderAll(options = {}) {

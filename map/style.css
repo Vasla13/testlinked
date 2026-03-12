@@ -2243,6 +2243,123 @@ body.map-shell .map-form-note {
     font-size: 0.84rem;
 }
 
+body.map-shell .cloud-auth-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+body.map-shell .cloud-auth-badge {
+    align-self: flex-start;
+    padding: 6px 10px;
+    border: 1px solid rgba(102, 243, 255, 0.18);
+    border-radius: 999px;
+    background: rgba(8, 20, 44, 0.8);
+    color: #9befff;
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 1.8px;
+    text-transform: uppercase;
+}
+
+body.map-shell .cloud-auth-title {
+    margin: 0;
+    color: #effbff;
+    font-size: 1.16rem;
+    font-weight: 800;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+}
+
+body.map-shell .cloud-auth-copy {
+    color: #a6c2dd;
+    font-size: 0.86rem;
+    line-height: 1.65;
+}
+
+body.map-shell .cloud-auth-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+body.map-shell .cloud-auth-field {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    padding: 12px;
+    border: 1px solid rgba(102, 243, 255, 0.12);
+    border-radius: 14px;
+    background:
+        linear-gradient(180deg, rgba(9, 20, 44, 0.92), rgba(4, 10, 24, 0.88)),
+        radial-gradient(circle at top right, rgba(102, 243, 255, 0.08), transparent 44%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+body.map-shell .cloud-auth-label {
+    color: #d5ecfa;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+}
+
+body.map-shell .cloud-auth-input {
+    width: 100%;
+    min-height: 48px;
+    padding: 10px 12px;
+    border: 1px solid rgba(102, 243, 255, 0.16);
+    border-radius: 10px;
+    background: rgba(3, 9, 22, 0.92);
+    color: #ebfbff;
+    font-family: var(--font-main);
+    font-size: 0.94rem;
+    box-shadow: inset 0 0 0 1px rgba(102, 243, 255, 0.04);
+}
+
+body.map-shell .cloud-auth-input::placeholder {
+    color: #637996;
+}
+
+body.map-shell .cloud-auth-input:focus {
+    outline: none;
+    border-color: rgba(102, 243, 255, 0.52);
+    box-shadow: 0 0 0 3px rgba(102, 243, 255, 0.1), 0 0 18px rgba(102, 243, 255, 0.12);
+}
+
+body.map-shell .cloud-auth-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+body.map-shell .cloud-auth-pill {
+    padding: 6px 10px;
+    border: 1px solid rgba(255, 204, 138, 0.18);
+    border-radius: 999px;
+    background: rgba(34, 24, 8, 0.72);
+    color: #ffe5b7;
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 1.1px;
+    text-transform: uppercase;
+}
+
+body.map-shell .cloud-auth-hint {
+    color: #86a4c0;
+    font-size: 0.78rem;
+    line-height: 1.55;
+    padding: 12px 14px;
+    border: 1px dashed rgba(102, 243, 255, 0.14);
+    border-radius: 12px;
+    background: rgba(4, 11, 26, 0.66);
+}
+
+body.map-shell .cloud-auth-secondary,
+body.map-shell .cloud-auth-tertiary {
+    min-width: 150px;
+}
+
 body.map-shell .map-save-warning {
     padding: 12px;
     border: 1px solid rgba(255, 204, 138, 0.22);
@@ -2743,7 +2860,8 @@ body.map-shell .loader-step.is-complete {
     body.map-shell .data-shell-status,
     body.map-shell .editor-actions-row,
     body.map-shell .editor-danger-row,
-    body.map-shell .data-hub-grid {
+    body.map-shell .data-hub-grid,
+    body.map-shell .cloud-auth-grid {
         grid-template-columns: 1fr;
     }
 
@@ -2765,6 +2883,21 @@ body.map-shell .map-alert-pulse {
 body.map-shell .map-alert-ring,
 body.map-shell .map-alert-zone {
     filter: drop-shadow(0 0 10px rgba(255, 77, 103, 0.22));
+}
+
+body.map-shell .map-alert-ring.is-scheduled,
+body.map-shell .map-alert-zone.is-scheduled {
+    filter: drop-shadow(0 0 14px rgba(255, 196, 120, 0.2));
+    animation: map-alert-imminent-pulse 2.2s ease-in-out infinite;
+}
+
+@keyframes map-alert-imminent-pulse {
+    0%, 100% {
+        opacity: 0.72;
+    }
+    50% {
+        opacity: 1;
+    }
 }
 
 body.map-shell .map-alert-pin {
@@ -2856,6 +2989,56 @@ body.map-shell .map-alert-callout-card {
     box-shadow: 0 22px 44px rgba(0, 0, 0, 0.42), 0 0 20px rgba(255, 77, 103, 0.12);
     clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px));
     pointer-events: auto;
+    overflow: hidden;
+    isolation: isolate;
+}
+
+body.map-shell .map-alert-callout-card[data-phase="scheduled"] {
+    border-color: rgba(255, 196, 120, 0.38);
+    background:
+        linear-gradient(180deg, rgba(37, 19, 8, 0.96), rgba(18, 11, 7, 0.92)),
+        radial-gradient(circle at top right, rgba(255, 214, 145, 0.12), transparent 54%);
+    box-shadow: 0 22px 44px rgba(0, 0, 0, 0.42), 0 0 22px rgba(255, 176, 74, 0.14);
+}
+
+body.map-shell .map-alert-callout-card::before,
+body.map-shell .map-alert-callout-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0;
+}
+
+body.map-shell .map-alert-callout-card[data-phase="scheduled"]::before {
+    opacity: 0.88;
+    background:
+        repeating-linear-gradient(180deg, rgba(255, 224, 165, 0.05) 0 1px, transparent 1px 8px),
+        linear-gradient(90deg, rgba(255, 214, 145, 0.05), transparent 38%, rgba(102, 243, 255, 0.04));
+    mix-blend-mode: screen;
+}
+
+body.map-shell .map-alert-callout-card[data-phase="scheduled"]::after {
+    inset: -18% auto -18% -34%;
+    width: 42%;
+    opacity: 0.62;
+    background: linear-gradient(90deg, transparent, rgba(255, 230, 173, 0.18), rgba(255, 255, 255, 0.04), transparent);
+    transform: skewX(-16deg);
+    animation: map-alert-forecast-scan 4.2s linear infinite;
+}
+
+body.map-shell .map-alert-callout-card > * {
+    position: relative;
+    z-index: 1;
+}
+
+@keyframes map-alert-forecast-scan {
+    0% {
+        transform: translateX(0) skewX(-16deg);
+    }
+    100% {
+        transform: translateX(360%) skewX(-16deg);
+    }
 }
 
 body.map-shell .map-alert-callout-pointer {
@@ -2868,6 +3051,11 @@ body.map-shell .map-alert-callout-pointer {
     box-shadow: 0 0 14px rgba(255, 77, 103, 0.32);
 }
 
+body.map-shell #map-alert-banner[data-phase="scheduled"] .map-alert-callout-pointer {
+    background: linear-gradient(90deg, rgba(255, 236, 178, 0.92), rgba(255, 173, 84, 0.96));
+    box-shadow: 0 0 16px rgba(255, 173, 84, 0.28);
+}
+
 body.map-shell .map-alert-callout-dot {
     top: 0;
     left: 0;
@@ -2878,6 +3066,12 @@ body.map-shell .map-alert-callout-dot {
     background: #ff4d67;
     box-shadow: 0 0 18px rgba(255, 77, 103, 0.4);
     transform: translate(-50%, -50%);
+}
+
+body.map-shell #map-alert-banner[data-phase="scheduled"] .map-alert-callout-dot {
+    border-color: rgba(255, 247, 226, 0.98);
+    background: #ffb160;
+    box-shadow: 0 0 20px rgba(255, 173, 84, 0.42);
 }
 
 body.map-shell .map-alert-head {
@@ -2920,6 +3114,78 @@ body.map-shell .map-alert-desc {
     font-size: 0.84rem;
     line-height: 1.45;
     margin-bottom: 10px;
+}
+
+body.map-shell .map-alert-ai-copy {
+    margin: -2px 0 8px;
+    color: rgba(255, 234, 208, 0.78);
+    font-size: 0.72rem;
+    line-height: 1.45;
+}
+
+body.map-shell .map-alert-timeline {
+    margin-bottom: 10px;
+    padding: 10px 12px;
+    border: 1px solid rgba(255, 214, 145, 0.14);
+    background: rgba(255, 255, 255, 0.04);
+}
+
+body.map-shell .map-alert-timeline[data-tone="mid"] {
+    border-color: rgba(255, 204, 138, 0.2);
+}
+
+body.map-shell .map-alert-timeline[data-tone="high"],
+body.map-shell .map-alert-timeline[data-tone="critical"] {
+    border-color: rgba(255, 151, 120, 0.26);
+    background: rgba(255, 130, 94, 0.06);
+}
+
+body.map-shell .map-alert-timeline-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+body.map-shell .map-alert-timeline-label {
+    color: #ffd9a4;
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 1.3px;
+    text-transform: uppercase;
+}
+
+body.map-shell .map-alert-timeline-value {
+    color: #fff3dc;
+    font-size: 0.9rem;
+    font-weight: 800;
+    letter-spacing: 0.8px;
+}
+
+body.map-shell .map-alert-progress {
+    height: 8px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+body.map-shell .map-alert-progress-fill {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #ffd59a 0%, #ffb160 52%, #ff6f6f 100%);
+    box-shadow: 0 0 14px rgba(255, 160, 92, 0.28);
+    transition: width 820ms linear, box-shadow 180ms ease;
+}
+
+body.map-shell .map-alert-timeline-note {
+    margin-top: 8px;
+    color: rgba(255, 239, 213, 0.82);
+    font-size: 0.72rem;
+    line-height: 1.4;
+    letter-spacing: 0.4px;
 }
 
 body.map-shell .map-alert-meta {
@@ -2989,6 +3255,20 @@ body.map-shell.view-zoomed-out .map-alert-desc {
     font-size: 0.76rem;
     line-height: 1.35;
     margin-bottom: 8px;
+}
+
+body.map-shell.view-zoomed-out .map-alert-ai-copy {
+    font-size: 0.66rem;
+    margin-bottom: 8px;
+}
+
+body.map-shell.view-zoomed-out .map-alert-timeline {
+    padding: 8px 10px;
+    margin-bottom: 8px;
+}
+
+body.map-shell.view-zoomed-out .map-alert-timeline-value {
+    font-size: 0.78rem;
 }
 
 body.map-shell.view-zoomed-out .map-alert-meta,

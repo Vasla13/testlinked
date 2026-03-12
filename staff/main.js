@@ -1,5 +1,4 @@
 import { gpsToPercentage, percentageToGps } from '../map/js/utils.js';
-import { createPickerBridge } from './picker-bridge.js';
 
 const STAFF_CODE = 'staff';
 const ALERTS_ENDPOINT = '/.netlify/functions/alerts';
@@ -32,6 +31,11 @@ const dom = {
     description: document.getElementById('alertDescription'),
     active: document.getElementById('alertActive'),
     startAt: document.getElementById('alertStartAt'),
+    showBeforeStart: document.getElementById('alertShowBeforeStart'),
+    startVisibilitySwitch: document.getElementById('staffStartVisibilitySwitch'),
+    startVisibilityHint: document.getElementById('staffStartVisibilityHint'),
+    startVisibilityWaitBtn: document.getElementById('btnAlertStartWait'),
+    startVisibilityShowNowBtn: document.getElementById('btnAlertStartShowNow'),
     strokeWidth: document.getElementById('alertStrokeWidth'),
     strokeWidthValue: document.getElementById('alertStrokeWidthValue'),
     audienceAllBtn: document.getElementById('btnAudienceAll'),
@@ -40,8 +44,8 @@ const dom = {
     whitelistInput: document.getElementById('staffWhitelistInput'),
     whitelistAddBtn: document.getElementById('btnAddWhitelistUser'),
     whitelistSuggestions: document.getElementById('staffWhitelistSuggestions'),
+    whitelistCount: document.getElementById('staffWhitelistCount'),
     whitelistList: document.getElementById('staffWhitelistList'),
-    pickOnMapBtn: document.getElementById('btnPickAlertOnMap'),
     viewport: document.getElementById('viewport'),
     mapWorld: document.getElementById('map-world'),
     mapImage: document.getElementById('map-image'),
@@ -54,6 +58,11 @@ const dom = {
     modalTitle: document.getElementById('staffAlertModalTitle'),
     modalCloseBtn: document.getElementById('btnAlertModalClose'),
     modalCancelBtn: document.getElementById('btnAlertModalCancel'),
+    confirmModal: document.getElementById('staff-confirm-modal'),
+    confirmTitle: document.getElementById('staffConfirmTitle'),
+    confirmMessage: document.getElementById('staffConfirmMessage'),
+    confirmCancelBtn: document.getElementById('btnStaffConfirmCancel'),
+    confirmOkBtn: document.getElementById('btnStaffConfirmOk'),
 };
 
 const state = {
@@ -84,6 +93,9 @@ const state = {
     audienceMode: 'all',
     allowedUsers: [],
     userDirectory: [],
+    whitelistLookupLoading: false,
+    whitelistLookupError: '',
+    whitelistLookupRequestId: 0,
     selectionDrag: null,
     contextMenuMapCoords: null,
     contextMenuOpen: false,
@@ -93,21 +105,11 @@ const state = {
         originAlert: null,
         originSelection: null,
     },
+    confirmSession: {
+        open: false,
+        resolve: null,
+    },
 };
-
-const pickerBridge = createPickerBridge({
-    pickerUrl: '../map/index.html?pickAlert=1',
-    targetOrigin: window.location.origin,
-    onPayload: (payload) => {
-        applyPickerSelection(payload);
-    },
-    onOpened: () => {
-        setStatusMessage('Carte dediee ouverte. Clique sur la carte pour rapatrier la position.', 'ok');
-    },
-    onBlocked: () => {
-        setStatusMessage('Popup bloquee. Autorise les fenetres puis reessaie.', 'error');
-    }
-});
 
 function escapeText(value) {
     return String(value ?? '')
@@ -152,6 +154,7 @@ function getAlertShapeLabel(alert) {
 function getAlertStateLabel(alert) {
     if (!alert) return 'Brouillon';
     if (alert.active === false) return 'Inactive';
+    if (isAlertPreview(alert)) return 'Visible';
     if (isAlertScheduled(alert)) return 'Programmee';
     return 'Live';
 }
@@ -159,6 +162,7 @@ function getAlertStateLabel(alert) {
 function getAlertStateTone(alert) {
     if (!alert) return 'muted';
     if (alert.active === false) return 'muted';
+    if (isAlertPreview(alert)) return 'live';
     if (isAlertScheduled(alert)) return 'warn';
     return 'live';
 }
@@ -192,9 +196,18 @@ function getScheduledStartDate(alert = state.currentAlert) {
     return toValidDate(alert?.startsAt || '');
 }
 
+function hasFutureStartDate(date) {
+    return Boolean(date && date.getTime() > Date.now());
+}
+
+function isAlertPreview(alert = state.currentAlert) {
+    const date = getScheduledStartDate(alert);
+    return Boolean(alert?.active !== false && hasFutureStartDate(date) && alert?.showBeforeStart === true);
+}
+
 function isAlertScheduled(alert = state.currentAlert) {
     const date = getScheduledStartDate(alert);
-    return Boolean(alert?.active !== false && date && date.getTime() > Date.now());
+    return Boolean(alert?.active !== false && hasFutureStartDate(date) && alert?.showBeforeStart !== true);
 }
 
 function getDraftStartDate() {
@@ -202,6 +215,40 @@ function getDraftStartDate() {
         return toValidDate(String(dom.startAt.value || '').trim());
     }
     return getScheduledStartDate(state.currentAlert);
+}
+
+function shouldDraftShowBeforeStart() {
+    return Boolean(dom.showBeforeStart?.checked) && hasFutureStartDate(getDraftStartDate());
+}
+
+function refreshStartVisibilityUi() {
+    const startDate = getDraftStartDate();
+    const hasFutureStart = hasFutureStartDate(startDate);
+
+    if (!hasFutureStart && dom.showBeforeStart) {
+        dom.showBeforeStart.checked = false;
+    }
+
+    const showBeforeStart = shouldDraftShowBeforeStart();
+    if (dom.startVisibilitySwitch) {
+        dom.startVisibilitySwitch.hidden = !hasFutureStart;
+    }
+    dom.startVisibilityWaitBtn?.classList.toggle('is-active', hasFutureStart && !showBeforeStart);
+    dom.startVisibilityShowNowBtn?.classList.toggle('is-active', showBeforeStart);
+    dom.startVisibilityWaitBtn?.setAttribute('aria-pressed', hasFutureStart && !showBeforeStart ? 'true' : 'false');
+    dom.startVisibilityShowNowBtn?.setAttribute('aria-pressed', showBeforeStart ? 'true' : 'false');
+
+    if (dom.startVisibilityHint) {
+        if (!startDate) {
+            dom.startVisibilityHint.textContent = 'Laisse vide pour afficher tout de suite.';
+        } else if (!hasFutureStart) {
+            dom.startVisibilityHint.textContent = 'La date est deja atteinte: l alerte sera visible maintenant.';
+        } else if (showBeforeStart) {
+            dom.startVisibilityHint.textContent = 'Visible des maintenant. La date garde la montee de pression sur la carte.';
+        } else {
+            dom.startVisibilityHint.textContent = 'L alerte reste cachee jusqu a la date choisie.';
+        }
+    }
 }
 
 function refreshAlertModePill() {
@@ -213,8 +260,8 @@ function refreshAlertModePill() {
     }
 
     const startDate = getDraftStartDate();
-    if (startDate && startDate.getTime() > Date.now()) {
-        dom.alertMode.textContent = 'Programmee';
+    if (hasFutureStartDate(startDate)) {
+        dom.alertMode.textContent = shouldDraftShowBeforeStart() ? 'Visible' : 'Programmee';
         return;
     }
 
@@ -225,6 +272,13 @@ function normalizeAudienceUsername(value) {
     const raw = String(value || '').trim().toLowerCase();
     const clean = raw.replace(/[^a-z0-9._-]/g, '');
     return clean.length >= 3 ? clean : '';
+}
+
+function normalizeAudienceQuery(value) {
+    return String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9._-]/g, '');
 }
 
 function sanitizeAllowedUsers(list) {
@@ -246,19 +300,62 @@ function audienceSummary() {
     return `${state.allowedUsers.length} user${state.allowedUsers.length > 1 ? 's' : ''}`;
 }
 
+function audienceDescription() {
+    if (state.audienceMode !== 'whitelist') {
+        return 'Tout le monde verra cette alerte.';
+    }
+    if (!state.allowedUsers.length) {
+        return 'Restreinte: ajoute un ou plusieurs usernames autorises.';
+    }
+    return `Restreinte a ${state.allowedUsers.length} username${state.allowedUsers.length > 1 ? 's' : ''}.`;
+}
+
+function renderWhitelistComposerState() {
+    const query = normalizeAudienceQuery(dom.whitelistInput?.value || '');
+    const canAdd = Boolean(query && !state.allowedUsers.includes(query));
+    if (dom.whitelistAddBtn) {
+        dom.whitelistAddBtn.disabled = !canAdd;
+    }
+    if (dom.whitelistCount) {
+        dom.whitelistCount.textContent = String(state.allowedUsers.length);
+    }
+}
+
+function hideWhitelistSuggestions() {
+    if (!dom.whitelistSuggestions) return;
+    dom.whitelistSuggestions.hidden = true;
+    dom.whitelistSuggestions.innerHTML = '';
+}
+
 function renderWhitelistSuggestions() {
     if (!dom.whitelistSuggestions) return;
-    const query = normalizeAudienceUsername(dom.whitelistInput?.value || '');
+    const query = normalizeAudienceQuery(dom.whitelistInput?.value || '');
+    if (!query || state.audienceMode !== 'whitelist') {
+        hideWhitelistSuggestions();
+        return;
+    }
+
     const visible = state.userDirectory
-        .filter((username) => !query || username.includes(query))
+        .filter((username) => username.includes(query))
         .filter((username) => !state.allowedUsers.includes(username))
         .slice(0, 10);
 
+    dom.whitelistSuggestions.hidden = false;
     dom.whitelistSuggestions.innerHTML = visible.map((username) => `
-        <button type="button" class="staff-whitelist-suggestion" data-user="${escapeText(username)}">${escapeText(username)}</button>
-    `).join('') || '<div class="staff-whitelist-empty">Aucune suggestion</div>';
+        <button type="button" class="staff-whitelist-suggestion" data-user="${escapeText(username)}">
+            <span class="staff-whitelist-suggestion-name">${escapeText(username)}</span>
+            <span class="staff-whitelist-suggestion-meta">cloud</span>
+        </button>
+    `).join('') || `
+        <div class="staff-whitelist-empty">
+            ${state.whitelistLookupLoading ? 'Recherche en cours...' : (state.whitelistLookupError || 'Aucun username correspondant')}
+        </div>
+    `;
 
     Array.from(dom.whitelistSuggestions.querySelectorAll('[data-user]')).forEach((button) => {
+        button.onmousedown = (event) => {
+            event.preventDefault();
+        };
         button.onclick = () => {
             const username = button.getAttribute('data-user') || '';
             addWhitelistUser(username);
@@ -273,7 +370,7 @@ function renderWhitelistList() {
             <span>${escapeText(username)}</span>
             <button type="button" data-remove-user="${escapeText(username)}">×</button>
         </div>
-    `).join('') || '<div class="staff-whitelist-empty">Aucun utilisateur ajoute</div>';
+    `).join('') || '<div class="staff-whitelist-empty">Aucun username autorise pour l instant.</div>';
 
     Array.from(dom.whitelistList.querySelectorAll('[data-remove-user]')).forEach((button) => {
         button.onclick = () => {
@@ -286,14 +383,25 @@ function renderWhitelistList() {
 
 function renderAudienceUi() {
     if (dom.audienceMode) {
-        dom.audienceMode.textContent = state.audienceMode === 'whitelist' ? 'Whitelist' : 'Tous';
+        dom.audienceMode.textContent = audienceDescription();
     }
     dom.audienceAllBtn?.classList.toggle('is-active', state.audienceMode === 'all');
     dom.audienceWhitelistBtn?.classList.toggle('is-active', state.audienceMode === 'whitelist');
+    dom.audienceAllBtn?.setAttribute('aria-pressed', state.audienceMode === 'all' ? 'true' : 'false');
+    dom.audienceWhitelistBtn?.setAttribute('aria-pressed', state.audienceMode === 'whitelist' ? 'true' : 'false');
     if (dom.whitelistPanel) {
         dom.whitelistPanel.hidden = state.audienceMode !== 'whitelist';
     }
-    renderWhitelistSuggestions();
+    if (state.audienceMode !== 'whitelist') {
+        state.userDirectory = [];
+        state.whitelistLookupLoading = false;
+        state.whitelistLookupError = '';
+        if (dom.whitelistInput) dom.whitelistInput.value = '';
+        hideWhitelistSuggestions();
+    } else {
+        renderWhitelistSuggestions();
+    }
+    renderWhitelistComposerState();
     renderWhitelistList();
 }
 
@@ -307,18 +415,49 @@ function addWhitelistUser(value) {
         state.allowedUsers = [...state.allowedUsers, username];
     }
     if (dom.whitelistInput) dom.whitelistInput.value = '';
+    state.userDirectory = [];
+    state.whitelistLookupLoading = false;
+    state.whitelistLookupError = '';
     renderAudienceUi();
+    if (state.audienceMode === 'whitelist') {
+        window.setTimeout(() => {
+            dom.whitelistInput?.focus();
+        }, 0);
+    }
 }
 
-async function loadUserDirectory() {
-    try {
-        const data = await requestAdmin('list_users');
-        state.userDirectory = Array.isArray(data.users) ? sanitizeAllowedUsers(data.users) : [];
-        renderAudienceUi();
-    } catch (error) {
+async function loadUserDirectory(query = '') {
+    const normalizedQuery = normalizeAudienceQuery(query);
+    const requestId = ++state.whitelistLookupRequestId;
+
+    if (!normalizedQuery || state.audienceMode !== 'whitelist') {
         state.userDirectory = [];
-        renderAudienceUi();
+        state.whitelistLookupLoading = false;
+        state.whitelistLookupError = '';
+        renderWhitelistSuggestions();
+        return [];
     }
+
+    state.whitelistLookupLoading = true;
+    state.whitelistLookupError = '';
+    renderWhitelistSuggestions();
+
+    try {
+        const data = await requestAdmin('list_users', { query: normalizedQuery });
+        if (requestId !== state.whitelistLookupRequestId) return state.userDirectory;
+        state.userDirectory = Array.isArray(data.users) ? sanitizeAllowedUsers(data.users) : [];
+    } catch (error) {
+        if (requestId !== state.whitelistLookupRequestId) return state.userDirectory;
+        state.userDirectory = [];
+        state.whitelistLookupError = 'Recherche indisponible';
+    } finally {
+        if (requestId === state.whitelistLookupRequestId) {
+            state.whitelistLookupLoading = false;
+            renderWhitelistSuggestions();
+        }
+    }
+
+    return state.userDirectory;
 }
 
 function isAlertModalOpen() {
@@ -347,27 +486,23 @@ function openAlertModal(options = {}) {
     }, 0);
 }
 
+function restoreAlertWorkspace(originAlert = null) {
+    const restoreAlert = cloneAlertRecord(originAlert);
+    state.currentAlert = restoreAlert;
+    if (restoreAlert) {
+        fillForm(restoreAlert, { focus: false });
+        return;
+    }
+    fillForm(null, { preserveSelection: false, focus: false });
+}
+
 function closeAlertModal(options = {}) {
     if (!dom.modal) return;
     const session = state.modalSession;
     dom.modal.hidden = true;
 
-    if (options.restore && session.openedFromDraw) {
-        const restoreAlert = cloneAlertRecord(session.originAlert);
-        state.currentAlert = restoreAlert;
-        if (restoreAlert) {
-            fillForm(restoreAlert, { focus: false });
-        } else {
-            fillForm(null, { preserveSelection: false, focus: false });
-        }
-        if (!restoreAlert && session.originSelection) {
-            setSelection(session.originSelection, {
-                syncForm: false,
-                resetDraft: true,
-            });
-        }
-    } else if (options.restore && state.currentAlert) {
-        fillForm(state.currentAlert, { focus: false });
+    if (options.restore) {
+        restoreAlertWorkspace(session.originAlert);
     }
 
     state.modalSession = {
@@ -378,6 +513,48 @@ function closeAlertModal(options = {}) {
     };
     renderBanner();
     refreshStatusCards();
+}
+
+function isConfirmModalOpen() {
+    return Boolean(dom.confirmModal && !dom.confirmModal.hidden);
+}
+
+function closeConfirmModal(result = false) {
+    if (!dom.confirmModal) return;
+    dom.confirmModal.hidden = true;
+    const resolver = state.confirmSession.resolve;
+    state.confirmSession = {
+        open: false,
+        resolve: null,
+    };
+    if (typeof resolver === 'function') {
+        resolver(Boolean(result));
+    }
+}
+
+function openConfirmModal(options = {}) {
+    if (!dom.confirmModal || !dom.confirmTitle || !dom.confirmMessage || !dom.confirmOkBtn) {
+        return Promise.resolve(false);
+    }
+    if (typeof state.confirmSession.resolve === 'function') {
+        state.confirmSession.resolve(false);
+    }
+    state.confirmSession = {
+        open: true,
+        resolve: null,
+    };
+    dom.confirmTitle.textContent = String(options.title || 'Confirmation');
+    dom.confirmMessage.textContent = String(options.message || 'Confirme cette action.');
+    dom.confirmOkBtn.textContent = String(options.confirmLabel || 'Confirmer');
+    dom.confirmOkBtn.classList.toggle('staff-confirm-danger', options.tone === 'danger');
+    dom.confirmModal.hidden = false;
+
+    return new Promise((resolve) => {
+        state.confirmSession.resolve = resolve;
+        window.setTimeout(() => {
+            dom.confirmOkBtn?.focus();
+        }, 0);
+    });
 }
 
 function renderAlertsList() {
@@ -766,25 +943,6 @@ function buildZoneSelection(points, radius = getCurrentRadius()) {
     };
 }
 
-function sanitizePickerPayload(payload) {
-    if (!payload || typeof payload !== 'object') return null;
-
-    const xPercent = Number(payload.xPercent);
-    const yPercent = Number(payload.yPercent);
-    const gpsX = Number(payload.gpsX);
-    const gpsY = Number(payload.gpsY);
-
-    if (!Number.isFinite(xPercent) || !Number.isFinite(yPercent)) return null;
-    if (!Number.isFinite(gpsX) || !Number.isFinite(gpsY)) return null;
-
-    return {
-        xPercent: Number(xPercent.toFixed(4)),
-        yPercent: Number(yPercent.toFixed(4)),
-        gpsX: Number(gpsX.toFixed(2)),
-        gpsY: Number(gpsY.toFixed(2)),
-    };
-}
-
 function updateRadiusUi(radius = getCurrentRadius()) {
     const value = clampRadius(radius);
     if (dom.radius) dom.radius.value = String(value);
@@ -867,7 +1025,6 @@ function openContextMenu(clientX, clientY) {
 function stopDrawingMode(options = {}) {
     const shouldRestore = Boolean(options.restoreBackup);
     const backupAlert = cloneAlertRecord(state.drawBackupAlert);
-    const backupSelection = cloneSelection(state.drawBackupSelection);
     state.drawMode = false;
     state.drawType = '';
     state.drawCircleDraft = null;
@@ -880,19 +1037,8 @@ function stopDrawingMode(options = {}) {
         state.drawBackupSelection = null;
     }
     if (shouldRestore) {
-        state.currentAlert = backupAlert;
-        if (backupAlert) {
-            fillForm(backupAlert, { focus: false });
-            return;
-        }
-        if (backupSelection) {
-            fillForm(null, { preserveSelection: false, focus: false });
-            setSelection(backupSelection, {
-                syncForm: false,
-                resetDraft: true,
-            });
-            return;
-        }
+        restoreAlertWorkspace(backupAlert);
+        return;
     }
     renderSelection();
     renderBanner();
@@ -1246,13 +1392,17 @@ function refreshStatusCards() {
     const current = state.currentAlert;
     const activeCircle = getActiveCircle(selection);
     const circleCount = getSelectionCircles(selection).length;
+    const draftHasFutureStart = Boolean(dom.active?.checked) && hasFutureStartDate(getDraftStartDate());
+    const draftPreview = isAlertModalOpen() && draftHasFutureStart && shouldDraftShowBeforeStart();
+    const draftScheduled = isAlertModalOpen() && draftHasFutureStart && !shouldDraftShowBeforeStart();
 
     if (dom.statusState) {
         if (!state.unlocked) dom.statusState.textContent = 'Verrouille';
         else if (!current && (selection || String(dom.title?.value || '').trim() || String(dom.description?.value || '').trim())) dom.statusState.textContent = 'Pret';
         else if (!current) dom.statusState.textContent = 'Brouillon';
         else if (current.active === false) dom.statusState.textContent = 'Inactive';
-        else if (isAlertScheduled(current)) dom.statusState.textContent = 'Programmee';
+        else if (draftPreview || isAlertPreview(current)) dom.statusState.textContent = 'Visible';
+        else if (draftScheduled || isAlertScheduled(current)) dom.statusState.textContent = 'Programmee';
         else dom.statusState.textContent = 'Active';
     }
     const coordsLabel = selection
@@ -1312,6 +1462,9 @@ function renderBanner() {
     }
     if (startDate) {
         meta += ` • Diffusion ${formatAlertDateTime(startDate)}`;
+        if (shouldDraftShowBeforeStart()) {
+            meta += ' • deja visible';
+        }
     }
 
     dom.mapBanner.hidden = false;
@@ -1360,33 +1513,6 @@ function setSelection(selection, options = {}) {
     renderSelection();
     renderBanner();
     refreshStatusCards();
-}
-
-function applyPickerSelection(payload) {
-    const safePayload = sanitizePickerPayload(payload);
-    if (!safePayload) {
-        setStatusMessage('Position recue invalide.', 'warn');
-        return;
-    }
-
-    const nextSelection = buildCircleSelection([
-        ...getSelectionCircles(),
-        {
-            xPercent: safePayload.xPercent,
-            yPercent: safePayload.yPercent,
-            gpsX: safePayload.gpsX,
-            gpsY: safePayload.gpsY,
-            radius: getCurrentRadius(),
-        },
-    ]);
-
-    setSelection(nextSelection, {
-        syncForm: true,
-        resetDraft: true,
-    });
-
-    focusSelection();
-    setStatusMessage('Cercle ajoute depuis la carte dediee.', 'ok');
 }
 
 function finalizeZoneDraft(options = {}) {
@@ -1481,6 +1607,7 @@ function readDraftAlert() {
         allowedUsers,
         active: Boolean(dom.active?.checked),
         startsAt,
+        showBeforeStart: shouldDraftShowBeforeStart(),
     };
 }
 
@@ -1499,6 +1626,7 @@ function fillForm(alert, options = {}) {
         dom.description.value = '';
         dom.active.checked = true;
         if (dom.startAt) dom.startAt.value = '';
+        if (dom.showBeforeStart) dom.showBeforeStart.checked = false;
         state.audienceMode = 'all';
         state.allowedUsers = [];
         if (dom.publishBtn) dom.publishBtn.textContent = 'Publier';
@@ -1511,6 +1639,7 @@ function fillForm(alert, options = {}) {
             renderBanner();
             refreshStatusCards();
         }
+        refreshStartVisibilityUi();
         renderAudienceUi();
         refreshAlertModePill();
         updateAlertModalTitle();
@@ -1524,11 +1653,13 @@ function fillForm(alert, options = {}) {
     dom.description.value = String(alert.description || '');
     dom.active.checked = alert.active !== false;
     if (dom.startAt) dom.startAt.value = toLocalDateTimeInputValue(alert.startsAt || '');
+    if (dom.showBeforeStart) dom.showBeforeStart.checked = alert.showBeforeStart === true;
     state.audienceMode = alert.visibilityMode === 'whitelist' ? 'whitelist' : 'all';
     state.allowedUsers = sanitizeAllowedUsers(alert.allowedUsers);
     if (dom.publishBtn) dom.publishBtn.textContent = 'Mettre a jour';
     updateRadiusUi(alert.radius || DEFAULT_RADIUS);
     updateStrokeWidthUi(alert.strokeWidth || DEFAULT_STROKE_WIDTH);
+    refreshStartVisibilityUi();
     renderAudienceUi();
     refreshAlertModePill();
     updateAlertModalTitle();
@@ -1736,20 +1867,14 @@ function resetToNewAlertDraft(options = {}) {
     setStatusMessage('Trace une nouvelle alerte sur la carte.', 'ok');
 }
 
-function openPickerMapWindow() {
-    if (!state.unlocked) {
-        setStatusMessage('Deverrouille la console avant d’ouvrir la carte dediee.', 'warn');
-        return;
-    }
-    pickerBridge.open();
-}
-
 async function loadCurrentAlert() {
     await loadAlerts({ keepCurrent: true });
     refreshStatusCards();
     if (state.currentAlert) {
         if (state.currentAlert.active === false) {
             setStatusMessage('Alerte chargee en brouillon.', 'warn');
+        } else if (isAlertPreview(state.currentAlert)) {
+            setStatusMessage(`Alerte visible, diffusion fixee pour ${formatAlertDateTime(state.currentAlert.startsAt)}.`, 'ok');
         } else if (isAlertScheduled(state.currentAlert)) {
             setStatusMessage(`Alerte programmee pour ${formatAlertDateTime(state.currentAlert.startsAt)}.`, 'warn');
         } else {
@@ -1776,6 +1901,8 @@ async function saveAlert() {
         notifyPublicAlertRefresh();
         if (state.currentAlert?.active === false) {
             setStatusMessage('Alerte sauvegardee en brouillon.', 'warn');
+        } else if (isAlertPreview(state.currentAlert)) {
+            setStatusMessage(`Alerte visible maintenant, diffusion fixee pour ${formatAlertDateTime(state.currentAlert.startsAt)}.`, 'ok');
         } else if (isAlertScheduled(state.currentAlert)) {
             setStatusMessage(`Alerte programmee pour ${formatAlertDateTime(state.currentAlert.startsAt)}.`, 'ok');
         } else {
@@ -1792,7 +1919,14 @@ async function deleteAlert(targetId = getAlertId()) {
         setStatusMessage('Aucune alerte a supprimer.', 'warn');
         return;
     }
-    if (!window.confirm('Supprimer cette alerte ?')) return;
+    const targetAlert = (Array.isArray(state.alerts) ? state.alerts : []).find((alert) => getAlertId(alert) === deleteId) || state.currentAlert;
+    const confirmed = await openConfirmModal({
+        title: 'Supprimer l alerte',
+        message: `"${String(targetAlert?.title || 'Alerte sans titre')}" sera retiree de la carte et de la home.`,
+        confirmLabel: 'Supprimer',
+        tone: 'danger',
+    });
+    if (!confirmed) return;
 
     try {
         await requestAdmin('delete', { id: deleteId });
@@ -2068,7 +2202,6 @@ function unlockConsole() {
     loadCurrentAlert().catch((error) => {
         setStatusMessage(error.message || 'Impossible de charger les alertes.', 'error');
     });
-    loadUserDirectory().catch(() => {});
     scheduleMapView(Boolean(state.selection));
 }
 
@@ -2094,9 +2227,10 @@ function bindEvents() {
     });
 
     dom.publishBtn?.addEventListener('click', saveAlert);
-    dom.pickOnMapBtn?.addEventListener('click', openPickerMapWindow);
     dom.modalCloseBtn?.addEventListener('click', () => closeAlertModal({ restore: true }));
     dom.modalCancelBtn?.addEventListener('click', () => closeAlertModal({ restore: true }));
+    dom.confirmCancelBtn?.addEventListener('click', () => closeConfirmModal(false));
+    dom.confirmOkBtn?.addEventListener('click', () => closeConfirmModal(true));
     dom.ctxNewZone?.addEventListener('click', startCircleDraw);
     dom.ctxNewFreeZone?.addEventListener('click', startFreeDraw);
     dom.ctxCancel?.addEventListener('click', closeContextMenu);
@@ -2154,6 +2288,23 @@ function bindEvents() {
         refreshStatusCards();
     });
     dom.startAt?.addEventListener('input', () => {
+        refreshStartVisibilityUi();
+        refreshAlertModePill();
+        renderBanner();
+        refreshStatusCards();
+    });
+    dom.startVisibilityWaitBtn?.addEventListener('click', () => {
+        if (!hasFutureStartDate(getDraftStartDate())) return;
+        if (dom.showBeforeStart) dom.showBeforeStart.checked = false;
+        refreshStartVisibilityUi();
+        refreshAlertModePill();
+        renderBanner();
+        refreshStatusCards();
+    });
+    dom.startVisibilityShowNowBtn?.addEventListener('click', () => {
+        if (!hasFutureStartDate(getDraftStartDate())) return;
+        if (dom.showBeforeStart) dom.showBeforeStart.checked = true;
+        refreshStartVisibilityUi();
         refreshAlertModePill();
         renderBanner();
         refreshStatusCards();
@@ -2165,9 +2316,24 @@ function bindEvents() {
     dom.audienceWhitelistBtn?.addEventListener('click', () => {
         state.audienceMode = 'whitelist';
         renderAudienceUi();
+        window.setTimeout(() => {
+            dom.whitelistInput?.focus();
+        }, 0);
     });
     dom.whitelistAddBtn?.addEventListener('click', () => addWhitelistUser(dom.whitelistInput?.value || ''));
-    dom.whitelistInput?.addEventListener('input', () => renderWhitelistSuggestions());
+    dom.whitelistInput?.addEventListener('input', () => {
+        renderWhitelistComposerState();
+        loadUserDirectory(dom.whitelistInput?.value || '').catch(() => {});
+    });
+    dom.whitelistInput?.addEventListener('focus', () => {
+        renderWhitelistComposerState();
+        loadUserDirectory(dom.whitelistInput?.value || '').catch(() => {});
+    });
+    dom.whitelistInput?.addEventListener('blur', () => {
+        window.setTimeout(() => {
+            hideWhitelistSuggestions();
+        }, 120);
+    });
     dom.whitelistInput?.addEventListener('keydown', (event) => {
         if (event.key === 'Enter') {
             event.preventDefault();
@@ -2196,13 +2362,22 @@ function bindEvents() {
         }
     });
 
+    dom.confirmModal?.addEventListener('click', (event) => {
+        if (event.target === dom.confirmModal) {
+            closeConfirmModal(false);
+        }
+    });
+
     window.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && isConfirmModalOpen()) {
+            closeConfirmModal(false);
+            return;
+        }
         if (event.key === 'Escape' && isAlertModalOpen()) {
             closeAlertModal({ restore: true });
         }
     });
 
-    pickerBridge.bind();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -2213,6 +2388,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderAudienceUi();
     renderAlertsList();
     updateAlertModalTitle();
+    refreshStartVisibilityUi();
     refreshAlertModePill();
     refreshStatusCards();
     renderBanner();

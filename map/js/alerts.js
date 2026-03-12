@@ -8,6 +8,8 @@ const ALERTS_ENDPOINT = '/.netlify/functions/alerts';
 const ALERT_REFRESH_EVENT_KEY = 'bniAlertRefresh_v1';
 const ALERT_REFRESH_CHANNEL = 'bni-alert-refresh';
 const ALERT_POLL_MS = 6000;
+const ALERT_APPROACH_FALLBACK_WINDOW_MS = 28 * 24 * 60 * 60 * 1000;
+const ALERT_TIMELINE_TICK_MS = 1000;
 const COLLAB_SESSION_STORAGE_KEY = 'bniLinkedCollabSession_v1';
 const MAP_ALERT_SEEN_STORAGE_KEY = 'bniMapAlertSeen_v2';
 const MAP_ALERT_CLICK_EVENT = 'bni:map-alert-click';
@@ -18,6 +20,7 @@ const alertUiState = {
     activeBannerKey: '',
     clickListenerBound: false,
     positionFrame: 0,
+    timelineTimer: 0,
 };
 
 function escapeText(value) {
@@ -27,6 +30,177 @@ function escapeText(value) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
+}
+
+function toValidDate(value) {
+    const date = value instanceof Date ? value : new Date(value);
+    return Number.isFinite(date.getTime()) ? date : null;
+}
+
+function formatAlertDateTime(value) {
+    const date = toValidDate(value);
+    if (!date) return '';
+    return new Intl.DateTimeFormat('fr-FR', {
+        dateStyle: 'short',
+        timeStyle: 'short',
+    }).format(date);
+}
+
+function formatRemainingTime(ms) {
+    if (!Number.isFinite(ms) || ms <= 0) return 'maintenant';
+    const totalMinutes = Math.max(1, Math.ceil(ms / 60000));
+    const days = Math.floor(totalMinutes / 1440);
+    const hours = Math.floor((totalMinutes % 1440) / 60);
+    const minutes = totalMinutes % 60;
+
+    if (days > 0) {
+        return `dans ${days} j${hours ? ` ${hours} h` : ''}`;
+    }
+    if (hours > 0) {
+        return `dans ${hours} h${minutes ? ` ${minutes} min` : ''}`;
+    }
+    return `dans ${minutes} min`;
+}
+
+function isScheduledAlert(alert) {
+    const startsAt = toValidDate(alert?.startsAt || '');
+    return Boolean(startsAt && startsAt.getTime() > Date.now());
+}
+
+function isAlertVisibleOnMap(alert) {
+    if (!alert || alert.active === false) return false;
+    if (isScheduledAlert(alert) && alert.showBeforeStart !== true) return false;
+    return true;
+}
+
+function hashUnit(value) {
+    const text = String(value || '');
+    let hash = 2166136261;
+    for (let index = 0; index < text.length; index += 1) {
+        hash ^= text.charCodeAt(index);
+        hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0) / 4294967295;
+}
+
+function getAlertApproachSeed(alert) {
+    return [
+        String(alert?.id || ''),
+        String(alert?.startsAt || ''),
+        String(alert?.createdAt || ''),
+        String(alert?.updatedAt || ''),
+        String(alert?.title || ''),
+    ].join('::');
+}
+
+function getAlertApproachReferenceMs(alert, startMs) {
+    const dates = [alert?.createdAt, alert?.updatedAt]
+        .map((value) => toValidDate(value))
+        .filter(Boolean)
+        .map((date) => date.getTime())
+        .filter((timestamp) => timestamp < startMs);
+    if (dates.length) {
+        return Math.min(...dates);
+    }
+    return startMs - ALERT_APPROACH_FALLBACK_WINDOW_MS;
+}
+
+function computeAlertApproachScore(alert, timestamp = Date.now()) {
+    const startsAt = toValidDate(alert?.startsAt || '');
+    if (!startsAt) return null;
+
+    const startMs = startsAt.getTime();
+    if (timestamp >= startMs) return 100;
+
+    const remainingMs = Math.max(0, startMs - timestamp);
+    const referenceMs = getAlertApproachReferenceMs(alert, startMs);
+    const totalWindowMs = Math.max(60 * 60 * 1000, startMs - referenceMs);
+    const linearProgress = clamp(1 - (remainingMs / totalWindowMs), 0, 1);
+    const pressure = Math.pow(linearProgress, 0.28);
+    const seed = getAlertApproachSeed(alert);
+    const secondBucket = Math.floor(timestamp / ALERT_TIMELINE_TICK_MS);
+    const fastWave = Math.sin(
+        (timestamp / 1000) * (0.72 + (hashUnit(`${seed}:freq-fast`) * 0.42))
+        + (hashUnit(`${seed}:phase-fast`) * Math.PI * 2)
+    );
+    const slowWave = Math.sin(
+        (timestamp / 4200) * (0.64 + (hashUnit(`${seed}:freq-slow`) * 0.3))
+        + (hashUnit(`${seed}:phase-slow`) * Math.PI * 2)
+    );
+    const pulseNoise = ((hashUnit(`${seed}:pulse:${secondBucket}`) * 2) - 1) * 0.85;
+    const driftNoise = ((hashUnit(`${seed}:drift:${Math.floor(secondBucket / 6)}`) * 2) - 1) * 0.55;
+    const volatility = ((1 - pressure) * 18) + 1.25;
+    const baseline = 7 + (pressure * 84);
+    const floor = Math.min(99.2, 5 + (pressure * 87));
+    let score = baseline + ((fastWave * 0.45) + (slowWave * 0.28) + pulseNoise + driftNoise) * volatility;
+
+    if (remainingMs <= 72 * 60 * 60 * 1000) {
+        const closeRatio = 1 - (remainingMs / (72 * 60 * 60 * 1000));
+        score = Math.max(score, 54 + (Math.pow(closeRatio, 0.58) * 34));
+    }
+    if (remainingMs <= 6 * 60 * 60 * 1000) {
+        score = Math.max(score, 83 + ((1 - (remainingMs / (6 * 60 * 60 * 1000))) * 12));
+    }
+    if (remainingMs <= 60 * 60 * 1000) {
+        score = Math.max(score, 94 + ((1 - (remainingMs / (60 * 60 * 1000))) * 4.6));
+    }
+    if (remainingMs <= 15 * 60 * 1000) {
+        score = Math.max(score, 98 + ((1 - (remainingMs / (15 * 60 * 1000))) * 1.7));
+    }
+
+    return Number(clamp(score, floor, 99.6).toFixed(1));
+}
+
+function getAlertTimeline(alert) {
+    const startsAt = toValidDate(alert?.startsAt || '');
+    if (!startsAt) return null;
+
+    const startMs = startsAt.getTime();
+    const now = Date.now();
+    const remainingMs = startMs - now;
+    const scheduled = remainingMs > 0;
+    const progress = scheduled
+        ? (computeAlertApproachScore(alert, now) ?? 0)
+        : 100;
+    const previousProgress = scheduled
+        ? (computeAlertApproachScore(alert, now - ALERT_TIMELINE_TICK_MS) ?? progress)
+        : 100;
+    const delta = Number((progress - previousProgress).toFixed(1));
+
+    let tone = 'low';
+    if (remainingMs <= 15 * 60 * 1000 || progress >= 97) tone = 'critical';
+    else if (remainingMs <= 6 * 60 * 60 * 1000 || progress >= 84) tone = 'high';
+    else if (remainingMs <= 72 * 60 * 60 * 1000 || progress >= 56) tone = 'mid';
+
+    let signalLabel = 'telemetrie stable';
+    if (delta >= 0.6) {
+        signalLabel = `recalage offensif +${Math.max(1, Math.round(Math.abs(delta)))}%`;
+    } else if (delta <= -0.6) {
+        signalLabel = `recalage defensif -${Math.max(1, Math.round(Math.abs(delta)))}%`;
+    }
+
+    return {
+        scheduled,
+        startsAt,
+        startsAtLabel: formatAlertDateTime(startsAt),
+        remainingMs,
+        remainingLabel: scheduled ? formatRemainingTime(remainingMs) : 'en cours',
+        progress: Number(progress.toFixed(1)),
+        progressPercent: Math.round(progress),
+        delta,
+        signalLabel,
+        tone,
+    };
+}
+
+function getAlertCounterLabel(alerts = []) {
+    const list = Array.isArray(alerts) ? alerts : [];
+    const liveCount = list.filter((alert) => !isScheduledAlert(alert)).length;
+    const scheduledCount = list.length - liveCount;
+    if (liveCount && scheduledCount) return `${liveCount} live • ${scheduledCount} approche`;
+    if (scheduledCount > 1) return `${scheduledCount} en approche`;
+    if (scheduledCount === 1) return 'En approche';
+    return list.length > 1 ? `${list.length} actives` : '1 active';
 }
 
 function getAlertBanner() {
@@ -41,9 +215,12 @@ function getAlertKey(alert) {
     if (!alert || typeof alert !== 'object') return '';
     const gpsX = Number.isFinite(Number(alert.gpsX)) ? Number(alert.gpsX).toFixed(2) : '';
     const gpsY = Number.isFinite(Number(alert.gpsY)) ? Number(alert.gpsY).toFixed(2) : '';
+    const phase = isScheduledAlert(alert) ? 'scheduled' : 'live';
     return [
         String(alert.id || ''),
+        phase,
         String(alert.updatedAt || ''),
+        String(alert.startsAt || ''),
         String(alert.title || ''),
         gpsX,
         gpsY
@@ -202,6 +379,10 @@ function sanitizeAlert(raw) {
         circles,
         activeCircleIndex: Number.isInteger(Number(raw.activeCircleIndex)) ? Number(raw.activeCircleIndex) : (circles.length ? circles.length - 1 : -1),
         active: raw.active !== false,
+        scheduled: raw.scheduled === true,
+        startsAt: String(raw.startsAt || ''),
+        showBeforeStart: raw.showBeforeStart === true,
+        createdAt: String(raw.createdAt || ''),
         updatedAt: String(raw.updatedAt || ''),
     };
     if (alert.shapeType === 'zone') {
@@ -429,20 +610,42 @@ function renderAlertBanner(alerts) {
 
     if (!alert || !visibleAlerts.length) {
         banner.hidden = true;
+        delete banner.dataset.phase;
         banner.innerHTML = '';
         return;
     }
 
+    const timeline = getAlertTimeline(alert);
+    const isScheduled = Boolean(timeline?.scheduled);
+    const scheduleMarkup = isScheduled ? `
+        <div class="map-alert-timeline" data-tone="${escapeText(timeline.tone)}">
+            <div class="map-alert-timeline-head">
+                <span class="map-alert-timeline-label">Projection IA</span>
+                <strong class="map-alert-timeline-value">${timeline.progressPercent}%</strong>
+            </div>
+            <div class="map-alert-progress" aria-hidden="true">
+                <span class="map-alert-progress-fill" style="width:${timeline.progress}%"></span>
+            </div>
+            <div class="map-alert-timeline-note">Fenetre ${escapeText(timeline.startsAtLabel)} • ${escapeText(timeline.remainingLabel)} • ${escapeText(timeline.signalLabel)}</div>
+        </div>
+    ` : '';
+    const metaParts = [`GPS ${alert.gpsX.toFixed(2)} / ${alert.gpsY.toFixed(2)}`];
+    if (!isScheduled && timeline?.startsAtLabel) {
+        metaParts.push(`diffusee ${timeline.startsAtLabel}`);
+    }
+
     banner.hidden = false;
+    banner.dataset.phase = isScheduled ? 'scheduled' : 'live';
     banner.innerHTML = `
-        <div class="map-alert-callout-card">
+        <div class="map-alert-callout-card" data-phase="${isScheduled ? 'scheduled' : 'live'}">
             <div class="map-alert-head">
-                <div class="map-alert-kicker">Alertes BNI</div>
-                <div class="map-alert-counter">${visibleAlerts.length > 1 ? `${visibleAlerts.length} actives` : '1 active'}</div>
+                <div class="map-alert-kicker">${isScheduled ? 'Prediction IA BNI' : 'Alerte BNI'}</div>
+                <div class="map-alert-counter">${getAlertCounterLabel(visibleAlerts)}</div>
             </div>
             <div class="map-alert-title">${escapeText(alert.title)}</div>
             <div class="map-alert-desc">${escapeText(alert.description)}</div>
-            <div class="map-alert-meta">GPS ${alert.gpsX.toFixed(2)} / ${alert.gpsY.toFixed(2)}</div>
+            ${scheduleMarkup}
+            <div class="map-alert-meta">${escapeText(metaParts.join(' • '))}</div>
             <div id="map-alert-nav" class="map-alert-nav" ${visibleAlerts.length > 1 ? '' : 'hidden'}>
                 <button type="button" id="map-alert-prev" class="mini-btn map-alert-nav-btn" aria-label="Alerte precedente">‹</button>
                 <div class="map-alert-nav-label">${alertUiState.activeBannerIndex + 1} / ${visibleAlerts.length}</div>
@@ -495,17 +698,24 @@ function bindAlertClickListener() {
     });
 }
 
+function shouldAnimateAlertTimeline() {
+    const alert = getCurrentBannerAlert(state.activeAlerts);
+    const startsAt = toValidDate(alert?.startsAt || '');
+    if (!startsAt) return false;
+    return startsAt.getTime() > (Date.now() - ALERT_TIMELINE_TICK_MS);
+}
+
 function sanitizeAlertList(rawAlerts = []) {
     return (Array.isArray(rawAlerts) ? rawAlerts : [])
         .map((entry) => sanitizeAlert(entry))
-        .filter(Boolean);
+        .filter((entry) => isAlertVisibleOnMap(entry));
 }
 
 async function fetchAlertPayload(id = '') {
     const session = readViewerSession();
     const query = id
-        ? `id=${encodeURIComponent(id)}&t=${Date.now()}`
-        : `t=${Date.now()}`;
+        ? `id=${encodeURIComponent(id)}&includeScheduled=1&t=${Date.now()}`
+        : `includeScheduled=1&t=${Date.now()}`;
     const response = await fetch(`${ALERTS_ENDPOINT}?${query}`, {
         method: 'GET',
         cache: 'no-store',
@@ -518,7 +728,10 @@ async function fetchAlertPayload(id = '') {
         throw new Error(data.error || `Erreur alerte (${response.status})`);
     }
     return {
-        alert: sanitizeAlert(data.alert),
+        alert: (() => {
+            const alert = sanitizeAlert(data.alert);
+            return isAlertVisibleOnMap(alert) ? alert : null;
+        })(),
         alerts: sanitizeAlertList(data.alerts),
     };
 }
@@ -582,6 +795,14 @@ function startAlertRefreshLoop() {
     if (alertRefreshStarted) return;
     alertRefreshStarted = true;
     bindAlertClickListener();
+
+    if (!alertUiState.timelineTimer) {
+        alertUiState.timelineTimer = window.setInterval(() => {
+            if (document.visibilityState === 'hidden') return;
+            if (!shouldAnimateAlertTimeline()) return;
+            renderAlertBanner(state.activeAlerts);
+        }, ALERT_TIMELINE_TICK_MS);
+    }
 
     window.setInterval(() => {
         refreshMapAlert({ silent: true }).catch(() => {});

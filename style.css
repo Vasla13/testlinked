@@ -394,8 +394,8 @@ body.app-loading .help-overlay {
 /* FOOTER COMPACT */
 .footer-info {
     position: relative; margin-top: 2vh; width: 100%; text-align: center;
-    font-family: var(--font-code); font-size: 0.75rem; color: #aaa; font-weight: bold;
-    text-transform: uppercase; letter-spacing: 2px;
+    font-family: var(--font-code); font-size: 0.84rem; color: #b6c2cf; font-weight: bold;
+    text-transform: uppercase; letter-spacing: 2.2px;
     flex-shrink: 0;
 }
 
@@ -974,7 +974,7 @@ body.help-active .help-fab {
     right: 24px;
     bottom: 84px;
     z-index: 9500;
-    width: min(360px, calc(100vw - 28px));
+    width: min(388px, calc(100vw - 28px));
     padding: 16px 16px 14px;
     border: 1px solid rgba(255, 107, 129, 0.46);
     background:
@@ -984,6 +984,43 @@ body.help-active .help-fab {
     cursor: pointer;
     clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 18px 100%, 0 calc(100% - 18px));
     animation: alertPopupIn 0.28s ease;
+    overflow: hidden;
+    isolation: isolate;
+}
+
+.site-alert-popup::before,
+.site-alert-popup::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.site-alert-popup::before {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 26%),
+        repeating-linear-gradient(180deg, rgba(255, 194, 205, 0.038) 0 1px, transparent 1px 9px);
+    opacity: 0.7;
+}
+
+.site-alert-popup::after {
+    inset: auto 0 0;
+    height: 3px;
+    background: linear-gradient(90deg, rgba(255, 107, 129, 0.18), rgba(255, 170, 94, 0.9), rgba(255, 107, 129, 0.18));
+    box-shadow: 0 0 18px rgba(255, 151, 120, 0.35);
+}
+
+.site-alert-popup[data-phase="scheduled"] {
+    border-color: rgba(255, 196, 120, 0.42);
+    background:
+        linear-gradient(160deg, rgba(39, 18, 8, 0.97), rgba(18, 10, 8, 0.94)),
+        radial-gradient(circle at top right, rgba(255, 205, 122, 0.16), transparent 56%);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.52), 0 0 24px rgba(255, 183, 92, 0.14);
+}
+
+.site-alert-popup > * {
+    position: relative;
+    z-index: 1;
 }
 
 body.app-loading .site-alert-popup {
@@ -994,18 +1031,61 @@ body.app-loading .site-alert-popup {
 
 .site-alert-head {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
     gap: 10px;
+    margin-bottom: 8px;
+    padding-right: 34px;
+}
+
+.site-alert-title-block {
+    min-width: 0;
 }
 
 .site-alert-kicker {
     color: #ffb4c1;
-    font-size: 0.72rem;
+    font-size: 0.68rem;
     letter-spacing: 2px;
     text-transform: uppercase;
     font-weight: 700;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
+}
+
+.site-alert-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 9px;
+    border: 1px solid rgba(255, 214, 222, 0.16);
+    background: rgba(255, 255, 255, 0.045);
+    color: #fff3f5;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+}
+
+.site-alert-state-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #ff6b81;
+    box-shadow: 0 0 12px rgba(255, 107, 129, 0.6);
+    animation: siteAlertPulse 1.2s ease-in-out infinite;
+}
+
+.site-alert-popup[data-phase="scheduled"] .site-alert-kicker {
+    color: #ffd59c;
+}
+
+.site-alert-popup[data-phase="scheduled"] .site-alert-state {
+    border-color: rgba(255, 214, 145, 0.18);
+    color: #fff2da;
+}
+
+.site-alert-popup[data-phase="scheduled"] .site-alert-state-dot {
+    background: #ffb160;
+    box-shadow: 0 0 12px rgba(255, 177, 96, 0.62);
 }
 
 .site-alert-counter {
@@ -1021,24 +1101,36 @@ body.app-loading .site-alert-popup {
 
 .site-alert-title {
     color: #fff2f4;
-    font-size: 1.1rem;
+    font-size: 1.08rem;
     font-weight: 800;
     letter-spacing: 0.8px;
     margin-bottom: 8px;
+    line-height: 1.1;
 }
 
 .site-alert-desc {
     color: rgba(255, 235, 239, 0.86);
-    font-size: 0.88rem;
+    font-size: 0.85rem;
     line-height: 1.45;
-    margin-bottom: 10px;
+    margin-bottom: 12px;
 }
 
 .site-alert-meta {
     color: #ffcf96;
-    font-size: 0.74rem;
+    font-size: 0.68rem;
     letter-spacing: 1px;
     text-transform: uppercase;
+    line-height: 1.45;
+    padding: 10px 12px;
+    border: 1px solid rgba(255, 214, 145, 0.14);
+    background: rgba(255, 255, 255, 0.045);
+}
+
+.site-alert-note {
+    margin-top: 8px;
+    color: rgba(255, 240, 213, 0.82);
+    font-size: 0.75rem;
+    line-height: 1.45;
 }
 
 .site-alert-open,
@@ -1071,7 +1163,7 @@ body.app-loading .site-alert-popup {
 }
 
 .site-alert-nav {
-    margin-top: 10px;
+    margin-top: 12px;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -1098,8 +1190,8 @@ body.app-loading .site-alert-popup {
 
 .site-alert-close {
     position: absolute;
-    top: 8px;
-    right: 10px;
+    top: 12px;
+    right: 12px;
     width: 28px;
     height: 28px;
     border: 0;
@@ -1107,6 +1199,18 @@ body.app-loading .site-alert-popup {
     color: rgba(255, 214, 222, 0.9);
     font-size: 1rem;
     cursor: pointer;
+    z-index: 2;
+}
+
+@keyframes siteAlertPulse {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 0.88;
+    }
+    50% {
+        transform: scale(1.12);
+        opacity: 1;
+    }
 }
 
 .staff-admin-fab {
@@ -1330,7 +1434,7 @@ body.app-loading .site-alert-popup {
 
     .footer-info {
         margin-top: 1vh;
-        font-size: 0.68rem;
+        font-size: 0.74rem;
     }
 }
 

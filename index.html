@@ -101,7 +101,7 @@
         </div>
 
         <div class="footer-info" id="footer">
-            LOGICIEL DE LA BNI // DEV: DUTCH COLEMAN
+            LOGICIEL DE LA BNI // DEV : DUTCH COLEMAN 555-86999
         </div>
     </div>
 
@@ -436,42 +436,7 @@
 
             function setupModuleAccessGate() {
                 loadModuleSession();
-                ensureModuleSession()
-                    .then((hasSession) => {
-                        if (hasSession || moduleGate.guestMode) return;
-                        const seenKey = 'bniAuthPromptSeen_v1';
-                        const alreadySeen = sessionStorage.getItem(seenKey) === '1';
-                        if (!alreadySeen) {
-                            sessionStorage.setItem(seenKey, '1');
-                            showAuthOverlay('');
-                        }
-                    })
-                    .catch(() => {});
-
-                const links = [
-                    document.getElementById('module-reticule'),
-                    document.getElementById('module-tactique')
-                ].filter(Boolean);
-
-                links.forEach((link) => {
-                    link.addEventListener('click', async (event) => {
-                        event.preventDefault();
-                        const targetHref = link.getAttribute('href');
-                        if (!targetHref) return;
-
-                        if (moduleGate.guestMode) {
-                            window.location.href = targetHref;
-                            return;
-                        }
-
-                        const hasSession = await ensureModuleSession();
-                        if (hasSession) {
-                            window.location.href = targetHref;
-                            return;
-                        }
-                        showAuthOverlay(targetHref);
-                    });
-                });
+                ensureModuleSession().catch(() => {});
             }
 
             function setupWelcomeLinkCopy() {

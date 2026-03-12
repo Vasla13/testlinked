@@ -1440,14 +1440,32 @@ async function renderCloudHome() {
         openCloudModal(
             'CLOUD COLLABORATIF',
             `
-                <div style="font-size:0.82rem; color:#9bb0c7; margin-bottom:10px;">Crée un compte ou connecte-toi pour partager la carte.</div>
-                <input id="cloud-auth-user" type="text" placeholder="username" style="margin-bottom:8px;" />
-                <input id="cloud-auth-pass" type="password" placeholder="mot de passe" style="margin-bottom:0;" />
+                <div class="cloud-auth-shell">
+                    <div class="cloud-auth-badge">Acces cloud</div>
+                    <h3 class="cloud-auth-title">Compte BNI Connect</h3>
+                    <div class="cloud-auth-copy">Cree un compte ou reconnecte-toi pour partager la carte, retrouver tes boards et synchroniser les alertes et positions en direct.</div>
+                    <div class="cloud-auth-grid">
+                        <label class="cloud-auth-field">
+                            <span class="cloud-auth-label">Username</span>
+                            <input id="cloud-auth-user" type="text" placeholder="ex: operateur_nord" class="cloud-auth-input" autocomplete="username" />
+                        </label>
+                        <label class="cloud-auth-field">
+                            <span class="cloud-auth-label">Mot de passe</span>
+                            <input id="cloud-auth-pass" type="password" placeholder="Mot de passe" class="cloud-auth-input" autocomplete="current-password" />
+                        </label>
+                    </div>
+                    <div class="cloud-auth-meta">
+                        <span class="cloud-auth-pill">Map</span>
+                        <span class="cloud-auth-pill">Point</span>
+                        <span class="cloud-auth-pill">Sync live</span>
+                    </div>
+                    <div class="cloud-auth-hint">Le meme compte cloud fonctionne aussi sur l interface reseau.</div>
+                </div>
             `,
             `
-                <button type="button" id="cloud-auth-register" class="btn-modal-cancel">Creer compte</button>
+                <button type="button" id="cloud-auth-register" class="btn-modal-cancel cloud-auth-secondary">Creer compte</button>
                 <button type="button" id="cloud-auth-login" class="btn-modal-confirm">Connexion</button>
-                <button type="button" id="cloud-auth-close" class="btn-modal-cancel">Fermer</button>
+                <button type="button" id="cloud-auth-close" class="btn-modal-cancel cloud-auth-tertiary">Fermer</button>
             `
         );
 
@@ -1493,6 +1511,14 @@ async function renderCloudHome() {
 
         const closeBtn = document.getElementById('cloud-auth-close');
         if (closeBtn) closeBtn.onclick = () => closeCloudModal();
+        const passBtn = document.getElementById('cloud-auth-pass');
+        if (passBtn) {
+            passBtn.onkeydown = (event) => {
+                if (event.key === 'Enter') {
+                    runAuth('login').catch(() => {});
+                }
+            };
+        }
         return;
     }
 

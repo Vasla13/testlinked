@@ -2061,16 +2061,31 @@ async function renderCloudHome() {
     if (!collab.user) {
         msgEl.innerHTML = `
             <div class="modal-tool cloud-auth-shell">
-                <h3 class="modal-tool-title">Cloud collaboratif</h3>
-                <div class="modal-note">Cree un compte ou connecte-toi.</div>
-                <input id="cloud-auth-user" type="text" placeholder="username" class="modal-input-standalone" />
-                <input id="cloud-auth-pass" type="password" placeholder="mot de passe" class="modal-input-standalone" />
+                <div class="cloud-auth-badge">Acces cloud</div>
+                <h3 class="cloud-auth-title">Compte BNI Connect</h3>
+                <div class="cloud-auth-copy">Cree un compte ou reconnecte-toi pour retrouver tes boards, partager des dossiers et synchroniser les donnees en direct.</div>
+                <div class="cloud-auth-grid">
+                    <label class="cloud-auth-field">
+                        <span class="cloud-auth-label">Username</span>
+                        <input id="cloud-auth-user" type="text" placeholder="ex: operateur_nord" class="modal-input-standalone cloud-auth-input" autocomplete="username" />
+                    </label>
+                    <label class="cloud-auth-field">
+                        <span class="cloud-auth-label">Mot de passe</span>
+                        <input id="cloud-auth-pass" type="password" placeholder="Mot de passe" class="modal-input-standalone cloud-auth-input" autocomplete="current-password" />
+                    </label>
+                </div>
+                <div class="cloud-auth-meta">
+                    <span class="cloud-auth-pill">Point</span>
+                    <span class="cloud-auth-pill">Map</span>
+                    <span class="cloud-auth-pill">Sync live</span>
+                </div>
+                <div class="cloud-auth-hint">Le meme compte fonctionne sur les deux interfaces BNI.</div>
             </div>
         `;
         actEl.innerHTML = `
-            <button type="button" id="cloud-auth-register">Creer un compte</button>
-            <button type="button" id="cloud-auth-login" class="primary">Se connecter</button>
-            <button type="button" id="cloud-auth-close">Fermer</button>
+            <button type="button" id="cloud-auth-register" class="cloud-auth-secondary">Creer un compte</button>
+            <button type="button" id="cloud-auth-login" class="primary cloud-auth-primary">Se connecter</button>
+            <button type="button" id="cloud-auth-close" class="cloud-auth-tertiary">Fermer</button>
         `;
 
         const runAuth = async (action) => {
@@ -2103,6 +2118,9 @@ async function renderCloudHome() {
         document.getElementById('cloud-auth-register').onclick = () => runAuth('register');
         document.getElementById('cloud-auth-login').onclick = () => runAuth('login');
         document.getElementById('cloud-auth-close').onclick = () => { modalOverlay.style.display = 'none'; };
+        document.getElementById('cloud-auth-pass').onkeydown = (event) => {
+            if (event.key === 'Enter') runAuth('login');
+        };
         return;
     }
 

@@ -162,6 +162,16 @@ function normalizeStartsAt(value, fallback = "") {
   return date.toISOString();
 }
 
+function normalizeShowBeforeStart(value, startsAt, fallback = false) {
+  if (!String(startsAt || "").trim()) return false;
+  if (typeof value === "boolean") return value;
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (!raw) return Boolean(fallback);
+  if (["1", "true", "yes", "on"].includes(raw)) return true;
+  if (["0", "false", "no", "off"].includes(raw)) return false;
+  return Boolean(fallback);
+}
+
 function isAlertStarted(alert) {
   const startsAt = String(alert?.startsAt || "").trim();
   if (!startsAt) return true;
@@ -211,6 +221,11 @@ function normalizeAlert(raw, previous = null) {
     Object.prototype.hasOwnProperty.call(source, "startsAt") ? source.startsAt : previous?.startsAt,
     previous?.startsAt || ""
   );
+  const showBeforeStart = normalizeShowBeforeStart(
+    Object.prototype.hasOwnProperty.call(source, "showBeforeStart") ? source.showBeforeStart : previous?.showBeforeStart,
+    startsAt,
+    previous?.showBeforeStart === true
+  );
   const previousCircles = normalizeCircles(previous?.circles || []);
   const fallbackCircle = normalizeCircle(source, previousCircles[0] || previous);
   const circles = normalizeCircles(source.circles, previousCircles);
@@ -248,6 +263,7 @@ function normalizeAlert(raw, previous = null) {
       allowedUsers: visibilityMode === "whitelist" ? allowedUsers : [],
       active: source.active !== false,
       startsAt,
+      showBeforeStart,
       createdAt: String(previous?.createdAt || now),
       updatedAt: now,
     };
@@ -285,6 +301,7 @@ function normalizeAlert(raw, previous = null) {
     allowedUsers: visibilityMode === "whitelist" ? allowedUsers : [],
     active: source.active !== false,
     startsAt,
+    showBeforeStart,
     createdAt: String(previous?.createdAt || now),
     updatedAt: now,
   };
@@ -319,9 +336,26 @@ function pickPublicAlert(alerts, viewer = null, preferredId = "") {
   return visible[0] || null;
 }
 
-function listPublicAlerts(alerts, viewer = null) {
-  return sortAlerts(alerts)
-    .map((alert) => toPublicAlert(alert, viewer))
+function sortTimelineAlerts(alerts) {
+  return [...(Array.isArray(alerts) ? alerts : [])].sort((a, b) => {
+    const aScheduled = !isAlertStarted(a);
+    const bScheduled = !isAlertStarted(b);
+    if (aScheduled !== bScheduled) return aScheduled ? 1 : -1;
+    if (aScheduled && bScheduled) {
+      const delta = timeValue(a?.startsAt || "") - timeValue(b?.startsAt || "");
+      if (delta !== 0) return delta;
+    }
+    const displayDelta = alertDisplayTimeValue(b) - alertDisplayTimeValue(a);
+    if (displayDelta !== 0) return displayDelta;
+    return String(a?.title || "").localeCompare(String(b?.title || ""));
+  });
+}
+
+function listPublicAlerts(alerts, viewer = null, options = {}) {
+  const includeScheduled = options?.includeScheduled === true;
+  const source = includeScheduled ? sortTimelineAlerts(alerts) : sortAlerts(alerts);
+  return source
+    .map((alert) => toPublicAlert(alert, viewer, { includeScheduled }))
     .filter(Boolean);
 }
 
@@ -339,9 +373,9 @@ async function saveAlertList(store, alerts) {
   return nextAlerts;
 }
 
-function isViewerAllowed(alert, viewer) {
+function isViewerAllowed(alert, viewer, options = {}) {
   if (!alert || typeof alert !== "object" || !alert.active) return false;
-  if (!isAlertStarted(alert)) return false;
+  if (!isAlertStarted(alert) && alert.showBeforeStart !== true) return false;
   if (String(alert.visibilityMode || "all") !== "whitelist") return true;
   const normalized = normalizeUsername(viewer?.username || "");
   if (!normalized.ok) return false;
@@ -349,9 +383,9 @@ function isViewerAllowed(alert, viewer) {
   return allow.has(normalized.username);
 }
 
-function toPublicAlert(alert, viewer = null) {
+function toPublicAlert(alert, viewer = null, options = {}) {
   if (!alert || typeof alert !== "object") return null;
-  if (!isViewerAllowed(alert, viewer)) return null;
+  if (!isViewerAllowed(alert, viewer, options)) return null;
   return {
     id: String(alert.id || ""),
     title: String(alert.title || ""),
@@ -370,7 +404,9 @@ function toPublicAlert(alert, viewer = null) {
       : -1,
     visibilityMode: String(alert.visibilityMode || "all"),
     active: true,
+    scheduled: !isAlertStarted(alert),
     startsAt: String(alert.startsAt || ""),
+    showBeforeStart: alert.showBeforeStart === true,
     createdAt: String(alert.createdAt || ""),
     updatedAt: String(alert.updatedAt || ""),
   };
@@ -406,9 +442,10 @@ exports.handler = async (event) => {
 
   if (event.httpMethod === "GET") {
     const id = String(event.queryStringParameters?.id || "").trim();
+    const includeScheduled = String(event.queryStringParameters?.includeScheduled || "").trim() === "1";
     const alerts = await getAlertList(store);
     const viewer = await resolveViewer(event);
-    const publicAlerts = listPublicAlerts(alerts, viewer);
+    const publicAlerts = listPublicAlerts(alerts, viewer, { includeScheduled });
     const publicAlert = id
       ? (publicAlerts.find((alert) => String(alert?.id || "") === id) || null)
       : (publicAlerts[0] || null);
@@ -503,4 +540,7 @@ exports.handler = async (event) => {
 
 exports.__test = {
   normalizeAlert,
+  listPublicAlerts,
+  isViewerAllowed,
+  toPublicAlert,
 };

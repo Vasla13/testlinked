@@ -1,7 +1,7 @@
 import { state, applyMapBoardData, generateID, loadLocalState, saveLocalState, pushHistory, undo, getMapData } from './state.js';
 import { initEngine, updateTransform, centerMap, stepMapZoom } from './engine.js'; 
 import { renderGroupsList, initUI, selectItem } from './ui.js';
-import { customAlert, customConfirm, openSaveOptionsModal } from './ui-modals.js';
+import { customAlert, customConfirm, openSaveOptionsModal, openMapDataHubModal } from './ui-modals.js';
 import { gpsToPercentage } from './utils.js';
 import { renderAll } from './render.js';
 import { ICONS } from './constants.js';
@@ -335,22 +335,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const syncDataActionsUi = () => {
         if (!btnDataFileToggle) return;
-        const expanded = Boolean(dataActionLaunchers && !dataActionLaunchers.hidden);
-        btnDataFileToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        btnDataFileToggle.setAttribute('aria-expanded', 'false');
     };
 
     const closeDataActions = () => {
-        if (!dataActionLaunchers || dataActionLaunchers.hidden) return;
+        if (!dataActionLaunchers) return;
         dataActionLaunchers.hidden = true;
-        syncDataActionsUi();
-    };
-
-    const toggleDataActions = () => {
-        if (!dataActionLaunchers) {
-            openCloudMenu();
-            return;
-        }
-        dataActionLaunchers.hidden = !dataActionLaunchers.hidden;
         syncDataActionsUi();
     };
 
@@ -371,6 +361,24 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     };
 
+    const openFileHub = () => {
+        const cloudLabel = (() => {
+            const status = document.getElementById('cloudStatus')?.textContent?.trim() || 'Cloud hors ligne';
+            const meta = document.getElementById('cloudStatusMeta')?.textContent?.trim() || '';
+            return meta ? `${status} • ${meta}` : status;
+        })();
+        openMapDataHubModal({
+            localSummary: state.currentFileName ? `Local: ${state.currentFileName}` : 'Local actif',
+            cloudSummary: cloudLabel,
+            syncSummary: 'Map tactique',
+            onSave: openSaveHub,
+            onOpen: () => document.getElementById('btnTriggerImport')?.click(),
+            onMerge: () => document.getElementById('btnTriggerMerge')?.click(),
+            onCloud: openCloudMenu,
+            onReset: () => document.getElementById('btnResetMap')?.click(),
+        });
+    };
+
     if (btnSave) {
         btnSave.onclick = openSaveHub;
     }
@@ -378,7 +386,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const btnCloudMenu = document.getElementById('btnCloudMenu');
     if (btnCloudMenu) {
         btnCloudMenu.onclick = () => {
-            closeDataActions();
             openCloudMenu();
         };
     }
@@ -387,24 +394,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         syncDataActionsUi();
         btnDataFileToggle.onclick = (event) => {
             event.stopPropagation();
-            toggleDataActions();
+            openFileHub();
         };
     }
 
     if (dataActionLaunchers) {
-        dataActionLaunchers.addEventListener('click', (event) => {
-            event.stopPropagation();
-        });
-        Array.from(dataActionLaunchers.querySelectorAll('button')).forEach((button) => {
-            button.addEventListener('click', () => {
-                closeDataActions();
-            });
-        });
+        dataActionLaunchers.hidden = true;
     }
 
-    window.addEventListener('click', () => {
-        closeDataActions();
-    });
+    window.addEventListener('click', closeDataActions);
 
     // --- IMPORT ---
     const btnTriggerImport = document.getElementById('btnTriggerImport');
