@@ -1909,6 +1909,78 @@ export function injectStyles() {
         }
         .cloud-local-panel {
             margin-top: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .cloud-local-action-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+        .cloud-local-action-shell {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .cloud-local-action-card {
+            width: 100%;
+            min-height: 92px;
+            align-items: flex-start;
+            text-align: left;
+            padding: 16px 18px;
+        }
+        .cloud-local-action-card .data-hub-card-meta {
+            max-width: 32ch;
+            text-align: left;
+            line-height: 1.45;
+        }
+        .cloud-local-action-shell.is-open .cloud-local-action-card {
+            border-color: rgba(102, 243, 255, 0.48);
+            box-shadow: 0 0 20px rgba(102, 243, 255, 0.08);
+        }
+        .cloud-local-choice-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+        }
+        .cloud-local-choice-grid[hidden] {
+            display: none !important;
+        }
+        .cloud-local-choice {
+            min-height: 58px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            justify-content: center;
+            gap: 4px;
+            padding: 10px 12px;
+            border: 1px solid rgba(102, 243, 255, 0.16);
+            border-radius: 12px;
+            background: rgba(5, 12, 28, 0.86);
+            text-align: left;
+            clip-path: none;
+            transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+        }
+        .cloud-local-choice:hover {
+            border-color: rgba(102, 243, 255, 0.38);
+            background: rgba(10, 22, 44, 0.9);
+            transform: translateY(-1px);
+        }
+        .cloud-local-choice-title {
+            color: #bdf7ff;
+            font-size: 0.72rem;
+            letter-spacing: 1.4px;
+            text-transform: uppercase;
+        }
+        .cloud-local-choice-meta {
+            color: #88a3be;
+            font-size: 0.64rem;
+            letter-spacing: 1.1px;
+            text-transform: uppercase;
+        }
+        .cloud-local-action-grid > .data-hub-card-danger {
+            min-height: 92px;
         }
         .cloud-guest-panel {
             display: flex;
@@ -1968,11 +2040,6 @@ export function injectStyles() {
             font-size: 0.7rem;
             letter-spacing: 1px;
             text-transform: uppercase;
-        }
-        .cloud-local-grid {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 10px;
         }
         .cloud-board-row .mini-btn,
         .cloud-member-row .mini-btn,
@@ -4294,7 +4361,8 @@ export function injectStyles() {
             }
             .cloud-inline-form,
             .cloud-grid,
-            .cloud-local-grid,
+            .cloud-local-action-grid,
+            .cloud-local-choice-grid,
             .cloud-guest-layout,
             .cloud-auth-shell-guest .cloud-auth-grid {
                 grid-template-columns: 1fr;

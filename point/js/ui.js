@@ -2146,6 +2146,43 @@ async function renderCloudMembers(boardId) {
     document.getElementById('cloud-members-close').onclick = () => { modalOverlay.style.display = 'none'; };
 }
 
+function buildCloudLocalChoiceShell({
+    id,
+    title,
+    description,
+    fileAction,
+    fileHint,
+    textAction,
+    textHint,
+    disabled = false
+}) {
+    const disabledClass = disabled ? ' is-disabled-visual' : '';
+    return `
+        <div class="cloud-local-action-shell" data-local-shell="${id}">
+            <button
+                type="button"
+                class="cloud-local-action-card data-hub-card data-hub-card-local${disabledClass}"
+                data-local-toggle="${id}"
+                aria-expanded="false"
+                aria-controls="cloud-local-choices-${id}"
+            >
+                <span class="data-hub-card-title">${title}</span>
+                <span class="data-hub-card-meta">${description}</span>
+            </button>
+            <div id="cloud-local-choices-${id}" class="cloud-local-choice-grid" data-local-choices="${id}" hidden>
+                <button type="button" class="cloud-local-choice${disabledClass}" data-local-action="${fileAction}">
+                    <span class="cloud-local-choice-title">Fichier local</span>
+                    <span class="cloud-local-choice-meta">${fileHint}</span>
+                </button>
+                <button type="button" class="cloud-local-choice${disabledClass}" data-local-action="${textAction}">
+                    <span class="cloud-local-choice-title">Texte brut</span>
+                    <span class="cloud-local-choice-meta">${textHint}</span>
+                </button>
+            </div>
+        </div>
+    `;
+}
+
 function buildCloudLocalPanelMarkup(localSaveLocked) {
     return `
         <div class="cloud-board-row cloud-board-row-local is-active">
@@ -2157,31 +2194,35 @@ function buildCloudLocalPanelMarkup(localSaveLocked) {
         </div>
         <div class="cloud-local-panel">
             ${localSaveLocked ? '<div class="cloud-local-note">Mode partage: les exports locaux sont bloques pour les membres non lead.</div>' : ''}
-            <div class="cloud-local-grid">
-                <button type="button" class="data-hub-card data-hub-card-local" data-local-action="open-file">
-                    <span class="data-hub-card-title">Ouvrir</span>
-                    <span class="data-hub-card-meta">JSON</span>
-                </button>
-                <button type="button" class="data-hub-card data-hub-card-local ${localSaveLocked ? 'is-disabled-visual' : ''}" data-local-action="save-file">
-                    <span class="data-hub-card-title">Sauvegarder</span>
-                    <span class="data-hub-card-meta">JSON</span>
-                </button>
-                <button type="button" class="data-hub-card data-hub-card-local ${localSaveLocked ? 'is-disabled-visual' : ''}" data-local-action="save-text">
-                    <span class="data-hub-card-title">Copier JSON</span>
-                    <span class="data-hub-card-meta">Texte</span>
-                </button>
-                <button type="button" class="data-hub-card data-hub-card-local" data-local-action="open-text">
-                    <span class="data-hub-card-title">Coller JSON</span>
-                    <span class="data-hub-card-meta">Texte</span>
-                </button>
-                <button type="button" class="data-hub-card data-hub-card-local" data-local-action="merge-file">
-                    <span class="data-hub-card-title">Fusionner</span>
-                    <span class="data-hub-card-meta">Fichier</span>
-                </button>
-                <button type="button" class="data-hub-card data-hub-card-local" data-local-action="merge-text">
-                    <span class="data-hub-card-title">Fusion texte</span>
-                    <span class="data-hub-card-meta">JSON</span>
-                </button>
+            <div class="cloud-local-action-grid">
+                ${buildCloudLocalChoiceShell({
+                    id: 'open',
+                    title: 'Ouvrir',
+                    description: 'Importer un fichier JSON ou un texte brut',
+                    fileAction: 'open-file',
+                    fileHint: 'JSON',
+                    textAction: 'open-text',
+                    textHint: 'Coller le JSON'
+                })}
+                ${buildCloudLocalChoiceShell({
+                    id: 'save',
+                    title: 'Sauvegarder',
+                    description: 'Exporter en fichier local ou en texte brut',
+                    fileAction: 'save-file',
+                    fileHint: 'JSON',
+                    textAction: 'save-text',
+                    textHint: 'Copier le JSON',
+                    disabled: localSaveLocked
+                })}
+                ${buildCloudLocalChoiceShell({
+                    id: 'merge',
+                    title: 'Fusionner',
+                    description: 'Regrouper deux JSON ou deux textes bruts',
+                    fileAction: 'merge-file',
+                    fileHint: 'JSON',
+                    textAction: 'merge-text',
+                    textHint: 'Coller le JSON'
+                })}
                 <button type="button" class="data-hub-card data-hub-card-danger" data-local-action="reset-all">
                     <span class="data-hub-card-title">Reset</span>
                 </button>
@@ -2224,8 +2265,38 @@ function bindCloudLocalActions(localSaveLocked) {
         showCustomAlert('Export local interdit pour les membres partages.');
     };
 
+    const toggleButtons = Array.from(document.querySelectorAll('[data-local-toggle]'));
+    const choicePanels = Array.from(document.querySelectorAll('[data-local-choices]'));
+    const actionShells = Array.from(document.querySelectorAll('[data-local-shell]'));
+
+    const setOpenToggle = (targetId = '') => {
+        const safeTargetId = String(targetId || '');
+        toggleButtons.forEach((btn) => {
+            const toggleId = String(btn.getAttribute('data-local-toggle') || '');
+            const isOpen = safeTargetId && toggleId === safeTargetId;
+            btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        });
+        choicePanels.forEach((panel) => {
+            const panelId = String(panel.getAttribute('data-local-choices') || '');
+            panel.hidden = !(safeTargetId && panelId === safeTargetId);
+        });
+        actionShells.forEach((shell) => {
+            const shellId = String(shell.getAttribute('data-local-shell') || '');
+            shell.classList.toggle('is-open', Boolean(safeTargetId) && shellId === safeTargetId);
+        });
+    };
+
+    toggleButtons.forEach((btn) => {
+        btn.onclick = () => {
+            const toggleId = String(btn.getAttribute('data-local-toggle') || '');
+            const isOpen = btn.getAttribute('aria-expanded') === 'true';
+            setOpenToggle(isOpen ? '' : toggleId);
+        };
+    });
+
     Array.from(document.querySelectorAll('[data-local-action]')).forEach((btn) => {
         btn.onclick = () => {
+            setOpenToggle('');
             const action = btn.getAttribute('data-local-action') || '';
 
             if (action === 'save-file') {

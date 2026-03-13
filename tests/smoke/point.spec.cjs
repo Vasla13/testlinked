@@ -11,7 +11,11 @@ test('point guest file menu keeps local actions and auth-gated cloud access', as
 
     await expect(page.locator('#cloud-home-tab-local')).toBeVisible();
     await expect(page.locator('#cloud-home-tab-cloud')).toBeVisible();
-    await expect(page.locator('[data-local-action="save-file"]')).toBeVisible();
+    await expect(page.locator('[data-local-toggle="open"]')).toBeVisible();
+    await expect(page.locator('[data-local-choices="open"]')).toBeHidden();
+    await page.click('[data-local-toggle="open"]');
+    await expect(page.locator('[data-local-action="open-file"]')).toBeVisible();
+    await expect(page.locator('[data-local-action="open-text"]')).toBeVisible();
     const chooserPromise = page.waitForEvent('filechooser');
     await page.click('[data-local-action="open-file"]');
     const chooser = await chooserPromise;

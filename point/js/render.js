@@ -111,6 +111,29 @@ function blendHexColors(baseColor, accentColor, amount = 0.5) {
     );
 }
 
+function createHvtInfluenceGradient(sourceX, sourceY, targetX, targetY, sourceColor, targetColor, sourceInfluence = 0, targetInfluence = 0, linkInfluence = 0) {
+    try {
+        const safeSourceInfluence = clamp01(sourceInfluence);
+        const safeTargetInfluence = clamp01(targetInfluence);
+        const safeLinkInfluence = clamp01(Math.max(linkInfluence, safeSourceInfluence, safeTargetInfluence));
+        const totalInfluence = Math.max(0.001, safeSourceInfluence + safeTargetInfluence);
+        const sourceWeight = clamp01(safeSourceInfluence / totalInfluence);
+        const targetWeight = clamp01(safeTargetInfluence / totalInfluence);
+        const sourceReach = clamp01(0.18 + (sourceWeight * 0.26) + (safeSourceInfluence * 0.18));
+        const targetReach = clamp01(Math.max(sourceReach + 0.08, 0.82 - (targetWeight * 0.26) - (safeTargetInfluence * 0.18)));
+        const innerAlpha = Math.min(0.96, 0.22 + (safeLinkInfluence * 0.62));
+        const outerAlpha = Math.min(innerAlpha, 0.08 + (safeLinkInfluence * 0.38));
+        const gradient = ctx.createLinearGradient(sourceX, sourceY, targetX, targetY);
+        gradient.addColorStop(0, rgbaFromHex(sourceColor, outerAlpha));
+        gradient.addColorStop(sourceReach, rgbaFromHex(sourceColor, innerAlpha));
+        gradient.addColorStop(targetReach, rgbaFromHex(targetColor, innerAlpha));
+        gradient.addColorStop(1, rgbaFromHex(targetColor, outerAlpha));
+        return gradient;
+    } catch (e) {
+        return rgbaFromHex(sourceColor, 0.24 + (clamp01(linkInfluence) * 0.48));
+    }
+}
+
 function pairKey(a, b) {
     const s = String(a);
     const t = String(b);
@@ -175,7 +198,6 @@ export function draw() {
     const isHVT = state.hvtMode; 
     const topSet = (isHVT && state.hvtTopN > 0 && state.hvtTopIds && state.hvtTopIds.size) ? state.hvtTopIds : null;
     const hvtSeedNode = isHVT && state.hvtSelectedId ? nodeById(state.hvtSelectedId) : null;
-    const hvtAccentColor = hvtSeedNode ? sanitizeNodeColor(hvtSeedNode.color) : '';
     const showTypes = state.showLinkTypes; 
     const labelMode = state.labelMode; 
     const activeFilter = state.activeFilter; 
@@ -362,13 +384,18 @@ export function draw() {
         if (l.kind === KINDS.ENNEMI) continue; 
         const sId = getLinkEndpointId(l.source);
         const tId = getLinkEndpointId(l.target);
+        const sourceNode = (typeof l.source === 'object') ? l.source : nodeById(sId);
+        const targetNode = (typeof l.target === 'object') ? l.target : nodeById(tId);
         if (isFocus && (!state.focusSet.has(sId) || !state.focusSet.has(tId))) continue;
         
         let dimmed = isLinkDimmed(l);
         let globalAlpha = dimmed ? 0.2 : 0.8;
-        const sourceInfluence = Number(l.source?.hvtInfluence) || 0;
-        const targetInfluence = Number(l.target?.hvtInfluence) || 0;
+        const sourceInfluence = Number(sourceNode?.hvtInfluence) || 0;
+        const targetInfluence = Number(targetNode?.hvtInfluence) || 0;
         const linkInfluence = Math.max(Number(l.hvtInfluence) || 0, sourceInfluence, targetInfluence);
+        const sourceColor = sanitizeNodeColor(sourceNode?.color || '#66f3ff');
+        const targetColor = sanitizeNodeColor(targetNode?.color || '#66f3ff');
+        const dominantColor = sourceInfluence >= targetInfluence ? sourceColor : targetColor;
         const isSeedLink = Boolean(hvtSeedNode)
             && (String(sId) === String(hvtSeedNode.id) || String(tId) === String(hvtSeedNode.id));
 
@@ -413,10 +440,10 @@ export function draw() {
 
         if (showTypes || isPathLink || isHVT) {
              const baseLinkColor = isPathLink ? '#00ffff' : computeLinkColor(l);
-             const color = (isHVT && hvtAccentColor && !isPathLink)
-                ? blendHexColors(baseLinkColor, hvtAccentColor, isSeedLink ? 0.94 : (0.22 + clamp01(linkInfluence) * 0.68))
+             const strokeColor = (isHVT && !isPathLink)
+                ? createHvtInfluenceGradient(l.source.x, l.source.y, l.target.x, l.target.y, sourceColor, targetColor, sourceInfluence, targetInfluence, linkInfluence)
                 : baseLinkColor;
-             ctx.strokeStyle = color;
+             ctx.strokeStyle = strokeColor;
              ctx.lineWidth = (
                 isPathLink
                     ? 4
@@ -426,11 +453,11 @@ export function draw() {
                  ctx.shadowBlur = 15;
                  ctx.shadowColor = '#00ffff';
              } else if (isHVT && linkInfluence > 0.18) {
-                 ctx.shadowBlur = hvtAccentColor ? 12 : 8;
-                 ctx.shadowColor = color;
+                 ctx.shadowBlur = 12;
+                 ctx.shadowColor = dominantColor;
              } else if (useGlow && !dimmed && !isHVT) {
                  ctx.shadowBlur = 8;
-                 ctx.shadowColor = color;
+                 ctx.shadowColor = baseLinkColor;
              } else {
                  ctx.shadowBlur = 0;
              }
@@ -517,22 +544,17 @@ export function draw() {
                 rad = rad * (1 + Math.max(score, influence) * 0.8);
                 alpha = 1.0;
             } else if (influence > 0.5) {
-                alpha = hvtAccentColor ? 0.82 : 0.88;
+                alpha = 0.92;
                 rad *= 1.14;
             } else if (influence > 0.24) {
-                alpha = hvtAccentColor ? 0.42 : 0.58;
+                alpha = 0.68;
                 rad *= 1.02;
             } else if (influence > 0.12) {
-                alpha = hvtAccentColor ? 0.16 : 0.34;
-                rad *= hvtAccentColor ? 0.84 : 0.9;
+                alpha = 0.4;
+                rad *= 0.9;
             } else {
-                alpha = hvtAccentColor ? 0.03 : 0.08;
-                rad *= hvtAccentColor ? 0.72 : 0.8;
-            }
-
-            if (hvtAccentColor && (isSelectedSeed || influence > 0.06)) {
-                const tintAmount = isSelectedSeed ? 0.96 : Math.min(0.74, 0.14 + (influence * 0.72));
-                nodeColor = blendHexColors(nodeColor, hvtAccentColor, tintAmount);
+                alpha = 0.18;
+                rad *= 0.82;
             }
         }
 
@@ -558,15 +580,15 @@ export function draw() {
             ctx.lineWidth = 3 / Math.sqrt(p.scale);
             ctx.stroke();
         } else if (isBoss) {
-            ctx.shadowBlur = hvtAccentColor ? 18 : 15;
-            ctx.shadowColor = hvtAccentColor || nodeColor;
+            ctx.shadowBlur = 18;
+            ctx.shadowColor = nodeColor;
             ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 3 / Math.sqrt(p.scale);
             ctx.stroke();
         } else {
             ctx.shadowBlur = 0;
-            if (isHVT && hvtAccentColor && (Number(n.hvtInfluence) || 0) > 0.24) {
-                ctx.strokeStyle = rgbaFromHex(hvtAccentColor, 0.32 + (Number(n.hvtInfluence) || 0) * 0.38);
+            if (isHVT && (Number(n.hvtInfluence) || 0) > 0.24) {
+                ctx.strokeStyle = rgbaFromHex(nodeColor, 0.28 + (Number(n.hvtInfluence) || 0) * 0.42);
                 ctx.lineWidth = 1.4 / Math.sqrt(p.scale);
                 ctx.stroke();
             } else if(!dimmed && p.scale > 0.5 && !isHVT) {
@@ -713,13 +735,6 @@ export function draw() {
             
             const statusVisual = getPersonStatusVisual(c.n);
             let strokeColor = statusVisual ? statusVisual.accent : sanitizeNodeColor(c.n.color);
-            if (isHVT && hvtAccentColor) {
-                const labelInfluence = Number(c.n.hvtInfluence) || 0;
-                const isLabelSeed = Boolean(hvtSeedNode) && String(c.n.id) === String(hvtSeedNode.id);
-                if (isLabelSeed || labelInfluence > 0.16) {
-                    strokeColor = blendHexColors(strokeColor, hvtAccentColor, isLabelSeed ? 0.94 : (0.18 + (labelInfluence * 0.62)));
-                }
-            }
             if (c.isPathfindingNode) strokeColor = '#00ffff';
             if (c.isPathStart) strokeColor = '#ffff00';
             
