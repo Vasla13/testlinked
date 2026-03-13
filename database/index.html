@@ -158,6 +158,58 @@
     };
   }
 
+  function formatArchiveError(page, error) {
+    const label = page === 'map' ? 'archives tactiques' : 'archives reseau';
+    const rawMessage = String(error?.message || '').trim();
+    const normalized = rawMessage.toLowerCase();
+
+    if (!rawMessage || normalized === 'not_found') {
+      return {
+        status: `SOURCE ${label.toUpperCase()} INDISPONIBLE`,
+        title: 'Flux archive indisponible',
+        copy: `Le service des ${label} ne repond pas dans cet environnement.`,
+        hint: 'Recharge la page ou relance la fonction Netlify concernee.'
+      };
+    }
+
+    if (normalized.includes('failed to fetch') || normalized.includes('networkerror') || normalized.includes('load failed')) {
+      return {
+        status: `LIAISON ${label.toUpperCase()} INTERROMPUE`,
+        title: 'Connexion interrompue',
+        copy: `Impossible de joindre le service des ${label} pour le moment.`,
+        hint: 'Verifie la connexion ou reessaie dans quelques secondes.'
+      };
+    }
+
+    return {
+      status: `ERREUR SUR ${label.toUpperCase()}`,
+      title: 'Chargement impossible',
+      copy: `Les ${label} ne peuvent pas etre charges actuellement.`,
+      hint: 'Reessaie dans un instant.'
+    };
+  }
+
+  function renderArchiveErrorState(page, details) {
+    const cardsEl = document.getElementById(`cards-${page}`);
+    if (!cardsEl || !details) return;
+    cardsEl.innerHTML = `
+      <div class="error-state">
+        <div class="error-state-title">${escapeHtml(details.title || 'Chargement impossible')}</div>
+        <div class="error-state-copy">${escapeHtml(details.copy || 'Le service ne repond pas actuellement.')}</div>
+        <div class="error-state-hint">${escapeHtml(details.hint || 'Reessaie dans un instant.')}</div>
+        <div class="error-state-actions">
+          <button class="btn-cyber btn-error-retry" type="button" data-retry-page="${escapeHtml(page)}">REESSAYER</button>
+        </div>
+      </div>
+    `;
+    const retryBtn = cardsEl.querySelector('[data-retry-page]');
+    if (retryBtn) {
+      retryBtn.addEventListener('click', () => {
+        refreshPage(page).catch(() => {});
+      });
+    }
+  }
+
   function getApiKey() {
     const fromWindow = (typeof window.BNI_LINKED_KEY === 'string') ? window.BNI_LINKED_KEY.trim() : '';
     if (fromWindow) return fromWindow;
@@ -426,9 +478,10 @@
 
       render(page);
     } catch (e) {
-      statusEl.textContent = e?.message || "ERREUR DE CONNEXION (DATA LINK)";
+      const errorDetails = formatArchiveError(page, e);
+      statusEl.textContent = errorDetails.status;
       console.warn("Erreur DB:", e);
-      document.getElementById(`cards-${page}`).innerHTML = `<div class="error-state">${escapeHtml(e?.message || 'CONNEXION SERVEUR ÉCHOUÉE')}</div>`;
+      renderArchiveErrorState(page, errorDetails);
       const btn = document.getElementById(`load-more-${page}`);
       if (btn) btn.hidden = true;
     } finally {

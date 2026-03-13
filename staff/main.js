@@ -1035,6 +1035,22 @@ function setStatusMessage(text, stateName = 'idle') {
     dom.statusMessage.dataset.state = stateName;
 }
 
+function formatAlertAdminError(error, fallback = 'Operation impossible.') {
+    const rawMessage = String(error?.message || '').trim();
+    const normalized = rawMessage.toLowerCase();
+    if (!rawMessage) return fallback;
+    if (normalized === 'not_found') {
+        return 'Service alertes indisponible. Recharge la console ou verifie la fonction Netlify.';
+    }
+    if (normalized.includes('failed to fetch') || normalized.includes('networkerror') || normalized.includes('load failed')) {
+        return 'Connexion au service alertes interrompue. Reessaie.';
+    }
+    if (normalized.startsWith('erreur alerte (4') || normalized.startsWith('erreur alerte (5')) {
+        return 'Le service alertes ne repond pas correctement pour le moment.';
+    }
+    return rawMessage;
+}
+
 function setDrawStatus(text, mode = 'circle') {
     if (!dom.drawStatus) return;
     dom.drawStatus.textContent = text;
@@ -1931,7 +1947,7 @@ async function saveAlert() {
             setStatusMessage('Alerte publiee.', 'ok');
         }
     } catch (error) {
-        setStatusMessage(error.message || 'Impossible de publier l’alerte.', 'error');
+        setStatusMessage(formatAlertAdminError(error, 'Impossible de publier l alerte.'), 'error');
     }
 }
 
@@ -1963,7 +1979,7 @@ async function deleteAlert(targetId = getAlertId()) {
         alertsApi.notifyPublicAlertRefresh();
         setStatusMessage('Alerte supprimee.', 'ok');
     } catch (error) {
-        setStatusMessage(error.message || 'Suppression impossible.', 'error');
+        setStatusMessage(formatAlertAdminError(error, 'Suppression impossible.'), 'error');
     }
 }
 
@@ -2232,7 +2248,7 @@ function unlockConsole() {
     if (dom.accessInput) dom.accessInput.value = '';
     if (dom.accessError) dom.accessError.textContent = '';
     loadCurrentAlert().catch((error) => {
-        setStatusMessage(error.message || 'Impossible de charger les alertes.', 'error');
+        setStatusMessage(formatAlertAdminError(error, 'Impossible de charger les alertes.'), 'error');
     });
     scheduleMapView(Boolean(state.selection));
 }

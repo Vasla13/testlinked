@@ -9,6 +9,60 @@ const TACTICAL_COLORS = [
 ];
 
 let activeTimeout = null;
+let lastModalFocus = null;
+let activeDismissHandler = null;
+
+function restoreModalFocus() {
+    const target = lastModalFocus;
+    lastModalFocus = null;
+    if (target && typeof target.focus === 'function') {
+        requestAnimationFrame(() => target.focus());
+    }
+}
+
+function hideModalOverlay(overlay, options = {}) {
+    if (!overlay) return;
+    overlay.classList.add('hidden');
+    activeDismissHandler = null;
+    if (options.restoreFocus !== false) restoreModalFocus();
+}
+
+function dismissModalOverlay(overlay) {
+    const handler = activeDismissHandler;
+    if (typeof handler === 'function') {
+        activeDismissHandler = null;
+        handler();
+        return;
+    }
+    hideModalOverlay(overlay);
+}
+
+function prepareModalOverlay(overlay) {
+    if (!overlay || overlay.dataset.modalEnhanced === 'true') return;
+    overlay.dataset.modalEnhanced = 'true';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-labelledby', 'modal-title');
+    overlay.tabIndex = -1;
+    overlay.addEventListener('click', (event) => {
+        if (event.target === overlay) dismissModalOverlay(overlay);
+    });
+    overlay.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            dismissModalOverlay(overlay);
+        }
+    });
+}
+
+function showModalOverlay(overlay) {
+    if (!overlay) return;
+    prepareModalOverlay(overlay);
+    const activeEl = document.activeElement;
+    lastModalFocus = activeEl instanceof HTMLElement ? activeEl : null;
+    overlay.classList.remove('hidden');
+    requestAnimationFrame(() => overlay.focus());
+}
 
 function escapeMarkup(value) {
     return String(value ?? '')
@@ -29,14 +83,13 @@ function createModalPromise(setupFn) {
         const colorContainer = document.getElementById('modal-color-picker');
         
         if(!overlay) { console.error("Modal Missing"); return resolve(null); }
+        prepareModalOverlay(overlay);
         
         if (activeTimeout) {
             clearTimeout(activeTimeout);
             activeTimeout = null;
-            overlay.classList.remove('hidden');
-        } else {
-            overlay.classList.remove('hidden');
         }
+        showModalOverlay(overlay);
 
         inputContainer.style.display = 'none';
         colorContainer.style.display = 'none';
@@ -44,19 +97,30 @@ function createModalPromise(setupFn) {
         actionsEl.innerHTML = '';
         
         const close = (value) => {
-            overlay.classList.add('hidden');
+            hideModalOverlay(overlay);
             activeTimeout = setTimeout(() => {
                 resolve(value);
                 activeTimeout = null;
             }, 300);
         };
 
-        setupFn({ titleEl, contentEl, actionsEl, inputContainer, colorContainer, close });
+        activeDismissHandler = () => close(null);
+        setupFn({
+            titleEl,
+            contentEl,
+            actionsEl,
+            inputContainer,
+            colorContainer,
+            close,
+            setDismissHandler(handler) {
+                activeDismissHandler = typeof handler === 'function' ? handler : null;
+            }
+        });
     });
 }
 
 export function customAlert(title, msg) {
-    return createModalPromise(({ titleEl, contentEl, actionsEl, close }) => {
+    return createModalPromise(({ titleEl, contentEl, actionsEl, close, setDismissHandler }) => {
         titleEl.innerText = title;
         contentEl.innerHTML = msg;
         const btn = document.createElement('button');
@@ -64,11 +128,13 @@ export function customAlert(title, msg) {
         btn.innerText = "OK";
         btn.onclick = () => close(true);
         actionsEl.appendChild(btn);
+        setDismissHandler(() => close(true));
+        requestAnimationFrame(() => btn.focus());
     });
 }
 
 export function customConfirm(title, msg) {
-    return createModalPromise(({ titleEl, contentEl, actionsEl, close }) => {
+    return createModalPromise(({ titleEl, contentEl, actionsEl, close, setDismissHandler }) => {
         titleEl.innerText = title;
         contentEl.innerHTML = msg;
         const btnCancel = document.createElement('button');
@@ -80,18 +146,26 @@ export function customConfirm(title, msg) {
         btnOk.innerText = "CONFIRMER";
         btnOk.onclick = () => close(true);
         actionsEl.append(btnCancel, btnOk);
+        setDismissHandler(() => close(false));
+        requestAnimationFrame(() => btnOk.focus());
     });
 }
 
 export function customPrompt(title, msg, defaultValue = "") {
-    return createModalPromise(({ titleEl, contentEl, actionsEl, inputContainer, close }) => {
+    return createModalPromise(({ titleEl, contentEl, actionsEl, inputContainer, close, setDismissHandler }) => {
         titleEl.innerText = title;
         contentEl.innerHTML = msg;
         inputContainer.style.display = 'block';
         const input = document.getElementById('modal-input');
         input.value = defaultValue;
         input.focus();
-        input.onkeydown = (e) => { if (e.key === 'Enter') close(input.value); };
+        input.onkeydown = (e) => {
+            if (e.key === 'Enter') close(input.value);
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                close(null);
+            }
+        };
         const btnCancel = document.createElement('button');
         btnCancel.className = 'btn-modal-cancel';
         btnCancel.innerText = "ANNULER";
@@ -101,6 +175,7 @@ export function customPrompt(title, msg, defaultValue = "") {
         btnOk.innerText = "VALIDER";
         btnOk.onclick = () => close(input.value);
         actionsEl.append(btnCancel, btnOk);
+        setDismissHandler(() => close(null));
     });
 }
 
@@ -118,7 +193,7 @@ export function openGroupEditor(groupIndex) {
 
     if(!overlay) return;
     if(activeTimeout) clearTimeout(activeTimeout);
-    overlay.classList.remove('hidden');
+    showModalOverlay(overlay);
 
     title.innerText = "ÉDITION CALQUE";
     inputContainer.style.display = 'block'; // On utilise l'input standard pour le nom
@@ -174,7 +249,7 @@ export function openGroupEditor(groupIndex) {
     btnDelete.style.color = 'var(--danger)';
     btnDelete.innerText = "SUPPRIMER CALQUE";
     btnDelete.onclick = async () => {
-        overlay.classList.add('hidden');
+        hideModalOverlay(overlay);
         setTimeout(async () => {
             if(await customConfirm("SUPPRESSION", `Supprimer "${group.name}" et tout son contenu ?`)) {
                 const removedIds = group.points.map(p => p.id);
@@ -191,7 +266,7 @@ export function openGroupEditor(groupIndex) {
     const btnCancel = document.createElement('button');
     btnCancel.className = 'btn-modal-cancel';
     btnCancel.innerText = "ANNULER";
-    btnCancel.onclick = () => { overlay.classList.add('hidden'); };
+    btnCancel.onclick = () => { hideModalOverlay(overlay); };
 
     // Bouton Valider
     const btnSave = document.createElement('button');
@@ -206,7 +281,7 @@ export function openGroupEditor(groupIndex) {
         renderGroupsList();
         renderAll();
         saveLocalState();
-        overlay.classList.add('hidden');
+        hideModalOverlay(overlay);
     };
 
     actions.append(btnDelete, btnCancel, btnSave);
@@ -333,7 +408,7 @@ export function openSaveOptionsModal(options = {}) {
 
     if(!overlay) return;
     if(activeTimeout) clearTimeout(activeTimeout);
-    overlay.classList.remove('hidden');
+    showModalOverlay(overlay);
 
     title.innerText = "OPTIONS DE SAUVEGARDE";
     inputContainer.style.display = 'none';
@@ -400,13 +475,13 @@ export function openSaveOptionsModal(options = {}) {
     const btnClose = document.createElement('button');
     btnClose.className = 'btn-modal-cancel';
     btnClose.innerText = "FERMER";
-    btnClose.onclick = () => { overlay.classList.add('hidden'); };
+    btnClose.onclick = () => { hideModalOverlay(overlay); };
     actions.appendChild(btnClose);
 
     const btnOptFile = document.getElementById('btnOptFile');
     if (btnOptFile) {
         btnOptFile.onclick = async () => {
-            overlay.classList.add('hidden');
+            hideModalOverlay(overlay);
             setTimeout(async () => {
                 const defaultName = state.currentFileName || "mission_tactique";
                 const newName = await customPrompt(

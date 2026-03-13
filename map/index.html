@@ -51,7 +51,7 @@
         </div>
     </div>
 
-    <div id="modal-overlay" class="hidden">
+    <div id="modal-overlay" class="hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title" tabindex="-1">
         <div id="modal-box">
             <div id="modal-title">TITRE</div>
             <div id="modal-content">Message...</div>
@@ -195,19 +195,37 @@
                 </div>
                 <div class="gps-panel-body">
                     <div class="gps-row">
-                        <input type="text" id="gpsInputX" placeholder="X" class="gps-input">
-                        <input type="text" id="gpsInputY" placeholder="Y" class="gps-input">
+                        <div class="gps-field-block gps-field-inline">
+                            <label class="gps-label" for="gpsInputX">COORDONNEE X</label>
+                            <input type="text" id="gpsInputX" placeholder="X" class="gps-input" autocomplete="off">
+                        </div>
+                        <div class="gps-field-block gps-field-inline">
+                            <label class="gps-label" for="gpsInputY">COORDONNEE Y</label>
+                            <input type="text" id="gpsInputY" placeholder="Y" class="gps-input" autocomplete="off">
+                        </div>
                     </div>
                     <div class="gps-field-block">
                         <label class="gps-label" for="gpsGroupSelect">CALQUE CIBLE</label>
                         <select id="gpsGroupSelect" class="gps-input"></select>
                     </div>
-                    <input type="text" id="gpsName" placeholder="Nom du point">
-                    <div class="gps-row">
-                        <div style="flex:1"><select id="gpsIconType"></select></div>
-                        <div style="flex:1"><input type="text" id="gpsAffiliation" placeholder="Type"></div>
+                    <div class="gps-field-block">
+                        <label class="gps-label" for="gpsName">NOM DU POINT</label>
+                        <input type="text" id="gpsName" placeholder="Nom du point" autocomplete="off">
                     </div>
-                    <textarea id="gpsNotes" placeholder="Notes..."></textarea>
+                    <div class="gps-row">
+                        <div class="gps-field-block gps-field-inline">
+                            <label class="gps-label" for="gpsIconType">ICONE</label>
+                            <select id="gpsIconType"></select>
+                        </div>
+                        <div class="gps-field-block gps-field-inline">
+                            <label class="gps-label" for="gpsAffiliation">TYPE</label>
+                            <input type="text" id="gpsAffiliation" placeholder="Type" autocomplete="off">
+                        </div>
+                    </div>
+                    <div class="gps-field-block">
+                        <label class="gps-label" for="gpsNotes">NOTES</label>
+                        <textarea id="gpsNotes" placeholder="Notes..."></textarea>
+                    </div>
                     <button id="btnAddGpsPoint" class="action-btn full-width gps-submit">
                         Placer
                     </button>

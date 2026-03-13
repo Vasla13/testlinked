@@ -24,6 +24,7 @@
         <div class="boot-footer">
             <span id="boot-meter">SYS CHECK 0%</span>
             <span class="boot-cursor"></span>
+            <button id="boot-skip" class="boot-skip" type="button">Passer</button>
         </div>
     </div>
 
@@ -115,6 +116,7 @@
             const bootPhase = document.getElementById('boot-phase');
             const bootProgress = document.getElementById('boot-progress');
             const bootMeter = document.getElementById('boot-meter');
+            const bootSkip = document.getElementById('boot-skip');
             const bioLayer = document.getElementById('bio-layer');
             const bioStatus = document.getElementById('bio-status');
             const fingerprintSvg = document.getElementById('fingerprint-svg');
@@ -282,6 +284,17 @@
                         display: grid;
                         gap: 8px;
                     }
+                    .module-auth-field {
+                        display: grid;
+                        gap: 6px;
+                    }
+                    .module-auth-label {
+                        color: #8fb4c8;
+                        font-size: 0.7rem;
+                        letter-spacing: 1.4px;
+                        text-transform: uppercase;
+                        font-weight: 700;
+                    }
                     .module-auth-input {
                         width: 100%;
                         background: rgba(0,0,0,0.45);
@@ -346,18 +359,24 @@
                 const overlay = document.createElement('div');
                 overlay.id = 'module-auth-overlay';
                 overlay.innerHTML = `
-                    <div class="module-auth-card">
+                    <div class="module-auth-card" role="dialog" aria-modal="true" aria-labelledby="module-auth-title">
                         <div class="module-auth-head">
                             <div class="module-auth-title-wrap">
                                 <span class="module-auth-badge">Cloud</span>
-                                <div class="module-auth-title">Compte Requis</div>
+                                <div class="module-auth-title" id="module-auth-title">Compte Requis</div>
                             </div>
-                            <button id="module-auth-close" type="button" class="module-auth-close">x</button>
+                            <button id="module-auth-close" type="button" class="module-auth-close" aria-label="Fermer">Fermer</button>
                         </div>
                         <p class="module-auth-desc">Connecte-toi pour activer le cloud et les boards partages. Tu peux aussi continuer en mode invite (local uniquement).</p>
                         <div class="module-auth-grid">
-                            <input id="module-auth-user" class="module-auth-input" type="text" placeholder="username">
-                            <input id="module-auth-pass" class="module-auth-input" type="password" placeholder="mot de passe">
+                            <div class="module-auth-field">
+                                <label class="module-auth-label" for="module-auth-user">Username</label>
+                                <input id="module-auth-user" class="module-auth-input" type="text" placeholder="username">
+                            </div>
+                            <div class="module-auth-field">
+                                <label class="module-auth-label" for="module-auth-pass">Mot de passe</label>
+                                <input id="module-auth-pass" class="module-auth-input" type="password" placeholder="mot de passe">
+                            </div>
                         </div>
                         <div id="module-auth-error" class="module-auth-error"></div>
                         <div class="module-auth-actions">
@@ -379,6 +398,9 @@
                 if (closeBtn) closeBtn.addEventListener('click', onClose);
                 overlay.addEventListener('click', (event) => {
                     if (event.target === overlay) onClose();
+                });
+                overlay.addEventListener('keydown', (event) => {
+                    if (event.key === 'Escape') onClose();
                 });
 
                 const runAuth = async (action) => {
@@ -414,6 +436,13 @@
                 const guestBtn = overlay.querySelector('#module-auth-guest');
                 if (registerBtn) registerBtn.addEventListener('click', () => runAuth('register'));
                 if (loginBtn) loginBtn.addEventListener('click', () => runAuth('login'));
+                const usernameInput = overlay.querySelector('#module-auth-user');
+                const passwordInput = overlay.querySelector('#module-auth-pass');
+                const onSubmitKey = (event) => {
+                    if (event.key === 'Enter') runAuth('login');
+                };
+                if (usernameInput) usernameInput.addEventListener('keydown', onSubmitKey);
+                if (passwordInput) passwordInput.addEventListener('keydown', onSubmitKey);
                 if (guestBtn) {
                     guestBtn.addEventListener('click', () => {
                         setGuestMode(true);
@@ -639,6 +668,20 @@
                 if (tabletInterface) tabletInterface.style.opacity = '1';
                 document.body.classList.remove('app-loading');
             }
+
+            function dismissBootSequence() {
+                markBootSeenToday();
+                skipBootSequence();
+            }
+
+            if (bootSkip) {
+                bootSkip.addEventListener('click', dismissBootSequence);
+            }
+            document.addEventListener('keydown', (event) => {
+                if (event.key !== 'Escape') return;
+                if (!document.body.classList.contains('app-loading')) return;
+                dismissBootSequence();
+            });
 
             // Démarrage
             if (hasSeenBootToday()) {

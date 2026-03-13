@@ -21,11 +21,18 @@
     --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-* { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
 
-/* --- SCROLLBAR CACHÉE --- */
-*::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }
-* { -ms-overflow-style: none !important; scrollbar-width: none !important; }
+/* --- SCROLLBARS DISCRÈTES --- */
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: rgba(4, 10, 18, 0.38); }
+*::-webkit-scrollbar-thumb {
+    background: rgba(115, 251, 247, 0.22);
+    border-radius: 999px;
+    border: 2px solid rgba(4, 10, 18, 0.38);
+}
+*::-webkit-scrollbar-thumb:hover { background: rgba(115, 251, 247, 0.4); }
+* { -ms-overflow-style: auto; scrollbar-width: thin; scrollbar-color: rgba(115, 251, 247, 0.32) rgba(4, 10, 18, 0.32); }
 
 body {
     background-color: var(--bg-deep);
@@ -119,6 +126,24 @@ body {
     text-transform: uppercase;
     color: rgba(147, 246, 255, 0.92);
     text-shadow: 0 0 8px rgba(115, 251, 247, 0.35);
+}
+.boot-skip {
+    margin-left: auto;
+    border: 1px solid rgba(115, 251, 247, 0.38);
+    background: rgba(115, 251, 247, 0.08);
+    color: rgba(189, 247, 255, 0.92);
+    font-family: var(--font-ui);
+    font-size: 0.72rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    font-weight: 700;
+    padding: 6px 12px;
+    cursor: pointer;
+}
+.boot-skip:hover {
+    border-color: rgba(115, 251, 247, 0.72);
+    background: rgba(115, 251, 247, 0.88);
+    color: #03121a;
 }
 .boot-cursor { display: inline-block; width: 8px; height: 16px; background: var(--cyan); animation: blink 1s infinite; vertical-align: middle; }
 
@@ -296,16 +321,17 @@ body.app-loading .help-overlay {
 }
 
 .welcome-link-block {
-    margin-top: 14px;
-    width: min(860px, 95vw);
-    border: 1px solid rgba(115, 251, 247, 0.28);
-    background: rgba(7, 12, 20, 0.82);
+    margin-top: 10px;
+    width: min(640px, 92vw);
+    border: 1px solid rgba(115, 251, 247, 0.22);
+    background: rgba(7, 12, 20, 0.64);
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 10px;
-    padding: 10px 12px;
+    padding: 8px 10px;
     flex-wrap: wrap;
+    box-shadow: inset 0 0 0 1px rgba(115, 251, 247, 0.04);
 }
 
 .welcome-link-label {
@@ -339,6 +365,15 @@ body.app-loading .help-overlay {
     font-weight: 700;
     padding: 8px 12px;
     cursor: pointer;
+}
+.module-card,
+.top-hud,
+.main-logo,
+.boot-head,
+.boot-progress-track,
+.boot-footer,
+.welcome-link-copy {
+    user-select: none;
 }
 
 .welcome-link-copy:hover {

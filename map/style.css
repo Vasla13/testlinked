@@ -1874,6 +1874,11 @@ body.map-shell .tool-row {
     margin-bottom: 12px;
 }
 
+body.map-shell .gps-row .gps-field-block {
+    flex: 1 1 0;
+    margin-bottom: 0;
+}
+
 body.map-shell .gps-label,
 body.map-shell .tool-row label {
     color: #88a2c0;
@@ -1885,6 +1890,7 @@ body.map-shell .tool-row label {
 
 body.map-shell .gps-row {
     gap: 10px;
+    margin-bottom: 12px;
 }
 
 body.map-shell .gps-submit {

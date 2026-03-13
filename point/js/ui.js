@@ -39,13 +39,16 @@ const ui = {
     listGroups: document.getElementById('listGroups'),
     listPeople: document.getElementById('listPeople'),
     linkLegend: document.getElementById('linkLegend'),
-    pathfindingContainer: document.getElementById('pathfinding-ui')
+    pathfindingContainer: document.getElementById('pathfinding-ui'),
+    centerEmptyState: document.getElementById('centerEmptyState')
 };
 
 let modalOverlay = null;
 let hvtPanel = null;
 let intelPanel = null;
 let intelSuggestions = [];
+let modalDismissHandler = null;
+let modalLastActiveElement = null;
 const INTEL_ACCESS_CODE = 'bni-dutch';
 const API_KEY_STORAGE_KEY = 'bniLinkedApiKey';
 const COLLAB_AUTH_ENDPOINT = '/.netlify/functions/collab-auth';
@@ -176,6 +179,46 @@ const POINT_REALTIME_TEXT_FIELDS = {
 
 function getModalOverlay() {
     return modalOverlay;
+}
+
+function restoreModalFocus() {
+    const target = modalLastActiveElement;
+    modalLastActiveElement = null;
+    if (target && typeof target.focus === 'function') {
+        requestAnimationFrame(() => target.focus());
+    }
+}
+
+function hideModalOverlay(options = {}) {
+    if (!modalOverlay) return;
+    modalOverlay.style.display = 'none';
+    modalOverlay.setAttribute('data-mode', 'default');
+    modalDismissHandler = null;
+    if (options.restoreFocus !== false) restoreModalFocus();
+}
+
+function dismissModalOverlay() {
+    const handler = modalDismissHandler;
+    if (typeof handler === 'function') {
+        modalDismissHandler = null;
+        handler();
+        return;
+    }
+    hideModalOverlay();
+}
+
+function showModalOverlay() {
+    if (!modalOverlay) createModal();
+    if (!modalOverlay) return;
+    const activeEl = document.activeElement;
+    modalLastActiveElement = activeEl instanceof HTMLElement ? activeEl : null;
+    modalOverlay.style.display = 'flex';
+    requestAnimationFrame(() => modalOverlay.focus());
+}
+
+function updateCenterEmptyState() {
+    if (!ui.centerEmptyState) return;
+    ui.centerEmptyState.hidden = state.nodes.length > 0;
 }
 
 function sanitizeLogText(value, fallback = '') {
@@ -2512,7 +2555,7 @@ async function renderCloudHome() {
         saveBtn.title = isCloudBoardActive() ? 'Droits insuffisants' : 'Aucun board actif';
     }
     const closeX = document.getElementById('cloud-modal-close-x');
-    if (closeX) closeX.onclick = () => { modalOverlay.style.display = 'none'; };
+    if (closeX) closeX.onclick = () => { hideModalOverlay(); };
     bindCloudHomeTabs();
     bindCloudLocalActions(localSaveLocked);
 
@@ -2525,7 +2568,7 @@ function showCloudMenu() {
     if (!modalOverlay) createModal();
     setModalMode('cloud');
     collab.homePanel = collab.user ? 'cloud' : 'local';
-    modalOverlay.style.display = 'flex';
+    showModalOverlay();
     renderCloudHome();
 }
 
@@ -2681,9 +2724,9 @@ function showLinkGuide() {
     actEl.innerHTML = '<button id="btn-link-guide-close" class="grow">Fermer</button>';
 
     const closeBtn = document.getElementById('btn-link-guide-close');
-    if (closeBtn) closeBtn.onclick = () => { modalOverlay.style.display = 'none'; };
+    if (closeBtn) closeBtn.onclick = () => { hideModalOverlay(); };
 
-    modalOverlay.style.display = 'flex';
+    showModalOverlay();
     if (closeBtn) closeBtn.focus();
 }
 
@@ -2935,11 +2978,23 @@ function createModal() {
     modalOverlay = document.createElement('div');
     modalOverlay.id = 'custom-modal';
     modalOverlay.setAttribute('data-mode', 'default');
+    modalOverlay.setAttribute('role', 'dialog');
+    modalOverlay.setAttribute('aria-modal', 'true');
+    modalOverlay.tabIndex = -1;
     modalOverlay.innerHTML = `
         <div class="modal-card">
             <div id="modal-msg"></div>
             <div id="modal-actions"></div>
         </div>`;
+    modalOverlay.addEventListener('click', (event) => {
+        if (event.target === modalOverlay) dismissModalOverlay();
+    });
+    modalOverlay.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            dismissModalOverlay();
+        }
+    });
     document.body.appendChild(modalOverlay);
 }
 
@@ -2953,9 +3008,10 @@ export function showCustomAlert(msg) {
         actEl.innerHTML = `<button id="btn-modal-ok" class="grow">OK</button>`;
 
         const btn = document.getElementById('btn-modal-ok');
-        btn.onclick = () => { modalOverlay.style.display='none'; };
+        btn.onclick = () => { hideModalOverlay(); };
 
-        modalOverlay.style.display = 'flex';
+        modalDismissHandler = () => hideModalOverlay();
+        showModalOverlay();
         btn.focus();
     }
 }
@@ -2971,15 +3027,16 @@ export function showCustomConfirm(msg, onYes) {
 
         const btnNo = document.createElement('button');
         btnNo.innerText = 'ANNULER';
-        btnNo.onclick = () => { modalOverlay.style.display='none'; };
+        btnNo.onclick = () => { hideModalOverlay(); };
 
         const btnYes = document.createElement('button');
         btnYes.className = 'danger';
         btnYes.innerText = 'CONFIRMER';
-        btnYes.onclick = () => { modalOverlay.style.display='none'; onYes(); };
+        btnYes.onclick = () => { hideModalOverlay(); onYes(); };
 
         actEl.appendChild(btnNo); actEl.appendChild(btnYes);
-        modalOverlay.style.display = 'flex';
+        modalDismissHandler = () => hideModalOverlay();
+        showModalOverlay();
         btnYes.focus();
     }
 }
@@ -3003,7 +3060,7 @@ export function showCustomPrompt(msg, defaultValue, onConfirm, onCancel = null) 
         const btnCancel = document.createElement('button');
         btnCancel.innerText = 'ANNULER';
         btnCancel.onclick = () => {
-            modalOverlay.style.display='none';
+            hideModalOverlay();
             if (typeof onCancel === 'function') onCancel();
         };
 
@@ -3012,13 +3069,17 @@ export function showCustomPrompt(msg, defaultValue, onConfirm, onCancel = null) 
         btnConfirm.onclick = () => {
              const val = document.getElementById('modal-input-custom').value;
              if(val && val.trim() !== "") {
-                 modalOverlay.style.display='none';
+                 hideModalOverlay();
                  onConfirm(val.trim());
              }
         };
 
         actEl.appendChild(btnCancel); actEl.appendChild(btnConfirm);
-        modalOverlay.style.display = 'flex';
+        modalDismissHandler = () => {
+            hideModalOverlay();
+            if (typeof onCancel === 'function') onCancel();
+        };
+        showModalOverlay();
         setTimeout(() => document.getElementById('modal-input-custom').focus(), 50);
     }
 }
@@ -3059,6 +3120,7 @@ export function initUI() {
     setupSearch();
     setupTopButtons();
     setupQuickActions();
+    updateCenterEmptyState();
 
     window.zoomToNode = zoomToNode;
     window.recenterGraphView = recenterGraphView;
@@ -3090,6 +3152,12 @@ function setupTopButtons() {
     document.getElementById('createPerson').onclick = () => createNode(TYPES.PERSON, 'Nouvelle personne', { actor: collab.user?.username || '' });
     document.getElementById('createGroup').onclick = () => createNode(TYPES.GROUP, 'Nouveau groupe', { actor: collab.user?.username || '' });
     document.getElementById('createCompany').onclick = () => createNode(TYPES.COMPANY, 'Nouvelle entreprise', { actor: collab.user?.username || '' });
+    const btnCenterCreatePerson = document.getElementById('centerEmptyCreatePerson');
+    if (btnCenterCreatePerson) btnCenterCreatePerson.onclick = () => createNode(TYPES.PERSON, 'Nouvelle personne', { actor: collab.user?.username || '' });
+    const btnCenterCreateGroup = document.getElementById('centerEmptyCreateGroup');
+    if (btnCenterCreateGroup) btnCenterCreateGroup.onclick = () => createNode(TYPES.GROUP, 'Nouveau groupe', { actor: collab.user?.username || '' });
+    const btnCenterOpenFile = document.getElementById('centerEmptyOpenFile');
+    if (btnCenterOpenFile) btnCenterOpenFile.onclick = () => openDataHubModal();
 
     const btnDataFileToggle = document.getElementById('btnDataFileToggle');
     if (btnDataFileToggle) {
@@ -3165,9 +3233,9 @@ function openQuickSearchModal() {
 
     actEl.innerHTML = '<button type="button" id="quick-search-close">Fermer</button>';
     const closeBtn = document.getElementById('quick-search-close');
-    if (closeBtn) closeBtn.onclick = () => { modalOverlay.style.display = 'none'; };
+    if (closeBtn) closeBtn.onclick = () => { hideModalOverlay(); };
 
-    modalOverlay.style.display = 'flex';
+    showModalOverlay();
     if (inputEl) inputEl.focus();
 }
 
@@ -3724,13 +3792,13 @@ function openQuickCreateModal() {
     }
 
     const closeBtn = document.getElementById('quick-create-close');
-    if (closeBtn) closeBtn.onclick = () => { modalOverlay.style.display = 'none'; };
+    if (closeBtn) closeBtn.onclick = () => { hideModalOverlay(); };
 
     updateNodeState();
     updateLinkState();
     setActiveCreateTab('link');
 
-    modalOverlay.style.display = 'flex';
+    showModalOverlay();
     linkSourceInput?.focus();
 }
 
@@ -4196,7 +4264,7 @@ function showIntelUnlock(onUnlock) {
     actEl.innerHTML = '';
     const btnCancel = document.createElement('button');
     btnCancel.innerText = 'ANNULER';
-    btnCancel.onclick = () => { modalOverlay.style.display='none'; };
+    btnCancel.onclick = () => { hideModalOverlay(); };
 
     const btnConfirm = document.createElement('button');
     btnConfirm.innerText = 'VALIDER';
@@ -4208,7 +4276,7 @@ function showIntelUnlock(onUnlock) {
         if (val === INTEL_ACCESS_CODE) {
             state.aiSettings.intelUnlocked = true;
             scheduleSave();
-            modalOverlay.style.display='none';
+            hideModalOverlay();
             updateIntelButtonLockVisual();
             if (typeof onUnlock === 'function') onUnlock();
         } else {
@@ -4219,7 +4287,7 @@ function showIntelUnlock(onUnlock) {
 
     actEl.appendChild(btnCancel);
     actEl.appendChild(btnConfirm);
-    modalOverlay.style.display = 'flex';
+    showModalOverlay();
     setTimeout(() => {
         const input = document.getElementById('intel-unlock-input');
         if (input) input.focus();
@@ -5343,6 +5411,7 @@ export function refreshLists() {
     fill(ui.listGroups, state.nodes.filter(isGroup));
     fill(ui.listPeople, state.nodes.filter(isPerson));
 
+    updateCenterEmptyState();
     updateLinkLegend();
     if (state.hvtMode) updateHvtPanel();
     refreshIntelPanel();

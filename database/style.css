@@ -221,8 +221,45 @@ body {
   letter-spacing: 2px; text-transform: uppercase; background: rgba(0,0,0,0.2);
 }
 .error-state {
-  color: var(--accent-pink); border-color: var(--accent-pink);
-  background: rgba(255, 107, 129, 0.05);
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 10px;
+  padding: 28px;
+  color: var(--text-light);
+  border: 1px solid rgba(255, 107, 129, 0.45);
+  background: linear-gradient(180deg, rgba(255, 107, 129, 0.1), rgba(255, 107, 129, 0.04));
+}
+.error-state-title {
+  color: #ffd8df;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.error-state-copy {
+  color: #f2c8d3;
+  line-height: 1.5;
+}
+.error-state-hint {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+.error-state-actions {
+  display: flex;
+  justify-content: flex-start;
+  padding-top: 4px;
+}
+.btn-error-retry {
+  flex: 0 0 auto;
+  min-width: 180px;
+  border-color: rgba(115, 251, 247, 0.52);
+  color: var(--accent-cyan);
+}
+.btn-error-retry:hover {
+  border-color: var(--accent-cyan);
+  background: var(--accent-cyan);
+  color: #000;
+  box-shadow: 0 0 10px rgba(115, 251, 247, 0.45);
 }
 
 /* --- MODALES CUSTOM --- */
