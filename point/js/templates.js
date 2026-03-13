@@ -125,6 +125,18 @@ export function renderEditorHTML(n, state) {
 
     return `
     <div class="editor-panel-layout">
+        <div class="editor-side-rail" aria-label="Actions rapides de la fiche">
+            <div class="editor-side-group">
+                <button id="btnFocusNode" class="mini-btn ${state.focusMode ? 'active' : ''}" type="button">${state.focusMode ? 'Tout voir' : 'Focus'}</button>
+                <button id="btnCenterNode" class="mini-btn" type="button">Centrer</button>
+                <button id="btnExportRP" class="mini-btn" type="button">Copier</button>
+            </div>
+            <div class="editor-side-group editor-side-group-bottom">
+                <button id="btnMergeLaunch" class="mini-btn editor-action-merge" type="button">Fusionner</button>
+                <button id="btnDelete" class="mini-btn danger" type="button">Supprimer</button>
+            </div>
+        </div>
+
         <div class="editor-main-card">
             <div class="editor-sheet">
                 <div class="editor-sheet-head">
@@ -146,18 +158,6 @@ export function renderEditorHTML(n, state) {
                     <div class="editor-sheet-topbar ${personStatusControls ? '' : 'editor-sheet-topbar-meta-only'}">
                         ${personStatusControls}
                         ${headMetaControls}
-                    </div>
-                </div>
-
-                <div class="editor-toolbar">
-                    <div class="editor-toolbar-group">
-                        <button id="btnFocusNode" class="mini-btn ${state.focusMode ? 'active' : ''}" type="button">${state.focusMode ? 'Tout voir' : 'Focus'}</button>
-                        <button id="btnCenterNode" class="mini-btn" type="button">Centrer</button>
-                        <button id="btnExportRP" class="mini-btn" type="button">Copier</button>
-                    </div>
-                    <div class="editor-toolbar-group editor-toolbar-group-danger">
-                        <button id="btnMergeLaunch" class="mini-btn editor-action-merge" type="button">Fusionner</button>
-                        <button id="btnDelete" class="mini-btn danger" type="button">Supprimer</button>
                     </div>
                 </div>
 

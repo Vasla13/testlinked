@@ -517,7 +517,7 @@ function syncCloudStatus() {
         }
         statusEl.innerHTML = `
             <span class="cloud-status-label">${escapeHtml(label)}</span>
-            <span class="cloud-status-value">${escapeHtml(String(value || '').toUpperCase())}</span>
+            <span class="cloud-status-value">${escapeHtml(String(value || ''))}</span>
         `;
     };
 
@@ -1007,20 +1007,21 @@ function syncCloudLivePanels() {
     const presenceEl = document.getElementById('cloudPresence');
     const modalSyncEl = document.getElementById('cloudModalSyncInfo');
     const modalPresenceEl = document.getElementById('cloudModalPresence');
+    const showLiveInfo = Boolean(collab.user && isCloudBoardActive());
     const otherUsers = collab.presence.filter((entry) => !entry.isSelf);
     const presenceLabel = otherUsers.length
         ? `${otherUsers.length} operateur${otherUsers.length > 1 ? 's' : ''} actif${otherUsers.length > 1 ? 's' : ''}`
         : (isCloudBoardActive() ? 'Aucun autre operateur detecte' : '');
 
     if (liveInfoEl) {
-        liveInfoEl.hidden = !collab.user;
+        liveInfoEl.hidden = !showLiveInfo;
     }
     if (syncInfoEl) {
         syncInfoEl.textContent = collab.syncLabel || 'Cloud';
         syncInfoEl.dataset.state = collab.syncState || 'idle';
     }
     if (presenceEl) {
-        presenceEl.innerHTML = isCloudBoardActive()
+        presenceEl.innerHTML = showLiveInfo
             ? (renderCloudPresenceChips(collab.presence, { includeSelf: false }) || `<div class="cloud-presence-empty">${escapeHtml(presenceLabel || 'Board prive')}</div>`)
             : '';
     }
@@ -3193,7 +3194,7 @@ function openQuickSearchModal() {
 
     msgEl.innerHTML = `
         <div class="modal-tool">
-            <h3 class="modal-tool-title">Recherche</h3>
+            <h3 class="modal-tool-title">Recherche rapide</h3>
             <input id="quick-search-input" type="text" placeholder="Nom ou telephone..." class="modal-input-standalone modal-search-input">
             <div id="quick-search-results" class="modal-search-results"></div>
         </div>

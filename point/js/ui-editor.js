@@ -355,10 +355,16 @@ function ensureEditorDrag() {
     });
 }
 
+function getEditorScrollContainer(editorBody = ui.editorBody) {
+    if (!editorBody) return null;
+    return editorBody.querySelector('.editor-main-card') || editorBody;
+}
+
 function captureEditorFocusState(editorBody = ui.editorBody) {
     if (!editorBody) return null;
     const active = document.activeElement;
     if (!active || !editorBody.contains(active)) return null;
+    const scrollContainer = getEditorScrollContainer(editorBody);
 
     const fieldId = String(active.id || '').trim();
     if (!fieldId) return null;
@@ -366,7 +372,7 @@ function captureEditorFocusState(editorBody = ui.editorBody) {
     return {
         selectionId: String(state.selection || ''),
         fieldId,
-        scrollTop: editorBody.scrollTop,
+        scrollTop: scrollContainer ? scrollContainer.scrollTop : 0,
         selectionStart: typeof active.selectionStart === 'number' ? active.selectionStart : null,
         selectionEnd: typeof active.selectionEnd === 'number' ? active.selectionEnd : null,
         selectionDirection: typeof active.selectionDirection === 'string' ? active.selectionDirection : 'none'
@@ -376,6 +382,7 @@ function captureEditorFocusState(editorBody = ui.editorBody) {
 function restoreEditorFocusState(snapshot, editorBody = ui.editorBody) {
     if (!snapshot || !editorBody) return;
     if (String(state.selection || '') !== String(snapshot.selectionId || '')) return;
+    const scrollContainer = getEditorScrollContainer(editorBody);
 
     const field = document.getElementById(snapshot.fieldId);
     if (!field || !editorBody.contains(field)) return;
@@ -392,8 +399,8 @@ function restoreEditorFocusState(snapshot, editorBody = ui.editorBody) {
         } catch (e) {}
     }
 
-    if (Number.isFinite(snapshot.scrollTop)) {
-        editorBody.scrollTop = snapshot.scrollTop;
+    if (scrollContainer && Number.isFinite(snapshot.scrollTop)) {
+        scrollContainer.scrollTop = snapshot.scrollTop;
     }
 }
 

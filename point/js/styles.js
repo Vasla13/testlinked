@@ -2815,14 +2815,20 @@ export function injectStyles() {
         }
 
         .editor-panel-layout {
-            display: block;
+            position: relative;
             min-width: 0;
+            padding-left: calc(var(--editor-action-rail-width, 74px) + var(--editor-action-rail-gap, 12px));
         }
         .editor-side-rail {
+            position: absolute;
+            top: 36px;
+            left: 0;
+            width: var(--editor-action-rail-width, 74px);
+            min-height: calc(100% - 36px);
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-            gap: 8px;
+            gap: 12px;
             align-self: stretch;
         }
         .editor-side-group {
@@ -2833,12 +2839,13 @@ export function injectStyles() {
         .editor-side-group-bottom {
             margin-top: auto;
             position: relative;
+            padding-top: 10px;
         }
         .editor-side-group .mini-btn {
             width: 100%;
-            min-height: 34px;
-            padding: 6px 3px;
-            font-size: 0.58rem;
+            min-height: 42px;
+            padding: 9px 6px;
+            font-size: 0.62rem;
             line-height: 1.15;
             font-family: var(--font-main);
             letter-spacing: 1.15px;
@@ -2846,7 +2853,7 @@ export function injectStyles() {
             background: linear-gradient(90deg, rgba(16, 34, 52, 0.9), rgba(8, 17, 30, 0.92));
             color: var(--accent-cyan);
             border: 1px solid rgba(102, 243, 255, 0.18);
-            box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22);
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.26);
         }
         .editor-side-group .mini-btn.danger {
             color: #ff9aa7;
@@ -2856,12 +2863,26 @@ export function injectStyles() {
         .editor-main-card {
             min-width: 0;
             width: 100%;
+            max-height: min(calc(100vh - 28px), 88vh);
             padding: 12px 12px 14px;
             border: 1px solid rgba(102, 243, 255, 0.14);
             border-radius: 14px;
             background: linear-gradient(180deg, rgba(5, 12, 28, 0.92), rgba(3, 9, 22, 0.84));
             box-shadow: inset 0 0 0 1px rgba(102, 243, 255, 0.04);
-            overflow: hidden;
+            overflow-x: hidden;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(102, 243, 255, 0.3) transparent;
+        }
+        .editor-main-card::-webkit-scrollbar {
+            width: 5px;
+        }
+        .editor-main-card::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .editor-main-card::-webkit-scrollbar-thumb {
+            background: rgba(102, 243, 255, 0.22);
+            border-radius: 999px;
         }
         .editor-sheet {
             display: flex;
@@ -2958,6 +2979,11 @@ export function injectStyles() {
         }
         .editor-action-merge {
             min-width: 118px;
+        }
+        .editor-side-group .editor-action-merge {
+            min-width: 0;
+            font-size: 0.56rem;
+            letter-spacing: 1px;
         }
         .editor-sheet-topbar {
             display: grid;
@@ -3912,36 +3938,40 @@ export function injectStyles() {
             box-sizing: border-box;
         }
         #cloudStatus {
-            min-height: 36px;
-            padding: 5px 7px;
+            min-height: 32px;
+            padding: 4px 6px;
         }
         .cloud-status-label,
         .cloud-status-solo {
-            letter-spacing: 1.1px;
-            font-size: 0.52rem;
+            letter-spacing: 0.9px;
+            font-size: 0.48rem;
         }
         .cloud-status-value {
             margin-top: 1px;
-            font-size: 0.72rem;
-            letter-spacing: 0.7px;
+            font-size: 0.66rem;
+            letter-spacing: 0.5px;
             text-transform: none;
         }
+        .cloud-live-info {
+            gap: 4px;
+            padding: 6px;
+        }
         .cloud-sync-info {
-            min-height: 28px;
-            padding: 5px 6px;
-            font-size: 0.62rem;
-            letter-spacing: 1.1px;
+            min-height: 24px;
+            padding: 4px 6px;
+            font-size: 0.56rem;
+            letter-spacing: 0.9px;
         }
         .cloud-presence-empty {
-            font-size: 0.66rem;
+            font-size: 0.62rem;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
         }
         .cloud-presence-pill {
-            min-height: 36px;
-            padding: 5px 6px;
-            gap: 6px;
+            min-height: 32px;
+            padding: 4px 6px;
+            gap: 5px;
         }
         .cloud-presence-name {
             font-size: 0.72rem;
@@ -4159,7 +4189,6 @@ export function injectStyles() {
             .quick-create-kind-row {
                 flex-direction: column;
             }
-            .editor-panel-layout,
             .editor-priority-grid,
             .editor-status-strip,
             .editor-meta-strip,
@@ -4168,6 +4197,12 @@ export function injectStyles() {
             .editor-link-grid,
             .editor-merge-row {
                 grid-template-columns: 1fr;
+            }
+            .editor-panel-layout {
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+                padding-left: 0;
             }
             .editor-sheet-head {
                 align-items: start;
@@ -4200,13 +4235,27 @@ export function injectStyles() {
             .editor-status-inline {
                 width: 100%;
             }
-            .editor-toolbar,
-            .editor-toolbar-group {
-                flex-direction: column;
-                align-items: stretch;
+            .editor-side-rail {
+                position: static;
+                width: 100%;
+                min-height: 0;
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 8px;
             }
-            .editor-toolbar-group-danger {
-                margin-left: 0;
+            .editor-side-group {
+                display: contents;
+            }
+            .editor-side-group-bottom {
+                margin-top: 0;
+                padding-top: 0;
+            }
+            .editor-side-group .mini-btn {
+                min-height: 38px;
+                padding: 8px 8px;
+            }
+            .editor-side-group .editor-action-merge {
+                font-size: 0.54rem;
             }
             .editor-side-popover {
                 position: static;
@@ -4218,12 +4267,6 @@ export function injectStyles() {
             }
             .editor-status-actions {
                 justify-content: flex-start;
-            }
-            .editor-side-rail {
-                order: 2;
-                display: grid;
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-                align-items: start;
             }
             #right #editor {
                 width: 100% !important;

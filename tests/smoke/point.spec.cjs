@@ -49,6 +49,58 @@ test('point editor keeps long names visible and uses a square color picker', asy
     expect(Math.abs(colorBox.width - colorBox.height)).toBeLessThanOrEqual(6);
 });
 
+test('point editor keeps the action rail outside the panel and renames quick search', async ({ page }) => {
+    await installNetlifyMocks(page);
+
+    await page.setViewportSize({ width: 1536, height: 864 });
+    await page.goto('/point/');
+    await waitForPointReady(page);
+
+    await expect(page.locator('#btnQuickSearch')).toHaveText('RECHERCHE RAPIDE');
+
+    await page.evaluate(() => {
+        const btn = document.getElementById('createPerson');
+        if (!btn) throw new Error('createPerson button missing');
+        btn.click();
+    });
+
+    await expect(page.locator('.editor-side-rail')).toBeVisible();
+    await expect(page.locator('.editor-main-card')).toBeVisible();
+
+    const railBox = await page.locator('.editor-side-rail').boundingBox();
+    const cardBox = await page.locator('.editor-main-card').boundingBox();
+    const focusBox = await page.locator('#btnFocusNode').boundingBox();
+    const mergeBox = await page.locator('#btnMergeLaunch').boundingBox();
+    if (!railBox || !cardBox) throw new Error('Editor layout boxes unavailable');
+    if (!focusBox || !mergeBox) throw new Error('Editor action boxes unavailable');
+
+    expect(railBox.x + railBox.width).toBeLessThan(cardBox.x + 2);
+    expect(cardBox.width).toBeLessThanOrEqual(460);
+    expect(Math.abs(mergeBox.width - focusBox.width)).toBeLessThanOrEqual(4);
+});
+
+test('point session summary hides the extra cloud box until a board is opened', async ({ page }) => {
+    await page.addInitScript(() => {
+        localStorage.setItem('bniLinkedCollabSession_v1', JSON.stringify({
+            token: 'session-token',
+            user: { username: 'dutch' },
+        }));
+    });
+
+    await installNetlifyMocks(page, {
+        authSession: true,
+        authUser: { username: 'dutch' },
+        boards: [],
+    });
+
+    await page.goto('/point/');
+    await waitForPointReady(page);
+
+    await expect(page.locator('#cloudStatus')).toContainText('Session');
+    await expect(page.locator('#cloudStatus')).toContainText('dutch');
+    await expect(page.locator('#cloudLiveInfo')).toBeHidden();
+});
+
 test('point settings presets remain clickable and update the panel state', async ({ page }) => {
     await installNetlifyMocks(page);
 

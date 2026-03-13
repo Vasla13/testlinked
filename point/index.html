@@ -106,20 +106,16 @@
       position: absolute;
       left: 50%;
       top: 50%;
-      transform: translate(-50%, -50%);
-      width: min(430px, calc(100vw - var(--left-panel-width) - 120px));
-      max-height: calc(100vh - 20px);
-      border: 1px solid rgba(115, 251, 247, 0.56);
-      background:
-        linear-gradient(160deg, rgba(7, 16, 36, 0.97), rgba(5, 12, 30, 0.94)),
-        radial-gradient(circle at top right, rgba(115, 251, 247, 0.1), transparent 62%);
-      backdrop-filter: blur(6px);
-      box-shadow:
-        0 0 0 1px rgba(115, 251, 247, 0.12),
-        0 26px 48px rgba(0, 0, 0, 0.62);
-      border-radius: 12px;
+      transform: translate(calc(-50% + var(--editor-shell-shift)), -50%);
+      width: min(var(--editor-shell-max), calc(100vw - var(--left-panel-width) - var(--editor-side-clearance)));
+      max-height: none;
+      border: none;
+      background: transparent;
+      backdrop-filter: none;
+      box-shadow: none;
+      border-radius: 0;
       padding: 0;
-      overflow: hidden;
+      overflow: visible;
     }
     #editorTitle {
       display: none !important;
@@ -135,12 +131,12 @@
       font-size: 0.68rem;
     }
     #editorBody {
-      padding: 16px 18px 18px !important;
+      padding: 0 !important;
       text-align: left !important;
       opacity: 1 !important;
-      max-height: calc(100vh - 56px);
-      overflow-y: auto;
-      background: rgba(2, 8, 22, 0.5);
+      max-height: none;
+      overflow: visible;
+      background: transparent;
     }
 
     /* --- SECTIONS DANS SIDEBARS --- */
@@ -800,6 +796,13 @@
       --font-tactical: 'Rajdhani', sans-serif;
       --font-code: 'VT323', monospace;
       --left-panel-width: 226px;
+      --editor-main-width: 426px;
+      --editor-action-rail-width: 76px;
+      --editor-action-rail-gap: 14px;
+      --editor-shell-max: calc(var(--editor-main-width) + var(--editor-action-rail-width) + var(--editor-action-rail-gap));
+      --editor-shell-shift: calc((var(--editor-action-rail-width) + var(--editor-action-rail-gap)) / 2);
+      --editor-side-clearance: 120px;
+      --quick-actions-max: 620px;
       --bg-dark: #020816;
       --bg-panel: rgba(6, 16, 39, 0.92);
       --bg-panel-soft: rgba(5, 14, 34, 0.76);
@@ -1048,15 +1051,16 @@
     #btnDataFileToggle {
       width: 100%;
       justify-content: center;
-      font-size: 0.94rem;
-      letter-spacing: 2px;
+      min-height: 36px;
+      font-size: 0.82rem;
+      letter-spacing: 1.5px;
     }
 
     .data-summary {
       display: flex;
       flex-direction: column;
-      gap: 8px;
-      margin-top: 8px;
+      gap: 6px;
+      margin-top: 6px;
     }
 
     #cloudStatus {
@@ -1064,21 +1068,21 @@
       border-radius: 10px !important;
       background: rgba(3, 10, 22, 0.92) !important;
       color: var(--text-muted) !important;
-      font-size: 0.68rem !important;
-      min-height: 42px;
+      font-size: 0.62rem !important;
+      min-height: 34px;
       display: flex;
       flex-direction: column;
       align-items: flex-start;
       justify-content: center;
-      padding: 6px 8px;
+      padding: 5px 7px;
       line-height: 1.04;
       overflow: hidden;
     }
 
     .cloud-status-label,
     .cloud-status-solo {
-      font-size: 0.56rem;
-      letter-spacing: 1.6px;
+      font-size: 0.5rem;
+      letter-spacing: 1.2px;
       text-transform: uppercase;
       color: #7f99b7;
       white-space: nowrap;
@@ -1095,9 +1099,9 @@
 
     .cloud-status-value {
       margin-top: 2px;
-      font-size: 0.78rem;
-      letter-spacing: 1.1px;
-      text-transform: uppercase;
+      font-size: 0.68rem;
+      letter-spacing: 0.8px;
+      text-transform: none;
       color: var(--accent-cyan);
     }
 
@@ -1125,25 +1129,28 @@
     .cloud-live-info {
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 5px;
       margin-top: 2px;
-      padding: 8px;
+      padding: 6px;
       border: 1px solid rgba(102, 243, 255, 0.14);
       border-radius: 10px;
       background: rgba(3, 10, 22, 0.74);
     }
+    .cloud-live-info[hidden] {
+      display: none !important;
+    }
 
     .cloud-sync-info {
-      min-height: 30px;
+      min-height: 24px;
       display: flex;
       align-items: center;
-      padding: 6px 8px;
+      padding: 4px 6px;
       border: 1px solid rgba(102, 243, 255, 0.14);
       border-radius: 8px;
       background: rgba(2, 8, 18, 0.88);
       color: #9db6cf;
-      font-size: 0.68rem;
-      letter-spacing: 1.4px;
+      font-size: 0.56rem;
+      letter-spacing: 0.9px;
       text-transform: uppercase;
     }
 
@@ -1169,12 +1176,12 @@
     .cloud-presence-strip {
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 5px;
     }
 
     .cloud-presence-empty {
       color: #7388a4;
-      font-size: 0.74rem;
+      font-size: 0.68rem;
       line-height: 1.4;
       padding: 2px 0;
     }
@@ -1182,9 +1189,9 @@
     .cloud-presence-pill {
       display: flex;
       align-items: center;
-      gap: 8px;
-      min-height: 42px;
-      padding: 7px 8px;
+      gap: 6px;
+      min-height: 36px;
+      padding: 5px 6px;
       border: 1px solid rgba(102, 243, 255, 0.12);
       border-radius: 8px;
       background: rgba(2, 8, 18, 0.92);
@@ -1196,8 +1203,8 @@
     }
 
     .cloud-presence-avatar {
-      width: 28px;
-      height: 28px;
+      width: 24px;
+      height: 24px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -1205,7 +1212,7 @@
       border: 1px solid rgba(102, 243, 255, 0.24);
       background: rgba(17, 42, 58, 0.9);
       color: var(--accent-cyan);
-      font-size: 0.7rem;
+      font-size: 0.62rem;
       letter-spacing: 1px;
       text-transform: uppercase;
       flex: 0 0 auto;
@@ -1220,8 +1227,8 @@
 
     .cloud-presence-name {
       color: var(--text-light);
-      font-size: 0.78rem;
-      letter-spacing: 1px;
+      font-size: 0.68rem;
+      letter-spacing: 0.8px;
       text-transform: uppercase;
       white-space: nowrap;
       overflow: hidden;
@@ -1230,8 +1237,8 @@
 
     .cloud-presence-detail {
       color: #7d94b1;
-      font-size: 0.68rem;
-      letter-spacing: 1px;
+      font-size: 0.6rem;
+      letter-spacing: 0.8px;
       text-transform: uppercase;
       white-space: nowrap;
       overflow: hidden;
@@ -1300,16 +1307,12 @@
     }
 
     #editor {
-      width: min(430px, calc(100vw - var(--left-panel-width) - 120px));
-      border: 1px solid rgba(102, 243, 255, 0.42);
-      border-radius: 18px;
-      background:
-        linear-gradient(180deg, rgba(7, 18, 42, 0.98), rgba(4, 11, 26, 0.96)),
-        radial-gradient(circle at top right, rgba(102, 243, 255, 0.08), transparent 54%);
-      box-shadow:
-        0 0 0 1px rgba(102, 243, 255, 0.08),
-        0 28px 80px rgba(0, 0, 0, 0.62);
-      clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 18px 100%, 0 calc(100% - 18px));
+      width: min(var(--editor-shell-max), calc(100vw - var(--left-panel-width) - var(--editor-side-clearance)));
+      border: none;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+      clip-path: none;
     }
 
     #editorDragHandle {
@@ -1321,9 +1324,9 @@
     }
 
     #editorBody {
-      padding: 12px 14px 14px !important;
-      max-height: calc(100vh - 56px);
-      background: linear-gradient(180deg, rgba(5, 12, 28, 0.92), rgba(3, 10, 24, 0.82)) !important;
+      padding: 0 !important;
+      max-height: none;
+      background: transparent !important;
     }
 
     .editor-empty {
@@ -1336,15 +1339,17 @@
 
     #quick-actions {
       bottom: 18px;
-      width: min(608px, calc(100vw - 32px));
-      gap: 8px;
+      width: min(var(--quick-actions-max), calc(100vw - 24px));
+      gap: 6px;
     }
 
     .quick-action-btn {
-      min-height: 42px;
-      font-size: 1rem;
+      min-height: 38px;
+      padding: 0 12px;
+      font-size: 0.84rem;
       font-family: var(--font-main);
-      letter-spacing: 1.6px;
+      letter-spacing: 1.1px;
+      white-space: nowrap;
       background: linear-gradient(90deg, rgba(18, 39, 56, 0.88), rgba(7, 17, 32, 0.94));
       border: 1px solid var(--border-strong);
       color: var(--accent-cyan);
@@ -1375,6 +1380,13 @@
     @media (min-width: 1024px) and (max-height: 820px) {
       :root {
         --left-panel-width: 196px;
+        --editor-main-width: 344px;
+        --editor-action-rail-width: 66px;
+        --editor-action-rail-gap: 10px;
+        --editor-shell-max: calc(var(--editor-main-width) + var(--editor-action-rail-width) + var(--editor-action-rail-gap));
+        --editor-shell-shift: calc((var(--editor-action-rail-width) + var(--editor-action-rail-gap)) / 2);
+        --editor-side-clearance: 72px;
+        --quick-actions-max: 520px;
       }
 
       #app {
@@ -1389,21 +1401,11 @@
         padding: 12px 12px 12px 0;
       }
 
-      #editor {
-        width: min(372px, calc(100vw - var(--left-panel-width) - 72px));
-        max-height: calc(100vh - 16px);
-      }
-
-      #quick-actions {
-        bottom: 12px;
-        width: min(468px, calc(100vw - 18px));
-        gap: 6px;
-      }
+      #quick-actions { bottom: 12px; }
 
       .quick-action-btn {
-        min-height: 36px;
-        font-size: 0.82rem;
-        letter-spacing: 1.1px;
+        min-height: 34px;
+        font-size: 0.76rem;
       }
 
       #linkLegend {
@@ -1426,38 +1428,47 @@
     @media (min-width: 1024px) and (min-height: 821px) and (max-width: 1439px) {
       :root {
         --left-panel-width: 208px;
-      }
-
-      #editor {
-        width: min(392px, calc(100vw - var(--left-panel-width) - 92px));
-      }
-
-      #quick-actions {
-        width: min(524px, calc(100vw - 22px));
+        --editor-main-width: 372px;
+        --editor-action-rail-width: 70px;
+        --editor-action-rail-gap: 12px;
+        --editor-shell-max: calc(var(--editor-main-width) + var(--editor-action-rail-width) + var(--editor-action-rail-gap));
+        --editor-shell-shift: calc((var(--editor-action-rail-width) + var(--editor-action-rail-gap)) / 2);
+        --editor-side-clearance: 88px;
+        --quick-actions-max: 560px;
       }
     }
 
     @media (min-width: 1440px) and (max-width: 1919px) {
       :root {
         --left-panel-width: 228px;
+        --editor-main-width: 416px;
+        --editor-action-rail-width: 74px;
+        --editor-action-rail-gap: 14px;
+        --editor-shell-max: calc(var(--editor-main-width) + var(--editor-action-rail-width) + var(--editor-action-rail-gap));
+        --editor-shell-shift: calc((var(--editor-action-rail-width) + var(--editor-action-rail-gap)) / 2);
+        --editor-side-clearance: 124px;
+        --quick-actions-max: 608px;
       }
 
       #app {
         padding: 8px 12px 12px 8px;
       }
 
-      #editor {
-        width: min(470px, calc(100vw - var(--left-panel-width) - 140px));
-      }
-
-      #quick-actions {
-        width: min(672px, calc(100vw - 40px));
+      .quick-action-btn {
+        font-size: 0.82rem;
       }
     }
 
     @media (min-width: 1920px) {
       :root {
         --left-panel-width: 256px;
+        --editor-main-width: 448px;
+        --editor-action-rail-width: 78px;
+        --editor-action-rail-gap: 16px;
+        --editor-shell-max: calc(var(--editor-main-width) + var(--editor-action-rail-width) + var(--editor-action-rail-gap));
+        --editor-shell-shift: calc((var(--editor-action-rail-width) + var(--editor-action-rail-gap)) / 2);
+        --editor-side-clearance: 156px;
+        --quick-actions-max: 648px;
       }
 
       #app {
@@ -1472,12 +1483,8 @@
         padding: 20px 20px 20px 0;
       }
 
-      #editor {
-        width: min(520px, calc(100vw - var(--left-panel-width) - 180px));
-      }
-
-      #quick-actions {
-        width: min(784px, calc(100vw - 60px));
+      .quick-action-btn {
+        font-size: 0.86rem;
       }
 
       .brand-logo {
@@ -1488,14 +1495,13 @@
     @media (min-width: 2560px), (min-width: 1920px) and (min-aspect-ratio: 21/9) {
       :root {
         --left-panel-width: 275px;
-      }
-
-      #editor {
-        width: min(575px, calc(100vw - var(--left-panel-width) - 220px));
-      }
-
-      #quick-actions {
-        width: min(896px, calc(100vw - 96px));
+        --editor-main-width: 500px;
+        --editor-action-rail-width: 82px;
+        --editor-action-rail-gap: 18px;
+        --editor-shell-max: calc(var(--editor-main-width) + var(--editor-action-rail-width) + var(--editor-action-rail-gap));
+        --editor-shell-shift: calc((var(--editor-action-rail-width) + var(--editor-action-rail-gap)) / 2);
+        --editor-side-clearance: 190px;
+        --quick-actions-max: 700px;
       }
 
       #linkLegend {
@@ -1506,6 +1512,13 @@
     @media (max-width: 900px) {
       body.point-skin {
         overflow: auto;
+      }
+
+      :root {
+        --editor-action-rail-width: 0px;
+        --editor-action-rail-gap: 0px;
+        --editor-shell-shift: 0px;
+        --quick-actions-max: 100vw;
       }
 
       #app {
@@ -1699,7 +1712,7 @@
   </div>
 
   <div id="quick-actions" aria-label="Actions rapides">
-    <button id="btnQuickSearch" class="quick-action-btn" type="button">RECHERCHE</button>
+    <button id="btnQuickSearch" class="quick-action-btn" type="button">RECHERCHE RAPIDE</button>
     <button id="btnQuickCreate" class="quick-action-btn" type="button">CREER</button>
     <button id="btnQuickIntel" class="quick-action-btn" type="button">AIDE IA</button>
   </div>
