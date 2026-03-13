@@ -88,6 +88,37 @@ test('point editor keeps the action rail outside the panel and renames quick sea
     expect(Math.abs(mergeBox.width - focusBox.width)).toBeLessThanOrEqual(4);
 });
 
+test('point editor stays open while panning and closes on a single empty click', async ({ page }) => {
+    await installNetlifyMocks(page);
+
+    await page.goto('/point/');
+    await waitForPointReady(page);
+
+    await page.evaluate(() => {
+        const btn = document.getElementById('createPerson');
+        if (!btn) throw new Error('createPerson button missing');
+        btn.click();
+    });
+
+    await expect(page.locator('#editor')).toBeVisible();
+
+    const graphBox = await page.locator('#graph').boundingBox();
+    if (!graphBox) throw new Error('Graph canvas not available');
+
+    const startX = graphBox.x + 24;
+    const startY = graphBox.y + 24;
+
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(startX + 90, startY + 36, { steps: 8 });
+    await page.mouse.up();
+
+    await expect(page.locator('#editor')).toBeVisible();
+
+    await page.mouse.click(startX, startY);
+    await expect(page.locator('#editor')).toBeHidden();
+});
+
 test('point session summary hides the extra cloud box until a board is opened', async ({ page }) => {
     await page.addInitScript(() => {
         localStorage.setItem('bniLinkedCollabSession_v1', JSON.stringify({

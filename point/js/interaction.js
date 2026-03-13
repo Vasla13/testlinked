@@ -52,6 +52,12 @@ function getWorldPositionFromEvent(event, canvas) {
 export function setupCanvasEvents(canvas) {
     if (!canvas) return;
     const NODE_DRAG_THRESHOLD_PX = 6;
+    const releaseSuppressedClickSoon = () => {
+        if (typeof window === 'undefined' || typeof window.setTimeout !== 'function') return;
+        window.setTimeout(() => {
+            suppressNextClick = false;
+        }, 0);
+    };
     
     // 1. ZOOM (CORRIGÉ ET SYNCHRONISÉ)
     canvas.addEventListener('wheel', (e) => {
@@ -82,6 +88,8 @@ export function setupCanvasEvents(canvas) {
 
     // 2. SOURIS (CLIC & DRAG MANUEL)
     let isPanning = false;
+    let pendingPan = false;
+    let panStart = { x: 0, y: 0 };
     let lastPan = { x: 0, y: 0 };
     let dragLinkSource = null;
     let suppressNextClick = false;
@@ -105,18 +113,11 @@ export function setupCanvasEvents(canvas) {
         // Cas 2 : Panoramique (Clic Gauche DANS LE VIDE)
         // On vérifie bien !hit pour ne pas bouger si on est sur un noeud
         if (!hit && e.button === 0) {
-            isPanning = true; 
-            suppressNextClick = true;
+            pendingPan = true;
+            isPanning = false;
+            panStart = { x: e.clientX, y: e.clientY };
             lastPan = { x: e.clientX, y: e.clientY };
-            canvas.style.cursor = 'grabbing';
-            
-            // Désélection si on clique dans le vide
-            if (state.selection) { 
-                state.selection = null; 
-                renderEditor(); 
-                updatePathfindingPanel(); 
-                draw(); 
-            }
+            canvas.style.cursor = 'default';
         }
     });
 
@@ -129,7 +130,17 @@ export function setupCanvasEvents(canvas) {
         }
         
         // Mode Panoramique (Déplacement carte)
-        if (isPanning) {
+        if (pendingPan || isPanning) {
+            if (!isPanning) {
+                const totalDx = e.clientX - panStart.x;
+                const totalDy = e.clientY - panStart.y;
+                if (Math.abs(totalDx) < NODE_DRAG_THRESHOLD_PX && Math.abs(totalDy) < NODE_DRAG_THRESHOLD_PX) {
+                    return;
+                }
+                isPanning = true;
+                suppressNextClick = true;
+                canvas.style.cursor = 'grabbing';
+            }
             const dx = e.clientX - lastPan.x; 
             const dy = e.clientY - lastPan.y;
             lastPan = { x: e.clientX, y: e.clientY };
@@ -161,11 +172,17 @@ export function setupCanvasEvents(canvas) {
                 if (success) selectNode(dragLinkSource.id);
             }
             dragLinkSource = null; state.tempLink = null; 
+            releaseSuppressedClickSoon();
             draw(); return;
         }
         
         // Fin Panoramique
-        if (isPanning) { isPanning = false; canvas.style.cursor = 'default'; }
+        pendingPan = false;
+        if (isPanning) {
+            isPanning = false;
+            canvas.style.cursor = 'default';
+            releaseSuppressedClickSoon();
+        }
     });
 
     canvas.addEventListener('click', (e) => {
@@ -179,11 +196,16 @@ export function setupCanvasEvents(canvas) {
         const hit = findNodeAtPosition(p.x, p.y, 40);
         if (hit) {
             selectNode(hit.id);
+        } else if (state.selection) {
+            state.selection = null;
+            renderEditor();
+            updatePathfindingPanel();
+            draw();
         }
     });
     
     canvas.addEventListener('mouseleave', () => {
-        isPanning = false; state.hoverId = null; dragLinkSource = null; state.tempLink = null; suppressNextClick = false; draw();
+        pendingPan = false; isPanning = false; state.hoverId = null; dragLinkSource = null; state.tempLink = null; suppressNextClick = false; draw();
     });
 
     // 3. CONFIGURATION D3 DRAG (Pour bouger les nœuds)
@@ -241,6 +263,7 @@ export function setupCanvasEvents(canvas) {
                 delete e.subject.__dragStartClientY;
 
                 if (moved) {
+                    releaseSuppressedClickSoon();
                     saveState();
                 }
             }
