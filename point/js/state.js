@@ -12,6 +12,7 @@ export const state = {
     hvtMode: false,
     hvtTopN: 10,
     hvtTopIds: new Set(),
+    hvtSelectedId: null,
     pathfinding: { startId: null, active: false, pathNodes: new Set(), pathLinks: new Set() },
     activeFilter: 'ALL',
     globeMode: true,
@@ -170,6 +171,7 @@ export function loadState() {
         state.pathfinding = { startId: null, active: false, pathNodes: new Set(), pathLinks: new Set() };
         state.hvtMode = false;
         state.hvtTopIds = new Set();
+        state.hvtSelectedId = null;
         return true;
     } catch (e) { return false; }
 }

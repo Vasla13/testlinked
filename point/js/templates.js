@@ -125,26 +125,6 @@ export function renderEditorHTML(n, state) {
 
     return `
     <div class="editor-panel-layout">
-        <div class="editor-side-rail">
-            <div class="editor-side-group">
-                <button id="btnFocusNode" class="mini-btn ${state.focusMode ? 'active' : ''}">${state.focusMode ? 'tout voir' : 'Focus'}</button>
-                <button id="btnCenterNode" class="mini-btn">centrer</button>
-            </div>
-            <div class="editor-side-group editor-side-group-bottom">
-                <button id="btnExportRP" class="mini-btn" type="button">Copier</button>
-                <button id="btnMergeLaunch" class="mini-btn" type="button">Fusion</button>
-                <button id="btnDelete" class="mini-btn danger" type="button">Supprimer</button>
-                <div id="editorMergeRail" class="editor-side-popover" hidden>
-                    <div class="editor-side-popover-title">Fusionner cette fiche</div>
-                    <div class="editor-autocomplete-field">
-                        <input id="mergeTarget" type="text" autocomplete="off" spellcheck="false" placeholder="Vers qui fusionner ?" class="flex-grow-input">
-                        <div id="mergeTargetResults" class="editor-autocomplete-results" hidden></div>
-                    </div>
-                    <button id="btnMergeApply" class="mini-btn primary" type="button">Fusionner</button>
-                </div>
-            </div>
-        </div>
-
         <div class="editor-main-card">
             <div class="editor-sheet">
                 <div class="editor-sheet-head">
@@ -166,6 +146,32 @@ export function renderEditorHTML(n, state) {
                     <div class="editor-sheet-topbar ${personStatusControls ? '' : 'editor-sheet-topbar-meta-only'}">
                         ${personStatusControls}
                         ${headMetaControls}
+                    </div>
+                </div>
+
+                <div class="editor-toolbar">
+                    <div class="editor-toolbar-group">
+                        <button id="btnFocusNode" class="mini-btn ${state.focusMode ? 'active' : ''}" type="button">${state.focusMode ? 'Tout voir' : 'Focus'}</button>
+                        <button id="btnCenterNode" class="mini-btn" type="button">Centrer</button>
+                        <button id="btnExportRP" class="mini-btn" type="button">Copier</button>
+                    </div>
+                    <div class="editor-toolbar-group editor-toolbar-group-danger">
+                        <button id="btnMergeLaunch" class="mini-btn editor-action-merge" type="button">Fusionner</button>
+                        <button id="btnDelete" class="mini-btn danger" type="button">Supprimer</button>
+                    </div>
+                </div>
+
+                <div id="editorMergeRail" class="editor-side-popover editor-merge-inline" hidden>
+                    <div class="editor-merge-head">
+                        <div class="editor-side-popover-title">Fusionner cette fiche</div>
+                        <div class="editor-merge-copy">Tout le contenu de cette fiche sera absorbé par la fiche cible.</div>
+                    </div>
+                    <div class="editor-merge-row">
+                        <div class="editor-autocomplete-field flex-grow-input">
+                            <input id="mergeTarget" type="text" autocomplete="off" spellcheck="false" placeholder="Rechercher la fiche cible" class="flex-grow-input">
+                            <div id="mergeTargetResults" class="editor-autocomplete-results" hidden></div>
+                        </div>
+                        <button id="btnMergeApply" class="mini-btn primary" type="button">Valider la fusion</button>
                     </div>
                 </div>
 
@@ -207,13 +213,11 @@ export function renderEditorHTML(n, state) {
 
                 <div class="editor-link-strip">
                     <div class="editor-inline-title">Ajouter une relation</div>
-                    <div class="editor-link-composer editor-link-composer-primary">
-                        <div class="editor-autocomplete-field flex-grow-input">
+                    <div class="editor-link-grid">
+                        <div class="editor-autocomplete-field flex-grow-input editor-link-target">
                             <input id="editorLinkName" type="text" autocomplete="off" spellcheck="false" placeholder="Nom de la fiche a lier" class="flex-grow-input">
                             <div id="editorLinkNameResults" class="editor-autocomplete-results" hidden></div>
                         </div>
-                    </div>
-                    <div class="editor-link-composer editor-link-composer-secondary">
                         <select id="editorLinkType" class="compact-select editor-compact-select">
                             <option value="${TYPES.PERSON}">Personne</option>
                             <option value="${TYPES.GROUP}">Groupe</option>

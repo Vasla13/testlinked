@@ -44,7 +44,6 @@ const ui = {
 
 let modalOverlay = null;
 let hvtPanel = null;
-let hvtSelectedId = null;
 let intelPanel = null;
 let intelSuggestions = [];
 const INTEL_ACCESS_CODE = 'bni-dutch';
@@ -990,7 +989,7 @@ function syncCloudLivePanels() {
     if (modalPresenceEl) {
         modalPresenceEl.innerHTML = isCloudBoardActive()
             ? (renderCloudPresenceChips(collab.presence, { includeSelf: true }) || `<div class="cloud-presence-empty">${escapeHtml(presenceLabel || 'Board prive')}</div>`)
-            : `<div class="cloud-presence-empty">Session cloud ouverte</div>`;
+            : `<div class="cloud-presence-empty">Session cloud</div>`;
     }
 }
 
@@ -2264,7 +2263,7 @@ async function runCloudAuth(action) {
         collab.user = res.user || null;
         persistCollabState();
         startCollabSessionHeartbeat();
-        setCloudSyncState('session', 'Session cloud ouverte');
+        setCloudSyncState('session', 'Session cloud');
         if (collab.pendingBoardId) {
             const targetBoard = collab.pendingBoardId;
             collab.pendingBoardId = '';
@@ -2367,7 +2366,7 @@ async function renderCloudHome() {
             <div class="cloud-shell">
                 <div class="cloud-home-head">
                     <div class="cloud-home-heading">
-                        <div class="cloud-home-kicker">Donnees</div>
+                        <div class="cloud-home-kicker">Fichier</div>
                         <div class="cloud-home-title">Session invite</div>
                     </div>
                     <div class="cloud-home-tab-group">
@@ -2449,7 +2448,7 @@ async function renderCloudHome() {
         <div class="cloud-shell">
             <div class="cloud-home-head">
                 <div class="cloud-home-heading">
-                    <div class="cloud-home-kicker">Donnees</div>
+                    <div class="cloud-home-kicker">Fichier</div>
                     <div class="cloud-home-title">${escapeHtml(collab.user.username)}</div>
                 </div>
                 <div class="cloud-home-tab-group">
@@ -3072,7 +3071,7 @@ function setupTopButtons() {
 
     const btnDataFileToggle = document.getElementById('btnDataFileToggle');
     if (btnDataFileToggle) {
-        btnDataFileToggle.textContent = 'Donnees';
+        btnDataFileToggle.textContent = 'Fichier';
         btnDataFileToggle.title = 'Ouvrir le hub local / cloud';
         btnDataFileToggle.onclick = () => openDataHubModal();
     }
@@ -3715,6 +3714,9 @@ function openQuickCreateModal() {
 
 function openHvtAssistant() {
     state.hvtMode = true;
+    if (state.selection && nodeById(state.selection)) {
+        state.hvtSelectedId = state.selection;
+    }
     calculateHVT();
     showHvtPanel();
     const btnHVT = document.getElementById('btnHVT');
@@ -3724,7 +3726,7 @@ function openHvtAssistant() {
 function deactivateHvtMode() {
     state.hvtMode = false;
     state.hvtTopIds = new Set();
-    hvtSelectedId = null;
+    state.hvtSelectedId = null;
     const btnHVT = document.getElementById('btnHVT');
     if (btnHVT) btnHVT.classList.remove('active');
     if (hvtPanel) hvtPanel.style.display = 'none';
@@ -4506,7 +4508,12 @@ export function updateHvtPanel() {
         .filter(n => (n.hvtScore || 0) > 0)
         .sort((a, b) => (b.hvtScore || 0) - (a.hvtScore || 0));
     const limit = (state.hvtTopN && state.hvtTopN > 0) ? state.hvtTopN : Math.min(20, ranked.length);
-    const list = ranked.slice(0, limit);
+    const rankById = new Map(ranked.map((node, index) => [String(node.id), index + 1]));
+    let list = ranked.slice(0, limit);
+    const currentSelected = nodeById(state.hvtSelectedId);
+    if (currentSelected && !list.some((node) => String(node.id) === String(currentSelected.id))) {
+        list = [currentSelected, ...list].slice(0, limit);
+    }
     const label = (state.hvtTopN && state.hvtTopN > 0) ? `Top ${state.hvtTopN}` : `Top ${limit}`;
     if (subtitleEl) subtitleEl.textContent = label;
     if (countEl) countEl.textContent = `${list.length}/${ranked.length}`;
@@ -4520,10 +4527,11 @@ export function updateHvtPanel() {
     listEl.innerHTML = list.map((n, i) => {
         const score = Math.round((n.hvtScore || 0) * 100);
         const typeLabel = TYPE_LABEL[n.type] || n.type;
-        const isActive = String(n.id) === String(hvtSelectedId);
+        const isActive = String(n.id) === String(state.hvtSelectedId);
+        const rank = rankById.get(String(n.id)) || (i + 1);
         return `
             <div class="hvt-row ${isActive ? 'active' : ''}" data-id="${n.id}">
-                <div class="hvt-rank">#${i + 1}</div>
+                <div class="hvt-rank">#${rank}</div>
                 <div class="hvt-name">${escapeHtml(n.name)}</div>
                 <div class="hvt-type">${typeLabel}</div>
                 <div class="hvt-score">${score}%</div>
@@ -4534,18 +4542,17 @@ export function updateHvtPanel() {
     listEl.querySelectorAll('.hvt-row').forEach(row => {
         row.onclick = () => {
             const id = row.dataset.id;
-            hvtSelectedId = id;
+            state.hvtSelectedId = id;
             const node = nodeById(id);
             if (node) {
                 zoomToNode(node.id);
             }
-            updateHvtPanel();
         };
     });
 
-    const selected = nodeById(hvtSelectedId) || list[0];
+    const selected = nodeById(state.hvtSelectedId) || list[0];
     if (!selected) { detailsEl.innerHTML = ''; return; }
-    hvtSelectedId = selected.id;
+    state.hvtSelectedId = selected.id;
     detailsEl.innerHTML = renderHvtDetails(selected);
 }
 
@@ -5239,6 +5246,10 @@ export function addLink(a, b, kind, options = {}) {
 
 export function selectNode(id) {
     state.selection = id;
+    if (state.hvtMode && String(state.hvtSelectedId || '') !== String(id || '')) {
+        state.hvtSelectedId = id;
+        refreshHvt();
+    }
     renderEditor();
     updatePathfindingPanel();
     draw();
@@ -5252,6 +5263,10 @@ function zoomToNode(id) {
     const n = nodeById(id);
     if (!n) return;
     state.selection = n.id;
+    if (state.hvtMode) {
+        state.hvtSelectedId = n.id;
+        refreshHvt();
+    }
     state.view.scale = 1.6;
     state.view.x = -n.x * 1.6;
     state.view.y = -n.y * 1.6;

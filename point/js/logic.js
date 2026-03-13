@@ -47,9 +47,15 @@ function normalizeHvtEdgeWeight(kind) {
 function updateHvtInfluenceFlow() {
     const adjacency = new Map();
     const ranked = [...state.nodes].sort((a, b) => (b.hvtScore || 0) - (a.hvtScore || 0));
-    const seedIds = state.hvtTopIds && state.hvtTopIds.size
-        ? [...state.hvtTopIds].map((id) => String(id))
-        : ranked.filter((node) => (node.hvtScore || 0) >= 0.55).slice(0, 8).map((node) => String(node.id));
+    const selectedSeedId = String(state.hvtSelectedId || '').trim();
+    const selectedSeedNode = selectedSeedId ? nodeById(selectedSeedId) : null;
+    const seedIds = selectedSeedNode
+        ? [selectedSeedId]
+        : (
+            state.hvtTopIds && state.hvtTopIds.size
+                ? [...state.hvtTopIds].map((id) => String(id))
+                : ranked.filter((node) => (node.hvtScore || 0) >= 0.55).slice(0, 8).map((node) => String(node.id))
+        );
 
     state.nodes.forEach((node) => {
         node.hvtInfluence = 0;
