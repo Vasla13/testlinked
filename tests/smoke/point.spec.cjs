@@ -39,6 +39,14 @@ test('point editor keeps long names visible and uses a square color picker', asy
     await expect(page.locator('#edQuickNameInline')).toBeVisible();
     await expect(page.locator('#edQuickNameInline')).toHaveJSProperty('tagName', 'TEXTAREA');
 
+    await page.fill('#edQuickNameInline', 'Morgane Fox');
+    await page.fill('#edQuickNum', '75523');
+
+    const shortNameBox = await page.locator('#edQuickNameInline').boundingBox();
+    const shortNumBox = await page.locator('#edQuickNum').boundingBox();
+    if (!shortNameBox || !shortNumBox) throw new Error('Header fields not available');
+    expect(Math.abs(shortNameBox.y - shortNumBox.y)).toBeLessThanOrEqual(4);
+
     await page.fill('#edQuickNameInline', 'Jean-Baptiste Maximilien de la Tour du Nord - secteur tres long');
 
     const nameHeight = await page.locator('#edQuickNameInline').evaluate((el) => el.clientHeight);
@@ -56,7 +64,8 @@ test('point editor keeps the action rail outside the panel and renames quick sea
     await page.goto('/point/');
     await waitForPointReady(page);
 
-    await expect(page.locator('#btnQuickSearch')).toHaveText('RECHERCHE RAPIDE');
+    await expect(page.locator('#btnQuickSearch')).toHaveText('RECHERCHE');
+    await expect(page.locator('#left .section h2').nth(2)).toHaveText('Recherche rapide');
 
     await page.evaluate(() => {
         const btn = document.getElementById('createPerson');

@@ -3194,7 +3194,7 @@ function openQuickSearchModal() {
 
     msgEl.innerHTML = `
         <div class="modal-tool">
-            <h3 class="modal-tool-title">Recherche rapide</h3>
+            <h3 class="modal-tool-title">Recherche</h3>
             <input id="quick-search-input" type="text" placeholder="Nom ou telephone..." class="modal-input-standalone modal-search-input">
             <div id="quick-search-results" class="modal-search-results"></div>
         </div>

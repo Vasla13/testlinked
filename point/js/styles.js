@@ -2843,9 +2843,9 @@ export function injectStyles() {
         }
         .editor-side-group .mini-btn {
             width: 100%;
-            min-height: 42px;
-            padding: 9px 6px;
-            font-size: 0.62rem;
+            min-height: 44px;
+            padding: 10px 7px;
+            font-size: 0.66rem;
             line-height: 1.15;
             font-family: var(--font-main);
             letter-spacing: 1.15px;
@@ -2894,9 +2894,9 @@ export function injectStyles() {
             display: flex;
             flex-direction: column;
             align-items: stretch;
-            gap: 8px;
+            gap: 6px;
             margin: -12px -12px 0;
-            padding: 12px 14px 11px;
+            padding: 10px 14px 9px;
             border-bottom: 1px solid rgba(102, 243, 255, 0.18);
             background: linear-gradient(90deg, rgba(102, 243, 255, 0.16), rgba(7, 18, 39, 0.96) 28%, rgba(3, 9, 24, 0.98));
             box-shadow: inset 0 1px 0 rgba(140, 250, 255, 0.08);
@@ -2909,9 +2909,9 @@ export function injectStyles() {
         }
         .editor-sheet-identity-row {
             display: flex;
-            align-items: flex-start;
+            align-items: center;
             justify-content: flex-start;
-            gap: 8px;
+            gap: 10px;
             width: 100%;
             min-width: 0;
             flex-wrap: nowrap;
@@ -2919,6 +2919,10 @@ export function injectStyles() {
         .editor-sheet-title-block {
             min-width: 0;
             flex: 1 1 auto;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            min-height: 38px;
         }
         .editor-head-pills {
             display: inline-flex;
@@ -2938,8 +2942,8 @@ export function injectStyles() {
         }
         .editor-sheet-name-input {
             width: 100%;
-            min-height: 40px;
-            padding: 4px 0 3px;
+            min-height: 38px;
+            padding: 2px 0 1px;
             border: none;
             background: transparent;
             box-shadow: none;
@@ -2982,7 +2986,7 @@ export function injectStyles() {
         }
         .editor-side-group .editor-action-merge {
             min-width: 0;
-            font-size: 0.56rem;
+            font-size: 0.6rem;
             letter-spacing: 1px;
         }
         .editor-sheet-topbar {
@@ -3034,15 +3038,16 @@ export function injectStyles() {
             min-width: 0;
         }
         .editor-inline-phone-head {
-            flex: 0 1 190px;
-            min-width: 138px;
-            max-width: 220px;
+            flex: 0 1 176px;
+            min-width: 112px;
+            max-width: 208px;
             margin-left: 0;
-            min-height: auto;
+            min-height: 38px;
             padding: 0;
             border: none;
             background: transparent;
             box-shadow: none;
+            align-self: center;
         }
         .editor-inline-label {
             color: #7f9ab7;
@@ -3058,13 +3063,15 @@ export function injectStyles() {
         .editor-inline-phone input {
             min-width: 0;
             width: 100%;
+            min-height: 38px;
+            height: 38px;
             border: none;
             background: transparent;
             color: var(--text-light);
             font-family: var(--font-main);
             font-size: clamp(1.12rem, 1.5vw, 1.34rem);
-            line-height: 1;
-            padding: 0;
+            line-height: 38px;
+            padding: 0 0 1px;
             box-shadow: none;
             outline: none;
             text-align: right;
@@ -4251,11 +4258,11 @@ export function injectStyles() {
                 padding-top: 0;
             }
             .editor-side-group .mini-btn {
-                min-height: 38px;
+                min-height: 40px;
                 padding: 8px 8px;
             }
             .editor-side-group .editor-action-merge {
-                font-size: 0.54rem;
+                font-size: 0.58rem;
             }
             .editor-side-popover {
                 position: static;
