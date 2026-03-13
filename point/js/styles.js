@@ -1511,10 +1511,14 @@ export function injectStyles() {
         }
         .cloud-auth-shell-inline {
             max-width: none;
-            padding: 16px;
+            padding: 18px;
             border: 1px solid rgba(102, 243, 255, 0.1);
             border-radius: 14px;
             background: linear-gradient(180deg, rgba(5, 12, 28, 0.76), rgba(4, 10, 22, 0.82));
+        }
+        .cloud-auth-shell-guest {
+            justify-content: center;
+            min-height: 100%;
         }
         .cloud-auth-badge {
             align-self: flex-start;
@@ -1545,6 +1549,10 @@ export function injectStyles() {
             display: grid;
             grid-template-columns: 1fr;
             gap: 8px;
+        }
+        .cloud-auth-shell-guest .cloud-auth-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
         }
         .cloud-auth-field {
             display: flex;
@@ -1615,7 +1623,7 @@ export function injectStyles() {
         .cloud-shell {
             display: flex;
             flex-direction: column;
-            gap: 14px;
+            gap: 12px;
         }
         .cloud-manage-shell {
             display: flex;
@@ -1689,6 +1697,15 @@ export function injectStyles() {
                 linear-gradient(180deg, rgba(6, 14, 30, 0.9), rgba(4, 10, 22, 0.92)),
                 radial-gradient(circle at top right, rgba(102, 243, 255, 0.05), transparent 30%);
             box-shadow: inset 0 0 0 1px rgba(102, 243, 255, 0.03);
+        }
+        .cloud-panel-shell-guest {
+            min-height: 0;
+            max-height: none;
+            overflow: visible;
+            padding: 0;
+            border: none;
+            background: transparent;
+            box-shadow: none;
         }
         .cloud-scroll {
             max-height: 270px;
@@ -1843,6 +1860,7 @@ export function injectStyles() {
         .cloud-close-btn {
             min-width: 38px;
             min-height: 38px;
+            padding: 0;
             border-radius: 10px;
         }
         .cloud-grid {
@@ -1854,16 +1872,16 @@ export function injectStyles() {
             display: flex;
             justify-content: space-between;
             gap: 12px;
-            margin-top: 2px;
+            margin-top: 0;
             color: #9bb0c7;
-            font-size: 0.74rem;
+            font-size: 0.72rem;
             flex-wrap: wrap;
         }
         .cloud-status-pill {
             display: inline-flex;
             align-items: center;
-            min-height: 34px;
-            padding: 8px 12px;
+            min-height: 32px;
+            padding: 7px 11px;
             border: 1px solid rgba(102, 243, 255, 0.12);
             border-radius: 999px;
             background: rgba(4, 11, 26, 0.78);
@@ -1895,7 +1913,61 @@ export function injectStyles() {
         .cloud-guest-panel {
             display: flex;
             flex-direction: column;
+            gap: 12px;
+        }
+        .cloud-guest-layout {
+            display: grid;
+            grid-template-columns: minmax(250px, 0.9fr) minmax(320px, 1.1fr);
+            gap: 12px;
+            align-items: stretch;
+        }
+        .cloud-guest-hero {
+            display: flex;
+            flex-direction: column;
             gap: 10px;
+            padding: 18px;
+            border: 1px solid rgba(102, 243, 255, 0.12);
+            border-radius: 16px;
+            background:
+                linear-gradient(180deg, rgba(7, 16, 35, 0.94), rgba(4, 10, 22, 0.9)),
+                radial-gradient(circle at top left, rgba(102, 243, 255, 0.08), transparent 54%);
+        }
+        .cloud-guest-kicker {
+            color: #7ec8d5;
+            font-size: 0.66rem;
+            letter-spacing: 1.8px;
+            text-transform: uppercase;
+        }
+        .cloud-guest-title {
+            color: #effbff;
+            font-size: 1.18rem;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+        }
+        .cloud-guest-copy {
+            color: #9fb8d2;
+            font-size: 0.8rem;
+            line-height: 1.5;
+        }
+        .cloud-guest-pills {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: auto;
+        }
+        .cloud-guest-pill {
+            display: inline-flex;
+            align-items: center;
+            min-height: 30px;
+            padding: 6px 10px;
+            border: 1px solid rgba(102, 243, 255, 0.12);
+            border-radius: 999px;
+            background: rgba(4, 11, 26, 0.72);
+            color: #9fd8e1;
+            font-size: 0.7rem;
+            letter-spacing: 1px;
+            text-transform: uppercase;
         }
         .cloud-local-grid {
             display: grid;
@@ -4172,7 +4244,9 @@ export function injectStyles() {
             }
             .cloud-inline-form,
             .cloud-grid,
-            .cloud-local-grid {
+            .cloud-local-grid,
+            .cloud-guest-layout,
+            .cloud-auth-shell-guest .cloud-auth-grid {
                 grid-template-columns: 1fr;
             }
             .cloud-home-head,

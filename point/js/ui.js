@@ -2333,16 +2333,19 @@ async function renderCloudHome() {
 
     if (!collab.user) {
         const guestCloudPanel = `
-            <div class="cloud-board-row">
-                <div class="cloud-row-main">
-                    <div class="cloud-row-title">Cloud verrouille</div>
-                    <div class="cloud-row-sub">connexion requise · point</div>
-                </div>
-                <div class="cloud-local-badge">Invite</div>
-            </div>
             <div class="cloud-local-panel cloud-guest-panel">
-                <div class="cloud-local-note">Tu gardes toutes les actions locales. Pour creer, ouvrir ou sauvegarder dans le cloud, reconnecte-toi avec ton mot de passe.</div>
-                <div class="modal-tool cloud-auth-shell cloud-auth-shell-inline">
+                <div class="cloud-guest-layout">
+                    <section class="cloud-guest-hero">
+                        <div class="cloud-guest-kicker">Mode invite</div>
+                        <div class="cloud-guest-title">Cloud verrouille</div>
+                        <div class="cloud-guest-copy">Tu gardes toutes les actions locales. Pour creer, ouvrir ou sauvegarder dans le cloud, reconnecte-toi avec ton mot de passe.</div>
+                        <div class="cloud-guest-pills">
+                            <span class="cloud-guest-pill">Local dispo</span>
+                            <span class="cloud-guest-pill">Point</span>
+                            <span class="cloud-guest-pill">Connexion requise</span>
+                        </div>
+                    </section>
+                    <div class="modal-tool cloud-auth-shell cloud-auth-shell-inline cloud-auth-shell-guest">
                     <div class="cloud-auth-badge">Cloud</div>
                     <h3 class="cloud-auth-title">Connexion au cloud</h3>
                     <div class="cloud-auth-copy">Entre simplement un identifiant et un mot de passe. Si le compte n existe pas encore, tu peux le creer ici.</div>
@@ -2357,10 +2360,14 @@ async function renderCloudHome() {
                         </label>
                     </div>
                     <div class="cloud-auth-hint">Le meme compte fonctionne aussi sur la carte. Sans connexion, tu restes en local.</div>
+                    </div>
                 </div>
             </div>
         `;
         const panelBody = localPanel === 'local' ? localRows : guestCloudPanel;
+        const panelShellClass = localPanel === 'cloud'
+            ? 'cloud-column cloud-panel-shell cloud-panel-shell-guest'
+            : 'cloud-column cloud-panel-shell';
 
         msgEl.innerHTML = `
             <div class="cloud-shell">
@@ -2375,10 +2382,10 @@ async function renderCloudHome() {
                     </div>
                     <button type="button" id="cloud-modal-close-x" class="mini-btn cloud-close-btn">×</button>
                 </div>
-                <div class="cloud-column cloud-panel-shell">${panelBody}</div>
+                <div class="${panelShellClass}">${panelBody}</div>
                 <div class="cloud-status-bar">
-                    <span class="cloud-status-pill">Session: invite</span>
-                    <span id="cloudModalSyncInfo" class="cloud-status-pill">Cloud verrouille jusqu a connexion</span>
+                    <span class="cloud-status-pill">Invite</span>
+                    <span id="cloudModalSyncInfo" class="cloud-status-pill">Connexion requise</span>
                 </div>
             </div>
         `;
@@ -2729,16 +2736,31 @@ function createModal() {
                 flex-wrap: wrap;
             }
             #custom-modal[data-mode="cloud"] .modal-card {
-                width: min(1040px, calc(100vw - 220px));
-                min-height: 540px;
-                padding: 22px 22px 18px;
+                width: min(1040px, calc(100vw - 56px));
+                min-height: min(540px, calc(100vh - 34px));
+                max-height: calc(100vh - 28px);
+                padding: 18px 20px 16px;
                 border-radius: 18px;
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
                 background:
                     linear-gradient(180deg, rgba(5, 12, 30, 0.98), rgba(4, 10, 22, 0.98)),
                     radial-gradient(circle at top right, rgba(102, 243, 255, 0.08), transparent 28%);
                 box-shadow:
                     0 0 0 1px rgba(115, 251, 247, 0.14),
                     0 28px 90px rgba(0, 0, 0, 0.7);
+            }
+            #custom-modal[data-mode="cloud"] #modal-msg {
+                flex: 1 1 auto;
+                min-height: 0;
+                margin-bottom: 12px;
+                overflow: auto;
+                padding-right: 4px;
+            }
+            #custom-modal[data-mode="cloud"] #modal-actions {
+                flex: 0 0 auto;
+                justify-content: flex-end;
             }
             #custom-modal[data-mode="create"] .modal-card {
                 width: min(736px, calc(100vw - 120px));
