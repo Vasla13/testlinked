@@ -72,6 +72,11 @@ const collab = {
     shadowData: null,
     saveInFlight: false,
     presence: [],
+    presenceTimer: null,
+    presenceLoopToken: 0,
+    presenceLoopRunning: false,
+    presenceRetryMs: 0,
+    presenceInFlight: false,
     homePanel: 'cloud',
     realtimeSession: null,
     realtimeFallbackActive: false,
@@ -86,6 +91,8 @@ const COLLAB_AUTOSAVE_RETRY_MS = 250;
 const COLLAB_WATCH_TIMEOUT_MS = 7000;
 const COLLAB_WATCH_RETRY_MIN_MS = 500;
 const COLLAB_WATCH_RETRY_MAX_MS = 4000;
+const COLLAB_PRESENCE_HEARTBEAT_MS = 6500;
+const COLLAB_PRESENCE_RETRY_MS = 3200;
 const collabStorage = createStoredCollabStateBridge({
     sessionStorageKey: COLLAB_SESSION_STORAGE_KEY,
     boardStorageKey: COLLAB_ACTIVE_BOARD_STORAGE_KEY,
@@ -272,6 +279,17 @@ function updateMapPresence(entries = []) {
         return String(a.username || '').localeCompare(String(b.username || ''));
     });
     syncMapRealtimeAwarenessDecorations();
+}
+
+function buildMapPresencePayload(extra = {}) {
+    const selected = getMapSelectedEntity();
+    return {
+        activeNodeId: String(extra.activeNodeId || extra.activePointId || selected?.entity?.id || ''),
+        activeNodeName: String(extra.activeNodeName || extra.activeLabel || selected?.label || ''),
+        activeTextKey: String(extra.activeTextKey || collab.activeTextKey || ''),
+        activeTextLabel: String(extra.activeTextLabel || collab.activeTextLabel || ''),
+        mode: String(extra.mode || (canEditCloudBoard() ? 'editing' : 'viewing'))
+    };
 }
 
 function getMapAwarenessMessage(textKey) {
@@ -571,14 +589,7 @@ export function unbindMapRealtimeTextFields() {
 
 export async function updateMapCloudPresence(extra = {}) {
     if (!isCloudBoardActive() || !collab.user || !collab.token) return false;
-    const selected = getMapSelectedEntity();
-    const payload = {
-        activeNodeId: String(extra.activeNodeId || selected?.entity?.id || ''),
-        activeNodeName: String(extra.activeNodeName || selected?.label || ''),
-        activeTextKey: String(extra.activeTextKey || collab.activeTextKey || ''),
-        activeTextLabel: String(extra.activeTextLabel || collab.activeTextLabel || ''),
-        mode: String(extra.mode || (canEditCloudBoard() ? 'editing' : 'viewing'))
-    };
+    const payload = buildMapPresencePayload(extra);
 
     if (isRealtimeCloudActive()) {
         return collab.realtimeSession.updatePresence(payload);
@@ -601,11 +612,13 @@ function startLegacyCloudTransport() {
     collab.realtimeFallbackActive = true;
     startCollabAutosave();
     startCollabLiveSync();
+    startCollabPresence();
 }
 
 async function activateCloudTransport() {
     stopCollabAutosave();
     stopCollabLiveSync();
+    stopCollabPresence();
     if (!isCloudBoardActive() || !collab.user || !collab.token) {
         stopCollabRealtime();
         return false;
@@ -628,6 +641,7 @@ async function activateCloudTransport() {
 async function startCollabRealtime() {
     if (!shouldUseRealtimeCloud()) return false;
     stopCollabRealtime();
+    stopCollabPresence();
     await preloadRealtimeTextTools().catch(() => null);
 
     const session = await createRealtimeBoardSession({
@@ -658,6 +672,7 @@ async function startCollabRealtime() {
                 collab.realtimeFallbackActive = true;
                 startCollabAutosave();
                 startCollabLiveSync();
+                startCollabPresence();
             }
             if (state.selectedPoint || state.selectedZone) {
                 import('./ui-editor.js').then((module) => {
@@ -672,14 +687,7 @@ async function startCollabRealtime() {
         },
         localFlushMs: 90,
         buildPresence: () => {
-            const selected = getMapSelectedEntity();
-            return {
-                activePointId: String(selected?.entity?.id || ''),
-                activeLabel: String(selected?.label || ''),
-                activeTextKey: String(collab.activeTextKey || ''),
-                activeTextLabel: String(collab.activeTextLabel || ''),
-                mode: canEditCloudBoard() ? 'editing' : 'viewing'
-            };
+            return buildMapPresencePayload();
         }
     });
 
@@ -687,6 +695,7 @@ async function startCollabRealtime() {
     collab.realtimeFallbackActive = false;
     stopCollabAutosave();
     stopCollabLiveSync();
+    stopCollabPresence();
     session.updatePresence();
     syncMapRealtimeAwarenessDecorations();
     return true;
@@ -762,6 +771,75 @@ function stopCollabLiveSync() {
         runningKey: 'syncLoopRunning',
         retryKey: 'syncRetryMs'
     });
+}
+
+function stopCollabPresence() {
+    stopRetriableLoop(collab, {
+        timerKey: 'presenceTimer',
+        tokenKey: 'presenceLoopToken',
+        runningKey: 'presenceLoopRunning',
+        retryKey: 'presenceRetryMs',
+        inFlightKey: 'presenceInFlight'
+    });
+}
+
+function scheduleNextPresenceTick(loopToken, delayMs = COLLAB_PRESENCE_HEARTBEAT_MS) {
+    scheduleRetriableLoop(collab, {
+        timerKey: 'presenceTimer',
+        tokenKey: 'presenceLoopToken'
+    }, loopToken, delayMs, () => {
+        touchCollabPresence(loopToken).catch(() => {});
+    });
+}
+
+async function clearCollabPresence(boardId = collab.activeBoardId) {
+    const targetBoardId = String(boardId || '').trim();
+    if (!targetBoardId || !collab.token) return;
+    try {
+        await collabBoardRequest('clear_presence', { boardId: targetBoardId });
+    } catch (e) {}
+}
+
+async function touchCollabPresence(loopToken = collab.presenceLoopToken, options = {}) {
+    if (collab.presenceLoopToken !== loopToken && !options.force) return false;
+    if (!isCloudBoardActive() || !collab.user || !collab.token) return false;
+    const payload = buildMapPresencePayload(options.extra || {});
+
+    if (isRealtimeCloudActive()) {
+        return collab.realtimeSession.updatePresence(payload);
+    }
+    if (collab.presenceInFlight && !options.force) return false;
+
+    collab.presenceInFlight = true;
+    try {
+        const response = await collabBoardRequest('touch_presence', {
+            boardId: collab.activeBoardId,
+            ...payload
+        });
+        updateMapPresence(response?.presence || []);
+        scheduleNextPresenceTick(loopToken, COLLAB_PRESENCE_HEARTBEAT_MS);
+        return true;
+    } catch (e) {
+        scheduleNextPresenceTick(loopToken, COLLAB_PRESENCE_RETRY_MS);
+        return false;
+    } finally {
+        collab.presenceInFlight = false;
+    }
+}
+
+function startCollabPresence() {
+    stopCollabPresence();
+    if (!isCloudBoardActive() || !collab.user || !collab.token) {
+        updateMapPresence([]);
+        return;
+    }
+    if (isRealtimeCloudActive()) {
+        touchCollabPresence(collab.presenceLoopToken, { force: true }).catch(() => {});
+        return;
+    }
+    const loopToken = collab.presenceLoopToken + 1;
+    collab.presenceLoopToken = loopToken;
+    scheduleNextPresenceTick(loopToken, 0);
 }
 
 function scheduleNextWatchTick(loopToken, delayMs = 0) {
@@ -926,6 +1004,7 @@ function setActiveCloudBoardFromSummary(summary = null) {
         stopCollabRealtime();
         stopCollabAutosave();
         stopCollabLiveSync();
+        stopCollabPresence();
     }
     if (!summary || !summary.id) {
         collab.activeBoardId = '';
@@ -947,6 +1026,7 @@ function setActiveCloudBoardFromSummary(summary = null) {
     }
 
     if (previousBoardId && previousBoardId !== collab.activeBoardId) {
+        clearCollabPresence(previousBoardId).catch(() => {});
         syncSharedMapSnapshot(null);
     }
     applyLocalPersistencePolicy();
@@ -1156,7 +1236,9 @@ async function logoutCollab() {
     stopCollabRealtime();
     stopCollabAutosave();
     stopCollabLiveSync();
+    stopCollabPresence();
     try {
+        await clearCollabPresence(collab.activeBoardId);
         if (collab.token) await collabAuthRequest('logout');
     } catch (e) {}
 

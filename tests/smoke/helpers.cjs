@@ -80,6 +80,9 @@ async function installNetlifyMocks(page, options = {}) {
         if (pathname.endsWith('/collab-board')) {
             const action = String(body.action || url.searchParams.get('action') || 'list');
             requests.push({ endpoint: 'collab-board', action, payload: clone(body) });
+            const viewerId = String(authUser.id || 'u-smoke');
+            const viewerName = String(authUser.username || 'smoke-user');
+            const findBoard = (boardId) => boardsStore.boards.find((entry) => String(entry?.id || '') === String(boardId || '').trim());
 
              if (action === 'list_boards') {
                 return jsonResponse(route, 200, {
@@ -125,6 +128,66 @@ async function installNetlifyMocks(page, options = {}) {
                     },
                     presence: Array.isArray(board.presence) ? clone(board.presence) : [],
                     onlineUsers: Array.isArray(board.onlineUsers) ? clone(board.onlineUsers) : [],
+                });
+            }
+
+            if (action === 'touch_presence') {
+                const board = findBoard(body.boardId);
+                if (!board) {
+                    return jsonResponse(route, 404, {
+                        ok: false,
+                        error: 'Board introuvable',
+                    });
+                }
+                const nextPresence = Array.isArray(board.presence) ? clone(board.presence) : [];
+                const row = {
+                    userId: viewerId,
+                    username: viewerName,
+                    role: String(board.role || 'editor'),
+                    boardId: String(board.id || ''),
+                    activeNodeId: String(body.activeNodeId || ''),
+                    activeNodeName: String(body.activeNodeName || ''),
+                    activeTextKey: String(body.activeTextKey || ''),
+                    activeTextLabel: String(body.activeTextLabel || ''),
+                    mode: String(body.mode || 'editing'),
+                    lastAt: buildIsoNow(),
+                };
+                const filtered = nextPresence.filter((entry) => String(entry?.userId || '') !== viewerId);
+                filtered.push(row);
+                board.presence = filtered;
+                return jsonResponse(route, 200, {
+                    ok: true,
+                    boardId: String(board.id || ''),
+                    presence: clone(board.presence),
+                });
+            }
+
+            if (action === 'clear_presence') {
+                const board = findBoard(body.boardId);
+                if (board) {
+                    board.presence = (Array.isArray(board.presence) ? board.presence : [])
+                        .filter((entry) => String(entry?.userId || '') !== viewerId);
+                }
+                return jsonResponse(route, 200, {
+                    ok: true,
+                    boardId: String(body.boardId || ''),
+                });
+            }
+
+            if (action === 'watch_board') {
+                const board = findBoard(body.boardId);
+                if (!board) {
+                    return jsonResponse(route, 404, {
+                        ok: false,
+                        error: 'Board introuvable',
+                    });
+                }
+                return jsonResponse(route, 200, {
+                    ok: true,
+                    changed: false,
+                    boardId: String(board.id || ''),
+                    updatedAt: String(board.updatedAt || ''),
+                    presence: Array.isArray(board.presence) ? clone(board.presence) : [],
                 });
             }
 

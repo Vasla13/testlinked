@@ -53,8 +53,10 @@ function cloneJson(value, fallback = null) {
     }
 }
 
-function presenceStorageKey(boardId, userId) {
-    return `presence/${boardId}/${userId}`;
+function presenceStorageKey(boardId, userId, clientId = '') {
+    const cleanClientId = String(clientId || '').trim();
+    const baseKey = `presence/${boardId}/${userId}`;
+    return cleanClientId ? `${baseKey}/${cleanClientId}` : baseKey;
 }
 
 function canonicalizeBoardData(page, data) {
@@ -146,12 +148,17 @@ class BoardRoom {
             lastAt: now
         };
         this.presence.set(clientState.clientId, row);
-        await this.store.setJSON(presenceStorageKey(this.boardId, clientState.userId), row);
+        await this.store.setJSON(
+            presenceStorageKey(this.boardId, clientState.userId, clientState.clientId),
+            row
+        );
     }
 
     async clearPresenceEntry(clientState) {
         this.presence.delete(clientState.clientId);
-        await this.store.delete(presenceStorageKey(this.boardId, clientState.userId)).catch(() => {});
+        await this.store.delete(
+            presenceStorageKey(this.boardId, clientState.userId, clientState.clientId)
+        ).catch(() => {});
     }
 
     async attachClient(socket, user, role) {

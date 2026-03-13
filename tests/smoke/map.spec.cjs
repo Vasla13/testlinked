@@ -46,3 +46,48 @@ test('map keeps a single interaction controller for draw mode and exposes the mo
     await expect(page.locator('#ezName')).toHaveValue(/Zone 1/);
     await expect(page.locator('#map-interaction-mode')).toBeHidden();
 });
+
+test('map legacy cloud fallback keeps presence alive without user interaction', async ({ page }) => {
+    await page.addInitScript(() => {
+        localStorage.setItem('bniLinkedCollabSession_v1', JSON.stringify({
+            token: 'smoke-token',
+            user: { id: 'u-smoke', username: 'smoke-user' },
+        }));
+    });
+
+    const api = await installNetlifyMocks(page, {
+        authSession: true,
+        authUser: { id: 'u-smoke', username: 'smoke-user' },
+        boards: [{
+            id: 'board-map-legacy',
+            title: 'Legacy Map',
+            role: 'editor',
+            page: 'map',
+            updatedAt: new Date().toISOString(),
+            data: {
+                groups: [{
+                    id: 'grp-a',
+                    name: 'Allies',
+                    color: '#73fbf7',
+                    visible: true,
+                    points: [],
+                    zones: [],
+                }],
+                tacticalLinks: [],
+            },
+            presence: [],
+        }],
+    });
+
+    await page.goto('/map/?board=board-map-legacy');
+    await waitForMapReady(page);
+
+    await expect.poll(() =>
+        api.requests.filter((entry) => entry.endpoint === 'collab-board' && entry.action === 'touch_presence').length
+    ).toBeGreaterThanOrEqual(1);
+
+    await expect.poll(() =>
+        api.requests.filter((entry) => entry.endpoint === 'collab-board' && entry.action === 'touch_presence').length,
+        { timeout: 14000 }
+    ).toBeGreaterThanOrEqual(2);
+});

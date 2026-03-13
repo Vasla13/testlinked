@@ -58,7 +58,7 @@ function validateBoardData(data, page) {
 }
 
 const PRESENCE_STALE_MS = 15000;
-const PRESENCE_MAX_ITEMS = 24;
+const PRESENCE_MAX_ITEMS = 96;
 const SESSION_ACTIVE_MS = 35000;
 const SESSION_SCAN_MAX = 400;
 const BOARD_ACTIVITY_MAX = 40;
@@ -1056,7 +1056,7 @@ async function listBoardPresence(store, boardId) {
   const keys = await listKeysByPrefix(store, presencePrefix(boardId), PRESENCE_MAX_ITEMS);
   const rows = await Promise.all(keys.map((key) => store.get(key, { type: "json" }).catch(() => null)));
   const now = Date.now();
-  const active = [];
+  const latestByUser = new Map();
 
   for (let index = 0; index < rows.length; index += 1) {
     const row = rows[index];
@@ -1070,7 +1070,7 @@ async function listBoardPresence(store, boardId) {
       if (key) await store.delete(key).catch(() => {});
       continue;
     }
-    active.push({
+    const entry = {
       userId: String(row.userId || ""),
       username: String(row.username || ""),
       role: sanitizeRole(row.role || ROLE_EDITOR, ROLE_EDITOR),
@@ -1081,9 +1081,14 @@ async function listBoardPresence(store, boardId) {
       activeTextLabel: String(row.activeTextLabel || ""),
       mode: String(row.mode || "editing"),
       lastAt: String(row.lastAt || ""),
-    });
+    };
+    const previous = latestByUser.get(entry.userId);
+    if (!previous || timeValue(entry.lastAt) >= timeValue(previous.lastAt)) {
+      latestByUser.set(entry.userId, entry);
+    }
   }
 
+  const active = [...latestByUser.values()];
   active.sort((a, b) => String(a.username || "").localeCompare(String(b.username || "")));
   return active;
 }
@@ -1687,4 +1692,5 @@ exports.__test = {
   normalizeBoardPayload,
   mergeBoardPayload,
   sanitizeShareRole,
+  listBoardPresence,
 };
