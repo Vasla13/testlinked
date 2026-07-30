@@ -22,3 +22,8 @@ Desktop.ini
 # Fichiers temporaires ou de build (si vous en avez plus tard)
 dist/
 build/
+
+# Rapports et résultats de tests
+test-results/
+playwright-report/
+
