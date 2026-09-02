@@ -19,42 +19,7 @@
         }
     </script>
 </head>
-<body class="app-loading">
-
-    <div id="boot-layer">
-        <div class="boot-head">
-            <div class="boot-brand">BNI-LINKED // TACTICAL TABLET 2035</div>
-            <div class="boot-phase" id="boot-phase">SECURE STARTUP PROTOCOL</div>
-        </div>
-        <div class="boot-progress-track" aria-hidden="true">
-            <div class="boot-progress-fill" id="boot-progress"></div>
-        </div>
-        <div id="boot-text"></div>
-        <div class="boot-footer">
-            <span id="boot-meter">SYS CHECK 0%</span>
-            <span class="boot-cursor"></span>
-            <button id="boot-skip" class="boot-skip" type="button">Passer</button>
-        </div>
-    </div>
-
-    <div id="bio-layer">
-        <div class="scanner-box">
-            <div class="holo-circle"></div>
-            <svg class="fingerprint-svg" viewBox="0 0 100 100" id="fingerprint-svg">
-                <path d="M50,10 C35,10 25,25 25,40 C25,50 30,60 35,70" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
-                <path d="M50,20 C42,20 35,30 35,40 C35,46 38,52 41,58" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
-                <path d="M50,30 C46,30 43,33 43,40" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
-                <path d="M50,10 C65,10 75,25 75,40 C75,50 70,60 65,70" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
-                <path d="M50,20 C58,20 65,30 65,40 C65,46 62,52 59,58" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
-                <path d="M50,30 C54,30 57,33 57,40" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
-                <path d="M35,80 Q50,95 65,80" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
-                <path d="M40,75 Q50,85 60,75" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
-            </svg>
-            <div class="scan-laser"></div>
-        </div>
-        <div class="bio-text">IDENTIFICATION REQUISE</div>
-        <div class="bio-status" id="bio-status">EN ATTENTE DU SUJET...</div>
-    </div>
+<body>
 
     <div id="tablet-interface">
         
@@ -120,15 +85,6 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            const bootLayer = document.getElementById('boot-layer');
-            const bootText = document.getElementById('boot-text');
-            const bootPhase = document.getElementById('boot-phase');
-            const bootProgress = document.getElementById('boot-progress');
-            const bootMeter = document.getElementById('boot-meter');
-            const bootSkip = document.getElementById('boot-skip');
-            const bioLayer = document.getElementById('bio-layer');
-            const bioStatus = document.getElementById('bio-status');
-            const fingerprintSvg = document.getElementById('fingerprint-svg');
             const tabletInterface = document.getElementById('tablet-interface');
             const welcomeLinkInput = document.getElementById('welcome-link-input');
             const welcomeLinkCopy = document.getElementById('welcome-link-copy');
@@ -136,7 +92,6 @@
             const COLLAB_AUTH_ENDPOINT = '/.netlify/functions/collab-auth';
             const COLLAB_SESSION_STORAGE_KEY = 'bniLinkedCollabSession_v1';
             const MODULE_GUEST_STORAGE_KEY = 'bniLinkedGuestMode_v1';
-            const DAILY_BOOT_STORAGE_KEY = 'bniLinkedBootSeenDay_v1';
             const moduleGate = {
                 token: '',
                 user: null,
@@ -501,204 +456,18 @@
                 });
             }
 
-            function getBootDayStamp() {
-                const now = new Date();
-                const year = now.getFullYear();
-                const month = String(now.getMonth() + 1).padStart(2, '0');
-                const day = String(now.getDate()).padStart(2, '0');
-                return `${year}-${month}-${day}`;
-            }
-
-            function hasSeenBootToday() {
-                try {
-                    return localStorage.getItem(DAILY_BOOT_STORAGE_KEY) === getBootDayStamp();
-                } catch (e) {
-                    return false;
-                }
-            }
-
-            function markBootSeenToday() {
-                try {
-                    localStorage.setItem(DAILY_BOOT_STORAGE_KEY, getBootDayStamp());
-                } catch (e) {}
-            }
-
             setupModuleAccessGate();
             setupWelcomeLinkCopy();
 
             // Horloge Temps Réel
             function updateRealtimeClock() {
                 const now = new Date();
-                document.getElementById('realtime-clock').innerText = now.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+                const clockEl = document.getElementById('realtime-clock');
+                if (clockEl) clockEl.innerText = now.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
             }
 
             updateRealtimeClock();
             setInterval(updateRealtimeClock, 1000);
-
-            // --- SEQUENCE DE BOOT (CINEMATIQUE TABLETTE 2035) ---
-            const bootConfig = {
-                startDelay: 110,
-                minLineDelay: 45,
-                maxLineDelay: 95,
-                pauseBeforeBio: 240,
-                bootFadeOut: 150,
-                bioStep1: 130,
-                bioStep2: 460,
-                bioStep3: 860,
-                bioStep4: 1240,
-                unlockAfterAuth: 280,
-                bioFadeOut: 140
-            };
-
-            const lines = [
-                { text: "INITIALIZING TRUSTED STARTUP BUS...", phase: "SECURE BOOTSTRAP", progress: 6 },
-                { text: "NEGOTIATING ENCRYPTED BACKPLANE...", phase: "SECURE BOOTSTRAP", progress: 14, warn: true },
-                { text: "LOADING KERNEL v5.14.2 // TACTICAL BRANCH", phase: "CORE SYSTEM", progress: 24 },
-                { text: "[OK] CPU MATRIX ONLINE: 128 CORES", phase: "CORE SYSTEM", progress: 34, ok: true, major: true },
-                { text: "[OK] MEMORY INTEGRITY: 100%", phase: "CORE SYSTEM", progress: 42, ok: true },
-                { text: "SYNCING GEO-TIME SATELLITE GRID...", phase: "NETWORK HANDSHAKE", progress: 53, warn: true },
-                { text: "ESTABLISHING QUANTUM-LINK TUNNEL...", phase: "NETWORK HANDSHAKE", progress: 66, warn: true },
-                { text: "[OK] COMMAND RELAY AUTHENTICATED", phase: "NETWORK HANDSHAKE", progress: 76, ok: true },
-                { text: "MOUNTING FIELD MODULES: RETICULE / TACTIQUE", phase: "MISSION STACK", progress: 87 },
-                { text: "LOADING BIOMETRIC SENTINEL...", phase: "MISSION STACK", progress: 94 },
-                { text: "SYSTEM READY // WAITING FOR OPERATOR", phase: "MISSION STACK", progress: 100, major: true }
-            ];
-
-            let lineIndex = 0;
-
-            function randomBetween(min, max) {
-                return Math.floor(Math.random() * (max - min + 1)) + min;
-            }
-
-            function nowStamp() {
-                const now = new Date();
-                return now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-            }
-
-            function updateBootHUD(phase, progress) {
-                if (bootPhase) bootPhase.innerText = phase;
-                if (bootProgress) bootProgress.style.width = `${progress}%`;
-                if (bootMeter) bootMeter.innerText = `SYS CHECK ${progress}%`;
-            }
-
-            function appendBootLine(entry) {
-                const div = document.createElement('div');
-                div.className = 'boot-line';
-                if (entry.ok) div.classList.add('ok');
-                if (entry.warn) div.classList.add('warn');
-                if (entry.major) div.classList.add('major');
-                div.innerText = `[${nowStamp()}] > ${entry.text}`;
-                bootText.appendChild(div);
-
-                const maxLines = 13;
-                while (bootText.children.length > maxLines) {
-                    bootText.removeChild(bootText.firstChild);
-                }
-                bootText.scrollTop = bootText.scrollHeight;
-            }
-
-            function typeNextLine() {
-                if (lineIndex >= lines.length) {
-                    setTimeout(startBioScan, bootConfig.pauseBeforeBio);
-                    return;
-                }
-
-                const entry = lines[lineIndex];
-                updateBootHUD(entry.phase, entry.progress);
-                appendBootLine(entry);
-                lineIndex++;
-
-                let delay = randomBetween(bootConfig.minLineDelay, bootConfig.maxLineDelay);
-                if (entry.ok) delay -= 20;
-                if (entry.major) delay += 130;
-                setTimeout(typeNextLine, Math.max(28, delay));
-            }
-
-            function setBioStatus(text, color, glow = color) {
-                bioStatus.innerText = text;
-                bioStatus.style.color = color;
-                bioStatus.style.textShadow = `0 0 16px ${glow}`;
-            }
-
-            // --- SCAN BIOMETRIQUE ---
-            function startBioScan() {
-                updateBootHUD("BIOMETRIC VERIFICATION", 100);
-                if (bootMeter) bootMeter.innerText = "AUTH PIPELINE READY";
-                bootLayer.style.opacity = '0';
-
-                setTimeout(() => {
-                    bootLayer.style.display = 'none';
-                    bioLayer.style.display = 'flex';
-                    requestAnimationFrame(() => bioLayer.classList.add('active'));
-
-                    setBioStatus("SYNCHRONISATION CAPTEURS MULTI-SPECTRAUX...", "#ff922b", "#ff922b");
-
-                    setTimeout(() => {
-                        setBioStatus("LECTURE BIOMETRIQUE: EMPREINTE + CADENCE CARDIAQUE...", "#ffb86a", "#ffb86a");
-                    }, bootConfig.bioStep1);
-
-                    setTimeout(() => {
-                        setBioStatus("CROISEMENT IDENTITE / BASE NATIONALE...", "#ffd166", "#ffd166");
-                        fingerprintSvg.classList.add('active');
-                    }, bootConfig.bioStep2);
-
-                    setTimeout(() => {
-                        setBioStatus("MATCH CONFIRME: SCORE DE CONFIANCE 99.7%", "#73fbf7", "#73fbf7");
-                    }, bootConfig.bioStep3);
-
-                    setTimeout(() => {
-                        setBioStatus("ACCES TABLETTE 2035 AUTORISE.", "#73fbf7", "#73fbf7");
-                        setTimeout(unlockTablet, bootConfig.unlockAfterAuth);
-                    }, bootConfig.bioStep4);
-                }, bootConfig.bootFadeOut);
-            }
-
-            // --- DEVERROUILLAGE FINAL ---
-            function unlockTablet() {
-                bioLayer.classList.remove('active');
-                setTimeout(() => {
-                    bioLayer.style.display = 'none';
-                    tabletInterface.style.opacity = '1';
-                    document.body.classList.remove('app-loading');
-                }, bootConfig.bioFadeOut);
-            }
-
-            function skipBootSequence() {
-                if (bootLayer) {
-                    bootLayer.style.opacity = '0';
-                    bootLayer.style.display = 'none';
-                }
-                if (bioLayer) {
-                    bioLayer.classList.remove('active');
-                    bioLayer.style.opacity = '0';
-                    bioLayer.style.display = 'none';
-                }
-                if (fingerprintSvg) fingerprintSvg.classList.remove('active');
-                if (tabletInterface) tabletInterface.style.opacity = '1';
-                document.body.classList.remove('app-loading');
-            }
-
-            function dismissBootSequence() {
-                markBootSeenToday();
-                skipBootSequence();
-            }
-
-            if (bootSkip) {
-                bootSkip.addEventListener('click', dismissBootSequence);
-            }
-            document.addEventListener('keydown', (event) => {
-                if (event.key !== 'Escape') return;
-                if (!document.body.classList.contains('app-loading')) return;
-                dismissBootSequence();
-            });
-
-            // Démarrage
-            if (hasSeenBootToday()) {
-                skipBootSequence();
-            } else {
-                markBootSeenToday();
-                setTimeout(typeNextLine, bootConfig.startDelay);
-            }
         });
     </script>
     <script>

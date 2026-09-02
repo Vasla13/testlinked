@@ -2876,6 +2876,36 @@ body.map-shell .loader-step.is-complete {
         overflow: auto;
     }
 
+@media (max-width: 960px) {
+    body.map-shell #sidebar-left,
+    body.map-shell #sidebar-right {
+        width: min(320px, calc(100vw - 24px));
+    }
+
+    body.map-shell .loader-grid {
+        grid-template-columns: 1fr;
+    }
+
+    body.map-shell .loader-radar {
+        min-height: 160px;
+    }
+}
+
+@media (max-width: 768px) {
+    body.map-shell #app-container {
+        padding-top: 55px;
+    }
+
+    body.map-shell #sidebar-left {
+        position: absolute;
+        top: 55px;
+        left: 0;
+        bottom: 0;
+        transform: translateX(-100%);
+        border-radius: 0 20px 20px 0;
+        overflow: auto;
+    }
+
     body.map-shell #sidebar-left.mobile-active {
         transform: translateX(0);
     }
@@ -2889,12 +2919,25 @@ body.map-shell .loader-step.is-complete {
     }
 
     body.map-shell #hud-bottom {
-        left: 12px;
-        right: 12px;
+        left: 8px;
+        right: 8px;
         width: auto;
         transform: none;
         justify-content: space-between;
-        padding: 8px;
+        padding: 5px 6px;
+        gap: 4px;
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+    body.map-shell #hud-bottom::-webkit-scrollbar {
+        display: none;
+    }
+    body.map-shell #hud-bottom .hud-btn {
+        padding: 0 7px;
+        font-size: 0.72rem;
+        min-height: 34px;
+        white-space: nowrap;
+        flex-shrink: 0;
     }
 
     body.map-shell #coords-display,

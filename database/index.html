@@ -168,16 +168,26 @@
   }
 
   function formatArchiveError(page, error) {
-    const label = page === 'map' ? 'archives tactiques' : 'archives reseau';
+    const label = page === 'map' ? 'archives tactiques' : 'archives réseau';
     const rawMessage = String(error?.message || '').trim();
     const normalized = rawMessage.toLowerCase();
+
+    if (normalized.includes('401') || normalized.includes('autoris') || normalized.includes('auth') || normalized.includes('unauthorized')) {
+      return {
+        status: 'CONNEXION CLOUD REQUISE',
+        title: 'Accès Sécurisé Requis',
+        copy: `L'accès aux ${label} nécessite une authentification active.`,
+        hint: 'Connectez-vous avec vos identifiants pour déverrouiller la base de données.',
+        isAuth: true
+      };
+    }
 
     if (!rawMessage || normalized === 'not_found') {
       return {
         status: `SOURCE ${label.toUpperCase()} INDISPONIBLE`,
         title: 'Flux archive indisponible',
-        copy: `Le service des ${label} ne repond pas dans cet environnement.`,
-        hint: 'Recharge la page ou relance la fonction Netlify concernee.'
+        copy: `Le service des ${label} ne répond pas dans cet environnement.`,
+        hint: 'Recharge la page ou relance la fonction Netlify concernée.'
       };
     }
 
@@ -186,28 +196,85 @@
         status: `LIAISON ${label.toUpperCase()} INTERROMPUE`,
         title: 'Connexion interrompue',
         copy: `Impossible de joindre le service des ${label} pour le moment.`,
-        hint: 'Verifie la connexion ou reessaie dans quelques secondes.'
+        hint: 'Vérifie la connexion ou réessaie dans quelques secondes.'
       };
     }
 
     return {
       status: `ERREUR SUR ${label.toUpperCase()}`,
       title: 'Chargement impossible',
-      copy: `Les ${label} ne peuvent pas etre charges actuellement.`,
-      hint: 'Reessaie dans un instant.'
+      copy: `Les ${label} ne peuvent pas être chargées actuellement.`,
+      hint: 'Réessaie dans un instant.'
     };
   }
 
   function renderArchiveErrorState(page, details) {
     const cardsEl = document.getElementById(`cards-${page}`);
     if (!cardsEl || !details) return;
+
+    if (details.isAuth) {
+      cardsEl.innerHTML = `
+        <div class="error-state auth-required-card">
+          <div class="auth-icon">🔒</div>
+          <div class="error-state-title">${escapeHtml(details.title)}</div>
+          <div class="error-state-copy">${escapeHtml(details.copy)}</div>
+          <form class="auth-login-box" id="dbLoginForm-${page}">
+            <input type="text" class="auth-input db-auth-user" placeholder="Identifiant (ex: jude)" autocomplete="username" required />
+            <input type="password" class="auth-input db-auth-pass" placeholder="Mot de passe" autocomplete="current-password" required />
+            <button class="btn-cyber btn-db-login" type="submit">SE CONNECTER</button>
+            <div class="auth-error-msg" hidden></div>
+          </form>
+          <div class="error-state-hint">${escapeHtml(details.hint)}</div>
+        </div>
+      `;
+      const form = cardsEl.querySelector(`#dbLoginForm-${page}`);
+      const errEl = form?.querySelector('.auth-error-msg');
+      if (form) {
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const username = form.querySelector('.db-auth-user').value.trim();
+          const password = form.querySelector('.db-auth-pass').value;
+          const submitBtn = form.querySelector('.btn-db-login');
+          if (errEl) errEl.hidden = true;
+          submitBtn.disabled = true;
+          submitBtn.textContent = 'CONNEXION...';
+          try {
+            const res = await fetch('/.netlify/functions/collab-auth', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'login', username, password })
+            });
+            const out = await res.json().catch(() => ({}));
+            if (!res.ok || !out.ok) {
+              throw new Error(out.error || 'Identifiants invalides');
+            }
+            localStorage.setItem(COLLAB_SESSION_STORAGE_KEY, JSON.stringify({
+              token: out.token,
+              user: out.user
+            }));
+            archiveState.point.loaded = false;
+            archiveState.map.loaded = false;
+            await refreshPage(page);
+          } catch (err) {
+            if (errEl) {
+              errEl.textContent = err.message || 'Erreur de connexion';
+              errEl.hidden = false;
+            }
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'SE CONNECTER';
+          }
+        });
+      }
+      return;
+    }
+
     cardsEl.innerHTML = `
       <div class="error-state">
         <div class="error-state-title">${escapeHtml(details.title || 'Chargement impossible')}</div>
-        <div class="error-state-copy">${escapeHtml(details.copy || 'Le service ne repond pas actuellement.')}</div>
-        <div class="error-state-hint">${escapeHtml(details.hint || 'Reessaie dans un instant.')}</div>
+        <div class="error-state-copy">${escapeHtml(details.copy || 'Le service ne répond pas actuellement.')}</div>
+        <div class="error-state-hint">${escapeHtml(details.hint || 'Réessaie dans un instant.')}</div>
         <div class="error-state-actions">
-          <button class="btn-cyber btn-error-retry" type="button" data-retry-page="${escapeHtml(page)}">REESSAYER</button>
+          <button class="btn-cyber btn-error-retry" type="button" data-retry-page="${escapeHtml(page)}">RÉESSAYER</button>
         </div>
       </div>
     `;

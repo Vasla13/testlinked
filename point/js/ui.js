@@ -4504,7 +4504,14 @@ function setupHudButtons() {
 
     const dockHeader = document.createElement('div');
     dockHeader.className = 'hud-dock-header';
-    dockHeader.innerHTML = `<span class="hud-status-dot"></span><span class="hud-dock-title">Vue Tactique</span>`;
+    dockHeader.title = 'Afficher / Masquer les commandes de vue';
+    dockHeader.innerHTML = `<span class="hud-status-dot"></span><span class="hud-dock-title">Vue Tactique</span><span class="hud-dock-chevron">▾</span>`;
+    dockHeader.onclick = () => {
+        hud.classList.toggle('hud-collapsed');
+    };
+    if (typeof window !== 'undefined' && window.innerWidth <= 768) {
+        hud.classList.add('hud-collapsed');
+    }
     hud.appendChild(dockHeader);
 
     const btnRecenter = createHudButton('hud-btn hud-stack-btn hud-primary-btn');

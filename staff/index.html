@@ -29,12 +29,16 @@
 
     <div id="staff-access-overlay">
         <div class="staff-access-card">
-            <div class="staff-access-kicker">Acces staff</div>
+            <div class="staff-access-kicker">Accès staff</div>
             <div class="staff-access-title">Console alertes BNI</div>
-            <p class="staff-access-copy">Entre le code staff pour acceder au panneau d’alerte.</p>
-            <input id="staff-access-input" type="password" class="staff-access-input" placeholder="Code d'acces">
+            <p class="staff-access-copy">Entrez le code staff pour accéder au panneau d’alerte.</p>
+            <input id="staff-access-input" type="password" class="staff-access-input" placeholder="Code d'accès">
             <div id="staff-access-error" class="staff-access-error"></div>
             <button id="staff-access-submit" type="button" class="staff-access-btn">Entrer</button>
+            <div style="margin-top: 16px; display: flex; justify-content: center; gap: 16px;">
+                <a href="../" class="staff-back-link" style="color: #66f3ff; text-decoration: none; font-size: 0.8rem; letter-spacing: 1px; text-transform: uppercase;">← Hub</a>
+                <a href="../map/" class="staff-back-link" style="color: #aab2c0; text-decoration: none; font-size: 0.8rem; letter-spacing: 1px; text-transform: uppercase;">Carte tactique →</a>
+            </div>
         </div>
     </div>
 
@@ -46,13 +50,13 @@
 
             <div class="panel-section shell-section staff-summary-panel">
                 <div class="staff-panel-head">
-                    <span class="section-title shell-title">Etat</span>
+                    <span class="section-title shell-title">État</span>
                     <span id="staffAlertMode" class="editor-pill staff-mini-pill">Brouillon</span>
                 </div>
                 <div class="staff-status-grid">
                     <div class="data-shell-card">
-                        <span class="data-shell-label">Etat</span>
-                        <strong id="staffAlertState">Verrouille</strong>
+                        <span class="data-shell-label">État</span>
+                        <strong id="staffAlertState">Verrouillé</strong>
                     </div>
                     <div class="data-shell-card">
                         <span class="data-shell-label">Forme</span>
@@ -61,20 +65,20 @@
                 </div>
                 <div id="staffDrawStatus" class="staff-draw-status">Utilise Tracer cercle ou Tracer zone pour commencer.</div>
                 <div class="staff-position-meta">Position: <strong id="staffAlertCoords">--</strong></div>
-                <div id="staffStatusMessage" class="staff-status-message">Console verrouillee.</div>
+                <div id="staffStatusMessage" class="staff-status-message">Console verrouillée.</div>
             </div>
 
             <div class="panel-section shell-section staff-help-panel">
-                <span class="section-title shell-title">Creation</span>
+                <span class="section-title shell-title">Création</span>
                 <div class="staff-helper-copy">
                     1. Choisis Cercle ou Zone.<br>
-                    2. Trace sur la carte puis ajuste les reglages utiles.<br>
-                    3. Termine puis remplis la fenetre d’alerte.
+                    2. Trace sur la carte puis ajuste les réglages utiles.<br>
+                    3. Termine puis remplis la fenêtre d’alerte.
                 </div>
                 <div class="staff-draw-actions">
                     <button id="btnNewAlert" class="action-btn" type="button">Tracer cercle</button>
                     <button id="btnStartFreeDraw" class="action-btn" type="button">Tracer zone</button>
-                    <button id="btnCancelDrawMode" class="btn-close-editor staff-draw-cancel" type="button" disabled>Annuler trace</button>
+                    <button id="btnCancelDrawMode" class="btn-close-editor staff-draw-cancel" type="button" disabled>Annuler tracé</button>
                 </div>
                 <div class="staff-draw-controls">
                     <div class="staff-draw-control">
@@ -86,18 +90,18 @@
                     </div>
                     <div class="staff-draw-control">
                         <label class="staff-control-label" for="alertStrokeWidth">
-                            Epaisseur du trait
+                            Épaisseur du trait
                             <span id="alertStrokeWidthValue">0.06</span>
                         </label>
                         <input id="alertStrokeWidth" class="staff-slider" type="range" min="0.02" max="0.5" step="0.01" value="0.06">
                     </div>
-                    <div class="staff-control-hint">Le rayon agit sur le cercle actif. Le trait s applique a toute l alerte.</div>
+                    <div class="staff-control-hint">Le rayon agit sur le cercle actif. Le trait s'applique à toute l'alerte.</div>
                     <div id="staffCircleTools" class="staff-circle-tools" hidden>
                         <div class="staff-circle-tools-head">
                             <span class="staff-circle-tools-title">Cercle actif</span>
                             <span id="staffCircleCount" class="staff-circle-count">0</span>
                         </div>
-                        <div id="staffCircleToolsHint" class="staff-circle-tools-hint">Selectionne un cercle pour regler son rayon.</div>
+                        <div id="staffCircleToolsHint" class="staff-circle-tools-hint">Sélectionne un cercle pour régler son rayon.</div>
                         <div id="staffCirclePicker" class="staff-circle-picker"></div>
                     </div>
                 </div>

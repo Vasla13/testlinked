@@ -3866,6 +3866,33 @@ export function injectStyles() {
             padding: 3px 6px 7px;
             border-bottom: 1px solid rgba(102, 243, 255, 0.1);
             margin-bottom: 2px;
+            cursor: pointer;
+            user-select: none;
+        }
+        .hud-dock-chevron {
+            margin-left: auto;
+            font-size: 0.68rem;
+            color: #66f3ff;
+            opacity: 0.8;
+            transition: transform 0.2s ease;
+        }
+        #hud.hud-collapsed {
+            padding: 7px 12px;
+            gap: 0;
+            width: auto;
+            min-width: 125px;
+            border-radius: 12px;
+        }
+        #hud.hud-collapsed .hud-dock-header {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding: 0;
+        }
+        #hud.hud-collapsed .hud-dock-chevron {
+            transform: rotate(-90deg);
+        }
+        #hud.hud-collapsed > :not(.hud-dock-header) {
+            display: none !important;
         }
         .hud-status-dot {
             width: 6px;

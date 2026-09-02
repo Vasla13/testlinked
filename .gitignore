@@ -26,4 +26,5 @@ build/
 # Rapports et résultats de tests
 test-results/
 playwright-report/
+audit-screens/
 
