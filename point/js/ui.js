@@ -4472,10 +4472,8 @@ function setupHudButtons() {
     const setHudButtonContent = (button, icon, label, value = '') => {
         button.innerHTML = `
             <span class="hud-btn-icon">${iconMarkup[icon] || ''}</span>
-            <span class="hud-btn-copy">
-                <span class="hud-btn-label">${escapeHtml(label)}</span>
-                ${value ? `<span class="hud-btn-value">${escapeHtml(value)}</span>` : ''}
-            </span>
+            <span class="hud-btn-label">${escapeHtml(label)}</span>
+            ${value ? `<span class="hud-pill-badge">${escapeHtml(value)}</span>` : ''}
         `;
         button.classList.toggle('has-meta', !!value);
         button.classList.toggle('no-meta', !value);
@@ -4503,6 +4501,11 @@ function setupHudButtons() {
         draw();
         scheduleSave();
     };
+
+    const dockHeader = document.createElement('div');
+    dockHeader.className = 'hud-dock-header';
+    dockHeader.innerHTML = `<span class="hud-status-dot"></span><span class="hud-dock-title">Vue Tactique</span>`;
+    hud.appendChild(dockHeader);
 
     const btnRecenter = createHudButton('hud-btn hud-stack-btn hud-primary-btn');
     setHudButtonContent(btnRecenter, 'recenter', 'Recentrer');
@@ -4561,7 +4564,7 @@ function setupHudButtons() {
     const updateFilterControls = () => {
         const selectedEntry = modeOptions.find((entry) => entry.value === state.activeFilter) || modeOptions[0];
 
-        setHudButtonContent(btnModeFilter, selectedEntry.icon, 'Mode', selectedEntry.short);
+        setHudButtonContent(btnModeFilter, selectedEntry.icon, 'Filtre', `${selectedEntry.short} ▾`);
         btnModeFilter.title = selectedEntry.title;
         btnModeFilter.classList.toggle('active', state.activeFilter !== FILTERS.ALL);
         btnModeFilter.setAttribute('aria-expanded', modeDrawerOpen ? 'true' : 'false');

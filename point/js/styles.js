@@ -339,15 +339,15 @@ export function injectStyles() {
             border-color: rgba(123, 144, 171, 0.14);
         }
         #hud .hud-btn-icon {
-            flex: 0 0 28px;
-            width: 28px;
-            height: 28px;
-            border-radius: 8px;
+            flex: 0 0 22px;
+            width: 22px;
+            height: 22px;
+            border-radius: 0;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            background: rgba(115, 251, 247, 0.08);
-            border: 1px solid rgba(115, 251, 247, 0.16);
+            background: transparent;
+            border: none;
             color: currentColor;
             flex-shrink: 0;
         }
@@ -443,26 +443,6 @@ export function injectStyles() {
         #hud .hud-filter-trigger {
             width: 100%;
             position: relative;
-            padding-right: 28px !important;
-        }
-        #hud .hud-filter-trigger::after {
-            content: '▾';
-            position: absolute;
-            right: 10px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #7f96b0;
-            font-size: 0.75rem;
-            line-height: 1;
-            margin-left: 0;
-            transition: transform 0.18s ease, color 0.18s ease;
-            pointer-events: none;
-        }
-        #hud .hud-filter-card.expanded .hud-filter-trigger::after {
-            transform: translateY(-50%) rotate(180deg);
-            color: #d8eeff;
-        }
-            color: #d8eeff;
         }
         #hud .hud-filter-options {
             display: none;
@@ -3848,142 +3828,291 @@ export function injectStyles() {
             border-radius: 5px;
         }
 
+        /* ==========================================================================
+           HUD FLOTTANT GLASSMORPHISM & BADGES NÉON
+           ========================================================================== */
         #hud {
             position: fixed;
-            top: max(12px, env(safe-area-inset-top));
-            right: max(12px, env(safe-area-inset-right));
+            top: max(16px, env(safe-area-inset-top));
+            right: max(16px, env(safe-area-inset-right));
             left: auto;
             bottom: auto;
             transform: none;
-            width: min(156px, calc(100vw - 20px));
-            max-width: 156px;
+            width: 176px;
+            max-width: calc(100vw - 32px);
             margin-top: 0;
-            padding: 8px 7px;
-            background: rgba(5, 12, 28, 0.82);
-            border: 1px solid rgba(102, 243, 255, 0.18);
-            border-radius: 16px;
+            padding: 8px;
+            background: rgba(5, 12, 26, 0.78);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border: 1px solid rgba(102, 243, 255, 0.22);
+            border-radius: 14px;
             display: flex;
             flex-direction: column;
             align-items: stretch;
-            justify-content: flex-start;
-            gap: 6px;
-            box-shadow: inset 0 0 0 1px rgba(102, 243, 255, 0.04);
+            gap: 5px;
+            box-shadow:
+                0 16px 40px rgba(0, 0, 0, 0.55),
+                0 0 20px rgba(102, 243, 255, 0.06),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            z-index: 70;
+            user-select: none;
         }
-        .hud-panel-title {
-            display: none;
+
+        .hud-dock-header {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            padding: 3px 6px 7px;
+            border-bottom: 1px solid rgba(102, 243, 255, 0.1);
+            margin-bottom: 2px;
         }
+        .hud-status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #66f3ff;
+            box-shadow: 0 0 8px #66f3ff;
+            animation: hudDotPulse 2.4s infinite ease-in-out;
+        }
+        @keyframes hudDotPulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.35; transform: scale(0.8); }
+        }
+        .hud-dock-title {
+            font-size: 0.62rem;
+            font-weight: 700;
+            letter-spacing: 1.6px;
+            text-transform: uppercase;
+            color: #7b9ab9;
+        }
+
         #hud .hud-btn {
-            color: var(--text-muted);
-            font-size: 0.7rem;
-            letter-spacing: 1.4px;
-        }
-        #hud .hud-stack-btn,
-        #hud .hud-mode-btn {
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            font-family: var(--font-main);
             width: 100%;
-            min-height: 48px;
-            justify-content: flex-start;
-            border-radius: 10px;
-            padding: 7px 10px;
-            gap: 10px;
-            clip-path: none;
+            padding: 0;
+            transition: all 0.18s ease;
         }
+
+        #hud .hud-stack-btn {
+            width: 100%;
+            min-height: 38px;
+            padding: 6px 9px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid rgba(102, 243, 255, 0.08);
+            border-radius: 9px;
+            background: rgba(10, 22, 42, 0.45);
+            color: #d8eeff;
+            text-align: left;
+            transition: all 0.18s ease;
+        }
+        #hud .hud-stack-btn:hover {
+            background: rgba(102, 243, 255, 0.12);
+            border-color: rgba(102, 243, 255, 0.35);
+            color: #fff;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+        #hud .hud-stack-btn:active {
+            transform: scale(0.98);
+        }
+
         #hud .hud-primary-btn {
-            border-color: rgba(102, 243, 255, 0.28);
-            background: linear-gradient(180deg, rgba(10, 22, 42, 0.94), rgba(4, 10, 22, 0.98));
+            background: linear-gradient(90deg, rgba(102, 243, 255, 0.14), rgba(102, 243, 255, 0.04));
+            border-color: rgba(102, 243, 255, 0.3);
         }
+        #hud .hud-primary-btn:hover {
+            background: linear-gradient(90deg, rgba(102, 243, 255, 0.24), rgba(102, 243, 255, 0.08));
+            border-color: rgba(102, 243, 255, 0.55);
+            box-shadow: 0 0 16px rgba(102, 243, 255, 0.18);
+        }
+
         #hud .hud-btn-icon {
-            flex-basis: 28px;
-            width: 28px;
-            height: 28px;
-            border-radius: 8px;
-        }
-        #hud .hud-btn-label {
-            color: #7f96b0;
-            font-size: 0.5rem;
-            line-height: 1.1;
-            letter-spacing: 1.3px;
-        }
-        #hud .hud-btn-value {
-            flex: 0 0 auto;
-            color: var(--text-light);
-            font-size: 0.76rem;
-            line-height: 1;
-            letter-spacing: 1px;
-            font-weight: 800;
-            padding: 0;
-            border-radius: 0;
-            border: none;
-            background: transparent;
-        }
-        #hud .hud-btn-copy {
-            flex: 1 1 auto;
-            flex-direction: column;
-            align-items: flex-start;
+            flex: 0 0 20px;
+            width: 20px;
+            height: 20px;
+            display: inline-flex;
+            align-items: center;
             justify-content: center;
-            gap: 2px;
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            color: var(--accent-cyan);
+            opacity: 0.9;
+            transition: transform 0.18s ease;
         }
-        #hud .hud-filter-card {
-            padding: 0;
+        #hud .hud-stack-btn:hover .hud-btn-icon {
+            transform: scale(1.1);
+            opacity: 1;
+        }
+        #hud .hud-btn-icon .icon-svg {
+            width: 15px;
+            height: 15px;
+        }
+
+        #hud .hud-btn-label {
+            font-size: 0.74rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            color: #bdd7f0;
+            flex: 1 1 auto;
+            white-space: nowrap;
+        }
+        #hud .hud-stack-btn:hover .hud-btn-label {
+            color: #fff;
+        }
+
+        .hud-pill-badge {
+            margin-left: auto;
+            padding: 3px 8px;
+            border-radius: 999px;
+            font-size: 0.64rem;
+            font-weight: 700;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+            background: rgba(102, 243, 255, 0.09);
+            border: 1px solid rgba(102, 243, 255, 0.24);
+            color: #79f3ff;
+            display: inline-flex;
+            align-items: center;
             gap: 4px;
+            transition: all 0.18s ease;
+        }
+        #hud .hud-stack-btn:hover .hud-pill-badge {
+            background: rgba(102, 243, 255, 0.18);
+            border-color: rgba(102, 243, 255, 0.45);
+            color: #fff;
+        }
+        #hud .hud-stack-btn.active .hud-pill-badge {
+            background: rgba(102, 243, 255, 0.24);
+            border-color: rgba(102, 243, 255, 0.65);
+            color: #fff;
+            box-shadow: 0 0 10px rgba(102, 243, 255, 0.25);
+        }
+        #hud .hud-stack-btn.is-off .hud-pill-badge {
+            background: rgba(255, 255, 255, 0.03);
+            border-color: rgba(255, 255, 255, 0.1);
+            color: #627b94;
+        }
+
+        #hud .hud-filter-card {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            padding: 0;
             border: none;
             background: transparent;
-            clip-path: none;
-            box-shadow: none;
         }
-        #hud .hud-filter-title {
-            padding: 1px 1px 4px;
-            font-size: 0.5rem;
+        #hud .hud-filter-options {
+            display: none;
+            flex-direction: column;
+            gap: 3px;
+            padding: 5px;
+            margin-top: 2px;
+            border-radius: 9px;
+            background: rgba(4, 9, 22, 0.95);
+            border: 1px solid rgba(102, 243, 255, 0.22);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+            animation: hudDrawerIn 0.18s ease-out;
+        }
+        @keyframes hudDrawerIn {
+            from { opacity: 0; transform: translateY(-4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        #hud .hud-filter-card.expanded .hud-filter-options {
+            display: flex;
         }
         #hud .hud-filter-option {
-            padding: 7px;
-            font-size: 0.6rem;
-            letter-spacing: 1px;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 8px;
+            border: 1px solid transparent;
+            border-radius: 6px;
+            background: transparent;
+            color: #92b0cc;
+            font-size: 0.68rem;
+            font-weight: 600;
+            letter-spacing: 0.6px;
+            cursor: pointer;
+            transition: all 0.15s ease;
         }
-        #hud .hud-settings-btn .hud-btn-icon {
-            flex-basis: 28px;
-            width: 28px;
-            height: 28px;
-            border-radius: 8px;
-            background: rgba(102, 243, 255, 0.12);
-            border-color: rgba(102, 243, 255, 0.22);
+        #hud .hud-filter-option:hover {
+            background: rgba(102, 243, 255, 0.1);
+            color: #fff;
         }
+        #hud .hud-filter-option.active {
+            background: rgba(102, 243, 255, 0.18);
+            border-color: rgba(102, 243, 255, 0.45);
+            color: #66f3ff;
+            box-shadow: inset 0 0 0 1px rgba(102, 243, 255, 0.1);
+        }
+        #hud .hud-filter-option-icon {
+            flex: 0 0 16px;
+            width: 16px;
+            height: 16px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #hud .hud-filter-option-label {
+            flex: 1 1 auto;
+            text-align: left;
+        }
+
         #hud .hud-toolbar {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 5px;
-            padding: 5px;
-            border: 1px solid rgba(102, 243, 255, 0.16);
-            border-radius: 12px;
-            background: linear-gradient(180deg, rgba(8, 16, 34, 0.9), rgba(4, 10, 22, 0.96));
-            box-shadow: inset 0 0 0 1px rgba(102, 243, 255, 0.03);
-            clip-path: none;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 4px;
+            padding: 3px;
+            margin-top: 3px;
+            border-top: 1px solid rgba(102, 243, 255, 0.1);
+            padding-top: 7px;
+            border-radius: 0;
+            background: transparent;
+            box-shadow: none;
         }
         #hud .hud-tool-btn {
-            min-height: 36px;
-            padding: 0;
+            flex: 1;
+            min-height: 30px;
             display: flex;
             align-items: center;
             justify-content: center;
-            border: 1px solid rgba(102, 243, 255, 0.14);
-            border-radius: 8px;
-            background: rgba(10, 22, 44, 0.65);
-            clip-path: none;
-            transition: transform 0.16s ease, border-color 0.2s ease, background 0.2s ease;
+            border: 1px solid rgba(102, 243, 255, 0.12);
+            border-radius: 7px;
+            background: rgba(10, 22, 42, 0.45);
+            color: #8daecb;
+            cursor: pointer;
+            transition: all 0.15s ease;
         }
         #hud .hud-tool-btn:hover {
-            transform: translateY(-1px);
             border-color: rgba(102, 243, 255, 0.4);
-            background: rgba(102, 243, 255, 0.12);
+            background: rgba(102, 243, 255, 0.15);
             color: #fff;
+            transform: translateY(-1px);
+        }
+        #hud .hud-tool-btn:active {
+            transform: scale(0.93);
         }
         #hud .hud-tool-btn .hud-btn-icon {
-            flex-basis: auto;
+            flex: 0 0 auto;
             width: auto;
             height: auto;
             margin: 0;
             background: transparent;
             border: none;
             box-shadow: none;
+        }
+        #hud .hud-tool-btn .hud-btn-icon .icon-svg {
+            width: 15px;
+            height: 15px;
         }
         #hud .hud-tool-btn .hud-btn-copy {
             display: none;
