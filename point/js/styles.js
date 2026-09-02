@@ -307,11 +307,11 @@ export function injectStyles() {
         #hud .hud-stack-btn,
         #hud .hud-mode-btn {
             min-height: 48px;
-            padding: 7px 8px;
-            border: 1px solid rgba(115, 251, 247, 0.14);
-            border-radius: 11px;
+            padding: 7px 10px;
+            border: 1px solid rgba(115, 251, 247, 0.16);
+            border-radius: 10px;
             background: linear-gradient(180deg, rgba(8, 16, 34, 0.9), rgba(4, 10, 22, 0.96));
-            clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+            clip-path: none;
             justify-content: flex-start;
             text-align: left;
             transition:
@@ -325,12 +325,12 @@ export function injectStyles() {
         #hud .hud-mode-btn:hover {
             transform: translateY(-1px);
             background: linear-gradient(180deg, rgba(10, 20, 40, 0.94), rgba(5, 13, 28, 0.98));
-            border-color: rgba(115, 251, 247, 0.24);
+            border-color: rgba(115, 251, 247, 0.35);
         }
         #hud .hud-stack-btn.active,
         #hud .hud-mode-btn.active {
             background: linear-gradient(180deg, rgba(16, 35, 58, 0.96), rgba(8, 18, 32, 0.96));
-            border-color: rgba(115, 251, 247, 0.42);
+            border-color: rgba(115, 251, 247, 0.45);
             box-shadow: 0 0 14px rgba(115, 251, 247, 0.12);
         }
         #hud .hud-stack-btn.is-off,
@@ -339,16 +339,17 @@ export function injectStyles() {
             border-color: rgba(123, 144, 171, 0.14);
         }
         #hud .hud-btn-icon {
-            flex: 0 0 25px;
-            width: 25px;
-            height: 25px;
-            border-radius: 7px;
+            flex: 0 0 28px;
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
             background: rgba(115, 251, 247, 0.08);
-            border: 1px solid rgba(115, 251, 247, 0.14);
+            border: 1px solid rgba(115, 251, 247, 0.16);
             color: currentColor;
+            flex-shrink: 0;
         }
         #hud .hud-btn-copy {
             display: flex;
@@ -361,8 +362,8 @@ export function injectStyles() {
         }
         #hud .hud-btn-label {
             color: #7f96b0;
-            font-size: 0.48rem;
-            line-height: 1.05;
+            font-size: 0.5rem;
+            line-height: 1.1;
             letter-spacing: 1.3px;
             text-transform: uppercase;
             font-weight: 700;
@@ -371,7 +372,7 @@ export function injectStyles() {
         #hud .hud-btn-value {
             flex: 0 0 auto;
             color: #d8eeff;
-            font-size: 0.75rem;
+            font-size: 0.76rem;
             line-height: 1;
             letter-spacing: 1px;
             text-transform: uppercase;
@@ -385,7 +386,7 @@ export function injectStyles() {
         #hud .hud-stack-btn.no-meta .hud-btn-label,
         #hud .hud-mode-btn.no-meta .hud-btn-label {
             color: #d8eeff;
-            font-size: 0.7rem;
+            font-size: 0.72rem;
             line-height: 1;
             letter-spacing: 1.1px;
         }
@@ -429,30 +430,38 @@ export function injectStyles() {
             display: flex;
             flex-direction: column;
             gap: 4px;
-            padding: 6px;
-            border: 1px solid rgba(115, 251, 247, 0.16);
-            border-radius: 16px;
-            background: linear-gradient(180deg, rgba(8, 16, 34, 0.9), rgba(4, 10, 22, 0.96));
-            clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
-            box-shadow: inset 0 0 0 1px rgba(115, 251, 247, 0.03);
+            padding: 0;
+            border: none;
+            border-radius: 0;
+            background: transparent;
+            clip-path: none;
+            box-shadow: none;
         }
         #hud .hud-filter-drawer {
-            overflow: hidden;
+            overflow: visible;
         }
         #hud .hud-filter-trigger {
             width: 100%;
             position: relative;
+            padding-right: 28px !important;
         }
         #hud .hud-filter-trigger::after {
             content: '▾';
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
             color: #7f96b0;
-            font-size: 0.62rem;
+            font-size: 0.75rem;
             line-height: 1;
-            margin-left: auto;
+            margin-left: 0;
             transition: transform 0.18s ease, color 0.18s ease;
+            pointer-events: none;
         }
         #hud .hud-filter-card.expanded .hud-filter-trigger::after {
-            transform: rotate(180deg);
+            transform: translateY(-50%) rotate(180deg);
+            color: #d8eeff;
+        }
             color: #d8eeff;
         }
         #hud .hud-filter-options {
@@ -3871,32 +3880,33 @@ export function injectStyles() {
         #hud .hud-stack-btn,
         #hud .hud-mode-btn {
             width: 100%;
-            min-height: 50px;
+            min-height: 48px;
             justify-content: flex-start;
-            border-radius: 11px;
-            padding: 8px 9px;
-            gap: 9px;
+            border-radius: 10px;
+            padding: 7px 10px;
+            gap: 10px;
+            clip-path: none;
         }
         #hud .hud-primary-btn {
-            border-color: rgba(102, 243, 255, 0.24);
+            border-color: rgba(102, 243, 255, 0.28);
             background: linear-gradient(180deg, rgba(10, 22, 42, 0.94), rgba(4, 10, 22, 0.98));
         }
         #hud .hud-btn-icon {
-            flex-basis: 26px;
-            width: 26px;
-            height: 26px;
-            border-radius: 7px;
+            flex-basis: 28px;
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
         }
         #hud .hud-btn-label {
             color: #7f96b0;
-            font-size: 0.48rem;
-            line-height: 1.05;
+            font-size: 0.5rem;
+            line-height: 1.1;
             letter-spacing: 1.3px;
         }
         #hud .hud-btn-value {
             flex: 0 0 auto;
             color: var(--text-light);
-            font-size: 0.75rem;
+            font-size: 0.76rem;
             line-height: 1;
             letter-spacing: 1px;
             font-weight: 800;
@@ -3910,11 +3920,15 @@ export function injectStyles() {
             flex-direction: column;
             align-items: flex-start;
             justify-content: center;
-            gap: 3px;
+            gap: 2px;
         }
         #hud .hud-filter-card {
-            padding: 6px;
-            gap: 5px;
+            padding: 0;
+            gap: 4px;
+            border: none;
+            background: transparent;
+            clip-path: none;
+            box-shadow: none;
         }
         #hud .hud-filter-title {
             padding: 1px 1px 4px;
@@ -3926,46 +3940,50 @@ export function injectStyles() {
             letter-spacing: 1px;
         }
         #hud .hud-settings-btn .hud-btn-icon {
-            flex-basis: 26px;
-            width: 26px;
-            height: 26px;
-            border-radius: 7px;
+            flex-basis: 28px;
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
             background: rgba(102, 243, 255, 0.12);
             border-color: rgba(102, 243, 255, 0.22);
         }
         #hud .hud-toolbar {
             display: grid;
             grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 6px;
-            padding: 6px;
+            gap: 5px;
+            padding: 5px;
             border: 1px solid rgba(102, 243, 255, 0.16);
-            border-radius: 14px;
+            border-radius: 12px;
             background: linear-gradient(180deg, rgba(8, 16, 34, 0.9), rgba(4, 10, 22, 0.96));
             box-shadow: inset 0 0 0 1px rgba(102, 243, 255, 0.03);
-            clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+            clip-path: none;
         }
         #hud .hud-tool-btn {
             min-height: 36px;
             padding: 0;
+            display: flex;
+            align-items: center;
             justify-content: center;
-            border: 1px solid rgba(102, 243, 255, 0.18);
-            border-radius: 10px;
-            background: linear-gradient(180deg, rgba(10, 22, 42, 0.94), rgba(5, 12, 26, 0.98));
-            clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+            border: 1px solid rgba(102, 243, 255, 0.14);
+            border-radius: 8px;
+            background: rgba(10, 22, 44, 0.65);
+            clip-path: none;
             transition: transform 0.16s ease, border-color 0.2s ease, background 0.2s ease;
         }
         #hud .hud-tool-btn:hover {
             transform: translateY(-1px);
-            border-color: rgba(102, 243, 255, 0.32);
-            background: linear-gradient(180deg, rgba(14, 28, 52, 0.98), rgba(6, 14, 30, 1));
+            border-color: rgba(102, 243, 255, 0.4);
+            background: rgba(102, 243, 255, 0.12);
+            color: #fff;
         }
         #hud .hud-tool-btn .hud-btn-icon {
-            flex-basis: 28px;
-            width: 28px;
-            height: 28px;
+            flex-basis: auto;
+            width: auto;
+            height: auto;
             margin: 0;
-            background: rgba(102, 243, 255, 0.1);
-            border: 1px solid rgba(102, 243, 255, 0.18);
+            background: transparent;
+            border: none;
+            box-shadow: none;
         }
         #hud .hud-tool-btn .hud-btn-copy {
             display: none;
