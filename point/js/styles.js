@@ -1739,15 +1739,28 @@ export function injectStyles() {
         }
         .cloud-local-badge {
             align-self: center;
-            padding: 7px 11px;
-            border: 1px solid rgba(102, 243, 255, 0.18);
+            display: inline-flex;
+            align-items: center;
+            padding: 6px 13px;
+            border: 1px solid rgba(102, 243, 255, 0.25);
             border-radius: 999px;
             background: rgba(102, 243, 255, 0.08);
             color: var(--accent-cyan);
-            font-size: 0.66rem;
+            font-size: 0.68rem;
             letter-spacing: 1.2px;
             text-transform: uppercase;
             white-space: nowrap;
+            pointer-events: none;
+            user-select: none;
+        }
+        .badge-dot {
+            display: inline-block;
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--accent-cyan);
+            margin-right: 7px;
+            box-shadow: 0 0 8px var(--accent-cyan);
         }
         .cloud-row-main {
             min-width: 0;
@@ -1979,8 +1992,21 @@ export function injectStyles() {
             letter-spacing: 1.1px;
             text-transform: uppercase;
         }
-        .cloud-local-action-grid > .data-hub-card-danger {
-            min-height: 92px;
+        .cloud-local-action-card.data-hub-card-danger {
+            border-color: rgba(255, 107, 129, 0.35);
+            background: linear-gradient(180deg, rgba(54, 14, 26, 0.72), rgba(28, 8, 14, 0.78));
+            clip-path: none;
+            border-radius: 14px;
+        }
+        .cloud-local-action-card.data-hub-card-danger:hover {
+            border-color: rgba(255, 107, 129, 0.65);
+            background: linear-gradient(180deg, rgba(78, 20, 34, 0.88), rgba(38, 10, 18, 0.88));
+        }
+        .cloud-local-action-card.data-hub-card-danger .data-hub-card-title {
+            color: #ff9da9;
+        }
+        .cloud-local-action-card.data-hub-card-danger .data-hub-card-meta {
+            color: #d18d96;
         }
         .cloud-guest-panel {
             display: flex;

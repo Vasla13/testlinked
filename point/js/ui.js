@@ -2187,29 +2187,29 @@ function buildCloudLocalPanelMarkup(localSaveLocked) {
     return `
         <div class="cloud-board-row cloud-board-row-local is-active">
             <div class="cloud-row-main">
-                <div class="cloud-row-title">${escapeHtml(state.projectName || 'Session locale')}</div>
-                <div class="cloud-row-sub">local · point</div>
+                <div class="cloud-row-title">${escapeHtml(state.projectName || 'Graphe local')}</div>
+                <div class="cloud-row-sub">Mode Hors-ligne · Réticule Point</div>
             </div>
-            <div class="cloud-local-badge">Actions locales</div>
+            <div class="cloud-local-badge"><span class="badge-dot"></span> Mode Local</div>
         </div>
         <div class="cloud-local-panel">
-            ${localSaveLocked ? '<div class="cloud-local-note">Mode partage: les exports locaux sont bloques pour les membres non lead.</div>' : ''}
+            ${localSaveLocked ? '<div class="cloud-local-note">Mode partage : les exports locaux sont bloqués pour les membres non lead.</div>' : ''}
             <div class="cloud-local-action-grid">
                 ${buildCloudLocalChoiceShell({
                     id: 'open',
                     title: 'Ouvrir',
-                    description: 'Importer un fichier JSON ou un texte brut',
+                    description: 'Importer un fichier JSON ou coller du texte brut',
                     fileAction: 'open-file',
-                    fileHint: 'JSON',
+                    fileHint: 'Fichier JSON',
                     textAction: 'open-text',
                     textHint: 'Coller le JSON'
                 })}
                 ${buildCloudLocalChoiceShell({
                     id: 'save',
                     title: 'Sauvegarder',
-                    description: 'Exporter en fichier local ou en texte brut',
+                    description: 'Exporter en fichier local ou copier le texte brut',
                     fileAction: 'save-file',
-                    fileHint: 'JSON',
+                    fileHint: 'Fichier JSON',
                     textAction: 'save-text',
                     textHint: 'Copier le JSON',
                     disabled: localSaveLocked
@@ -2219,13 +2219,16 @@ function buildCloudLocalPanelMarkup(localSaveLocked) {
                     title: 'Fusionner',
                     description: 'Regrouper deux JSON ou deux textes bruts',
                     fileAction: 'merge-file',
-                    fileHint: 'JSON',
+                    fileHint: 'Fichier JSON',
                     textAction: 'merge-text',
                     textHint: 'Coller le JSON'
                 })}
-                <button type="button" class="data-hub-card data-hub-card-danger" data-local-action="reset-all">
-                    <span class="data-hub-card-title">Reset</span>
-                </button>
+                <div class="cloud-local-action-shell">
+                    <button type="button" class="cloud-local-action-card data-hub-card data-hub-card-danger" data-local-action="reset-all">
+                        <span class="data-hub-card-title">⚠️ Réinitialiser</span>
+                        <span class="data-hub-card-meta">Vider le graphe local et repartir de zéro</span>
+                    </button>
+                </div>
             </div>
         </div>
     `;
@@ -2451,30 +2454,30 @@ async function renderCloudHome() {
             <div class="cloud-local-panel cloud-guest-panel">
                 <div class="cloud-guest-layout">
                     <section class="cloud-guest-hero">
-                        <div class="cloud-guest-kicker">Mode invite</div>
-                        <div class="cloud-guest-title">Cloud verrouille</div>
-                        <div class="cloud-guest-copy">Tu gardes toutes les actions locales. Pour creer, ouvrir ou sauvegarder dans le cloud, reconnecte-toi avec ton mot de passe.</div>
+                        <div class="cloud-guest-kicker">Collaboration en direct</div>
+                        <div class="cloud-guest-title">Espace Cloud BNI</div>
+                        <div class="cloud-guest-copy">Connectez-vous avec vos identifiants pour rejoindre un tableau partagé, synchroniser vos données en temps réel et collaborer avec l'équipe.</div>
                         <div class="cloud-guest-pills">
-                            <span class="cloud-guest-pill">Local dispo</span>
-                            <span class="cloud-guest-pill">Point</span>
-                            <span class="cloud-guest-pill">Connexion requise</span>
+                            <span class="cloud-guest-pill">Point relationnel</span>
+                            <span class="cloud-guest-pill">Temps réel</span>
+                            <span class="cloud-guest-pill">Multi-opérateurs</span>
                         </div>
                     </section>
                     <div class="modal-tool cloud-auth-shell cloud-auth-shell-inline cloud-auth-shell-guest">
-                    <div class="cloud-auth-badge">Cloud</div>
-                    <h3 class="cloud-auth-title">Connexion au cloud</h3>
-                    <div class="cloud-auth-copy">Entre simplement un identifiant et un mot de passe. Si le compte n existe pas encore, tu peux le creer ici.</div>
-                    <div class="cloud-auth-grid">
-                        <label class="cloud-auth-field">
-                            <span class="cloud-auth-label">Identifiant</span>
-                            <input id="cloud-auth-user" type="text" placeholder="operateur_nord" class="modal-input-standalone cloud-auth-input" autocomplete="username" />
-                        </label>
-                        <label class="cloud-auth-field">
-                            <span class="cloud-auth-label">Mot de passe</span>
-                            <input id="cloud-auth-pass" type="password" placeholder="Mot de passe" class="modal-input-standalone cloud-auth-input" autocomplete="current-password" />
-                        </label>
-                    </div>
-                    <div class="cloud-auth-hint">Le meme compte fonctionne aussi sur la carte. Sans connexion, tu restes en local.</div>
+                        <div class="cloud-auth-badge">Authentification</div>
+                        <h3 class="cloud-auth-title">Connexion au Cloud</h3>
+                        <div class="cloud-auth-copy">Renseignez votre identifiant et mot de passe ci-dessous :</div>
+                        <div class="cloud-auth-grid">
+                            <label class="cloud-auth-field">
+                                <span class="cloud-auth-label">Identifiant</span>
+                                <input id="cloud-auth-user" type="text" placeholder="ex: jude, mia, dutch..." class="modal-input-standalone cloud-auth-input" autocomplete="username" />
+                            </label>
+                            <label class="cloud-auth-field">
+                                <span class="cloud-auth-label">Mot de passe</span>
+                                <input id="cloud-auth-pass" type="password" placeholder="Votre mot de passe" class="modal-input-standalone cloud-auth-input" autocomplete="current-password" />
+                            </label>
+                        </div>
+                        <div class="cloud-auth-hint">Le même compte fonctionne sur le réticule et sur la carte tactique.</div>
                     </div>
                 </div>
             </div>
@@ -2488,32 +2491,43 @@ async function renderCloudHome() {
             <div class="cloud-shell">
                 <div class="cloud-home-head">
                     <div class="cloud-home-heading">
-                        <div class="cloud-home-kicker">Fichier</div>
-                        <div class="cloud-home-title">Session invite</div>
+                        <div class="cloud-home-kicker">Fichier & Synchronisation</div>
+                        <div class="cloud-home-title">${localPanel === 'cloud' ? 'Connexion Cloud' : 'Session Locale'}</div>
                     </div>
                     <div class="cloud-home-tab-group">
                         <button type="button" id="cloud-home-tab-cloud" class="cloud-home-tab ${localPanel === 'cloud' ? 'is-active' : ''}">Cloud</button>
                         <button type="button" id="cloud-home-tab-local" class="cloud-home-tab cloud-home-tab-alt ${localPanel === 'local' ? 'is-active' : ''}">Local</button>
                     </div>
-                    <button type="button" id="cloud-modal-close-x" class="mini-btn cloud-close-btn">×</button>
+                    <button type="button" id="cloud-modal-close-x" class="mini-btn cloud-close-btn" title="Fermer" aria-label="Fermer">&times;</button>
                 </div>
                 <div class="${panelShellClass}">${panelBody}</div>
                 <div class="cloud-status-bar">
-                    <span class="cloud-status-pill">Invite</span>
-                    <span id="cloudModalSyncInfo" class="cloud-status-pill">Connexion requise</span>
+                    <span class="cloud-status-pill">${localPanel === 'cloud' ? 'Mode Invité' : 'Mode Hors-ligne'}</span>
+                    <span id="cloudModalSyncInfo" class="cloud-status-pill">${localPanel === 'cloud' ? 'Connexion requise pour le Cloud' : 'Modifications enregistrées localement'}</span>
                 </div>
             </div>
         `;
         actEl.innerHTML = localPanel === 'cloud'
             ? `
-                <button type="button" id="cloud-auth-register" class="cloud-auth-secondary">Creer un compte</button>
+                <button type="button" id="cloud-auth-register" class="cloud-auth-secondary">Créer un compte</button>
                 <button type="button" id="cloud-auth-login" class="primary cloud-auth-primary">Se connecter</button>
                 <button type="button" id="cloud-auth-close" class="cloud-auth-tertiary">Fermer</button>
             `
-            : `<button type="button" id="cloud-auth-close" class="cloud-auth-tertiary">Fermer</button>`;
+            : `
+                <button type="button" id="cloud-switch-to-cloud" class="cloud-auth-secondary" style="margin-right:auto;">☁️ Rejoindre le Cloud</button>
+                <button type="button" id="cloud-auth-close" class="cloud-auth-tertiary">Fermer</button>
+            `;
 
         bindCloudHomeTabs();
         bindCloudLocalActions(localSaveLocked);
+
+        const switchToCloudBtn = document.getElementById('cloud-switch-to-cloud');
+        if (switchToCloudBtn) {
+            switchToCloudBtn.onclick = () => {
+                collab.homePanel = 'cloud';
+                renderCloudHome();
+            };
+        }
 
         const closeX = document.getElementById('cloud-modal-close-x');
         if (closeX) closeX.onclick = () => { modalOverlay.style.display = 'none'; };
@@ -2555,7 +2569,7 @@ async function renderCloudHome() {
                 </div>
                 <div class="cloud-row-actions">
                     <button type="button" class="mini-btn cloud-open-board" data-board="${escapeHtml(b.id)}">Ouvrir</button>
-                    ${role === 'owner' ? `<button type="button" class="mini-btn cloud-manage-board" data-board="${escapeHtml(b.id)}">Gerer</button>` : ''}
+                    ${role === 'owner' ? `<button type="button" class="mini-btn cloud-manage-board" data-board="${escapeHtml(b.id)}">Gérer</button>` : ''}
                     ${role !== 'owner' ? `<button type="button" class="mini-btn cloud-leave-board" data-board="${escapeHtml(b.id)}">Quitter</button>` : ''}
                 </div>
             </div>
@@ -2564,26 +2578,26 @@ async function renderCloudHome() {
 
     const panelBody = localPanel === 'local'
         ? localRows
-        : (boardRows || '<div class="modal-empty-state">Aucun board cloud.</div>');
+        : (boardRows || '<div class="modal-empty-state">Aucun board cloud actif disponible.</div>');
 
     msgEl.innerHTML = `
         <div class="cloud-shell">
             <div class="cloud-home-head">
                 <div class="cloud-home-heading">
-                    <div class="cloud-home-kicker">Fichier</div>
+                    <div class="cloud-home-kicker">Opérateur connecté</div>
                     <div class="cloud-home-title">${escapeHtml(collab.user.username)}</div>
                 </div>
                 <div class="cloud-home-tab-group">
                     <button type="button" id="cloud-home-tab-cloud" class="cloud-home-tab ${localPanel === 'cloud' ? 'is-active' : ''}">Cloud</button>
                     <button type="button" id="cloud-home-tab-local" class="cloud-home-tab cloud-home-tab-alt ${localPanel === 'local' ? 'is-active' : ''}">Local</button>
                 </div>
-                <button type="button" id="cloud-modal-close-x" class="mini-btn cloud-close-btn">×</button>
+                <button type="button" id="cloud-modal-close-x" class="mini-btn cloud-close-btn" title="Fermer" aria-label="Fermer">&times;</button>
             </div>
             <div class="cloud-column cloud-panel-shell">${panelBody}</div>
             <div class="cloud-status-bar">
-                <span class="cloud-status-pill">Connecte: ${escapeHtml(collab.user.username)}</span>
+                <span class="cloud-status-pill">Connecté : ${escapeHtml(collab.user.username)}</span>
                 <span id="cloudModalSyncInfo" class="cloud-status-pill ${isCloudBoardActive() ? 'cloud-status-active' : ''}">
-                    ${isCloudBoardActive() ? `Board actif: ${escapeHtml(collab.activeBoardTitle || collab.activeBoardId)} (${escapeHtml(collab.activeRole || '')})` : 'Aucun board cloud actif'}
+                    ${isCloudBoardActive() ? `Board actif : ${escapeHtml(collab.activeBoardTitle || collab.activeBoardId)} (${escapeHtml(collab.activeRole || '')})` : 'Aucun board cloud actif'}
                 </span>
             </div>
         </div>
@@ -2591,21 +2605,32 @@ async function renderCloudHome() {
 
     actEl.innerHTML = localPanel === 'cloud'
         ? `
-            <button type="button" id="cloud-create-board" class="primary">Nouveau</button>
-            <button type="button" id="cloud-save-active">Sauver</button>
-            <button type="button" id="cloud-logout">Deconnexion</button>
+            <button type="button" id="cloud-create-board" class="primary">Nouveau tableau</button>
+            <button type="button" id="cloud-save-active">Sauvegarder</button>
+            <button type="button" id="cloud-logout">Déconnexion</button>
         `
-        : `<button type="button" id="cloud-logout">Deconnexion</button>`;
+        : `
+            <button type="button" id="cloud-switch-to-cloud" class="cloud-auth-secondary" style="margin-right:auto;">☁️ Voir les tableaux Cloud</button>
+            <button type="button" id="cloud-logout">Déconnexion</button>
+        `;
+
+    const switchToCloudBtn = document.getElementById('cloud-switch-to-cloud');
+    if (switchToCloudBtn) {
+        switchToCloudBtn.onclick = () => {
+            collab.homePanel = 'cloud';
+            renderCloudHome();
+        };
+    }
 
     const createBtn = document.getElementById('cloud-create-board');
     if (createBtn) {
         createBtn.onclick = async () => {
             try {
                 await createCloudBoardFromCurrent();
-                showCustomAlert(`Board cree: ${escapeHtml(collab.activeBoardTitle || '')}`);
+                showCustomAlert(`Board créé : ${escapeHtml(collab.activeBoardTitle || '')}`);
                 await renderCloudHome();
             } catch (e) {
-                showCustomAlert(`Erreur creation cloud: ${escapeHtml(e.message || 'inconnue')}`);
+                showCustomAlert(`Erreur création cloud : ${escapeHtml(e.message || 'inconnue')}`);
             }
         };
     }
@@ -2639,7 +2664,7 @@ async function renderCloudHome() {
 function showCloudMenu() {
     if (!modalOverlay) createModal();
     setModalMode('cloud');
-    collab.homePanel = collab.user ? 'cloud' : 'local';
+    collab.homePanel = (collab.user || collab.pendingBoardId) ? 'cloud' : 'local';
     showModalOverlay();
     renderCloudHome();
 }
