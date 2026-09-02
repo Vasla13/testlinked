@@ -629,14 +629,7 @@ input[type="range"]::-webkit-slider-thumb { appearance: none; width: 12px; heigh
     0% { opacity: 0.9; transform: scale(1); }
     100% { opacity: 0; transform: scale(1.045); }
 }
-body.app-loading .help-fab-wrap,
-body.app-loading .help-nudge,
-body.app-loading .help-settings-popover,
-body.app-loading .help-overlay {
-    opacity: 0 !important;
-    visibility: hidden !important;
-    pointer-events: none !important;
-}
+
 .help-fab-wrap {
     position: fixed;
     right: var(--help-fab-right);
@@ -2575,44 +2568,6 @@ body.map-shell #drawing-notif {
     body.map-shell #sidebar-right {
         width: min(320px, calc(100vw - 24px));
     }
-
-    body.map-shell .loader-grid {
-        grid-template-columns: 1fr;
-    }
-
-    body.map-shell .loader-radar {
-        min-height: 160px;
-    }
-}
-
-@media (max-width: 768px) {
-    body.map-shell #app-container {
-        padding-top: 55px;
-    }
-
-    body.map-shell #sidebar-left {
-        position: absolute;
-        top: 55px;
-        left: 0;
-        bottom: 0;
-        transform: translateX(-100%);
-        border-radius: 0 20px 20px 0;
-        overflow: auto;
-    }
-
-@media (max-width: 960px) {
-    body.map-shell #sidebar-left,
-    body.map-shell #sidebar-right {
-        width: min(320px, calc(100vw - 24px));
-    }
-
-    body.map-shell .loader-grid {
-        grid-template-columns: 1fr;
-    }
-
-    body.map-shell .loader-radar {
-        min-height: 160px;
-    }
 }
 
 @media (max-width: 768px) {
@@ -2677,9 +2632,6 @@ body.map-shell #drawing-notif {
         grid-template-columns: 1fr;
     }
 
-    body.map-shell .loader-shell {
-        padding: 22px 18px 18px;
-    }
 
     body.map-shell .map-alert-callout-card {
         width: min(300px, calc(100vw - 34px));

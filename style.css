@@ -965,11 +965,6 @@ body.help-active .help-fab {
     z-index: 1;
 }
 
-body.app-loading .site-alert-popup {
-    opacity: 0 !important;
-    visibility: hidden !important;
-    pointer-events: none !important;
-}
 
 .site-alert-head {
     display: flex;

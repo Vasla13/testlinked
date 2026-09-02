@@ -95,33 +95,16 @@ function pruneDismissedSignatures(alerts) {
 }
 
 function isHomeReady() {
-    if (!document.body || document.body.classList.contains('app-loading')) return false;
-
-    const bootLayer = document.getElementById('boot-layer');
-    const bioLayer = document.getElementById('bio-layer');
-    const isHidden = (element) => {
-        if (!element) return true;
-        if (element.hidden) return true;
-        const style = window.getComputedStyle(element);
-        return style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0;
-    };
-
-    return isHidden(bootLayer) && isHidden(bioLayer);
+    return !!document.body;
 }
 
 function waitForHomeReady(callback) {
-    if (isHomeReady()) {
-        homeReady = true;
+    homeReady = true;
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => callback(), { once: true });
+    } else {
         callback();
-        return;
     }
-
-    const timer = window.setInterval(() => {
-        if (!isHomeReady()) return;
-        window.clearInterval(timer);
-        homeReady = true;
-        callback();
-    }, 140);
 }
 
 function getVisibleAlerts() {
