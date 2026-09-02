@@ -131,15 +131,24 @@ function getStoreClient() {
   return getStore(STORE_NAME);
 }
 
+function unwrap(obj) {
+  if (!obj || typeof obj !== "object") return obj;
+  if (obj.__bni_blob && obj.value && typeof obj.value === "object") return obj.value;
+  return obj;
+}
+
 async function getUserByUsername(store, username) {
-  const mapping = await store.get(usernameKey(username), { type: "json" });
+  const rawMapping = await store.get(usernameKey(username), { type: "json" });
+  const mapping = unwrap(rawMapping);
   if (!mapping || !mapping.userId) return null;
-  return store.get(userKey(mapping.userId), { type: "json" });
+  const rawUser = await store.get(userKey(mapping.userId), { type: "json" });
+  return unwrap(rawUser);
 }
 
 async function getUserById(store, userId) {
   if (!userId) return null;
-  return store.get(userKey(userId), { type: "json" });
+  const rawUser = await store.get(userKey(userId), { type: "json" });
+  return unwrap(rawUser);
 }
 
 async function createSession(store, user) {
