@@ -1,6 +1,6 @@
 import { state } from './state.js';
 import { KINDS, TYPES } from './constants.js';
-import { nodeRadius, draw } from './render.js';
+import { nodeRadius, draw, requestDraw } from './render.js';
 import { clamp, getId } from './utils.js';
 
 let simulation;
@@ -364,7 +364,7 @@ export function initPhysics() {
 
 function ticked() {
     if (state.forceSimulation) return; 
-    draw();
+    requestDraw();
 }
 
 export function restartSim() {
@@ -485,7 +485,7 @@ export function restartSim() {
     // 5. COLLISION (Slider: Collision)
     simulation.force("collide", d3lib.forceCollide()
         .radius(n => nodeRadius(n) + adaptiveCollision) 
-        .iterations(2)
+        .iterations(1)
     );
 
     // 6. BARRIÈRE (Gérée par l'état Globe)
@@ -494,11 +494,11 @@ export function restartSim() {
         if (!state.globeMode) return; 
         for (const n of state.nodes) {
             const d = Math.sqrt(n.x * n.x + n.y * n.y);
-            if (d > worldRadius) {
+            if (d > worldRadius && d > 0) {
                 const excess = d - worldRadius;
-                const angle = Math.atan2(n.y, n.x);
-                n.vx -= Math.cos(angle) * (excess * 0.1); 
-                n.vy -= Math.sin(angle) * (excess * 0.1);
+                const factor = (excess * 0.1) / d;
+                n.vx -= n.x * factor; 
+                n.vy -= n.y * factor;
             }
         }
     });
@@ -515,17 +515,18 @@ export function restartSim() {
                 if (n.fx != null) continue;
                 if (connectedPairs.has(`${n.id}-${struct.id}`)) continue; // Si connecté, le lien gère la distance
 
-                const dx = n.x - struct.x; const dy = n.y - struct.y;
+                const dx = n.x - struct.x;
+                const dy = n.y - struct.y;
+                if (Math.abs(dx) > territoryRadius || Math.abs(dy) > territoryRadius) continue;
                 const distSq = dx*dx + dy*dy; 
                 const minDistSq = territoryRadius * territoryRadius;
 
-                if (distSq < minDistSq) {
+                if (distSq < minDistSq && distSq > 0) {
                     const dist = Math.sqrt(distSq);
-                    // Ici on utilise le slider "Force Repousse Entreprise"
                     const push = (territoryRadius - dist) * S.structureRepulsion; 
-                    
-                    const angle = Math.atan2(dy, dx);
-                    n.vx += Math.cos(angle) * push; n.vy += Math.sin(angle) * push;
+                    const invDist = push / dist;
+                    n.vx += dx * invDist;
+                    n.vy += dy * invDist;
                 }
             }
         }

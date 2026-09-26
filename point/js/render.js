@@ -164,9 +164,18 @@ export function nodeRadius(n) {
     return Math.max(R_MIN[n.type], Math.min(R_MAX[n.type], r));
 }
 
+let drawFrameId = null;
+export function requestDraw() {
+    if (drawFrameId !== null) return;
+    drawFrameId = requestAnimationFrame(() => {
+        drawFrameId = null;
+        draw();
+    });
+}
+
 export function resizeCanvas() {
     if (!canvas || !container) return;
-    const r = window.devicePixelRatio || 1;
+    const r = Math.min(window.devicePixelRatio || 1, 2);
     const w = container.clientWidth;
     const h = container.clientHeight;
     canvas.width = w * r;
@@ -190,9 +199,16 @@ export function draw() {
 
     const p = state.view;
     updateZoomDisplay(p.scale);
-    const r = window.devicePixelRatio || 1;
+    const r = Math.min(window.devicePixelRatio || 1, 2);
     const w = canvas.width / r;
     const h = canvas.height / r;
+
+    // Viewport Bounding Box en coordonnées monde (pour le culling)
+    const pad = Math.max(120, 160 / Math.max(0.15, p.scale));
+    const viewMinX = -(w / 2 + p.x) / p.scale - pad;
+    const viewMaxX = (w / 2 - p.x) / p.scale + pad;
+    const viewMinY = -(h / 2 + p.y) / p.scale - pad;
+    const viewMaxY = (h / 2 - p.y) / p.scale + pad;
     
     const isFocus = state.focusMode;
     const isHVT = state.hvtMode; 
@@ -347,6 +363,12 @@ export function draw() {
             const a = nodeMap?.get(String(pl.aId));
             const b = nodeMap?.get(String(pl.bId));
             if (!a || !b) continue;
+            if ((a.x < viewMinX && b.x < viewMinX) ||
+                (a.x > viewMaxX && b.x > viewMaxX) ||
+                (a.y < viewMinY && b.y < viewMinY) ||
+                (a.y > viewMaxY && b.y > viewMaxY)) {
+                continue;
+            }
             const key = pairKey(pl.aId, pl.bId);
             const total = predictedCounts.get(key) || 1;
             const idx = pairIndex.get(key) || 0;
@@ -386,6 +408,17 @@ export function draw() {
         const tId = getLinkEndpointId(l.target);
         const sourceNode = (typeof l.source === 'object') ? l.source : nodeById(sId);
         const targetNode = (typeof l.target === 'object') ? l.target : nodeById(tId);
+        if (!sourceNode || !targetNode) continue;
+        const sx = sourceNode.x;
+        const sy = sourceNode.y;
+        const tx = targetNode.x;
+        const ty = targetNode.y;
+        if ((sx < viewMinX && tx < viewMinX) ||
+            (sx > viewMaxX && tx > viewMaxX) ||
+            (sy < viewMinY && ty < viewMinY) ||
+            (sy > viewMaxY && ty > viewMaxY)) {
+            continue;
+        }
         if (isFocus && (!state.focusSet.has(sId) || !state.focusSet.has(tId))) continue;
         
         let dimmed = isLinkDimmed(l);
@@ -526,8 +559,11 @@ export function draw() {
 
     // 3. NOEUDS
     for (const n of renderableNodes) {
-        const dimmed = isNodeDimmed(n);
-        let rad = nodeRadius(n); 
+        let rad = nodeRadius(n);
+        if (n.x + rad < viewMinX || n.x - rad > viewMaxX || n.y + rad < viewMinY || n.y - rad > viewMaxY) {
+            continue;
+        }
+        const dimmed = isNodeDimmed(n); 
         let alpha = dimmed ? 0.4 : 1.0;
         let nodeColor = sanitizeNodeColor(n.color);
         const statusVisual = getPersonStatusVisual(n);
@@ -646,6 +682,8 @@ export function draw() {
         const drawnBoxes = [];
 
         for (const n of renderableNodes) {
+            // Viewport culling pour les labels
+            if (n.x < viewMinX || n.x > viewMaxX || n.y < viewMinY || n.y > viewMaxY) continue;
             const influence = Number(n.hvtInfluence) || 0;
             if (isHVT) {
                 if (topSet && !topSet.has(n.id) && influence < 0.24) continue;
@@ -714,8 +752,11 @@ export function draw() {
         candidates.sort((a, b) => b.priority - a.priority);
 
         const overlaps = (a, b) => !(a.x + a.w < b.x || b.x + b.w < a.x || a.y + a.h < b.y || b.y + b.h < a.y);
+        const MAX_DRAWN_LABELS = 45;
+        let drawnCount = 0;
 
         for (const c of candidates) {
+            if (drawnCount >= MAX_DRAWN_LABELS && c.priority < 90) break;
             const rect = { x: c.boxX, y: c.boxY, w: c.boxW, h: c.boxH };
             const mustDraw = c.priority >= 90;
             let collide = false;
@@ -726,6 +767,7 @@ export function draw() {
             }
             if (collide) continue;
             drawnBoxes.push(rect);
+            drawnCount++;
 
             ctx.globalAlpha = 0.95; ctx.fillStyle = 'rgba(3, 8, 18, 0.96)';
             ctx.beginPath();

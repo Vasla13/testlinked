@@ -1,6 +1,6 @@
 import { state, saveState } from './state.js';
 import { getSimulation } from './physics.js';
-import { draw } from './render.js';
+import { draw, requestDraw } from './render.js';
 import { screenToWorld, clamp } from './utils.js';
 import { selectNode, renderEditor, updatePathfindingPanel, addLink } from './ui.js';
 
@@ -82,7 +82,7 @@ export function setupCanvasEvents(canvas) {
         state.view.x = mouse.x - canvas.clientWidth / 2 - (mouseBefore.x * newScale);
         state.view.y = mouse.y - canvas.clientHeight / 2 - (mouseBefore.y * newScale);
 
-        draw();
+        requestDraw();
     }, { passive: false });
 
 
@@ -93,6 +93,8 @@ export function setupCanvasEvents(canvas) {
     let lastPan = { x: 0, y: 0 };
     let dragLinkSource = null;
     let suppressNextClick = false;
+    let hoverRafPending = false;
+    let lastHoverEvent = null;
 
     canvas.addEventListener('mousedown', (e) => {
         // Calcul précis de la position monde
@@ -126,7 +128,7 @@ export function setupCanvasEvents(canvas) {
         if (dragLinkSource) { 
             const p = getWorldPositionFromEvent(e, canvas);
             state.tempLink.x2 = p.x; state.tempLink.y2 = p.y; 
-            draw(); return; 
+            requestDraw(); return; 
         }
         
         // Mode Panoramique (Déplacement carte)
@@ -145,17 +147,33 @@ export function setupCanvasEvents(canvas) {
             const dy = e.clientY - lastPan.y;
             lastPan = { x: e.clientX, y: e.clientY };
             state.view.x += dx; state.view.y += dy; 
-            draw(); return; 
+            requestDraw(); return; 
         }
         
-        // Changement curseur au survol
+        // Changement curseur au survol (cadencé par rAF pour éviter les micro-saccades sur souris haute fréquence)
         if (!isPanning && !dragLinkSource) {
-            const p = getWorldPositionFromEvent(e, canvas);
-            const hit = findNodeAtPosition(p.x, p.y, 40);
-            if (hit) { 
-                if (state.hoverId !== hit.id) { state.hoverId = hit.id; canvas.style.cursor = 'pointer'; draw(); } 
-            } else { 
-                if (state.hoverId !== null) { state.hoverId = null; canvas.style.cursor = 'default'; draw(); } 
+            lastHoverEvent = e;
+            if (!hoverRafPending) {
+                hoverRafPending = true;
+                requestAnimationFrame(() => {
+                    hoverRafPending = false;
+                    if (!lastHoverEvent || isPanning || dragLinkSource) return;
+                    const p = getWorldPositionFromEvent(lastHoverEvent, canvas);
+                    const hit = findNodeAtPosition(p.x, p.y, 40);
+                    if (hit) { 
+                        if (state.hoverId !== hit.id) {
+                            state.hoverId = hit.id;
+                            canvas.style.cursor = 'pointer';
+                            requestDraw();
+                        } 
+                    } else { 
+                        if (state.hoverId !== null) {
+                            state.hoverId = null;
+                            canvas.style.cursor = 'default';
+                            requestDraw();
+                        } 
+                    }
+                });
             }
         }
     });
@@ -205,7 +223,7 @@ export function setupCanvasEvents(canvas) {
     });
     
     canvas.addEventListener('mouseleave', () => {
-        pendingPan = false; isPanning = false; state.hoverId = null; dragLinkSource = null; state.tempLink = null; suppressNextClick = false; draw();
+        pendingPan = false; isPanning = false; state.hoverId = null; dragLinkSource = null; state.tempLink = null; suppressNextClick = false; requestDraw();
     });
 
     // 3. CONFIGURATION D3 DRAG (Pour bouger les nœuds)
