@@ -180,9 +180,9 @@ body.high-light-mode #map-image {
 
 /* --- 4. MARQUEURS TACTIQUES & CORRECTIFS COULEURS --- */
 .marker.status-danger { animation: pulse-danger 2s infinite; --marker-color: #ff4444 !important; }
-.marker.status-inactive { opacity: 0.6; filter: grayscale(0.8); }
-.marker.status-missing { opacity: 0.75; --marker-color: #f4c35a !important; }
-.marker.status-deceased { opacity: 0.6; filter: grayscale(1); --marker-color: #ff6b81 !important; text-decoration: line-through; }
+.marker.status-inactive, .marker.status-inactif { opacity: 0.6; filter: grayscale(0.8); }
+.marker.status-missing, .marker.status-disparu { opacity: 0.75; --marker-color: #f4c35a !important; }
+.marker.status-deceased, .marker.status-mort { opacity: 0.6; filter: grayscale(1); --marker-color: #ff6b81 !important; text-decoration: line-through; }
 @keyframes pulse-danger { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
 
 .marker {

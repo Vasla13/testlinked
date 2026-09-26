@@ -114,7 +114,12 @@ function buildPointLookup() {
 }
 
 function getMarkerRenderState(group, point, gIndex, pIndex) {
-    const status = String(point.status || 'ACTIVE').toLowerCase();
+    let rawStatus = String(point.status || 'ACTIVE').toLowerCase();
+    let status = 'active';
+    if (rawStatus === 'inactive' || rawStatus === 'inactif') status = 'inactive';
+    else if (rawStatus === 'missing' || rawStatus === 'disparu') status = 'missing';
+    else if (rawStatus === 'deceased' || rawStatus === 'mort') status = 'deceased';
+
     const baseColor = group.color || '#00ffff';
     const softColor = mixHex(baseColor, '#ffffff', 0.35) || baseColor;
     const deepColor = mixHex(baseColor, '#000000', 0.5) || baseColor;
@@ -516,10 +521,17 @@ function renderTacticalLinks() {
         line.setAttribute('data-hover-width', String(widths.hover));
         line.setAttribute('stroke-width', String(widths.normal));
 
-        const sStatus = String(pFrom.status || 'ACTIVE').toUpperCase();
-        const tStatus = String(pTo.status || 'ACTIVE').toUpperCase();
-        const isInactiveOrDead = sStatus === 'INACTIVE' || sStatus === 'MISSING' || sStatus === 'DECEASED' ||
-                                 tStatus === 'INACTIVE' || tStatus === 'MISSING' || tStatus === 'DECEASED';
+        const normMapStatus = (s) => {
+            const raw = String(s || 'ACTIVE').toLowerCase();
+            if (raw === 'inactive' || raw === 'inactif') return 'inactive';
+            if (raw === 'missing' || raw === 'disparu') return 'missing';
+            if (raw === 'deceased' || raw === 'mort') return 'deceased';
+            return 'active';
+        };
+        const sStatus = normMapStatus(pFrom.status);
+        const tStatus = normMapStatus(pTo.status);
+        const isInactiveOrDead = sStatus === 'inactive' || sStatus === 'missing' || sStatus === 'deceased' ||
+                                 tStatus === 'inactive' || tStatus === 'missing' || tStatus === 'deceased';
         const linkKind = String(link.type || link.kind || '').toLowerCase();
         const isEx = linkKind === 'ex_employe' || linkKind === 'ex_membre' || linkKind === 'ex employé' || linkKind === 'ex membre';
 

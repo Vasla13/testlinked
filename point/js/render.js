@@ -544,7 +544,7 @@ export function draw() {
             }
             const color = computeLinkColor(l);
             
-            ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+            ctx.globalAlpha = (isInactiveOrDead || isExLink) ? 0.35 : 1; ctx.shadowBlur = 0;
             
             // Fond rond noir
             ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(mx, my, 10 / Math.sqrt(p.scale), 0, Math.PI*2); ctx.fill();

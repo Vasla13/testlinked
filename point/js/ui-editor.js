@@ -609,6 +609,9 @@ function setupEditorListeners(n) {
             if (nextStatus === normalizePersonStatus(n.personStatus, n.type)) return;
             queueHistory();
             n.personStatus = nextStatus;
+            updatePersonColors();
+            refreshHvt();
+            restartSim();
             refreshLists();
             renderEditor();
             draw();

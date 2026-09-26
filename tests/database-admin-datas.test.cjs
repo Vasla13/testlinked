@@ -198,17 +198,19 @@ test('Node merging logic merges data entity and associated user into single node
   ]);
 
   // Map users to entities
+  const cleanNormKey = (s) => normKey(s).replace(/^@+/, '');
   const userToEntityMap = new Map();
   const entityToUserMap = new Map();
   for (const k of allSubgraphKeys) {
+    const cleanK = cleanNormKey(k);
     const matchedUser = loadedUsers.find((u) => {
       const points = Array.isArray(u.associatedPoints) ? u.associatedPoints : [];
-      if (points.some((p) => normKey(p) === k)) return true;
+      if (points.some((p) => cleanNormKey(p) === cleanK)) return true;
       const full = `${u.firstName || ''} ${u.lastName || ''}`.trim();
       const reverse = `${u.lastName || ''} ${u.firstName || ''}`.trim();
-      if (full && normKey(full) === k) return true;
-      if (reverse && normKey(reverse) === k) return true;
-      if (normKey(u.username) === k) return true;
+      if (full && cleanNormKey(full) === cleanK) return true;
+      if (reverse && cleanNormKey(reverse) === cleanK) return true;
+      if (cleanNormKey(u.username) === cleanK) return true;
       return false;
     });
     if (matchedUser) {
@@ -296,26 +298,28 @@ test('Graph physics attraction calculations enforce zero attraction on inactif/m
 
     const sDeg = sourceNode?.degree ?? 1;
     const tDeg = targetNode?.degree ?? 1;
+
+    let baseStrength = 0.7;
+    if (isEx) {
+      if (shared === 0) return 0;
+      baseStrength = Math.min(0.45, 0.05 + shared * 0.1);
+    } else if (link.kind === 'ami') {
+      if (shared === 0) baseStrength = 0.02; // minimal attraction if 0 shared indirect
+      else baseStrength = Math.min(0.85, 0.06 + shared * 0.16);
+    } else if (link.kind === 'connaissance') {
+      if (shared === 0) baseStrength = 0.01;
+      else baseStrength = Math.min(0.7, 0.04 + shared * 0.12);
+    } else if (link.kind === 'amour') {
+      if (shared === 0) baseStrength = 0.04;
+      else baseStrength = Math.min(0.9, 0.1 + shared * 0.18);
+    }
+
+    // 2nd degree to 2nd degree has strictly reduced attraction compared to base
     if (sDeg === 2 && tDeg === 2) {
-      return 0.06; // reduced attraction between 2nd degree nodes
+      return Math.min(baseStrength * 0.5, 0.06);
     }
 
-    if (link.kind === 'ami') {
-      if (shared === 0) return 0.02; // minimal attraction if 0 shared indirect
-      return Math.min(0.85, 0.06 + shared * 0.16);
-    }
-
-    if (link.kind === 'connaissance') {
-      if (shared === 0) return 0.01;
-      return Math.min(0.7, 0.04 + shared * 0.12);
-    }
-
-    if (link.kind === 'amour') {
-      if (shared === 0) return 0.04;
-      return Math.min(0.9, 0.1 + shared * 0.18);
-    }
-
-    return 0.7;
+    return baseStrength;
   }
 
   const activeNode1 = { id: 'n1', status: 'actif', degree: 1 };
@@ -351,18 +355,25 @@ test('Graph physics attraction calculations enforce zero attraction on inactif/m
   assert.equal(conn0, 0.01);
   assert.ok(conn2 > conn0);
 
-  // 5. 2nd degree to 2nd degree has reduced attraction
+  // 5. 2nd degree to 2nd degree has reduced attraction (< 1st degree)
   const deg2Strength = computeLinkStrength({ kind: 'relation' }, deg2NodeA, deg2NodeB);
   assert.equal(deg2Strength, 0.06);
+
+  // 2nd degree friends with 0 shared has less attraction than 1st degree (0.01 vs 0.02)
+  const deg2Ami0 = computeLinkStrength({ kind: 'ami', sharedIndirectCount: 0 }, deg2NodeA, deg2NodeB);
+  assert.equal(deg2Ami0, 0.01);
+  assert.ok(deg2Ami0 < ami0);
 });
 
-test('Shared indirect connections counter accurately computes common non-enemy neighbors', () => {
-  const nodes = [{ id: 'A' }, { id: 'B' }, { id: 'C' }, { id: 'D' }];
+test('Shared indirect connections counter accurately computes common non-enemy neighbors excluding clouds', () => {
+  const nodes = [{ id: 'A' }, { id: 'B' }, { id: 'C' }, { id: 'D' }, { id: 'cloud:board_1' }];
   const links = [
     { source: 'A', target: 'C', kind: 'ami' },
     { source: 'B', target: 'C', kind: 'ami' },
     { source: 'A', target: 'D', kind: 'collegue' },
     { source: 'B', target: 'D', kind: 'collegue' },
+    { source: 'A', target: 'cloud:board_1', kind: 'membre_cloud' },
+    { source: 'B', target: 'cloud:board_1', kind: 'membre_cloud' },
     { source: 'A', target: 'B', kind: 'ami' },
   ];
 
@@ -374,14 +385,33 @@ test('Shared indirect connections counter accurately computes common non-enemy n
     adj.get(l.target).add(l.source);
   }
 
-  // Calculate shared indirect count for A-B
+  // Calculate shared indirect count for A-B excluding cloud: nodes
   const aNeighbors = adj.get('A');
   const bNeighbors = adj.get('B');
   let shared = 0;
   for (const neighbor of aNeighbors) {
-    if (neighbor !== 'B' && bNeighbors.has(neighbor)) shared++;
+    if (neighbor !== 'B' && bNeighbors.has(neighbor) && !String(neighbor).startsWith('cloud:')) {
+      shared++;
+    }
   }
 
-  // A and B both connect to C and D -> shared count is 2
+  // A and B both connect to C and D (and cloud:board_1 which is excluded) -> shared count is 2
   assert.equal(shared, 2);
+});
+
+test('Map status normalization correctly translates French statuses inactif, disparu, mort', () => {
+  const normMapStatus = (s) => {
+    const raw = String(s || 'ACTIVE').toLowerCase();
+    if (raw === 'inactive' || raw === 'inactif') return 'inactive';
+    if (raw === 'missing' || raw === 'disparu') return 'missing';
+    if (raw === 'deceased' || raw === 'mort') return 'deceased';
+    return 'active';
+  };
+
+  assert.equal(normMapStatus('inactif'), 'inactive');
+  assert.equal(normMapStatus('INACTIF'), 'inactive');
+  assert.equal(normMapStatus('disparu'), 'missing');
+  assert.equal(normMapStatus('mort'), 'deceased');
+  assert.equal(normMapStatus('active'), 'active');
+  assert.equal(normMapStatus('ACTIVE'), 'active');
 });

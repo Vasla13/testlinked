@@ -1973,16 +1973,20 @@ exports.handler = async (event) => {
       }
     }
 
+    const cleanNormKey = (str) =>
+      normKey(str).replace(/^@+/, "");
+
     const resultDatas = [];
     for (const [k, item] of datasMap.entries()) {
+      const cleanK = cleanNormKey(k);
       const matchedUsers = loadedUsers.filter((u) => {
         const points = Array.isArray(u.associatedPoints) ? u.associatedPoints : [];
-        if (points.some((p) => normKey(p) === k)) return true;
+        if (points.some((p) => cleanNormKey(p) === cleanK)) return true;
         const full = `${u.firstName || ""} ${u.lastName || ""}`.trim();
         const reverse = `${u.lastName || ""} ${u.firstName || ""}`.trim();
-        if (full && normKey(full) === k) return true;
-        if (reverse && normKey(reverse) === k) return true;
-        if (normKey(u.username) === k) return true;
+        if (full && cleanNormKey(full) === cleanK) return true;
+        if (reverse && cleanNormKey(reverse) === cleanK) return true;
+        if (cleanNormKey(u.username) === cleanK) return true;
         return false;
       }).map((u) => ({
         id: u.id,
@@ -2209,15 +2213,19 @@ exports.handler = async (event) => {
     const userToEntityMap = new Map();
     const entityToUserMap = new Map();
 
+    const cleanNormSub = (str) =>
+      normKey(str).replace(/^@+/, "");
+
     for (const k of allSubgraphKeys) {
+      const cleanK = cleanNormSub(k);
       const matchedUser = loadedUsers.find((u) => {
         const points = Array.isArray(u.associatedPoints) ? u.associatedPoints : [];
-        if (points.some((p) => normKey(p) === k)) return true;
+        if (points.some((p) => cleanNormSub(p) === cleanK)) return true;
         const full = `${u.firstName || ""} ${u.lastName || ""}`.trim();
         const reverse = `${u.lastName || ""} ${u.firstName || ""}`.trim();
-        if (full && normKey(full) === k) return true;
-        if (reverse && normKey(reverse) === k) return true;
-        if (normKey(u.username) === k) return true;
+        if (full && cleanNormSub(full) === cleanK) return true;
+        if (reverse && cleanNormSub(reverse) === cleanK) return true;
+        if (cleanNormSub(u.username) === cleanK) return true;
         return false;
       });
 
@@ -2354,7 +2362,7 @@ exports.handler = async (event) => {
       const tSet = adj.get(t) || new Set();
       let shared = 0;
       for (const neighbor of sSet) {
-        if (neighbor !== t && tSet.has(neighbor)) shared++;
+        if (neighbor !== t && tSet.has(neighbor) && !String(neighbor).startsWith("cloud:")) shared++;
       }
       l.sharedIndirectCount = shared;
     }
