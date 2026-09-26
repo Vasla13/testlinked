@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bni-linked-v1';
+const CACHE_NAME = 'bni-linked-v2';
 const PRECACHE_URLS = [
   './',
   './index.html',
@@ -71,7 +71,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Pour les ressources statiques et images lourdes (ex: carte.jpg) -> Cache-First avec fallback réseau
-  if (event.request.destination === 'image' || url.pathname.endsWith('.jpg') || url.pathname.endsWith('.png') || url.pathname.endsWith('.css') || url.pathname.endsWith('.js') || url.hostname.includes('fonts.googleapis.com')) {
+  if (event.request.destination === 'image' || url.pathname.endsWith('.jpg') || url.pathname.endsWith('.png') || url.pathname.endsWith('.webp') || url.pathname.endsWith('.svg') || url.hostname.includes('fonts.googleapis.com')) {
     event.respondWith(
       caches.match(event.request).then((cachedResponse) => {
         if (cachedResponse) {
@@ -89,7 +89,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Pour les pages HTML -> Network-First avec fallback Cache pour support hors-ligne
+  // Pour le code applicatif et les pages HTML/JS/CSS -> Network-First avec fallback Cache pour support hors-ligne
   event.respondWith(
     fetch(event.request)
       .then((response) => {
