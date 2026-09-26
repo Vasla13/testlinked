@@ -926,6 +926,64 @@ body {
   height: 10px;
   border-radius: 50%;
 }
+.legend-shape {
+  display: inline-block;
+  vertical-align: middle;
+}
+.legend-circle {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1px solid #00f0ff;
+}
+.legend-diamond {
+  width: 9px;
+  height: 9px;
+  transform: rotate(45deg);
+  background: #2ecc71;
+  border: 1px solid #ffffff;
+}
+.legend-hexagon {
+  width: 11px;
+  height: 10px;
+  background: #f39c12;
+  clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
+}
+.legend-line-hostile {
+  width: 16px;
+  height: 2px;
+  border-top: 2px dashed #ff3344;
+}
+
+/* User Card Actions */
+.user-card-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-action-user {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: var(--text-light);
+  padding: 4px 9px;
+  font-size: 0.78rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+.btn-action-user:hover {
+  background: rgba(0, 240, 255, 0.15);
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+}
+.btn-action-user.btn-delete-user:hover {
+  background: rgba(255, 68, 68, 0.18);
+  border-color: #ff4444;
+  color: #ff4444;
+}
 
 /* Graph Clouds Dropdown Filter */
 .graph-clouds-dropdown-wrapper {

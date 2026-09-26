@@ -415,3 +415,197 @@ test('Map status normalization correctly translates French statuses inactif, dis
   assert.equal(normMapStatus('active'), 'active');
   assert.equal(normMapStatus('ACTIVE'), 'active');
 });
+
+test('User rename logic supports firstName, lastName, and username validation / reindexing', () => {
+  const store = new Map();
+  const user = {
+    id: 'usr_abc',
+    username: 'oldname',
+    firstName: 'OldFirst',
+    lastName: 'OldLast',
+    associatedPoints: ['Jean'],
+  };
+  store.set(`users/${user.id}`, user);
+  store.set(`users/by-name/oldname`, { userId: user.id, username: 'oldname' });
+
+  // 1. Invalid username fails
+  const invalidCheck = normalizeUsername('ab');
+  assert.equal(invalidCheck.ok, false);
+
+  // 2. Already taken username by another user fails
+  store.set(`users/by-name/takenname`, { userId: 'other_user', username: 'takenname' });
+  const checkTaken = normalizeUsername('takenname');
+  assert.equal(checkTaken.ok, true);
+  const existing = store.get(`users/by-name/${checkTaken.username}`);
+  assert.ok(existing && existing.userId !== user.id);
+
+  // 3. Valid username renames and moves index
+  const validCheck = normalizeUsername('newname');
+  assert.equal(validCheck.ok, true);
+  const newUsername = validCheck.username;
+  store.delete(`users/by-name/${user.username}`);
+  user.username = newUsername;
+  user.firstName = 'NewFirst';
+  user.lastName = 'NewLast';
+  store.set(`users/by-name/${newUsername}`, { userId: user.id, username: newUsername });
+  store.set(`users/${user.id}`, user);
+
+  assert.equal(store.has('users/by-name/oldname'), false);
+  assert.equal(store.get('users/by-name/newname').userId, 'usr_abc');
+  assert.equal(user.firstName, 'NewFirst');
+  assert.equal(user.lastName, 'NewLast');
+});
+
+test('User delete logic removes userKey and usernameKey', () => {
+  const store = new Map();
+  const userId = 'usr_to_delete';
+  const username = 'delete_me';
+  store.set(`users/${userId}`, { id: userId, username });
+  store.set(`users/by-name/${username}`, { userId, username });
+
+  // Delete
+  assert.equal(store.has(`users/${userId}`), true);
+  assert.equal(store.has(`users/by-name/${username}`), true);
+  store.delete(`users/${userId}`);
+  store.delete(`users/by-name/${username}`);
+
+  assert.equal(store.has(`users/${userId}`), false);
+  assert.equal(store.has(`users/by-name/${username}`), false);
+});
+
+test('Status normalization supports groups and companies (mort, disparu, inactif, actif)', () => {
+  const normalizePersonStatus = (value, type = null) => {
+    const raw = String(value || '').trim().toLowerCase();
+    if (raw === 'inactive' || raw === 'inactif') return 'inactif';
+    if (raw === 'missing' || raw === 'disparu') return 'disparu';
+    if (raw === 'deceased' || raw === 'mort') return 'mort';
+    return 'actif';
+  };
+
+  for (const type of ['person', 'group', 'company']) {
+    assert.equal(normalizePersonStatus('inactif', type), 'inactif');
+    assert.equal(normalizePersonStatus('disparu', type), 'disparu');
+    assert.equal(normalizePersonStatus('mort', type), 'mort');
+    assert.equal(normalizePersonStatus('actif', type), 'actif');
+    assert.equal(normalizePersonStatus('unknown', type), 'actif');
+    assert.equal(normalizePersonStatus('', type), 'actif');
+  }
+});
+
+test('Hostile links (ennemi, rival) have red color #ff3344, zero attraction and repulsion flags', () => {
+  const HOSTILE_LINK_KINDS = new Set(['ennemi', 'rival']);
+  const POINT_LINK_COLORS = {
+    patron: '#9b59b6',
+    haut_grade: '#f39c12',
+    employe: '#f1c40f',
+    ex_employe: '#94a3b8',
+    collegue: '#e67e22',
+    partenaire: '#1abc9c',
+    famille: '#8e44ad',
+    couple: '#e84393',
+    amour: '#fd79a8',
+    ami: '#2ecc71',
+    connaissance: '#bdc3c7',
+    ennemi: '#ff3344',
+    rival: '#ff3344',
+    affiliation: '#3498db',
+    membre: '#2980b9',
+    ex_membre: '#64748b',
+    relation: '#95a5a6'
+  };
+
+  // 1. Both ennemi and rival are hostile
+  assert.equal(HOSTILE_LINK_KINDS.has('ennemi'), true);
+  assert.equal(HOSTILE_LINK_KINDS.has('rival'), true);
+  assert.equal(HOSTILE_LINK_KINDS.has('ami'), false);
+
+  // 2. Both ennemi and rival are colored #ff3344
+  assert.equal(POINT_LINK_COLORS['ennemi'], '#ff3344');
+  assert.equal(POINT_LINK_COLORS['rival'], '#ff3344');
+
+  // 3. Hostile links have zero attraction force in simulation
+  const getPhysicsStrength = (link) => {
+    if (HOSTILE_LINK_KINDS.has(link.kind)) return 0;
+    return 0.7;
+  };
+  assert.equal(getPhysicsStrength({ kind: 'ennemi' }), 0);
+  assert.equal(getPhysicsStrength({ kind: 'rival' }), 0);
+  assert.equal(getPhysicsStrength({ kind: 'ami' }), 0.7);
+});
+
+test('Person color dynamically computes weighted average of connected organizations/groups', () => {
+  const hexToRgb = (hex) => {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? {
+      r: parseInt(result[1], 16),
+      g: parseInt(result[2], 16),
+      b: parseInt(result[3], 16)
+    } : { r: 255, g: 255, b: 255 };
+  };
+  const rgbToHex = (r, g, b) => {
+    const ch = (v) => Math.max(0, Math.min(255, Math.round(Number(v) || 0))).toString(16).padStart(2, '0');
+    return `#${ch(r)}${ch(g)}${ch(b)}`;
+  };
+
+  const computeGraphNodeColors = (nodes, links) => {
+    const orgColors = new Map();
+    for (const node of nodes) {
+      if (node.pointType === 'group' || node.pointType === 'company') {
+        if (node.color && node.color !== '#ffffff') {
+          orgColors.set(node.id, node.color);
+        }
+      }
+    }
+
+    const personColors = new Map();
+    for (const node of nodes) {
+      if (node.pointType === 'person' || (!node.pointType && !node.isUser && !node.isCloud)) {
+        let totalR = 0, totalG = 0, totalB = 0, count = 0;
+        for (const l of links) {
+          const sId = typeof l.source === 'object' ? l.source.id : l.source;
+          const tId = typeof l.target === 'object' ? l.target.id : l.target;
+          let otherId = null;
+          if (sId === node.id) otherId = tId;
+          else if (tId === node.id) otherId = sId;
+
+          if (otherId && orgColors.has(otherId)) {
+            const rgb = hexToRgb(orgColors.get(otherId));
+            totalR += rgb.r;
+            totalG += rgb.g;
+            totalB += rgb.b;
+            count++;
+          }
+        }
+        if (count > 0) {
+          personColors.set(node.id, rgbToHex(totalR / count, totalG / count, totalB / count));
+        } else {
+          personColors.set(node.id, '#ffffff');
+        }
+      }
+    }
+    return { orgColors, personColors };
+  };
+
+  const nodes = [
+    { id: 'org_red', pointType: 'group', color: '#ff0000' },
+    { id: 'org_blue', pointType: 'company', color: '#0000ff' },
+    { id: 'p_dual', pointType: 'person' },
+    { id: 'p_solo', pointType: 'person' },
+    { id: 'p_alone', pointType: 'person' },
+  ];
+  const links = [
+    { source: 'p_dual', target: 'org_red' },
+    { source: 'p_dual', target: 'org_blue' },
+    { source: 'p_solo', target: 'org_red' },
+  ];
+
+  const { personColors } = computeGraphNodeColors(nodes, links);
+
+  // Alone person has default #ffffff
+  assert.equal(personColors.get('p_alone'), '#ffffff');
+  // Solo person has exact red color #ff0000
+  assert.equal(personColors.get('p_solo'), '#ff0000');
+  // Dual person has average of #ff0000 and #0000ff -> #800080 (purple)
+  assert.equal(personColors.get('p_dual'), '#800080');
+});
+

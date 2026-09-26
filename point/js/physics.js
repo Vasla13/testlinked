@@ -379,7 +379,7 @@ function getLinkStrength(link, settings, nodeMap, neighborMap) {
     const tStatus = normalizePersonStatus(tNode?.personStatus, tNode?.type);
     const isInactiveOrDead = sStatus === PERSON_STATUS.INACTIVE || sStatus === PERSON_STATUS.MISSING || sStatus === PERSON_STATUS.DECEASED ||
                              tStatus === PERSON_STATUS.INACTIVE || tStatus === PERSON_STATUS.MISSING || tStatus === PERSON_STATUS.DECEASED;
-    if (isInactiveOrDead) {
+    if (isInactiveOrDead || HOSTILE_LINK_KINDS.has(link.kind)) {
         return 0; // Aucune attraction
     }
 
@@ -398,7 +398,7 @@ function getLinkStrength(link, settings, nodeMap, neighborMap) {
     if (link.kind === KINDS.EMPLOYE) return clamp(Math.max(0.24, businessStrength * 1.1), 0.05, 1.1);
     if (link.kind === KINDS.COLLEGUE) return clamp(businessStrength * 0.95, 0.05, 1.1);
     if (link.kind === KINDS.AFFILIATION || link.kind === KINDS.MEMBRE) return clamp(businessStrength * 0.74, 0.05, 1.0);
-    if (link.kind === KINDS.PARTENAIRE || link.kind === KINDS.RELATION || link.kind === KINDS.RIVAL) {
+    if (link.kind === KINDS.PARTENAIRE || link.kind === KINDS.RELATION) {
         return clamp(businessStrength * 0.88, 0.05, 1.0);
     }
 
@@ -477,7 +477,7 @@ export function restartSim() {
         nodeDegree.set(t, (nodeDegree.get(t) || 0) + 1);
         connectedPairs.add(`${s}-${t}`);
         connectedPairs.add(`${t}-${s}`);
-        if (l.kind !== KINDS.ENNEMI) {
+        if (!HOSTILE_LINK_KINDS.has(l.kind)) {
             if (neighborMap.has(s) && neighborMap.has(t)) {
                 neighborMap.get(s).add(t);
                 neighborMap.get(t).add(s);
@@ -488,7 +488,7 @@ export function restartSim() {
 
     const S = state.physicsSettings; // Raccourci pour accéder aux sliders
     const nodeCount = state.nodes.length || 1;
-    const linkCount = state.links.filter(l => l.kind !== KINDS.ENNEMI).length;
+    const linkCount = state.links.filter(l => !HOSTILE_LINK_KINDS.has(l.kind)).length;
     const avgDegree = (nodeCount > 0) ? (2 * linkCount) / nodeCount : 0;
     const densityBoost = clamp((avgDegree - 3) / 8, 0, 1.5);
     const adaptiveCollision = S.collision * (1 + densityBoost);
@@ -498,11 +498,11 @@ export function restartSim() {
     simulation.force("link", d3lib.forceLink(state.links)
         .id(d => d.id)
         .distance(l => {
-            if (l.kind === KINDS.ENNEMI) return 0; 
+            if (HOSTILE_LINK_KINDS.has(l.kind)) return 0; 
             return getLinkDistance(l, S, neighborMap);
         })
         .strength(l => {
-            if (l.kind === KINDS.ENNEMI) return 0; 
+            if (HOSTILE_LINK_KINDS.has(l.kind)) return 0; 
             return getLinkStrength(l, S, nodeMap, neighborMap);
         })
     );
@@ -511,10 +511,10 @@ export function restartSim() {
     simulation.force("gravityX", d3lib.forceX(0).strength(S.gravity));
     simulation.force("gravityY", d3lib.forceY(0).strength(S.gravity));
 
-    // 3. ENNEMIS (Utilise le NOUVEAU Slider: enemyForce)
+    // 3. ENNEMIS & RIVAUX (Répulsion mutuelle pour les éloigner loin sur la carte)
     const enemyRepulsion = (alpha) => {
         state.links.forEach(l => {
-            if (l.kind !== KINDS.ENNEMI) return;
+            if (!HOSTILE_LINK_KINDS.has(l.kind)) return;
             const s = l.source; const t = l.target;
             if (!Number.isFinite(s?.x) || !Number.isFinite(s?.y) || !Number.isFinite(t?.x) || !Number.isFinite(t?.y)) return;
 
@@ -522,18 +522,18 @@ export function restartSim() {
             const isBigT = (t.type === TYPES.COMPANY || t.type === TYPES.GROUP);
             const enemyDistanceMultiplier = numSetting(S.enemyDistanceMultiplier, 1.0);
             
-            let hateRadius = 900; 
+            let hateRadius = 1600; 
             
             // Le slider définit la "Force de base", on l'amplifie selon la taille
-            let forceMultiplier = S.enemyForce / 50; // Normalisation (ex: 300 / 50 = 6)
+            let forceMultiplier = (S.enemyForce || 300) / 40;
 
             if (isBigS && isBigT) { 
-                hateRadius = 5000; // Guerre totale
-                forceMultiplier *= 10; // Très violent
+                hateRadius = 6000; // Guerre totale
+                forceMultiplier *= 12; // Très violent
             } 
             else if (isBigS || isBigT) { 
-                hateRadius = 2500; 
-                forceMultiplier *= 2;
+                hateRadius = 3500; 
+                forceMultiplier *= 3;
             }
             hateRadius *= enemyDistanceMultiplier;
 
@@ -543,8 +543,8 @@ export function restartSim() {
             const dist = Math.sqrt(distSq);
             
             if (dist < hateRadius) {
-                const strength = (hateRadius - dist) / hateRadius; 
-                const force = strength * alpha * forceMultiplier; 
+                const strength = Math.pow((hateRadius - dist) / hateRadius, 1.1); 
+                const force = strength * alpha * forceMultiplier * 1.6; 
                 const fx = (dx / dist) * force; const fy = (dy / dist) * force;
                 t.vx += fx; t.vy += fy; s.vx -= fx; s.vy -= fy;
             }

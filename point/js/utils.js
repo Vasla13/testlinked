@@ -110,8 +110,7 @@ export function sanitizeNodeColor(color) {
     return hex;
 }
 
-export function normalizePersonStatus(value, type = TYPES.PERSON) {
-    if (type !== TYPES.PERSON) return PERSON_STATUS.ACTIVE;
+export function normalizePersonStatus(value, type = null) {
     const raw = String(value || '').trim().toLowerCase();
     if (raw === PERSON_STATUS.INACTIVE || raw === 'inactif') return PERSON_STATUS.INACTIVE;
     if (raw === PERSON_STATUS.MISSING || raw === 'disparu') return PERSON_STATUS.MISSING;
@@ -182,13 +181,13 @@ export function computeLinkColor(link) {
         [KINDS.AMI]: '#2ecc71',         // Vert
         [KINDS.CONNAISSANCE]: '#bdc3c7', // Gris Clair
         
-        [KINDS.ENNEMI]: '#e74c3c',      // Rouge
-        [KINDS.RIVAL]: '#d35400',       // Orange Foncé
+        [KINDS.ENNEMI]: '#ff3344',      // Rouge
+        [KINDS.RIVAL]: '#ff3344',       // Rouge (Rival)
         
         [KINDS.AFFILIATION]: '#3498db', // Bleu
         [KINDS.MEMBRE]: '#2980b9',      // Bleu Foncé
         [KINDS.EX_MEMBRE]: '#64748b',   // Gris Foncé
         [KINDS.RELATION]: '#95a5a6'     // Gris
     };
-    return map[link.kind] || '#999';
+    return map[link?.kind || link] || '#999';
 }

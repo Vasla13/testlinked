@@ -203,6 +203,22 @@ exports.handler = async (event) => {
     if (body.lastName !== undefined) {
       targetUser.lastName = String(body.lastName || "").trim();
     }
+    if (body.username !== undefined) {
+      const usernameCheck = normalizeUsername(body.username);
+      if (!usernameCheck.ok) {
+        return errorResponse(400, usernameCheck.reason || "Nom d'utilisateur invalide.");
+      }
+      const newUsername = usernameCheck.username;
+      if (newUsername !== targetUser.username) {
+        const existing = await store.get(usernameKey(newUsername), { type: "json" }).catch(() => null);
+        if (existing && String(existing.userId) !== String(targetUser.id)) {
+          return errorResponse(409, "Ce nom d'utilisateur est déjà utilisé.");
+        }
+        await store.delete(usernameKey(targetUser.username)).catch(() => {});
+        targetUser.username = newUsername;
+        await store.setJSON(usernameKey(newUsername), { userId: targetUser.id, username: newUsername });
+      }
+    }
     if (body.password && String(body.password).length >= 3) {
       targetUser.passwordHash = hashPassword(body.password);
     }
@@ -217,6 +233,34 @@ exports.handler = async (event) => {
     return jsonResponse(200, {
       ok: true,
       user: safeUser(targetUser),
+    });
+  }
+
+  if (action === "admin_delete_user") {
+    const auth = await resolveAuth(event, body);
+    if (!auth.ok) {
+      return errorResponse(auth.statusCode || 401, auth.error || "Session requise.");
+    }
+
+    const targetUserId = String(body.userId || "").trim();
+    if (!targetUserId) {
+      return errorResponse(400, "ID utilisateur manquant.");
+    }
+
+    const targetUser = await store.get(userKey(targetUserId), { type: "json" });
+    if (!targetUser) {
+      return errorResponse(404, "Utilisateur introuvable.");
+    }
+
+    await store.delete(userKey(targetUserId)).catch(() => {});
+    if (targetUser.username) {
+      await store.delete(usernameKey(targetUser.username)).catch(() => {});
+    }
+
+    return jsonResponse(200, {
+      ok: true,
+      message: "Utilisateur supprimé avec succès.",
+      deletedUserId: targetUserId,
     });
   }
 

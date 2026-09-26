@@ -183,6 +183,51 @@
     </div>
   </div>
 
+  <!-- MODALE MODIFIER / RENOMMER UTILISATEUR -->
+  <div id="user-edit-modal" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header">RENOMMER L'UTILISATEUR</div>
+      <div class="modal-body">
+        <form id="form-edit-user" style="display:flex; flex-direction:column; gap:12px;">
+          <input type="hidden" id="edit-user-id" />
+          <label>
+            <span class="card-section-label">Prénom *</span>
+            <input type="text" id="edit-user-firstname" class="cyber-input" placeholder="ex: Jude" required />
+          </label>
+          <label>
+            <span class="card-section-label">Nom *</span>
+            <input type="text" id="edit-user-lastname" class="cyber-input" placeholder="ex: Dupont" required />
+          </label>
+          <label>
+            <span class="card-section-label">Identifiant / Pseudo *</span>
+            <input type="text" id="edit-user-username" class="cyber-input" placeholder="ex: jude" required />
+          </label>
+          <div id="edit-user-error" class="auth-error-msg" hidden></div>
+          <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:10px;">
+            <button type="button" id="btn-cancel-edit-user" class="modal-btn">ANNULER</button>
+            <button type="submit" class="modal-btn confirm">ENREGISTRER</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODALE SUPPRESSION UTILISATEUR -->
+  <div id="user-delete-modal" class="modal-overlay">
+    <div class="modal-box" style="max-width:440px;">
+      <div class="modal-header" style="color:#ff4444;">SUPPRIMER L'UTILISATEUR</div>
+      <div class="modal-body">
+        <p id="delete-user-prompt" style="color:var(--text-light); font-size:0.95rem; line-height:1.5;"></p>
+        <p style="color:var(--text-muted); font-size:0.8rem;">Cette action supprimera définitivement le compte utilisateur et ses liaisons.</p>
+        <div id="delete-user-error" class="auth-error-msg" hidden></div>
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;">
+          <button type="button" id="btn-cancel-delete-user" class="modal-btn">ANNULER</button>
+          <button type="button" id="btn-confirm-delete-user" class="modal-btn danger" style="background:rgba(255,68,68,0.2); border-color:#ff4444; color:#ff4444;">SUPPRIMER</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- MODALE ASSOCIATION DATAS (POUR UTILISATEUR OU CLOUD) -->
   <div id="associate-modal" class="modal-overlay">
     <div class="modal-box modal-box-large">
@@ -250,11 +295,14 @@
 
         <div class="graph-legend-bar">
           <div class="legend-item"><span class="legend-dot" style="background:#ffd700; box-shadow:0 0 8px #ffd700;"></span><span>Racine</span></div>
-          <div class="legend-item"><span class="legend-dot" style="background:#00f0ff; box-shadow:0 0 6px #00f0ff;"></span><span>1er Degré</span></div>
-          <div class="legend-item"><span class="legend-dot" style="background:#a78bfa;"></span><span>2nd Degré</span></div>
-          <div class="legend-item"><span class="legend-dot" style="background:#ff00aa; box-shadow:0 0 8px #ff00aa;"></span><span>Data + Compte Lié</span></div>
-          <div class="legend-item"><span class="legend-dot" style="background:#ff922b;"></span><span>Cloud</span></div>
-          <div class="legend-item"><span class="legend-dot" style="background:#ff007f;"></span><span>Utilisateur</span></div>
+          <div class="legend-item"><span class="legend-shape legend-circle"></span><span>Personne</span></div>
+          <div class="legend-item"><span class="legend-shape legend-diamond"></span><span>Groupe</span></div>
+          <div class="legend-item"><span class="legend-shape legend-hexagon"></span><span>Entreprise</span></div>
+          <div class="legend-item"><span class="legend-line-hostile"></span><span style="color:#ff3344;">Ennemi / Rival</span></div>
+          <div class="legend-item"><span class="legend-dot" style="background:#f4c35a;"></span><span>? Disparu</span></div>
+          <div class="legend-item"><span class="legend-dot" style="background:#ff6b81;"></span><span>X Mort</span></div>
+          <div class="legend-item"><span class="legend-dot" style="background:#94a3b8;"></span><span>⊘ Inactif</span></div>
+          <div class="legend-item"><span class="legend-dot" style="background:#ff00aa; box-shadow:0 0 8px #ff00aa;"></span><span>+ Utilisateur</span></div>
         </div>
 
         <div id="graph-inspector" class="graph-inspector-panel" style="display:none;">
@@ -725,6 +773,10 @@
             <span class="user-full-name">${escapeHtml(fullName)}</span>
             <span class="user-username-tag">@${escapeHtml(u.username)}</span>
           </div>
+          <div class="user-card-actions">
+            <button class="btn-action-user btn-edit-user" data-edit-user="${escapeHtml(u.id)}" title="Renommer l'utilisateur">✏️ Renommer</button>
+            <button class="btn-action-user btn-delete-user" data-delete-user="${escapeHtml(u.id)}" title="Supprimer cet utilisateur">🗑️</button>
+          </div>
         </div>
 
         <div class="card-meta-line" style="font-size:0.8rem; color:var(--text-muted);">
@@ -782,6 +834,18 @@
           await apiCall('collab-auth', { action: 'associate_user_point', userId: u.id, pointName: ptName, mode: 'add' });
           await loadAllData();
         };
+      }
+
+      // BIND EDIT USER
+      const btnEdit = card.querySelector('[data-edit-user]');
+      if (btnEdit) {
+        btnEdit.onclick = () => openEditUserModal(u);
+      }
+
+      // BIND DELETE USER
+      const btnDelete = card.querySelector('[data-delete-user]');
+      if (btnDelete) {
+        btnDelete.onclick = () => openDeleteUserModal(u);
       }
 
       cardsEl.appendChild(card);
@@ -979,6 +1043,87 @@
     }
   };
 
+  // --- MODALE RENOMMER UTILISATEUR ---
+  function openEditUserModal(user) {
+    document.getElementById('edit-user-id').value = user.id;
+    document.getElementById('edit-user-firstname').value = user.firstName || '';
+    document.getElementById('edit-user-lastname').value = user.lastName || '';
+    document.getElementById('edit-user-username').value = user.username || '';
+    const errEl = document.getElementById('edit-user-error');
+    errEl.hidden = true;
+    errEl.textContent = '';
+    document.getElementById('user-edit-modal').classList.add('visible');
+  }
+
+  document.getElementById('btn-cancel-edit-user').onclick = () => {
+    document.getElementById('user-edit-modal').classList.remove('visible');
+  };
+
+  document.getElementById('form-edit-user').onsubmit = async (e) => {
+    e.preventDefault();
+    const userId = document.getElementById('edit-user-id').value;
+    const firstName = document.getElementById('edit-user-firstname').value.trim();
+    const lastName = document.getElementById('edit-user-lastname').value.trim();
+    const username = document.getElementById('edit-user-username').value.trim();
+    const errEl = document.getElementById('edit-user-error');
+    errEl.hidden = true;
+
+    try {
+      await apiCall('collab-auth', {
+        action: 'admin_update_user',
+        userId,
+        firstName,
+        lastName,
+        username
+      });
+      document.getElementById('user-edit-modal').classList.remove('visible');
+      await loadAllData();
+      await customAlert(`Utilisateur "${firstName} ${lastName} (@${username})" mis à jour avec succès !`);
+    } catch (err) {
+      errEl.textContent = err.message || 'Erreur lors de la mise à jour';
+      errEl.hidden = false;
+    }
+  };
+
+  // --- MODALE SUPPRESSION UTILISATEUR ---
+  let userToDelete = null;
+
+  function openDeleteUserModal(user) {
+    userToDelete = user;
+    const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username;
+    document.getElementById('delete-user-prompt').innerHTML = `Êtes-vous sûr de vouloir supprimer l'utilisateur <strong>${escapeHtml(fullName)}</strong> (@${escapeHtml(user.username)}) ?`;
+    const errEl = document.getElementById('delete-user-error');
+    errEl.hidden = true;
+    errEl.textContent = '';
+    document.getElementById('user-delete-modal').classList.add('visible');
+  }
+
+  document.getElementById('btn-cancel-delete-user').onclick = () => {
+    userToDelete = null;
+    document.getElementById('user-delete-modal').classList.remove('visible');
+  };
+
+  document.getElementById('btn-confirm-delete-user').onclick = async () => {
+    if (!userToDelete) return;
+    const errEl = document.getElementById('delete-user-error');
+    errEl.hidden = true;
+
+    try {
+      await apiCall('collab-auth', {
+        action: 'admin_delete_user',
+        userId: userToDelete.id
+      });
+      document.getElementById('user-delete-modal').classList.remove('visible');
+      const deletedName = `${userToDelete.firstName || ''} ${userToDelete.lastName || ''}`.trim() || userToDelete.username;
+      userToDelete = null;
+      await loadAllData();
+      await customAlert(`Utilisateur "${deletedName}" supprimé avec succès.`);
+    } catch (err) {
+      errEl.textContent = err.message || 'Erreur lors de la suppression';
+      errEl.hidden = false;
+    }
+  };
+
   // --- MODALE ASSOCIATION DATAS ---
   let associateTarget = { type: '', id: '', name: '' };
   function openAssociateModal(type, id, name) {
@@ -1163,6 +1308,114 @@
     });
   }
 
+  const POINT_LINK_COLORS = {
+    patron: '#9b59b6',      // Violet
+    haut_grade: '#f39c12',  // Or
+    employe: '#f1c40f',     // Jaune
+    ex_employe: '#94a3b8',  // Gris
+    'ex employé': '#94a3b8',
+    collegue: '#e67e22',    // Orange
+    partenaire: '#1abc9c',  // Turquoise
+    famille: '#8e44ad',     // Violet Foncé
+    couple: '#e84393',      // Rose Foncé
+    amour: '#fd79a8',       // Rose Clair
+    ami: '#2ecc71',         // Vert
+    connaissance: '#bdc3c7', // Gris Clair
+    ennemi: '#ff3344',      // Rouge
+    rival: '#ff3344',       // Rouge
+    affiliation: '#3498db', // Bleu
+    membre: '#2980b9',      // Bleu Foncé
+    ex_membre: '#64748b',   // Gris Foncé
+    'ex membre': '#64748b',
+    relation: '#95a5a6',    // Gris
+    compte_lie: '#ff007f',  // Magenta
+    membre_cloud: '#ff922b' // Orange Cloud
+  };
+
+  function hexToRgb(hex) {
+    const res = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || '#ffffff');
+    return res ? {
+      r: parseInt(res[1], 16),
+      g: parseInt(res[2], 16),
+      b: parseInt(res[3], 16)
+    } : { r: 255, g: 255, b: 255 };
+  }
+
+  function rgbToHex(r, g, b) {
+    const toHex = (n) => {
+      const v = Math.max(0, Math.min(255, Math.round(n))).toString(16);
+      return v.length === 1 ? '0' + v : v;
+    };
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+  }
+
+  function getPolygonPoints(sides, radius, offsetAngle = 0) {
+    const pts = [];
+    for (let i = 0; i < sides; i++) {
+      const a = offsetAngle + (i * 2 * Math.PI) / sides;
+      pts.push(`${(radius * Math.cos(a)).toFixed(2)},${(radius * Math.sin(a)).toFixed(2)}`);
+    }
+    return pts.join(' ');
+  }
+
+  function computeGraphNodeColors(nodes, links) {
+    const nodeMap = new Map(nodes.map(n => [n.id, n]));
+    const nodeWeights = new Map();
+
+    links.forEach(l => {
+      const sId = typeof l.source === 'object' ? l.source.id : l.source;
+      const tId = typeof l.target === 'object' ? l.target.id : l.target;
+      nodeWeights.set(sId, (nodeWeights.get(sId) || 0) + 1);
+      nodeWeights.set(tId, (nodeWeights.get(tId) || 0) + 1);
+    });
+
+    nodes.forEach(n => {
+      if (n.type === 'cloud') {
+        n.computedColor = '#ff922b';
+        return;
+      }
+      if (n.type === 'user' || n.type === 'user_peer') {
+        n.computedColor = '#ff007f';
+        return;
+      }
+
+      const pType = n.pointType || (Array.isArray(n.categories) && (n.categories.includes('company') || n.categories.includes('entreprise')) ? 'company' : (Array.isArray(n.categories) && (n.categories.includes('group') || n.categories.includes('groupe')) ? 'group' : 'person'));
+      n.pointType = pType;
+
+      if (pType === 'group') {
+        n.computedColor = n.color && String(n.color).startsWith('#') ? n.color : '#2ecc71';
+      } else if (pType === 'company') {
+        n.computedColor = n.color && String(n.color).startsWith('#') ? n.color : '#f39c12';
+      } else {
+        // Personne : calcul exact comme dans updatePersonColors de Point
+        let totalR = 0, totalG = 0, totalB = 0, totalWeight = 0;
+        links.forEach(l => {
+          const s = typeof l.source === 'object' ? l.source : nodeMap.get(l.source);
+          const t = typeof l.target === 'object' ? l.target : nodeMap.get(l.target);
+          if (!s || !t) return;
+          const other = (s.id === n.id) ? t : ((t.id === n.id) ? s : null);
+          if (!other) return;
+          if (other.pointType && other.pointType !== 'person') {
+            const w = nodeWeights.get(other.id) || 1;
+            const orgColor = other.color && String(other.color).startsWith('#')
+              ? other.color
+              : (other.pointType === 'company' ? '#f39c12' : '#2ecc71');
+            const rgb = hexToRgb(orgColor);
+            totalR += rgb.r * w;
+            totalG += rgb.g * w;
+            totalB += rgb.b * w;
+            totalWeight += w;
+          }
+        });
+        if (totalWeight > 0) {
+          n.computedColor = rgbToHex(totalR / totalWeight, totalG / totalWeight, totalB / totalWeight);
+        } else {
+          n.computedColor = n.color && String(n.color).startsWith('#') ? n.color : '#ffffff';
+        }
+      }
+    });
+  }
+
   function renderD3Graph() {
     if (!activeGraphData || !window.d3) return;
     if (d3Simulation) d3Simulation.stop();
@@ -1220,13 +1473,13 @@
       return true;
     }).map(l => ({ ...l }));
 
-    // Calcul dynamique des connexions indirectes mutuelles parmi les liens visibles (hors nœuds cloud)
+    // Calcul dynamique des connexions indirectes mutuelles parmi les liens visibles (hors nœuds cloud et hors ennemis/rivaux)
     const entityAdj = new Map();
     for (const n of visibleNodes) {
       if (n.type !== 'cloud') entityAdj.set(n.id, new Set());
     }
     for (const l of visibleLinks) {
-      if (l.kind === 'ennemi') continue;
+      if (l.kind === 'ennemi' || l.kind === 'rival') continue;
       const s = typeof l.source === 'object' ? l.source.id : l.source;
       const t = typeof l.target === 'object' ? l.target.id : l.target;
       if (entityAdj.has(s) && entityAdj.has(t)) {
@@ -1250,6 +1503,9 @@
       }
     }
 
+    // Calcul des couleurs selon la logique de Point
+    computeGraphNodeColors(visibleNodes, visibleLinks);
+
     const svg = d3.select('#graph-svg');
     svg.selectAll('*').remove();
 
@@ -1266,7 +1522,8 @@
 
     d3SvgGroup = svg.append('g');
 
-    // Identificateur de liens particuliers (inactif, mort, disparu, ex-employé, ex-membre, 2nd degré)
+    // Identificateur de liens particuliers (hostile, inactif, mort, disparu, ex-employé, ex-membre, 2nd degré)
+    const isHostileLink = (d) => d.kind === 'ennemi' || d.kind === 'rival';
     const isLinkInactiveDeadOrEx = (d) => {
       const sNode = typeof d.source === 'object' ? d.source : visibleNodes.find(n => n.id === d.source);
       const tNode = typeof d.target === 'object' ? d.target : visibleNodes.find(n => n.id === d.target);
@@ -1288,6 +1545,7 @@
     d3Simulation = d3.forceSimulation(visibleNodes)
       .force('link', d3.forceLink(visibleLinks).id(d => d.id)
         .distance(d => {
+          if (isHostileLink(d)) return 0; // Aucune attraction
           const sNode = typeof d.source === 'object' ? d.source : visibleNodes.find(n => n.id === d.source);
           const tNode = typeof d.target === 'object' ? d.target : visibleNodes.find(n => n.id === d.target);
           const sDeg = sNode?.degree ?? 1;
@@ -1316,6 +1574,8 @@
           return 130;
         })
         .strength(d => {
+          if (isHostileLink(d)) return 0; // Aucune attraction pour ennemis et rivaux
+
           const sNode = typeof d.source === 'object' ? d.source : visibleNodes.find(n => n.id === d.source);
           const tNode = typeof d.target === 'object' ? d.target : visibleNodes.find(n => n.id === d.target);
           const sDeg = sNode?.degree ?? 1;
@@ -1357,7 +1617,31 @@
       )
       .force('charge', d3.forceManyBody().strength(d => (d.degree === 0 ? -600 : -320)))
       .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide().radius(d => (d.degree === 0 ? 42 : 28)));
+      .force('collision', d3.forceCollide().radius(d => (d.degree === 0 ? 44 : 30)));
+
+    // Répulsion des ennemis et des rivaux (repoussés loin l'un de l'autre)
+    d3Simulation.force('hostileRepulsion', (alpha) => {
+      for (const l of visibleLinks) {
+        if (isHostileLink(l)) {
+          const s = typeof l.source === 'object' ? l.source : visibleNodes.find(n => n.id === l.source);
+          const t = typeof l.target === 'object' ? l.target : visibleNodes.find(n => n.id === l.target);
+          if (!s || !t || !Number.isFinite(s.x) || !Number.isFinite(s.y) || !Number.isFinite(t.x) || !Number.isFinite(t.y)) continue;
+          const dx = (t.x - s.x) || (Math.random() - 0.5);
+          const dy = (t.y - s.y) || (Math.random() - 0.5);
+          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+          const hateRadius = 650;
+          if (dist < hateRadius) {
+            const push = Math.pow((hateRadius - dist) / hateRadius, 1.1) * 160 * alpha;
+            const fx = (dx / dist) * push;
+            const fy = (dy / dist) * push;
+            if (t.fx == null) t.vx += fx;
+            if (t.fy == null) t.vy += fy;
+            if (s.fx == null) s.vx -= fx;
+            if (s.fy == null) s.vy -= fy;
+          }
+        }
+      }
+    });
 
     // Répulsion renforcée de la racine pour les 2nd degrés
     d3Simulation.force('rootRepulsion', (alpha) => {
@@ -1379,30 +1663,41 @@
       }
     });
 
-    // Render Links
+    // Render Links (exactement le même code couleur que le nuage de point)
     const link = d3SvgGroup.append('g')
       .selectAll('line')
       .data(visibleLinks)
       .join('line')
       .attr('stroke', d => {
-        if (isLinkBetweenSecondDegree(d)) {
-          return 'rgba(167, 139, 250, 0.28)'; // Transparent 2nd degré
+        if (isHostileLink(d)) {
+          return '#ff3344'; // Rouge pointillé hostile
         }
         if (isLinkInactiveDeadOrEx(d)) {
-          return 'rgba(148, 163, 184, 0.3)'; // Transparent inactif/mort/disparu/ex
+          return 'rgba(148, 163, 184, 0.35)'; // Inactif / mort / disparu / ex
         }
-        if (d.kind === 'compte_lie') return '#ff007f';
-        if (d.kind === 'membre_cloud') return '#ff922b';
-        return 'rgba(115, 251, 247, 0.45)';
+        if (isLinkBetweenSecondDegree(d)) {
+          return 'rgba(167, 139, 250, 0.28)'; // 2nd degré
+        }
+        return POINT_LINK_COLORS[d.kind] || '#66f3ff';
       })
-      .attr('stroke-width', d => (isLinkBetweenSecondDegree(d) || isLinkInactiveDeadOrEx(d) ? 1.2 : 1.6))
+      .attr('stroke-width', d => {
+        if (isHostileLink(d)) return 1.8;
+        if (isLinkBetweenSecondDegree(d) || isLinkInactiveDeadOrEx(d)) return 1.2;
+        return 1.6;
+      })
       .attr('stroke-dasharray', d => {
+        if (isHostileLink(d)) return '5,4'; // Pointillé rouge
         if (isLinkBetweenSecondDegree(d) || isLinkInactiveDeadOrEx(d)) return '4,4';
         if (d.kind === 'compte_lie' || d.kind === 'membre_cloud') return '4,4';
         return 'none';
+      })
+      .attr('stroke-opacity', d => {
+        if (isLinkBetweenSecondDegree(d)) return 0.4;
+        if (isLinkInactiveDeadOrEx(d)) return 0.35;
+        return 0.88;
       });
 
-    // Render Nodes
+    // Render Nodes (même logique, formes et couleurs que le nuage de point classique)
     const node = d3SvgGroup.append('g')
       .selectAll('g')
       .data(visibleNodes)
@@ -1413,51 +1708,104 @@
         .on('end', dragended))
       .on('click', (event, d) => showInspector(d));
 
-    // Circle styling
-    node.append('circle')
-      .attr('r', d => {
-        if (d.degree === 0) return 24;
-        if (d.type === 'cloud') return 18;
-        if (d.type === 'user' || d.type === 'user_peer') return 16;
-        if (d.degree === 1) return 16;
-        return 11;
-      })
-      .attr('fill', d => {
-        if (d.degree === 0) return '#101426';
-        if (d.type === 'cloud') return '#2b1a0e';
-        if (d.type === 'user' || d.type === 'user_peer') return '#260a1e';
-        if (d.degree === 1) return '#062028';
-        return '#15132d';
-      })
-      .attr('stroke', d => {
-        if (d.hasUser) return '#ff00aa'; // Highlight merged data+user
-        if (d.degree === 0) return '#ffd700';
-        if (d.type === 'cloud') return '#ff922b';
-        if (d.type === 'user' || d.type === 'user_peer') return '#ff007f';
-        if (d.degree === 1) return '#00f0ff';
-        return '#a78bfa';
-      })
-      .attr('stroke-width', d => (d.degree === 0 ? 3.5 : (d.hasUser ? 2.8 : 2)))
-      .style('filter', d => {
-        if (d.hasUser) return 'drop-shadow(0 0 10px #ff00aa)';
-        if (d.degree === 0) return 'drop-shadow(0 0 10px #ffd700)';
-        if (d.degree === 1) return 'drop-shadow(0 0 6px #00f0ff)';
-        return 'none';
-      });
+    // Formes des nœuds selon le type exact (Personne=Cercle, Groupe=Losange, Entreprise=Hexagone)
+    node.each(function(d) {
+      const g = d3.select(this);
+      const rad = d.degree === 0 ? 24 : (d.type === 'cloud' ? 18 : (d.type === 'user' || d.type === 'user_peer' ? 16 : (d.degree === 1 ? 16 : 12)));
+      const color = d.computedColor || '#ffffff';
+      const status = String(d.status || '').toLowerCase();
+      const isInactive = status === 'inactif' || status === 'inactive';
+      const isMissing = status === 'disparu' || status === 'missing';
+      const isDead = status === 'mort' || status === 'deceased';
+      const statusVisual = isDead ? { accent: '#ff6b81', badge: 'X' }
+                         : isMissing ? { accent: '#f4c35a', badge: '?' }
+                         : isInactive ? { accent: '#94a3b8', badge: '⊘' }
+                         : null;
 
-    // Anneau supplémentaire pour les entités fusionnées avec un compte utilisateur
-    node.filter(d => d.hasUser)
-      .append('circle')
-      .attr('r', d => (d.degree === 0 ? 28 : (d.degree === 1 ? 20 : 15)))
-      .attr('fill', 'none')
-      .attr('stroke', '#ff00aa')
-      .attr('stroke-width', 1.2)
-      .attr('stroke-dasharray', '3,3')
-      .style('pointer-events', 'none');
+      const strokeColor = statusVisual ? statusVisual.accent : (d.hasUser ? '#ff00aa' : (d.degree === 0 ? '#ffd700' : color));
+      const strokeWidth = d.degree === 0 ? 3.5 : (d.hasUser ? 2.8 : 2);
+      const strokeDash = statusVisual ? '4,4' : 'none';
+
+      // Shape: company -> hexagon, group -> diamond (square), other -> circle
+      if (d.pointType === 'company') {
+        g.append('polygon')
+          .attr('points', getPolygonPoints(6, rad * 1.15, Math.PI / 2))
+          .attr('fill', '#0d131f')
+          .attr('stroke', strokeColor)
+          .attr('stroke-width', strokeWidth)
+          .attr('stroke-dasharray', strokeDash)
+          .style('filter', d.degree === 0 ? 'drop-shadow(0 0 10px #ffd700)' : `drop-shadow(0 0 6px ${color}44)`);
+        g.append('polygon')
+          .attr('points', getPolygonPoints(6, rad * 0.7, Math.PI / 2))
+          .attr('fill', color)
+          .attr('opacity', 0.28)
+          .style('pointer-events', 'none');
+      } else if (d.pointType === 'group') {
+        g.append('polygon')
+          .attr('points', getPolygonPoints(4, rad * 1.25, 0))
+          .attr('fill', '#0d131f')
+          .attr('stroke', strokeColor)
+          .attr('stroke-width', strokeWidth)
+          .attr('stroke-dasharray', strokeDash)
+          .style('filter', d.degree === 0 ? 'drop-shadow(0 0 10px #ffd700)' : `drop-shadow(0 0 6px ${color}44)`);
+        g.append('polygon')
+          .attr('points', getPolygonPoints(4, rad * 0.75, 0))
+          .attr('fill', color)
+          .attr('opacity', 0.28)
+          .style('pointer-events', 'none');
+      } else {
+        g.append('circle')
+          .attr('r', rad)
+          .attr('fill', '#0d131f')
+          .attr('stroke', strokeColor)
+          .attr('stroke-width', strokeWidth)
+          .attr('stroke-dasharray', strokeDash)
+          .style('filter', d.degree === 0 ? 'drop-shadow(0 0 10px #ffd700)' : (d.hasUser ? 'drop-shadow(0 0 10px #ff00aa)' : `drop-shadow(0 0 6px ${color}44)`));
+        g.append('circle')
+          .attr('r', rad * 0.5)
+          .attr('fill', color)
+          .attr('opacity', 0.28)
+          .style('pointer-events', 'none');
+      }
+
+      // Anneau magenta pour compte utilisateur lié
+      if (d.hasUser) {
+        g.append('circle')
+          .attr('r', rad + 6)
+          .attr('fill', 'none')
+          .attr('stroke', '#ff00aa')
+          .attr('stroke-width', 1.2)
+          .attr('stroke-dasharray', '3,3')
+          .style('pointer-events', 'none');
+      }
+
+      // Badge de statut (⊘, ?, X)
+      if (statusVisual) {
+        const badgeX = rad * 0.75;
+        const badgeY = -rad * 0.75;
+        g.append('circle')
+          .attr('cx', badgeX)
+          .attr('cy', badgeY)
+          .attr('r', 7)
+          .attr('fill', '#030812')
+          .attr('stroke', statusVisual.accent)
+          .attr('stroke-width', 1.4);
+
+        g.append('text')
+          .attr('x', badgeX)
+          .attr('y', badgeY + 3.5)
+          .attr('text-anchor', 'middle')
+          .attr('fill', '#ffffff')
+          .attr('font-size', '9px')
+          .attr('font-weight', '700')
+          .style('pointer-events', 'none')
+          .text(statusVisual.badge);
+      }
+    });
 
     // Labels
     node.append('text')
-      .attr('dy', d => (d.degree === 0 ? 38 : 28))
+      .attr('dy', d => (d.degree === 0 ? 40 : 30))
       .attr('text-anchor', 'middle')
       .attr('fill', '#fff')
       .attr('font-size', d => (d.degree === 0 ? '12px' : '10px'))
@@ -1510,10 +1858,14 @@
         }
       }
       const distinctClouds = Array.from(distinctCloudsMap.values());
-      const categories = Array.isArray(node.categories) ? node.categories.join(', ') : 'Entité';
+      const typeLabel = node.pointType === 'company' ? 'Entreprise (Hexagone)' : (node.pointType === 'group' ? 'Groupe / Groupuscule (Losange)' : 'Personne (Cercle)');
 
       bodyEl.innerHTML = `
-        <div><strong>Type :</strong> ${escapeHtml(categories || 'Inconnu')}</div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <strong>Classification :</strong>
+          <span style="display:inline-block; width:12px; height:12px; border-radius:2px; background:${escapeHtml(node.computedColor || '#fff')};"></span>
+          <span>${escapeHtml(typeLabel)}</span>
+        </div>
         <div><strong>Degré :</strong> ${node.degree === 0 ? 'Racine (Cible)' : (node.degree === 1 ? 'Voisin direct (1er)' : 'Secondaire (2nd)')}</div>
         ${node.status ? `<div><strong>Statut :</strong> <span class="chip" style="text-transform:uppercase;">${escapeHtml(node.status)}</span></div>` : ''}
         ${node.hasUser && node.user ? `

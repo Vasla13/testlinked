@@ -2063,7 +2063,7 @@ exports.handler = async (event) => {
     const entities = new Map();
     const globalLinks = new Map();
 
-    const addEntity = (name, type, board, id, notes = "", status = "") => {
+    const addEntity = (name, type, board, id, notes = "", status = "", color = "") => {
       const k = normKey(name);
       if (!k) return null;
       if (!entities.has(k)) {
@@ -2074,12 +2074,14 @@ exports.handler = async (event) => {
           occurrences: [],
           notes: [],
           statuses: new Set(),
+          colors: [],
         });
       }
       const e = entities.get(k);
       if (type) e.types.add(type);
       if (notes) e.notes.push(notes);
       if (status) e.statuses.add(String(status).toLowerCase());
+      if (color) e.colors.push(color);
       e.occurrences.push({
         boardId: board.id,
         boardTitle: board.title || "Cloud",
@@ -2087,6 +2089,7 @@ exports.handler = async (event) => {
         id,
         type: type || "",
         status: status || "",
+        color: color || "",
       });
       return k;
     };
@@ -2119,7 +2122,7 @@ exports.handler = async (event) => {
         for (const n of board.data.nodes) {
           const raw = String(n.name || "").trim();
           if (raw) {
-            const k = addEntity(raw, n.type, board, n.id, n.notes || n.description, n.personStatus || "active");
+            const k = addEntity(raw, n.type, board, n.id, n.notes || n.description, n.personStatus || "active", n.color);
             if (k) idToKey.set(String(n.id), k);
           }
         }
@@ -2139,7 +2142,7 @@ exports.handler = async (event) => {
           for (const pt of points) {
             const raw = String(pt.name || "").trim();
             if (raw) {
-              const k = addEntity(raw, pt.type || g.name, board, pt.id, pt.notes, pt.status || "active");
+              const k = addEntity(raw, pt.type || g.name, board, pt.id, pt.notes, pt.status || "active", pt.color || g.color);
               if (k) idToKey.set(String(pt.id), k);
             }
           }
@@ -2250,12 +2253,23 @@ exports.handler = async (event) => {
         }
       }
 
+      let pointType = "person";
+      if (e?.types?.has("company") || e?.types?.has("entreprise")) {
+        pointType = "company";
+      } else if (e?.types?.has("group") || e?.types?.has("groupe") || e?.types?.has("groupuscule")) {
+        pointType = "group";
+      }
+
+      const entityColor = (e?.colors && e.colors.find(c => c && String(c).startsWith("#"))) || (pointType === "person" ? "#ffffff" : null);
+
       graphNodes.push({
         id: `data:${k}`,
         dataKey: k,
         label,
         rawName,
         type: "entity",
+        pointType,
+        color: entityColor,
         degree: deg,
         status: resolveStatus(e?.statuses),
         categories: e ? Array.from(e.types) : [],

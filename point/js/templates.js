@@ -94,7 +94,7 @@ export function renderPathfindingSidebar(state, selectedNode) {
 export function renderEditorHTML(n, state) {
     const kindsForPerson = getAllowedKinds(n.type, TYPES.PERSON);
     const personStatus = normalizePersonStatus(n.personStatus, n.type);
-    const personStatusControls = n.type === TYPES.PERSON ? `
+    const personStatusControls = `
         <div class="editor-status-inline">
             ${Object.values(PERSON_STATUS).map((status) => `
                 <button
@@ -104,7 +104,7 @@ export function renderEditorHTML(n, state) {
                 >${escapeHtml(PERSON_STATUS_LABELS[status])}</button>
             `).join('')}
         </div>
-    ` : '';
+    `;
 
     const typeOptions = `
         <option value="${TYPES.PERSON}" ${n.type===TYPES.PERSON?'selected':''}>Personne</option>

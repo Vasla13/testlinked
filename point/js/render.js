@@ -264,10 +264,8 @@ export function draw() {
             if (String(sId) === String(focusId)) focusNeighborIds.add(String(tId));
             else if (String(tId) === String(focusId)) focusNeighborIds.add(String(sId));
         }
-        if (l.kind !== KINDS.ENNEMI) {
-            const key = pairKey(sId, tId);
-            pairCounts.set(key, (pairCounts.get(key) || 0) + 1);
-        }
+        const key = pairKey(sId, tId);
+        pairCounts.set(key, (pairCounts.get(key) || 0) + 1);
     }
 
     const predictedLinks = (state.aiSettings?.intelUnlocked && state.aiSettings?.showPredicted && Array.isArray(state.aiPredictedLinks)) ? state.aiPredictedLinks : [];
@@ -406,7 +404,6 @@ export function draw() {
     const pairIndex = new Map();
     for (const l of state.links) {
         if (!visibleLinks.has(l)) continue;
-        if (l.kind === KINDS.ENNEMI) continue; 
         const sId = getLinkEndpointId(l.source);
         const tId = getLinkEndpointId(l.target);
         const sourceNode = (typeof l.source === 'object') ? l.source : nodeById(sId);
@@ -515,8 +512,14 @@ export function draw() {
         const isInactiveOrDead = sStatus === PERSON_STATUS.INACTIVE || sStatus === PERSON_STATUS.MISSING || sStatus === PERSON_STATUS.DECEASED ||
                                  tStatus === PERSON_STATUS.INACTIVE || tStatus === PERSON_STATUS.MISSING || tStatus === PERSON_STATUS.DECEASED;
         const isExLink = l.kind === KINDS.EX_EMPLOYE || l.kind === KINDS.EX_MEMBRE;
+        const isHostileLink = l.kind === KINDS.ENNEMI || l.kind === KINDS.RIVAL;
 
-        if (isInactiveOrDead || isExLink) {
+        if (isHostileLink) {
+            ctx.strokeStyle = '#ff3344';
+            globalAlpha = dimmed ? 0.35 : 0.88;
+            ctx.lineWidth = Math.max(1.8, (dimmed ? 1.2 : 2.2)) / Math.sqrt(p.scale);
+            ctx.setLineDash([6 / Math.sqrt(p.scale), 4 / Math.sqrt(p.scale)]);
+        } else if (isInactiveOrDead || isExLink) {
             globalAlpha = Math.min(globalAlpha, 0.25);
             ctx.setLineDash([6 / Math.sqrt(p.scale), 5 / Math.sqrt(p.scale)]);
         } else {
@@ -653,12 +656,14 @@ export function draw() {
         ctx.fill();
         ctx.shadowBlur = 0; // Reset important
 
-        if (statusVisual && n.type === TYPES.PERSON) {
+        if (statusVisual) {
             ctx.save();
             ctx.globalAlpha = Math.max(0.92, alpha);
             ctx.beginPath();
             ctx.setLineDash((statusVisual.status === PERSON_STATUS.MISSING || statusVisual.status === PERSON_STATUS.INACTIVE) ? [6 / Math.sqrt(p.scale), 5 / Math.sqrt(p.scale)] : []);
-            ctx.arc(n.x, n.y, rad + (5 / Math.sqrt(p.scale)), 0, Math.PI * 2);
+            if (isGroup(n)) drawPolygon(ctx, n.x, n.y, (rad * 1.2) + (5 / Math.sqrt(p.scale)), 4);
+            else if (isCompany(n)) drawPolygon(ctx, n.x, n.y, (rad * 1.1) + (5 / Math.sqrt(p.scale)), 6, Math.PI / 2);
+            else ctx.arc(n.x, n.y, rad + (5 / Math.sqrt(p.scale)), 0, Math.PI * 2);
             ctx.strokeStyle = statusVisual.accent;
             ctx.lineWidth = 2 / Math.sqrt(p.scale);
             ctx.stroke();

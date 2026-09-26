@@ -770,7 +770,7 @@ function setupEditorListeners(n) {
 
     document.getElementById('btnExportRP').onclick = () => {
         const typeLabel = n.type === TYPES.PERSON ? "Individu" : (n.type === TYPES.COMPANY ? "Entreprise" : "Organisation");
-        const statusLabel = n.type === TYPES.PERSON ? PERSON_STATUS_LABELS[normalizePersonStatus(n.personStatus, n.type)] : '';
+        const statusLabel = PERSON_STATUS_LABELS[normalizePersonStatus(n.personStatus, n.type)] || '';
         const relations = [];
         state.links.forEach(l => {
             const s = (typeof l.source === 'object') ? l.source : nodeById(l.source);

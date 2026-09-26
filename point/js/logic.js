@@ -354,7 +354,7 @@ export function calculatePath(startId, endId) {
                 const u = path[i];
                 const v = path[i+1];
                 const link = state.links.find(l => {
-                    if (l.kind === KINDS.ENNEMI) return false;
+                    if (l.kind === KINDS.ENNEMI || l.kind === KINDS.RIVAL) return false;
                     const s = (typeof l.source === 'object') ? l.source.id : l.source;
                     const t = (typeof l.target === 'object') ? l.target.id : l.target;
                     return (s === u && t === v) || (s === v && t === u);
@@ -370,7 +370,7 @@ export function calculatePath(startId, endId) {
         }
         const neighbors = [];
         state.links.forEach(l => {
-            if (l.kind === KINDS.ENNEMI) return;
+            if (l.kind === KINDS.ENNEMI || l.kind === KINDS.RIVAL) return;
             const s = (typeof l.source === 'object') ? l.source.id : l.source;
             const t = (typeof l.target === 'object') ? l.target.id : l.target;
             if (s === node && !visited.has(t)) neighbors.push(t);
