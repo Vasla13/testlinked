@@ -57,6 +57,9 @@ function getLabelMetrics(label, fontSize) {
 
 function getPersonStatusVisual(node) {
     const status = normalizePersonStatus(node?.personStatus, node?.type);
+    if (status === PERSON_STATUS.INACTIVE) {
+        return { status, accent: '#94a3b8', badge: '⊘', label: 'INACTIF' };
+    }
     if (status === PERSON_STATUS.MISSING) {
         return { status, accent: '#f4c35a', badge: '?', label: 'DISPARU' };
     }
@@ -507,9 +510,23 @@ export function draw() {
              ctx.lineWidth = (dimmed ? 1 : 1.5) / Math.sqrt(p.scale);
              ctx.shadowBlur = 0;
         }
+        const sStatus = normalizePersonStatus(sourceNode?.personStatus, sourceNode?.type);
+        const tStatus = normalizePersonStatus(targetNode?.personStatus, targetNode?.type);
+        const isInactiveOrDead = sStatus === PERSON_STATUS.INACTIVE || sStatus === PERSON_STATUS.MISSING || sStatus === PERSON_STATUS.DECEASED ||
+                                 tStatus === PERSON_STATUS.INACTIVE || tStatus === PERSON_STATUS.MISSING || tStatus === PERSON_STATUS.DECEASED;
+        const isExLink = l.kind === KINDS.EX_EMPLOYE || l.kind === KINDS.EX_MEMBRE;
+
+        if (isInactiveOrDead || isExLink) {
+            globalAlpha = Math.min(globalAlpha, 0.25);
+            ctx.setLineDash([6 / Math.sqrt(p.scale), 5 / Math.sqrt(p.scale)]);
+        } else {
+            ctx.setLineDash([]);
+        }
+
         if (topSet && (sTop ^ tTop) && !isHVT) globalAlpha = Math.min(globalAlpha, 0.25);
         ctx.globalAlpha = globalAlpha;
         ctx.stroke();
+        ctx.setLineDash([]);
 
         // AFFICHAGE DE L'EMOJI SUR LE LIEN
         if (showTypes && p.scale > 0.6 && !dimmed && !isPathLink && !isHVT) {
@@ -640,7 +657,7 @@ export function draw() {
             ctx.save();
             ctx.globalAlpha = Math.max(0.92, alpha);
             ctx.beginPath();
-            ctx.setLineDash(statusVisual.status === PERSON_STATUS.MISSING ? [6 / Math.sqrt(p.scale), 5 / Math.sqrt(p.scale)] : []);
+            ctx.setLineDash((statusVisual.status === PERSON_STATUS.MISSING || statusVisual.status === PERSON_STATUS.INACTIVE) ? [6 / Math.sqrt(p.scale), 5 / Math.sqrt(p.scale)] : []);
             ctx.arc(n.x, n.y, rad + (5 / Math.sqrt(p.scale)), 0, Math.PI * 2);
             ctx.strokeStyle = statusVisual.accent;
             ctx.lineWidth = 2 / Math.sqrt(p.scale);

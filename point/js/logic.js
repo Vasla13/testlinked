@@ -18,12 +18,15 @@ const HVT_LINK_WEIGHTS = {
     [KINDS.CONNAISSANCE]: 0.6,
     [KINDS.AFFILIATION]: 1.4,
     [KINDS.MEMBRE]: 1.0,
+    [KINDS.EX_EMPLOYE]: 0.5,
+    [KINDS.EX_MEMBRE]: 0.5,
     [KINDS.RELATION]: 0.5
 };
 
 function personStatusPriority(status) {
-    if (status === PERSON_STATUS.DECEASED) return 2;
-    if (status === PERSON_STATUS.MISSING) return 1;
+    if (status === PERSON_STATUS.DECEASED) return 3;
+    if (status === PERSON_STATUS.MISSING) return 2;
+    if (status === PERSON_STATUS.INACTIVE) return 1;
     return 0;
 }
 
@@ -171,6 +174,7 @@ export function calculateHVT() {
         const wNorm = (maxWeighted > 0) ? (w / maxWeighted) : 0;
         let score = (dNorm * 0.6) + (wNorm * 0.4);
         const personStatus = normalizePersonStatus(n.personStatus, n.type);
+        if (personStatus === PERSON_STATUS.INACTIVE) score *= 0.6;
         if (personStatus === PERSON_STATUS.MISSING) score *= 0.85;
         if (personStatus === PERSON_STATUS.DECEASED) score *= 0.35;
         n.hvtScore = score;

@@ -173,3 +173,215 @@ test('Auto-matching detects user full name and username matches', () => {
   assert.equal(normKey(user.username) === entityKey2, true);
   assert.equal(normKey(fullName) === entityKey3, false);
 });
+
+test('Node merging logic merges data entity and associated user into single node', () => {
+  const normKey = (str) =>
+    String(str || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim();
+
+  const user = {
+    id: 'usr_michel',
+    username: 'michelmuck',
+    firstName: 'Michel',
+    lastName: 'Muck',
+    associatedPoints: ['Michel Muck'],
+  };
+
+  const loadedUsers = [user];
+  const allSubgraphKeys = ['michel muck', 'banque fleeca'];
+  const entities = new Map([
+    ['michel muck', { name: 'Michel Muck', statuses: ['actif'], occurrences: [{ boardId: 'b1' }] }],
+    ['banque fleeca', { name: 'Banque Fleeca', statuses: ['actif'], occurrences: [{ boardId: 'b1' }] }]
+  ]);
+
+  // Map users to entities
+  const userToEntityMap = new Map();
+  const entityToUserMap = new Map();
+  for (const k of allSubgraphKeys) {
+    const matchedUser = loadedUsers.find((u) => {
+      const points = Array.isArray(u.associatedPoints) ? u.associatedPoints : [];
+      if (points.some((p) => normKey(p) === k)) return true;
+      const full = `${u.firstName || ''} ${u.lastName || ''}`.trim();
+      const reverse = `${u.lastName || ''} ${u.firstName || ''}`.trim();
+      if (full && normKey(full) === k) return true;
+      if (reverse && normKey(reverse) === k) return true;
+      if (normKey(u.username) === k) return true;
+      return false;
+    });
+    if (matchedUser) {
+      userToEntityMap.set(String(matchedUser.id), k);
+      entityToUserMap.set(k, matchedUser);
+    }
+  }
+
+  // Build merged graph nodes
+  const graphNodes = [];
+  for (const k of allSubgraphKeys) {
+    const e = entities.get(k);
+    const associatedUser = entityToUserMap.get(k);
+    const rawName = e?.name || k;
+    let label = rawName;
+    if (associatedUser) {
+      const atTag = `@${associatedUser.username}`;
+      if (!label.toLowerCase().includes(atTag.toLowerCase())) {
+        label = `${rawName} (${atTag})`;
+      }
+    }
+    graphNodes.push({
+      id: `data:${k}`,
+      dataKey: k,
+      label,
+      rawName,
+      hasUser: Boolean(associatedUser),
+      user: associatedUser ? safeUser(associatedUser) : null,
+    });
+  }
+
+  const michelNode = graphNodes.find((n) => n.dataKey === 'michel muck');
+  assert.ok(michelNode);
+  assert.equal(michelNode.hasUser, true);
+  assert.equal(michelNode.label, 'Michel Muck (@michelmuck)');
+  assert.equal(michelNode.user.username, 'michelmuck');
+
+  const fleecaNode = graphNodes.find((n) => n.dataKey === 'banque fleeca');
+  assert.ok(fleecaNode);
+  assert.equal(fleecaNode.hasUser, false);
+  assert.equal(fleecaNode.label, 'Banque Fleeca');
+  assert.equal(fleecaNode.user, null);
+
+  // Redundant user node should NOT be present among data entities
+  assert.equal(graphNodes.some((n) => n.id === `user:${user.id}`), false);
+});
+
+test('Status resolution correctly handles inactif, disparu, and mort with proper priority', () => {
+  const resolveStatus = (statuses) => {
+    if (!statuses || !statuses.length) return null;
+    const norm = statuses.map((s) => String(s || '').trim().toLowerCase());
+    if (norm.includes('mort') || norm.includes('deceased')) return 'mort';
+    if (norm.includes('disparu') || norm.includes('missing')) return 'disparu';
+    if (norm.includes('inactif') || norm.includes('inactive')) return 'inactif';
+    return 'actif';
+  };
+
+  assert.equal(resolveStatus(['inactif']), 'inactif');
+  assert.equal(resolveStatus(['inactive']), 'inactif');
+  assert.equal(resolveStatus(['actif', 'inactif']), 'inactif'); // Inactive overrides active
+  assert.equal(resolveStatus(['inactif', 'disparu']), 'disparu'); // Missing overrides inactive
+  assert.equal(resolveStatus(['inactif', 'mort']), 'mort'); // Deceased overrides inactive
+  assert.equal(resolveStatus(['actif']), 'actif');
+  assert.equal(resolveStatus([]), null);
+});
+
+test('Graph physics attraction calculations enforce zero attraction on inactif/mort and shared-indirect scaling', () => {
+  // Simulator link strength function matching database/index.html & point/js/physics.js logic
+  function computeLinkStrength(link, sourceNode, targetNode) {
+    const sStatus = String(sourceNode?.status || '').toLowerCase();
+    const tStatus = String(targetNode?.status || '').toLowerCase();
+    const inactiveStatuses = ['inactif', 'inactive', 'mort', 'deceased', 'disparu', 'missing'];
+
+    // Inactif / mort / disparu -> force d'attraction nulle
+    if (inactiveStatuses.includes(sStatus) || inactiveStatuses.includes(tStatus)) {
+      return 0;
+    }
+
+    const shared = link.sharedIndirectCount || 0;
+    const isEx = ['ex_employe', 'ex_membre'].includes(link.kind);
+    if (isEx) {
+      if (shared === 0) return 0;
+      return Math.min(0.45, 0.05 + shared * 0.1);
+    }
+
+    const sDeg = sourceNode?.degree ?? 1;
+    const tDeg = targetNode?.degree ?? 1;
+    if (sDeg === 2 && tDeg === 2) {
+      return 0.06; // reduced attraction between 2nd degree nodes
+    }
+
+    if (link.kind === 'ami') {
+      if (shared === 0) return 0.02; // minimal attraction if 0 shared indirect
+      return Math.min(0.85, 0.06 + shared * 0.16);
+    }
+
+    if (link.kind === 'connaissance') {
+      if (shared === 0) return 0.01;
+      return Math.min(0.7, 0.04 + shared * 0.12);
+    }
+
+    if (link.kind === 'amour') {
+      if (shared === 0) return 0.04;
+      return Math.min(0.9, 0.1 + shared * 0.18);
+    }
+
+    return 0.7;
+  }
+
+  const activeNode1 = { id: 'n1', status: 'actif', degree: 1 };
+  const activeNode2 = { id: 'n2', status: 'actif', degree: 1 };
+  const inactiveNode = { id: 'n3', status: 'inactif', degree: 1 };
+  const deadNode = { id: 'n4', status: 'mort', degree: 1 };
+  const missingNode = { id: 'n5', status: 'disparu', degree: 1 };
+  const deg2NodeA = { id: 'n6', status: 'actif', degree: 2 };
+  const deg2NodeB = { id: 'n7', status: 'actif', degree: 2 };
+
+  // 1. Inactif / mort / disparu gives zero attraction
+  assert.equal(computeLinkStrength({ kind: 'ami', sharedIndirectCount: 5 }, activeNode1, inactiveNode), 0);
+  assert.equal(computeLinkStrength({ kind: 'collegue' }, activeNode1, deadNode), 0);
+  assert.equal(computeLinkStrength({ kind: 'ami' }, missingNode, activeNode2), 0);
+
+  // 2. Ex employé / Ex membre: 0 shared -> 0 strength; > 0 shared -> scales up
+  assert.equal(computeLinkStrength({ kind: 'ex_employe', sharedIndirectCount: 0 }, activeNode1, activeNode2), 0);
+  assert.equal(computeLinkStrength({ kind: 'ex_membre', sharedIndirectCount: 0 }, activeNode1, activeNode2), 0);
+  assert.ok(computeLinkStrength({ kind: 'ex_employe', sharedIndirectCount: 2 }, activeNode1, activeNode2) > 0);
+  assert.ok(computeLinkStrength({ kind: 'ex_membre', sharedIndirectCount: 3 }, activeNode1, activeNode2) > 0.2);
+
+  // 3. Ami: 0 shared -> minimal attraction (0.02); scales up with shared connections
+  const ami0 = computeLinkStrength({ kind: 'ami', sharedIndirectCount: 0 }, activeNode1, activeNode2);
+  const ami1 = computeLinkStrength({ kind: 'ami', sharedIndirectCount: 1 }, activeNode1, activeNode2);
+  const ami3 = computeLinkStrength({ kind: 'ami', sharedIndirectCount: 3 }, activeNode1, activeNode2);
+  assert.equal(ami0, 0.02);
+  assert.ok(ami1 > ami0);
+  assert.ok(ami3 > ami1);
+
+  // 4. Connaissance and amour scaling
+  const conn0 = computeLinkStrength({ kind: 'connaissance', sharedIndirectCount: 0 }, activeNode1, activeNode2);
+  const conn2 = computeLinkStrength({ kind: 'connaissance', sharedIndirectCount: 2 }, activeNode1, activeNode2);
+  assert.equal(conn0, 0.01);
+  assert.ok(conn2 > conn0);
+
+  // 5. 2nd degree to 2nd degree has reduced attraction
+  const deg2Strength = computeLinkStrength({ kind: 'relation' }, deg2NodeA, deg2NodeB);
+  assert.equal(deg2Strength, 0.06);
+});
+
+test('Shared indirect connections counter accurately computes common non-enemy neighbors', () => {
+  const nodes = [{ id: 'A' }, { id: 'B' }, { id: 'C' }, { id: 'D' }];
+  const links = [
+    { source: 'A', target: 'C', kind: 'ami' },
+    { source: 'B', target: 'C', kind: 'ami' },
+    { source: 'A', target: 'D', kind: 'collegue' },
+    { source: 'B', target: 'D', kind: 'collegue' },
+    { source: 'A', target: 'B', kind: 'ami' },
+  ];
+
+  const adj = new Map();
+  for (const n of nodes) adj.set(n.id, new Set());
+  for (const l of links) {
+    if (l.kind === 'ennemi') continue;
+    adj.get(l.source).add(l.target);
+    adj.get(l.target).add(l.source);
+  }
+
+  // Calculate shared indirect count for A-B
+  const aNeighbors = adj.get('A');
+  const bNeighbors = adj.get('B');
+  let shared = 0;
+  for (const neighbor of aNeighbors) {
+    if (neighbor !== 'B' && bNeighbors.has(neighbor)) shared++;
+  }
+
+  // A and B both connect to C and D -> shared count is 2
+  assert.equal(shared, 2);
+});

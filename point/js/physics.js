@@ -1,7 +1,7 @@
 import { state } from './state.js';
-import { KINDS, TYPES } from './constants.js';
+import { KINDS, TYPES, PERSON_STATUS } from './constants.js';
 import { nodeRadius, draw, requestDraw } from './render.js';
-import { clamp, getId } from './utils.js';
+import { clamp, getId, normalizePersonStatus } from './utils.js';
 
 let simulation;
 
@@ -23,6 +23,8 @@ const BUSINESS_LINK_KINDS = new Set([
     KINDS.PATRON,
     KINDS.HAUT_GRADE,
     KINDS.EMPLOYE,
+    KINDS.EX_EMPLOYE,
+    KINDS.EX_MEMBRE,
     KINDS.COLLEGUE,
     KINDS.PARTENAIRE,
     KINDS.AFFILIATION,
@@ -36,6 +38,8 @@ const COMPANY_LAYOUT_KINDS = new Set([
     KINDS.PATRON,
     KINDS.HAUT_GRADE,
     KINDS.EMPLOYE,
+    KINDS.EX_EMPLOYE,
+    KINDS.EX_MEMBRE,
     KINDS.COLLEGUE,
     KINDS.PARTENAIRE,
     KINDS.AFFILIATION,
@@ -308,30 +312,84 @@ function createPresetLayoutForce(nodes, links, nodeMap) {
     };
 }
 
-function getLinkDistance(link, settings) {
+function getSharedIndirectCount(sId, tId, neighborMap) {
+    if (!neighborMap) return 0;
+    const sNeighbors = neighborMap.get(String(sId));
+    const tNeighbors = neighborMap.get(String(tId));
+    if (!sNeighbors || !tNeighbors) return 0;
+    let count = 0;
+    for (const nId of sNeighbors) {
+        if (nId !== String(tId) && tNeighbors.has(nId)) {
+            count++;
+        }
+    }
+    return count;
+}
+
+function getLinkDistance(link, settings, neighborMap) {
     const base = numSetting(settings.linkLength, 220);
     const socialMult = numSetting(settings.socialLinkDistanceMult, 0.78);
     const businessMult = numSetting(settings.businessLinkDistanceMult, 1.08);
+
+    const sId = getId(link.source);
+    const tId = getId(link.target);
+    const sharedCount = getSharedIndirectCount(sId, tId, neighborMap);
 
     if (link.kind === KINDS.AFFILIATION) return base * Math.max(1.35, businessMult * 1.45);
     if (link.kind === KINDS.PATRON) return base * 0.3 * businessMult;
     if (link.kind === KINDS.HAUT_GRADE) return base * 0.5 * businessMult;
     if (link.kind === KINDS.EMPLOYE) return base * 0.9 * businessMult;
+    if (link.kind === KINDS.EX_EMPLOYE || link.kind === KINDS.EX_MEMBRE) {
+        if (sharedCount === 0) return base * 1.6;
+        return base * Math.max(0.85, 1.4 - (sharedCount * 0.15));
+    }
     if (link.kind === KINDS.COLLEGUE) return base * 0.95 * businessMult;
     if (link.kind === KINDS.PARTENAIRE) return base * 1.02 * businessMult;
     if (link.kind === KINDS.MEMBRE) return base * 1.08 * businessMult;
     if (link.kind === KINDS.RELATION) return base * 1.1 * businessMult;
+    if (link.kind === KINDS.AMI) {
+        if (sharedCount === 0) return base * 1.5 * socialMult;
+        return base * Math.max(0.65, 1.2 - (sharedCount * 0.15)) * socialMult;
+    }
+    if (link.kind === KINDS.CONNAISSANCE) {
+        if (sharedCount === 0) return base * 1.6 * socialMult;
+        return base * Math.max(0.75, 1.3 - (sharedCount * 0.12)) * socialMult;
+    }
+    if (link.kind === KINDS.AMOUR) {
+        if (sharedCount === 0) return base * 1.3 * socialMult;
+        return base * Math.max(0.6, 1.1 - (sharedCount * 0.12)) * socialMult;
+    }
     if (SOCIAL_LINK_KINDS.has(link.kind)) {
-        if (link.kind === KINDS.CONNAISSANCE) return base * Math.min(1.1, socialMult + 0.18);
         return base * socialMult;
     }
     if (BUSINESS_LINK_KINDS.has(link.kind)) return base * businessMult;
     return base;
 }
 
-function getLinkStrength(link, settings) {
+function getLinkStrength(link, settings, nodeMap, neighborMap) {
+    const sId = getId(link.source);
+    const tId = getId(link.target);
+    const sNode = nodeMap ? nodeMap.get(String(sId)) : null;
+    const tNode = nodeMap ? nodeMap.get(String(tId)) : null;
+
+    // Règle: quand un point est inactif, mort ou disparu, aucun attraction de lien
+    const sStatus = normalizePersonStatus(sNode?.personStatus, sNode?.type);
+    const tStatus = normalizePersonStatus(tNode?.personStatus, tNode?.type);
+    const isInactiveOrDead = sStatus === PERSON_STATUS.INACTIVE || sStatus === PERSON_STATUS.MISSING || sStatus === PERSON_STATUS.DECEASED ||
+                             tStatus === PERSON_STATUS.INACTIVE || tStatus === PERSON_STATUS.MISSING || tStatus === PERSON_STATUS.DECEASED;
+    if (isInactiveOrDead) {
+        return 0; // Aucune attraction
+    }
+
+    const sharedCount = getSharedIndirectCount(sId, tId, neighborMap);
     const socialStrength = clamp(numSetting(settings.socialLinkStrength, 0.34), 0.05, 1.4);
     const businessStrength = clamp(numSetting(settings.businessLinkStrength, 0.26), 0.05, 1.2);
+
+    // Règle: "ex employé" et "ex membre": sans attraction si 0 indirect, plus fort si plusieurs liens indirects
+    if (link.kind === KINDS.EX_EMPLOYE || link.kind === KINDS.EX_MEMBRE) {
+        if (sharedCount === 0) return 0;
+        return clamp(0.06 * sharedCount, 0.04, 0.6);
+    }
 
     if (link.kind === KINDS.PATRON) return clamp(Math.max(0.45, businessStrength * 2.2), 0.05, 1.4);
     if (link.kind === KINDS.HAUT_GRADE) return clamp(Math.max(0.34, businessStrength * 1.6), 0.05, 1.3);
@@ -341,8 +399,24 @@ function getLinkStrength(link, settings) {
     if (link.kind === KINDS.PARTENAIRE || link.kind === KINDS.RELATION || link.kind === KINDS.RIVAL) {
         return clamp(businessStrength * 0.88, 0.05, 1.0);
     }
+
+    // Règle: "ami" - si 0 indirect, presque pas d'attraction. Plus de liens indirects -> plus d'attraction
+    if (link.kind === KINDS.AMI) {
+        if (sharedCount === 0) return 0.02; // Presque pas d'attraction
+        return clamp(0.05 + (sharedCount * 0.15), 0.05, 1.2) * (socialStrength / 0.34);
+    }
+
+    // Règle: "connaissance" et "amour" (pareille pour connaissance et amour)
+    if (link.kind === KINDS.CONNAISSANCE) {
+        if (sharedCount === 0) return 0.01;
+        return clamp(0.03 + (sharedCount * 0.10), 0.03, 0.9) * (socialStrength / 0.34);
+    }
+    if (link.kind === KINDS.AMOUR) {
+        if (sharedCount === 0) return 0.04;
+        return clamp(0.10 + (sharedCount * 0.18), 0.10, 1.3) * (socialStrength / 0.34);
+    }
+
     if (SOCIAL_LINK_KINDS.has(link.kind)) {
-        if (link.kind === KINDS.CONNAISSANCE) return clamp(socialStrength * 0.72, 0.05, 1.1);
         return socialStrength;
     }
     return 0.25;
@@ -386,19 +460,27 @@ export function restartSim() {
     const nodeDegree = new Map();
     const connectedPairs = new Set();
     const nodeMap = new Map();
+    const neighborMap = new Map();
     let maxDegree = 0;
 
     state.nodes.forEach((n) => {
         nodeDegree.set(n.id, 0);
         nodeMap.set(String(n.id), n);
+        neighborMap.set(String(n.id), new Set());
     });
     state.links.forEach(l => {
-        const s = (typeof l.source === 'object') ? l.source.id : l.source;
-        const t = (typeof l.target === 'object') ? l.target.id : l.target;
+        const s = String((typeof l.source === 'object') ? l.source.id : l.source);
+        const t = String((typeof l.target === 'object') ? l.target.id : l.target);
         nodeDegree.set(s, (nodeDegree.get(s) || 0) + 1);
         nodeDegree.set(t, (nodeDegree.get(t) || 0) + 1);
         connectedPairs.add(`${s}-${t}`);
         connectedPairs.add(`${t}-${s}`);
+        if (l.kind !== KINDS.ENNEMI) {
+            if (neighborMap.has(s) && neighborMap.has(t)) {
+                neighborMap.get(s).add(t);
+                neighborMap.get(t).add(s);
+            }
+        }
     });
     nodeDegree.forEach(v => { if (v > maxDegree) maxDegree = v; });
 
@@ -415,11 +497,11 @@ export function restartSim() {
         .id(d => d.id)
         .distance(l => {
             if (l.kind === KINDS.ENNEMI) return 0; 
-            return getLinkDistance(l, S);
+            return getLinkDistance(l, S, neighborMap);
         })
         .strength(l => {
             if (l.kind === KINDS.ENNEMI) return 0; 
-            return getLinkStrength(l, S);
+            return getLinkStrength(l, S, nodeMap, neighborMap);
         })
     );
 

@@ -219,6 +219,23 @@
             <input type="checkbox" id="toggle-social-links" checked />
             <span>Réseau Social (Clouds &amp; Utilisateurs)</span>
           </label>
+          <div class="graph-clouds-dropdown-wrapper" style="position:relative; margin-left:14px;">
+            <button id="btn-toggle-clouds-menu" class="btn-cyber" type="button" style="padding:4px 10px; font-size:0.85rem; display:flex; align-items:center; gap:6px;">
+              <span>☁️ Voir les clouds</span>
+              <span id="graph-clouds-badge" class="chip" style="padding:1px 6px; font-size:0.75rem; background:rgba(0,240,255,0.15); border-color:var(--accent-cyan);">0</span>
+              <span style="font-size:0.75rem;">▾</span>
+            </button>
+            <div id="graph-clouds-dropdown" class="graph-clouds-dropdown-box" style="display:none;">
+              <div class="graph-clouds-dropdown-head">
+                <span>CLOUDS SOURCES</span>
+                <div style="display:flex; gap:6px;">
+                  <button type="button" id="btn-clouds-select-all" class="btn-mini-cloud">Tout</button>
+                  <button type="button" id="btn-clouds-deselect-all" class="btn-mini-cloud">Aucun</button>
+                </div>
+              </div>
+              <div id="graph-clouds-checkbox-list" class="graph-clouds-checkbox-list"></div>
+            </div>
+          </div>
         </div>
         <div class="graph-toolbar-group" style="margin-left:auto;">
           <input type="text" id="search-in-graph" class="cyber-input" placeholder="🔍 Filtrer nœud..." style="padding:4px 10px; font-size:0.85rem; width:170px;" />
@@ -235,6 +252,7 @@
           <div class="legend-item"><span class="legend-dot" style="background:#ffd700; box-shadow:0 0 8px #ffd700;"></span><span>Racine</span></div>
           <div class="legend-item"><span class="legend-dot" style="background:#00f0ff; box-shadow:0 0 6px #00f0ff;"></span><span>1er Degré</span></div>
           <div class="legend-item"><span class="legend-dot" style="background:#a78bfa;"></span><span>2nd Degré</span></div>
+          <div class="legend-item"><span class="legend-dot" style="background:#ff00aa; box-shadow:0 0 8px #ff00aa;"></span><span>Data + Compte Lié</span></div>
           <div class="legend-item"><span class="legend-dot" style="background:#ff922b;"></span><span>Cloud</span></div>
           <div class="legend-item"><span class="legend-dot" style="background:#ff007f;"></span><span>Utilisateur</span></div>
         </div>
@@ -1050,6 +1068,8 @@
 
   // --- MODALE VISUALISATEUR RELATIONNEL (D3) ---
   let activeGraphData = null;
+  let activeGraphClouds = [];
+  let selectedGraphCloudIds = new Set();
   let d3Simulation = null;
   let d3SvgGroup = null;
   let d3ZoomBehavior = null;
@@ -1069,11 +1089,76 @@
     try {
       const res = await apiCall('collab-board', { action: 'get_entity_subgraph', entityName });
       activeGraphData = res;
+
+      // Extraire les clouds uniques contributeurs
+      const cloudsMap = new Map();
+      for (const n of activeGraphData.nodes || []) {
+        for (const occ of n.occurrences || []) {
+          if (occ.boardId && !cloudsMap.has(occ.boardId)) {
+            cloudsMap.set(occ.boardId, {
+              id: occ.boardId,
+              title: occ.boardTitle || 'Cloud',
+              page: occ.page || 'point'
+            });
+          }
+        }
+      }
+      for (const l of activeGraphData.links || []) {
+        for (const c of l.clouds || []) {
+          const cId = typeof c === 'object' ? c.id : c;
+          const cTitle = typeof c === 'object' ? c.title : c;
+          const cPage = (typeof c === 'object' && c.page) || 'point';
+          if (cId && !cloudsMap.has(cId)) {
+            cloudsMap.set(cId, { id: cId, title: cTitle || 'Cloud', page: cPage });
+          }
+        }
+      }
+      activeGraphClouds = Array.from(cloudsMap.values()).sort((a, b) => a.title.localeCompare(b.title));
+      selectedGraphCloudIds = new Set(activeGraphClouds.map(c => c.id));
+
+      renderCloudsDropdownList();
       renderD3Graph();
     } catch (e) {
       await customAlert(`Erreur chargement relations: ${e.message}`);
       modalEl.classList.remove('visible');
     }
+  }
+
+  function renderCloudsDropdownList() {
+    const listEl = document.getElementById('graph-clouds-checkbox-list');
+    const badgeEl = document.getElementById('graph-clouds-badge');
+    if (!listEl || !badgeEl) return;
+
+    badgeEl.textContent = `${selectedGraphCloudIds.size}/${activeGraphClouds.length}`;
+
+    if (!activeGraphClouds.length) {
+      listEl.innerHTML = '<div style="font-size:0.75rem; color:var(--text-muted); padding:4px;">Aucun cloud contributeur</div>';
+      return;
+    }
+
+    listEl.innerHTML = activeGraphClouds.map(c => {
+      const isChecked = selectedGraphCloudIds.has(c.id);
+      const icon = c.page === 'map' ? '🗺️' : '🕸️';
+      return `
+        <label class="graph-cloud-item">
+          <input type="checkbox" data-cloud-id="${escapeHtml(c.id)}" ${isChecked ? 'checked' : ''} />
+          <span>${icon} ${escapeHtml(c.title)}</span>
+        </label>
+      `;
+    }).join('');
+
+    listEl.querySelectorAll('input[type="checkbox"]').forEach(chk => {
+      chk.onchange = (e) => {
+        const cId = e.target.getAttribute('data-cloud-id');
+        if (e.target.checked) {
+          selectedGraphCloudIds.add(cId);
+        } else {
+          selectedGraphCloudIds.delete(cId);
+        }
+        badgeEl.textContent = `${selectedGraphCloudIds.size}/${activeGraphClouds.length}`;
+        renderD3Graph();
+      };
+    });
   }
 
   function renderD3Graph() {
@@ -1083,21 +1168,53 @@
     const includeSocial = document.getElementById('toggle-social-links').checked;
     const filterQuery = normKey(document.getElementById('search-in-graph').value);
 
-    // Filter nodes
+    // Filtrer les nœuds par degré, réseau social, recherche textuelle et sélection de clouds
     const visibleNodes = activeGraphData.nodes.filter(n => {
       if (!includeDegree2 && n.degree === 2 && n.type === 'entity') return false;
       if (!includeSocial && (n.type === 'user' || n.type === 'cloud' || n.type === 'user_peer')) return false;
       if (filterQuery && !normKey(n.label).includes(filterQuery)) return false;
+
+      // La racine est toujours conservée
+      if (n.degree === 0) return true;
+
+      if (n.type === 'cloud') {
+        return selectedGraphCloudIds.has(n.boardId);
+      }
+
+      if (n.type === 'entity') {
+        const occs = Array.isArray(n.occurrences) ? n.occurrences : [];
+        if (occs.length === 0) return true;
+        return occs.some(o => selectedGraphCloudIds.has(o.boardId));
+      }
+
+      if (n.type === 'user' || n.type === 'user_peer') {
+        const occs = Array.isArray(n.occurrences) ? n.occurrences : [];
+        if (occs.length > 0) return occs.some(o => selectedGraphCloudIds.has(o.boardId));
+        return true;
+      }
+
       return true;
     });
 
     const visibleNodeIds = new Set(visibleNodes.map(n => n.id));
 
-    // Filter links
+    // Filtrer les liens
     const visibleLinks = activeGraphData.links.filter(l => {
       const sId = typeof l.source === 'object' ? l.source.id : l.source;
       const tId = typeof l.target === 'object' ? l.target.id : l.target;
-      return visibleNodeIds.has(sId) && visibleNodeIds.has(tId);
+      if (!visibleNodeIds.has(sId) || !visibleNodeIds.has(tId)) return false;
+
+      // Filtrer par sélection des clouds contributeurs
+      if (Array.isArray(l.boardIds) && l.boardIds.length > 0) {
+        return l.boardIds.some(bId => selectedGraphCloudIds.has(bId));
+      }
+      if (Array.isArray(l.clouds) && l.clouds.length > 0) {
+        return l.clouds.some(c => {
+          const cId = typeof c === 'object' ? c.id : c;
+          return selectedGraphCloudIds.has(cId);
+        });
+      }
+      return true;
     }).map(l => ({ ...l }));
 
     const svg = d3.select('#graph-svg');
@@ -1116,15 +1233,120 @@
 
     d3SvgGroup = svg.append('g');
 
+    // Identificateur de liens particuliers (inactif, mort, disparu, ex-employé, ex-membre, 2nd degré)
+    const isLinkInactiveDeadOrEx = (d) => {
+      const sNode = typeof d.source === 'object' ? d.source : visibleNodes.find(n => n.id === d.source);
+      const tNode = typeof d.target === 'object' ? d.target : visibleNodes.find(n => n.id === d.target);
+      const sStatus = String(sNode?.status || '').toLowerCase();
+      const tStatus = String(tNode?.status || '').toLowerCase();
+      const isInactiveOrDead = ['inactif', 'inactive', 'mort', 'deceased', 'disparu', 'missing'].includes(sStatus) ||
+                               ['inactif', 'inactive', 'mort', 'deceased', 'disparu', 'missing'].includes(tStatus);
+      const isEx = ['ex_employe', 'ex_membre', 'ex employé', 'ex membre'].includes(d.kind);
+      return isInactiveOrDead || isEx;
+    };
+
+    const isLinkBetweenSecondDegree = (d) => {
+      const sNode = typeof d.source === 'object' ? d.source : visibleNodes.find(n => n.id === d.source);
+      const tNode = typeof d.target === 'object' ? d.target : visibleNodes.find(n => n.id === d.target);
+      return sNode?.degree === 2 && tNode?.degree === 2;
+    };
+
     // Force simulation
     d3Simulation = d3.forceSimulation(visibleNodes)
-      .force('link', d3.forceLink(visibleLinks).id(d => d.id).distance(d => {
-        if (d.kind === 'compte_lie' || d.kind === 'membre_cloud') return 90;
-        return 130;
-      }))
-      .force('charge', d3.forceManyBody().strength(-350))
+      .force('link', d3.forceLink(visibleLinks).id(d => d.id)
+        .distance(d => {
+          const sNode = typeof d.source === 'object' ? d.source : visibleNodes.find(n => n.id === d.source);
+          const tNode = typeof d.target === 'object' ? d.target : visibleNodes.find(n => n.id === d.target);
+          const sDeg = sNode?.degree ?? 1;
+          const tDeg = tNode?.degree ?? 1;
+          const shared = d.sharedIndirectCount || 0;
+
+          if (d.kind === 'compte_lie' || d.kind === 'membre_cloud') return 90;
+
+          // 2nd degré: liens plus longs pour les éloigner des 1ers degrés
+          if (sDeg === 2 && tDeg === 2) return 260;
+          if (sDeg === 2 || tDeg === 2) return 220;
+
+          if (d.kind === 'ami') {
+            if (shared === 0) return 180;
+            return Math.max(75, 140 - (shared * 18));
+          }
+          if (d.kind === 'connaissance' || ['ex_employe', 'ex_membre', 'ex employé', 'ex membre'].includes(d.kind)) {
+            if (shared === 0) return 190;
+            return Math.max(85, 150 - (shared * 15));
+          }
+          if (d.kind === 'amour') {
+            if (shared === 0) return 150;
+            return Math.max(65, 120 - (shared * 18));
+          }
+
+          return 130;
+        })
+        .strength(d => {
+          const sNode = typeof d.source === 'object' ? d.source : visibleNodes.find(n => n.id === d.source);
+          const tNode = typeof d.target === 'object' ? d.target : visibleNodes.find(n => n.id === d.target);
+          const sDeg = sNode?.degree ?? 1;
+          const tDeg = tNode?.degree ?? 1;
+
+          // Si un point est inactif, mort ou disparu: PLUS DU TOUT d'attraction
+          const sStatus = String(sNode?.status || '').toLowerCase();
+          const tStatus = String(tNode?.status || '').toLowerCase();
+          if (['inactif', 'inactive', 'mort', 'deceased', 'disparu', 'missing'].includes(sStatus) ||
+              ['inactif', 'inactive', 'mort', 'deceased', 'disparu', 'missing'].includes(tStatus)) {
+            return 0;
+          }
+
+          const shared = d.sharedIndirectCount || 0;
+          const isEx = ['ex_employe', 'ex_membre', 'ex employé', 'ex membre'].includes(d.kind);
+          if (isEx) {
+            if (shared === 0) return 0;
+            return Math.min(0.45, 0.05 + (shared * 0.1));
+          }
+
+          // Liens entre deux 2nd degrés ont moins de force d'attraction
+          if (sDeg === 2 && tDeg === 2) {
+            return 0.06;
+          }
+
+          if (d.kind === 'ami') {
+            if (shared === 0) return 0.02; // Presque pas d'attraction
+            return Math.min(0.85, 0.06 + (shared * 0.16));
+          }
+          if (d.kind === 'connaissance') {
+            if (shared === 0) return 0.01;
+            return Math.min(0.7, 0.04 + (shared * 0.12));
+          }
+          if (d.kind === 'amour') {
+            if (shared === 0) return 0.04;
+            return Math.min(0.9, 0.1 + (shared * 0.18));
+          }
+
+          return 0.7;
+        })
+      )
+      .force('charge', d3.forceManyBody().strength(d => (d.degree === 0 ? -600 : -320)))
       .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide().radius(d => (d.degree === 0 ? 40 : 28)));
+      .force('collision', d3.forceCollide().radius(d => (d.degree === 0 ? 42 : 28)));
+
+    // Répulsion renforcée de la racine pour les 2nd degrés
+    d3Simulation.force('rootRepulsion', (alpha) => {
+      const root = visibleNodes.find(n => n.degree === 0);
+      if (!root || !Number.isFinite(root.x) || !Number.isFinite(root.y)) return;
+      for (const n of visibleNodes) {
+        if (n.degree === 2) {
+          if (!Number.isFinite(n.x) || !Number.isFinite(n.y)) continue;
+          const dx = (n.x - root.x) || (Math.random() - 0.5);
+          const dy = (n.y - root.y) || (Math.random() - 0.5);
+          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+          const targetMinDist = 340;
+          if (dist < targetMinDist) {
+            const push = ((targetMinDist - dist) / targetMinDist) * 95 * alpha;
+            n.vx += (dx / dist) * push;
+            n.vy += (dy / dist) * push;
+          }
+        }
+      }
+    });
 
     // Render Links
     const link = d3SvgGroup.append('g')
@@ -1132,12 +1354,22 @@
       .data(visibleLinks)
       .join('line')
       .attr('stroke', d => {
+        if (isLinkBetweenSecondDegree(d)) {
+          return 'rgba(167, 139, 250, 0.28)'; // Transparent 2nd degré
+        }
+        if (isLinkInactiveDeadOrEx(d)) {
+          return 'rgba(148, 163, 184, 0.3)'; // Transparent inactif/mort/disparu/ex
+        }
         if (d.kind === 'compte_lie') return '#ff007f';
         if (d.kind === 'membre_cloud') return '#ff922b';
-        return 'rgba(115, 251, 247, 0.4)';
+        return 'rgba(115, 251, 247, 0.45)';
       })
-      .attr('stroke-width', d => (d.kind === 'compte_lie' ? 2 : 1.5))
-      .attr('stroke-dasharray', d => (d.kind === 'compte_lie' || d.kind === 'membre_cloud' ? '4,4' : 'none'));
+      .attr('stroke-width', d => (isLinkBetweenSecondDegree(d) || isLinkInactiveDeadOrEx(d) ? 1.2 : 1.6))
+      .attr('stroke-dasharray', d => {
+        if (isLinkBetweenSecondDegree(d) || isLinkInactiveDeadOrEx(d)) return '4,4';
+        if (d.kind === 'compte_lie' || d.kind === 'membre_cloud') return '4,4';
+        return 'none';
+      });
 
     // Render Nodes
     const node = d3SvgGroup.append('g')
@@ -1167,18 +1399,34 @@
         return '#15132d';
       })
       .attr('stroke', d => {
+        if (d.hasUser) return '#ff00aa'; // Highlight merged data+user
         if (d.degree === 0) return '#ffd700';
         if (d.type === 'cloud') return '#ff922b';
         if (d.type === 'user' || d.type === 'user_peer') return '#ff007f';
         if (d.degree === 1) return '#00f0ff';
         return '#a78bfa';
       })
-      .attr('stroke-width', d => (d.degree === 0 ? 3.5 : 2))
-      .style('filter', d => (d.degree === 0 ? 'drop-shadow(0 0 10px #ffd700)' : (d.degree === 1 ? 'drop-shadow(0 0 6px #00f0ff)' : 'none')));
+      .attr('stroke-width', d => (d.degree === 0 ? 3.5 : (d.hasUser ? 2.8 : 2)))
+      .style('filter', d => {
+        if (d.hasUser) return 'drop-shadow(0 0 10px #ff00aa)';
+        if (d.degree === 0) return 'drop-shadow(0 0 10px #ffd700)';
+        if (d.degree === 1) return 'drop-shadow(0 0 6px #00f0ff)';
+        return 'none';
+      });
+
+    // Anneau supplémentaire pour les entités fusionnées avec un compte utilisateur
+    node.filter(d => d.hasUser)
+      .append('circle')
+      .attr('r', d => (d.degree === 0 ? 28 : (d.degree === 1 ? 20 : 15)))
+      .attr('fill', 'none')
+      .attr('stroke', '#ff00aa')
+      .attr('stroke-width', 1.2)
+      .attr('stroke-dasharray', '3,3')
+      .style('pointer-events', 'none');
 
     // Labels
     node.append('text')
-      .attr('dy', d => (d.degree === 0 ? 36 : 26))
+      .attr('dy', d => (d.degree === 0 ? 38 : 28))
       .attr('text-anchor', 'middle')
       .attr('fill', '#fff')
       .attr('font-size', d => (d.degree === 0 ? '12px' : '10px'))
@@ -1230,6 +1478,15 @@
       bodyEl.innerHTML = `
         <div><strong>Type :</strong> ${escapeHtml(categories || 'Inconnu')}</div>
         <div><strong>Degré :</strong> ${node.degree === 0 ? 'Racine (Cible)' : (node.degree === 1 ? 'Voisin direct (1er)' : 'Secondaire (2nd)')}</div>
+        ${node.status ? `<div><strong>Statut :</strong> <span class="chip" style="text-transform:uppercase;">${escapeHtml(node.status)}</span></div>` : ''}
+        ${node.hasUser && node.user ? `
+          <div style="margin-top:6px; padding:8px; background:rgba(255,0,170,0.12); border:1px solid rgba(255,0,170,0.3); border-radius:6px;">
+            <div style="color:#ff77cc; font-weight:700; font-size:0.8rem; margin-bottom:4px;">👤 COMPTE UTILISATEUR ASSOCIÉ</div>
+            <div><strong>Nom :</strong> ${escapeHtml(node.user.firstName || '')} ${escapeHtml(node.user.lastName || '')}</div>
+            <div><strong>Pseudo :</strong> @${escapeHtml(node.user.username)}</div>
+            <div><strong>ID :</strong> ${escapeHtml(node.user.id || '')}</div>
+          </div>
+        ` : ''}
         <div style="margin-top:6px;"><strong>Présence dans les Clouds (${distinctClouds.length}) :</strong></div>
         <div style="display:flex; flex-direction:column; gap:4px; margin-top:4px;">
           ${distinctClouds.map(c => `
@@ -1276,6 +1533,39 @@
   document.getElementById('toggle-degree-2').onchange = () => renderD3Graph();
   document.getElementById('toggle-social-links').onchange = () => renderD3Graph();
   document.getElementById('search-in-graph').oninput = () => renderD3Graph();
+
+  const btnToggleClouds = document.getElementById('btn-toggle-clouds-menu');
+  const cloudsDropdown = document.getElementById('graph-clouds-dropdown');
+  if (btnToggleClouds && cloudsDropdown) {
+    btnToggleClouds.onclick = (e) => {
+      e.stopPropagation();
+      const isVisible = cloudsDropdown.style.display !== 'none';
+      cloudsDropdown.style.display = isVisible ? 'none' : 'flex';
+    };
+    document.addEventListener('click', (e) => {
+      if (!cloudsDropdown.contains(e.target) && !btnToggleClouds.contains(e.target)) {
+        cloudsDropdown.style.display = 'none';
+      }
+    });
+  }
+
+  const btnSelectAllClouds = document.getElementById('btn-clouds-select-all');
+  if (btnSelectAllClouds) {
+    btnSelectAllClouds.onclick = () => {
+      selectedGraphCloudIds = new Set(activeGraphClouds.map(c => c.id));
+      renderCloudsDropdownList();
+      renderD3Graph();
+    };
+  }
+
+  const btnDeselectAllClouds = document.getElementById('btn-clouds-deselect-all');
+  if (btnDeselectAllClouds) {
+    btnDeselectAllClouds.onclick = () => {
+      selectedGraphCloudIds.clear();
+      renderCloudsDropdownList();
+      renderD3Graph();
+    };
+  }
 
   document.getElementById('btn-graph-zoom-in').onclick = () => {
     d3.select('#graph-svg').transition().duration(250).call(d3ZoomBehavior.scaleBy, 1.3);

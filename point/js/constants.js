@@ -6,12 +6,14 @@ export const TYPES = {
 
 export const PERSON_STATUS = {
     ACTIVE: 'active',
+    INACTIVE: 'inactive',
     MISSING: 'missing',
     DECEASED: 'deceased'
 };
 
 export const PERSON_STATUS_LABELS = {
     [PERSON_STATUS.ACTIVE]: 'Actif',
+    [PERSON_STATUS.INACTIVE]: 'Inactif',
     [PERSON_STATUS.MISSING]: 'Disparu',
     [PERSON_STATUS.DECEASED]: 'Mort'
 };
@@ -20,6 +22,7 @@ export const KINDS = {
     PATRON: 'patron',
     HAUT_GRADE: 'haut_grade',
     EMPLOYE: 'employe',
+    EX_EMPLOYE: 'ex_employe',
     COLLEGUE: 'collegue',
     PARTENAIRE: 'partenaire',
     FAMILLE: 'famille',
@@ -31,6 +34,7 @@ export const KINDS = {
     CONNAISSANCE: 'connaissance',
     AFFILIATION: 'affiliation',
     MEMBRE: 'membre',
+    EX_MEMBRE: 'ex_membre',
     RELATION: 'relation'
 };
 
@@ -39,6 +43,7 @@ export const KIND_LABELS = {
     [KINDS.PATRON]: 'Patron',
     [KINDS.HAUT_GRADE]: 'Haut grade',
     [KINDS.EMPLOYE]: 'Employé',
+    [KINDS.EX_EMPLOYE]: 'Ex employé',
     [KINDS.COLLEGUE]: 'Collègue',
     [KINDS.PARTENAIRE]: 'Partenaire',
     [KINDS.FAMILLE]: 'Famille',
@@ -50,16 +55,18 @@ export const KIND_LABELS = {
     [KINDS.CONNAISSANCE]: 'Connaissance',
     [KINDS.AFFILIATION]: 'Affiliation',
     [KINDS.MEMBRE]: 'Membre',
+    [KINDS.EX_MEMBRE]: 'Ex membre',
     [KINDS.RELATION]: 'Relation'
 };
 
 export const PERSON_PERSON_KINDS = new Set([
     KINDS.FAMILLE, KINDS.COUPLE, KINDS.AMOUR, KINDS.AMI, 
-    KINDS.ENNEMI, KINDS.RIVAL, KINDS.CONNAISSANCE, KINDS.COLLEGUE
+    KINDS.ENNEMI, KINDS.RIVAL, KINDS.CONNAISSANCE, KINDS.COLLEGUE,
+    KINDS.EX_EMPLOYE, KINDS.EX_MEMBRE, KINDS.RELATION
 ]);
 
 export const PERSON_ORG_KINDS = new Set([
-    KINDS.PATRON, KINDS.HAUT_GRADE, KINDS.EMPLOYE, KINDS.AFFILIATION, KINDS.MEMBRE,
+    KINDS.PATRON, KINDS.HAUT_GRADE, KINDS.EMPLOYE, KINDS.EX_EMPLOYE, KINDS.AFFILIATION, KINDS.MEMBRE, KINDS.EX_MEMBRE,
     KINDS.PARTENAIRE, KINDS.ENNEMI 
 ]);
 
@@ -77,8 +84,8 @@ export const FILTERS = {
 // Règles de visibilité des liens selon le filtre actif
 export const FILTER_RULES = {
     [FILTERS.ALL]: null,
-    [FILTERS.BUSINESS]: new Set([KINDS.PATRON, KINDS.EMPLOYE, KINDS.COLLEGUE, KINDS.PARTENAIRE, KINDS.RELATION]),
-    [FILTERS.ILLEGAL]: new Set([KINDS.ENNEMI, KINDS.RIVAL, KINDS.MEMBRE, KINDS.AFFILIATION, KINDS.PARTENAIRE]),
+    [FILTERS.BUSINESS]: new Set([KINDS.PATRON, KINDS.EMPLOYE, KINDS.EX_EMPLOYE, KINDS.COLLEGUE, KINDS.PARTENAIRE, KINDS.RELATION]),
+    [FILTERS.ILLEGAL]: new Set([KINDS.ENNEMI, KINDS.RIVAL, KINDS.MEMBRE, KINDS.EX_MEMBRE, KINDS.AFFILIATION, KINDS.PARTENAIRE]),
     [FILTERS.SOCIAL]: new Set([KINDS.FAMILLE, KINDS.COUPLE, KINDS.AMOUR, KINDS.AMI, KINDS.CONNAISSANCE, KINDS.ENNEMI])
 };
 
@@ -88,9 +95,9 @@ export const R_MIN = { [TYPES.PERSON]: 12, [TYPES.COMPANY]: 25, [TYPES.GROUP]: 1
 export const R_MAX = { [TYPES.PERSON]: 50, [TYPES.COMPANY]: 100, [TYPES.GROUP]: 80 };
 
 export const LINK_KIND_EMOJI = {
-    [KINDS.PATRON]: '👑', [KINDS.HAUT_GRADE]: '⭐', [KINDS.EMPLOYE]: '💼', [KINDS.COLLEGUE]: '🤝',
+    [KINDS.PATRON]: '👑', [KINDS.HAUT_GRADE]: '⭐', [KINDS.EMPLOYE]: '💼', [KINDS.EX_EMPLOYE]: '💼', [KINDS.COLLEGUE]: '🤝',
     [KINDS.PARTENAIRE]: '🤝', [KINDS.FAMILLE]: '🏠', [KINDS.COUPLE]: '❤️',
     [KINDS.AMOUR]: '💘', [KINDS.AMI]: '🍻', [KINDS.ENNEMI]: '⚔️',
     [KINDS.RIVAL]: '⚡', [KINDS.CONNAISSANCE]: '👋', [KINDS.AFFILIATION]: '🏴',
-    [KINDS.MEMBRE]: '👤', [KINDS.RELATION]: '🔗'
+    [KINDS.MEMBRE]: '👤', [KINDS.EX_MEMBRE]: '👤', [KINDS.RELATION]: '🔗'
 };

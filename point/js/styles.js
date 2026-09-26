@@ -3250,6 +3250,11 @@ export function injectStyles() {
             text-transform: uppercase;
             white-space: nowrap;
         }
+        .editor-sheet-status.is-inactive {
+            border-color: rgba(148, 163, 184, 0.34);
+            background: rgba(148, 163, 184, 0.12);
+            color: #cbd5e1;
+        }
         .editor-sheet-status.is-missing {
             border-color: rgba(244, 195, 90, 0.34);
             background: rgba(244, 195, 90, 0.12);
@@ -3359,6 +3364,11 @@ export function injectStyles() {
             border-color: rgba(102, 243, 255, 0.4);
             background: rgba(102, 243, 255, 0.12);
             color: var(--accent-cyan);
+        }
+        .editor-status-btn.active.is-inactive {
+            border-color: rgba(148, 163, 184, 0.4);
+            background: rgba(148, 163, 184, 0.16);
+            color: #cbd5e1;
         }
         .editor-status-btn.active.is-missing {
             border-color: rgba(244, 195, 90, 0.36);

@@ -241,6 +241,15 @@ function renderPointEditor() {
                 <div class="editor-meta-grid">
                     <select id="edIcon" class="cyber-input">${iconOptions}</select>
                     <div class="editor-col">
+                        <label>Statut</label>
+                        <select id="edStatus" class="cyber-input">
+                            <option value="ACTIVE" ${point.status === 'ACTIVE' || !point.status ? 'selected' : ''}>Actif</option>
+                            <option value="INACTIVE" ${point.status === 'INACTIVE' ? 'selected' : ''}>Inactif</option>
+                            <option value="MISSING" ${point.status === 'MISSING' ? 'selected' : ''}>Disparu</option>
+                            <option value="DECEASED" ${point.status === 'DECEASED' ? 'selected' : ''}>Mort</option>
+                        </select>
+                    </div>
+                    <div class="editor-col">
                         <label>Calque</label>
                         <select id="edGroup" class="cyber-input">${groupOptions}</select>
                     </div>
@@ -291,6 +300,12 @@ function renderPointEditor() {
 
     document.getElementById('edIcon').onchange = (event) => {
         point.iconType = event.target.value;
+        renderAll();
+        saveLocalState();
+    };
+
+    document.getElementById('edStatus').onchange = (event) => {
+        point.status = event.target.value;
         renderAll();
         saveLocalState();
     };

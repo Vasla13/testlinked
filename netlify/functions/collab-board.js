@@ -2059,7 +2059,7 @@ exports.handler = async (event) => {
     const entities = new Map();
     const globalLinks = new Map();
 
-    const addEntity = (name, type, board, id, notes = "") => {
+    const addEntity = (name, type, board, id, notes = "", status = "") => {
       const k = normKey(name);
       if (!k) return null;
       if (!entities.has(k)) {
@@ -2069,16 +2069,25 @@ exports.handler = async (event) => {
           types: new Set(),
           occurrences: [],
           notes: [],
+          statuses: new Set(),
         });
       }
       const e = entities.get(k);
       if (type) e.types.add(type);
       if (notes) e.notes.push(notes);
-      e.occurrences.push({ boardId: board.id, boardTitle: board.title, page: board.page, id });
+      if (status) e.statuses.add(String(status).toLowerCase());
+      e.occurrences.push({
+        boardId: board.id,
+        boardTitle: board.title || "Cloud",
+        page: board.page || "point",
+        id,
+        type: type || "",
+        status: status || "",
+      });
       return k;
     };
 
-    const addLink = (k1, k2, kind, boardTitle) => {
+    const addLink = (k1, k2, kind, board) => {
       if (!k1 || !k2 || k1 === k2) return;
       const pair = k1 < k2 ? `${k1}___${k2}` : `${k2}___${k1}`;
       if (!globalLinks.has(pair)) {
@@ -2086,22 +2095,27 @@ exports.handler = async (event) => {
           source: k1 < k2 ? k1 : k2,
           target: k1 < k2 ? k2 : k1,
           kind: kind || "relation",
-          clouds: new Set(),
+          clouds: new Map(),
         });
       }
-      if (boardTitle) globalLinks.get(pair).clouds.add(boardTitle);
+      if (board && board.id) {
+        globalLinks.get(pair).clouds.set(String(board.id), {
+          id: board.id,
+          title: board.title || "Cloud",
+          page: board.page || "point",
+        });
+      }
     };
 
     for (const board of validBoards) {
       const page = board.page || "point";
-      const bTitle = board.title || "Cloud";
 
       if (page === "point" && board.data && Array.isArray(board.data.nodes)) {
         const idToKey = new Map();
         for (const n of board.data.nodes) {
           const raw = String(n.name || "").trim();
           if (raw) {
-            const k = addEntity(raw, n.type, board, n.id, n.notes || n.description);
+            const k = addEntity(raw, n.type, board, n.id, n.notes || n.description, n.personStatus || "active");
             if (k) idToKey.set(String(n.id), k);
           }
         }
@@ -2110,7 +2124,7 @@ exports.handler = async (event) => {
             const sKey = idToKey.get(String(l.source?.id || l.source));
             const tKey = idToKey.get(String(l.target?.id || l.target));
             if (sKey && tKey) {
-              addLink(sKey, tKey, l.kind, bTitle);
+              addLink(sKey, tKey, l.kind, board);
             }
           }
         }
@@ -2121,7 +2135,7 @@ exports.handler = async (event) => {
           for (const pt of points) {
             const raw = String(pt.name || "").trim();
             if (raw) {
-              const k = addEntity(raw, pt.type || g.name, board, pt.id, pt.notes);
+              const k = addEntity(raw, pt.type || g.name, board, pt.id, pt.notes, pt.status || "active");
               if (k) idToKey.set(String(pt.id), k);
             }
           }
@@ -2131,12 +2145,20 @@ exports.handler = async (event) => {
             const sKey = idToKey.get(String(l.source?.id || l.source));
             const tKey = idToKey.get(String(l.target?.id || l.target));
             if (sKey && tKey) {
-              addLink(sKey, tKey, l.label || "tactique", bTitle);
+              addLink(sKey, tKey, l.type || l.label || "tactique", board);
             }
           }
         }
       }
     }
+
+    const resolveStatus = (statusesSet) => {
+      if (!statusesSet || !statusesSet.size) return "active";
+      if (statusesSet.has("deceased") || statusesSet.has("mort")) return "deceased";
+      if (statusesSet.has("missing") || statusesSet.has("disparu")) return "missing";
+      if (statusesSet.has("inactive") || statusesSet.has("inactif")) return "inactive";
+      return "active";
+    };
 
     const targetEntity = entities.get(targetKey) || {
       key: targetKey,
@@ -2144,6 +2166,7 @@ exports.handler = async (event) => {
       types: new Set(),
       occurrences: [],
       notes: [],
+      statuses: new Set(),
     };
 
     const degree1 = new Set();
@@ -2170,39 +2193,24 @@ exports.handler = async (event) => {
 
     for (const [pair, link] of globalLinks.entries()) {
       if (allSubgraphKeys.has(link.source) && allSubgraphKeys.has(link.target)) {
+        const cloudArr = Array.from(link.clouds.values());
         subLinks.push({
           id: pair,
           source: `data:${link.source}`,
           target: `data:${link.target}`,
           kind: link.kind,
-          clouds: Array.from(link.clouds),
+          clouds: cloudArr,
+          boardIds: cloudArr.map((c) => c.id),
         });
       }
     }
 
-    const graphNodes = [];
+    // Match each data entity with any associated user
+    const userToEntityMap = new Map();
+    const entityToUserMap = new Map();
+
     for (const k of allSubgraphKeys) {
-      const e = entities.get(k);
-      const isTarget = k === targetKey;
-      const deg = isTarget ? 0 : degree1.has(k) ? 1 : 2;
-      graphNodes.push({
-        id: `data:${k}`,
-        dataKey: k,
-        label: e?.name || k,
-        type: "entity",
-        degree: deg,
-        categories: e ? Array.from(e.types) : [],
-        occurrences: e?.occurrences || [],
-        notes: e?.notes || [],
-      });
-    }
-
-    const entitiesToCheck = [targetKey, ...degree1];
-    const addedUsers = new Set();
-    const addedClouds = new Set();
-
-    for (const k of entitiesToCheck) {
-      const matchingUsers = loadedUsers.filter((u) => {
+      const matchedUser = loadedUsers.find((u) => {
         const points = Array.isArray(u.associatedPoints) ? u.associatedPoints : [];
         if (points.some((p) => normKey(p) === k)) return true;
         const full = `${u.firstName || ""} ${u.lastName || ""}`.trim();
@@ -2213,78 +2221,142 @@ exports.handler = async (event) => {
         return false;
       });
 
-      for (const u of matchingUsers) {
-        const userNodeId = `user:${u.id}`;
-        if (!addedUsers.has(u.id)) {
-          addedUsers.add(u.id);
+      if (matchedUser) {
+        userToEntityMap.set(String(matchedUser.id), k);
+        entityToUserMap.set(k, matchedUser);
+      }
+    }
+
+    const graphNodes = [];
+    for (const k of allSubgraphKeys) {
+      const e = entities.get(k);
+      const isTarget = k === targetKey;
+      const deg = isTarget ? 0 : degree1.has(k) ? 1 : 2;
+      const associatedUser = entityToUserMap.get(k);
+      const rawName = e?.name || k;
+      let label = rawName;
+      if (associatedUser) {
+        const atTag = `@${associatedUser.username}`;
+        if (!label.toLowerCase().includes(atTag.toLowerCase())) {
+          label = `${rawName} (${atTag})`;
+        }
+      }
+
+      graphNodes.push({
+        id: `data:${k}`,
+        dataKey: k,
+        label,
+        rawName,
+        type: "entity",
+        degree: deg,
+        status: resolveStatus(e?.statuses),
+        categories: e ? Array.from(e.types) : [],
+        occurrences: e?.occurrences || [],
+        notes: e?.notes || [],
+        user: associatedUser ? safeUser(associatedUser) : null,
+        associatedUser: associatedUser ? safeUser(associatedUser) : null,
+        hasUser: Boolean(associatedUser),
+      });
+    }
+
+    // Connect cloud and peer nodes for users associated with target or 1st degree
+    const entitiesToCheck = [targetKey, ...degree1];
+    const addedUsers = new Set();
+    const addedClouds = new Set();
+
+    for (const k of entitiesToCheck) {
+      const u = entityToUserMap.get(k);
+      if (!u) continue;
+
+      const targetDataNodeId = `data:${k}`;
+
+      const userBoards = validBoards.filter((b) => {
+        if (String(b.ownerId) === String(u.id)) return true;
+        return Array.isArray(b.members) && b.members.some((m) => String(m.userId) === String(u.id));
+      });
+
+      for (const b of userBoards) {
+        const cloudNodeId = `cloud:${b.id}`;
+        if (!addedClouds.has(b.id)) {
+          addedClouds.add(b.id);
           graphNodes.push({
-            id: userNodeId,
-            userId: u.id,
-            label: `👤 ${u.firstName && u.lastName ? `${u.firstName} ${u.lastName}` : u.username} (@${u.username})`,
-            type: "user",
-            degree: 1,
-            user: safeUser(u),
+            id: cloudNodeId,
+            boardId: b.id,
+            label: `☁️ ${b.title}`,
+            type: "cloud",
+            page: b.page || "point",
+            degree: 2,
+            occurrences: [{ boardId: b.id, boardTitle: b.title, page: b.page || "point" }],
           });
         }
+
         subLinks.push({
-          id: `link_${k}_user_${u.id}`,
-          source: `data:${k}`,
-          target: userNodeId,
-          kind: "compte_lie",
-          clouds: ["BNI Database"],
+          id: `link_entity_${k}_cloud_${b.id}`,
+          source: targetDataNodeId,
+          target: cloudNodeId,
+          kind: "membre_cloud",
+          clouds: [{ id: b.id, title: b.title, page: b.page || "point" }],
+          boardIds: [b.id],
         });
 
-        const userBoards = validBoards.filter((b) => {
-          if (String(b.ownerId) === String(u.id)) return true;
-          return Array.isArray(b.members) && b.members.some((m) => String(m.userId) === String(u.id));
-        });
+        const otherMembers = Array.isArray(b.members)
+          ? b.members.filter((m) => String(m.userId) !== String(u.id))
+          : [];
 
-        for (const b of userBoards) {
-          const cloudNodeId = `cloud:${b.id}`;
-          if (!addedClouds.has(b.id)) {
-            addedClouds.add(b.id);
-            graphNodes.push({
-              id: cloudNodeId,
-              boardId: b.id,
-              label: `☁️ ${b.title}`,
-              type: "cloud",
-              page: b.page || "point",
-              degree: 2,
-            });
-          }
-          subLinks.push({
-            id: `link_user_${u.id}_cloud_${b.id}`,
-            source: userNodeId,
-            target: cloudNodeId,
-            kind: "membre_cloud",
-            clouds: [b.title],
-          });
-
-          const otherMembers = Array.isArray(b.members)
-            ? b.members.filter((m) => String(m.userId) !== String(u.id))
-            : [];
-          for (const m of otherMembers) {
-            const peerNodeId = `user:${m.userId}`;
-            if (!addedUsers.has(m.userId)) {
-              addedUsers.add(m.userId);
+        for (const m of otherMembers) {
+          const mUserId = String(m.userId);
+          let peerTargetNodeId;
+          if (userToEntityMap.has(mUserId)) {
+            peerTargetNodeId = `data:${userToEntityMap.get(mUserId)}`;
+          } else {
+            peerTargetNodeId = `user:${mUserId}`;
+            if (!addedUsers.has(mUserId)) {
+              addedUsers.add(mUserId);
               graphNodes.push({
-                id: peerNodeId,
-                userId: m.userId,
+                id: peerTargetNodeId,
+                userId: mUserId,
                 label: `👤 ${m.username}`,
                 type: "user_peer",
                 degree: 2,
+                occurrences: [{ boardId: b.id, boardTitle: b.title, page: b.page || "point" }],
               });
             }
-            subLinks.push({
-              id: `link_cloud_${b.id}_peer_${m.userId}`,
-              source: cloudNodeId,
-              target: peerNodeId,
-              kind: m.role || "membre",
-              clouds: [b.title],
-            });
           }
+
+          subLinks.push({
+            id: `link_cloud_${b.id}_peer_${mUserId}`,
+            source: cloudNodeId,
+            target: peerTargetNodeId,
+            kind: m.role || "membre",
+            clouds: [{ id: b.id, title: b.title, page: b.page || "point" }],
+            boardIds: [b.id],
+          });
         }
       }
+    }
+
+    // Calculate shared indirect connection counts for physics on all links
+    const adj = new Map();
+    for (const n of graphNodes) adj.set(n.id, new Set());
+    for (const l of subLinks) {
+      if (l.kind === "ennemi") continue;
+      const s = typeof l.source === "object" ? l.source.id : l.source;
+      const t = typeof l.target === "object" ? l.target.id : l.target;
+      if (adj.has(s) && adj.has(t)) {
+        adj.get(s).add(t);
+        adj.get(t).add(s);
+      }
+    }
+    for (const l of subLinks) {
+      const s = typeof l.source === "object" ? l.source.id : l.source;
+      const t = typeof l.target === "object" ? l.target.id : l.target;
+      const sSet = adj.get(s) || new Set();
+      const tSet = adj.get(t) || new Set();
+      let shared = 0;
+      for (const neighbor of sSet) {
+        if (neighbor !== t && tSet.has(neighbor)) shared++;
+      }
+      l.sharedIndirectCount = shared;
     }
 
     return jsonResponse(200, {

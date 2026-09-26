@@ -927,3 +927,77 @@ body {
   border-radius: 50%;
 }
 
+/* Graph Clouds Dropdown Filter */
+.graph-clouds-dropdown-wrapper {
+  position: relative;
+}
+.graph-clouds-dropdown-box {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 280px;
+  max-height: 320px;
+  background: rgba(10, 16, 32, 0.96);
+  border: 1px solid var(--accent-cyan);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.85);
+  border-radius: 6px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 100;
+  backdrop-filter: blur(12px);
+}
+.graph-clouds-dropdown-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 6px;
+  font-size: 0.75rem;
+  letter-spacing: 1px;
+  color: var(--accent-cyan);
+  font-weight: 700;
+}
+.btn-mini-cloud {
+  background: rgba(0, 240, 255, 0.12);
+  border: 1px solid rgba(0, 240, 255, 0.35);
+  color: #fff;
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.btn-mini-cloud:hover {
+  background: rgba(0, 240, 255, 0.28);
+  border-color: var(--accent-cyan);
+}
+.graph-clouds-checkbox-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.graph-cloud-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: var(--text-light);
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  transition: background 0.15s;
+  user-select: none;
+}
+.graph-cloud-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.graph-cloud-item input[type="checkbox"] {
+  accent-color: var(--accent-cyan);
+  cursor: pointer;
+}
+

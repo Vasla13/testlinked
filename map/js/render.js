@@ -515,6 +515,21 @@ function renderTacticalLinks() {
         line.setAttribute('data-normal-width', String(widths.normal));
         line.setAttribute('data-hover-width', String(widths.hover));
         line.setAttribute('stroke-width', String(widths.normal));
+
+        const sStatus = String(pFrom.status || 'ACTIVE').toUpperCase();
+        const tStatus = String(pTo.status || 'ACTIVE').toUpperCase();
+        const isInactiveOrDead = sStatus === 'INACTIVE' || sStatus === 'MISSING' || sStatus === 'DECEASED' ||
+                                 tStatus === 'INACTIVE' || tStatus === 'MISSING' || tStatus === 'DECEASED';
+        const linkKind = String(link.type || link.kind || '').toLowerCase();
+        const isEx = linkKind === 'ex_employe' || linkKind === 'ex_membre' || linkKind === 'ex employé' || linkKind === 'ex membre';
+
+        if (isInactiveOrDead || isEx) {
+            line.setAttribute('stroke-dasharray', '6,4');
+            line.setAttribute('opacity', '0.35');
+        } else {
+            line.removeAttribute('stroke-dasharray');
+            line.setAttribute('opacity', '1');
+        }
     });
 
     Array.from(linksLayer.children).forEach((child) => {
