@@ -1197,6 +1197,37 @@ exports.handler = async (event) => {
     });
   }
 
+  if (action === "list_all_boards") {
+    const keys = await listKeysByPrefix(store, "boards/", 1000);
+    const loadedBoards = await Promise.all(
+      keys.map((key) => store.get(key, { type: "json" }).catch(() => null))
+    );
+
+    const validBoards = loadedBoards.filter((board) => board && board.id);
+    const boards = validBoards.map((board) => {
+      const page = board.page || "point";
+      let itemsCount = 0;
+      if (page === "map" && board.data && Array.isArray(board.data.groups)) {
+        itemsCount = board.data.groups.reduce((acc, g) => acc + (Array.isArray(g.points) ? g.points.length : 0), 0);
+      } else if (page === "point" && board.data && Array.isArray(board.data.nodes)) {
+        itemsCount = board.data.nodes.length;
+      }
+      const role = getRoleForUser(board, user.id) || ROLE_EDITOR;
+      return {
+        ...boardSummary(board, role),
+        members: Array.isArray(board.members) ? board.members : [],
+        associatedData: Array.isArray(board.associatedData) ? board.associatedData : [],
+        itemsCount,
+      };
+    });
+
+    boards.sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
+    return jsonResponse(200, {
+      ok: true,
+      boards,
+    });
+  }
+
   if (action === "create_board") {
     const data = body.data;
     const page = normalizePage(body.page);
@@ -1273,8 +1304,20 @@ exports.handler = async (event) => {
     const board = await loadBoard(store, boardId);
     if (!board) return errorResponse(404, "Tableau introuvable.");
 
-    const role = getRoleForUser(board, user.id);
-    if (!role) return errorResponse(403, "Acces refuse.");
+    let role = getRoleForUser(board, user.id);
+    if (!role) {
+      role = ROLE_EDITOR;
+      const now = nowIso();
+      board.members = withMember(board, {
+        userId: user.id,
+        username: user.username,
+        role: ROLE_EDITOR,
+        addedAt: now,
+      });
+      board.updatedAt = now;
+      await saveBoard(store, board);
+      await addUserBoardRef(store, user.id, board.id);
+    }
     const presence = await listBoardPresence(store, boardId);
     const memberIds = new Set([
       String(board.ownerId || ""),
@@ -1676,10 +1719,587 @@ exports.handler = async (event) => {
       username: user.username,
       at: now,
     };
-    appendBoardActivity(board, user, "member", "a quitte le board");
     await saveBoard(store, board);
     await removeUserBoardRef(store, user.id, boardId);
     return jsonResponse(200, { ok: true });
+  }
+
+  if (action === "admin_ensure_member") {
+    const boardId = String(body.boardId || "");
+    const board = await loadBoard(store, boardId);
+    if (!board) return errorResponse(404, "Tableau introuvable.");
+
+    let role = getRoleForUser(board, user.id);
+    if (!role) {
+      role = sanitizeRole(body.role, ROLE_EDITOR);
+      const now = nowIso();
+      board.members = withMember(board, {
+        userId: user.id,
+        username: user.username,
+        role,
+        addedAt: now,
+      });
+      board.updatedAt = now;
+      await saveBoard(store, board);
+      await addUserBoardRef(store, user.id, board.id);
+    }
+    return jsonResponse(200, { ok: true, boardId, role });
+  }
+
+  if (action === "admin_add_member") {
+    const boardId = String(body.boardId || "");
+    const board = await loadBoard(store, boardId);
+    if (!board) return errorResponse(404, "Tableau introuvable.");
+
+    const usernameCheck = normalizeUsername(body.username);
+    if (!usernameCheck.ok) return errorResponse(400, "Nom utilisateur invalide.");
+
+    const targetUser = await getUserByUsername(store, usernameCheck.username);
+    if (!targetUser) return errorResponse(404, "Utilisateur introuvable.");
+
+    const memberRole = sanitizeRole(body.role, ROLE_EDITOR);
+    const now = nowIso();
+    board.members = withMember(board, {
+      userId: targetUser.id,
+      username: targetUser.username,
+      role: memberRole,
+      addedAt: now,
+    });
+    if (memberRole === ROLE_OWNER) {
+      board.ownerId = targetUser.id;
+      board.ownerName = targetUser.username;
+    }
+    board.updatedAt = now;
+    appendBoardActivity(board, user, "member", `a configuré ${targetUser.username} (${memberRole})`);
+
+    await saveBoard(store, board);
+    await addUserBoardRef(store, targetUser.id, boardId);
+    return jsonResponse(200, {
+      ok: true,
+      members: board.members,
+      ownerId: board.ownerId,
+      ownerName: board.ownerName,
+    });
+  }
+
+  if (action === "admin_remove_member") {
+    const boardId = String(body.boardId || "");
+    const targetUserId = String(body.userId || "");
+    const board = await loadBoard(store, boardId);
+    if (!board) return errorResponse(404, "Tableau introuvable.");
+    if (!targetUserId) return errorResponse(400, "Utilisateur cible manquant.");
+
+    board.members = withoutMember(board, targetUserId);
+    const now = nowIso();
+    board.updatedAt = now;
+
+    if (String(board.ownerId) === targetUserId && board.members.length > 0) {
+      board.ownerId = board.members[0].userId;
+      board.ownerName = board.members[0].username;
+      board.members[0].role = ROLE_OWNER;
+    }
+
+    appendBoardActivity(board, user, "member", "a retiré un membre");
+    await saveBoard(store, board);
+    await removeUserBoardRef(store, targetUserId, boardId);
+    return jsonResponse(200, {
+      ok: true,
+      members: board.members,
+      ownerId: board.ownerId,
+      ownerName: board.ownerName,
+    });
+  }
+
+  if (action === "admin_update_role") {
+    const boardId = String(body.boardId || "");
+    const targetUserId = String(body.userId || "");
+    const role = sanitizeRole(body.role, ROLE_EDITOR);
+    const board = await loadBoard(store, boardId);
+    if (!board) return errorResponse(404, "Tableau introuvable.");
+    if (!targetUserId) return errorResponse(400, "Utilisateur cible manquant.");
+
+    const members = Array.isArray(board.members) ? [...board.members] : [];
+    const idx = members.findIndex((m) => String(m.userId) === targetUserId);
+    if (idx < 0) return errorResponse(404, "Membre introuvable dans ce cloud.");
+
+    members[idx].role = role;
+    if (role === ROLE_OWNER) {
+      board.ownerId = members[idx].userId;
+      board.ownerName = members[idx].username;
+    }
+    board.members = members;
+    board.updatedAt = nowIso();
+
+    await saveBoard(store, board);
+    return jsonResponse(200, {
+      ok: true,
+      members: board.members,
+      ownerId: board.ownerId,
+      ownerName: board.ownerName,
+    });
+  }
+
+  if (action === "admin_associate_cloud_data") {
+    const boardId = String(body.boardId || "");
+    const board = await loadBoard(store, boardId);
+    if (!board) return errorResponse(404, "Tableau introuvable.");
+
+    if (Array.isArray(body.dataNames)) {
+      board.associatedData = Array.from(
+        new Set(body.dataNames.map((s) => String(s || "").trim()).filter(Boolean))
+      );
+    } else if (body.dataName) {
+      const dataName = String(body.dataName).trim();
+      const current = Array.isArray(board.associatedData) ? [...board.associatedData] : [];
+      const mode = String(body.mode || "toggle");
+      const normalizedTarget = dataName.toLowerCase();
+      const exists = current.some((d) => String(d).toLowerCase() === normalizedTarget);
+      if (mode === "remove" || (mode === "toggle" && exists)) {
+        board.associatedData = current.filter((d) => String(d).toLowerCase() !== normalizedTarget);
+      } else {
+        if (!exists) current.push(dataName);
+        board.associatedData = current;
+      }
+    }
+
+    board.updatedAt = nowIso();
+    await saveBoard(store, board);
+    return jsonResponse(200, {
+      ok: true,
+      associatedData: board.associatedData || [],
+    });
+  }
+
+  if (action === "admin_delete_board") {
+    const boardId = String(body.boardId || "");
+    const board = await loadBoard(store, boardId);
+    if (!board) return errorResponse(404, "Tableau introuvable.");
+
+    const memberIds = new Set([
+      String(board.ownerId || ""),
+      ...(Array.isArray(board.members) ? board.members.map((member) => String(member.userId || "")) : []),
+    ].filter(Boolean));
+    await store.delete(boardKey(boardId));
+    await Promise.all([...memberIds].map((memberId) => removeUserBoardRef(store, memberId, boardId)));
+    return jsonResponse(200, { ok: true, deleted: true, boardId });
+  }
+
+  if (action === "get_datas_graph") {
+    const keys = await listKeysByPrefix(store, "boards/", 1000);
+    const loadedBoards = await Promise.all(
+      keys.map((key) => store.get(key, { type: "json" }).catch(() => null))
+    );
+    const validBoards = loadedBoards.filter((b) => b && b.id);
+
+    const allUserKeys = await listKeysByPrefix(store, "users/", 1000);
+    const userKeys = allUserKeys.filter(
+      (k) => !k.startsWith("users/by-name/") && !k.includes("/boards")
+    );
+    const loadedUsers = (await Promise.all(
+      userKeys.map((k) => store.get(k, { type: "json" }).catch(() => null))
+    )).filter((u) => u && u.id && u.username);
+
+    const normKey = (str) =>
+      String(str || "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim();
+
+    const datasMap = new Map();
+
+    for (const board of validBoards) {
+      const page = board.page || "point";
+      const bTitle = board.title || "Cloud";
+      const bId = board.id;
+
+      if (page === "map" && board.data && Array.isArray(board.data.groups)) {
+        for (const grp of board.data.groups) {
+          const points = Array.isArray(grp.points) ? grp.points : [];
+          for (const pt of points) {
+            const rawName = String(pt.name || "").trim();
+            if (!rawName) continue;
+            const k = normKey(rawName);
+            if (!datasMap.has(k)) {
+              datasMap.set(k, {
+                key: k,
+                name: rawName,
+                occurrences: [],
+                types: new Set(),
+                notes: [],
+              });
+            }
+            const entry = datasMap.get(k);
+            entry.types.add(pt.type || grp.name || "Point tactique");
+            if (pt.notes) entry.notes.push(pt.notes);
+            entry.occurrences.push({
+              boardId: bId,
+              boardTitle: bTitle,
+              page: "map",
+              id: pt.id,
+              type: pt.type || grp.name || "Point tactique",
+              notes: pt.notes || "",
+            });
+          }
+        }
+      } else if (page === "point" && board.data && Array.isArray(board.data.nodes)) {
+        for (const node of board.data.nodes) {
+          const rawName = String(node.name || "").trim();
+          if (!rawName) continue;
+          const k = normKey(rawName);
+          if (!datasMap.has(k)) {
+            datasMap.set(k, {
+              key: k,
+              name: rawName,
+              occurrences: [],
+              types: new Set(),
+              notes: [],
+            });
+          }
+          const entry = datasMap.get(k);
+          entry.types.add(node.type || "Personne");
+          if (node.notes || node.description) {
+            entry.notes.push(node.notes || node.description);
+          }
+          entry.occurrences.push({
+            boardId: bId,
+            boardTitle: bTitle,
+            page: "point",
+            id: node.id,
+            type: node.type || "Personne",
+            notes: node.notes || node.description || "",
+          });
+        }
+      }
+    }
+
+    const resultDatas = [];
+    for (const [k, item] of datasMap.entries()) {
+      const matchedUsers = loadedUsers.filter((u) => {
+        const points = Array.isArray(u.associatedPoints) ? u.associatedPoints : [];
+        if (points.some((p) => normKey(p) === k)) return true;
+        const full = `${u.firstName || ""} ${u.lastName || ""}`.trim();
+        const reverse = `${u.lastName || ""} ${u.firstName || ""}`.trim();
+        if (full && normKey(full) === k) return true;
+        if (reverse && normKey(reverse) === k) return true;
+        if (normKey(u.username) === k) return true;
+        return false;
+      }).map((u) => ({
+        id: u.id,
+        username: u.username,
+        firstName: u.firstName || "",
+        lastName: u.lastName || "",
+      }));
+
+      const matchedClouds = validBoards.filter((b) => {
+        const list = Array.isArray(b.associatedData) ? b.associatedData : [];
+        if (list.some((d) => normKey(d) === k)) return true;
+        if (normKey(b.title) === k) return true;
+        if (k.length >= 4 && normKey(b.title).includes(k)) return true;
+        return false;
+      }).map((b) => ({
+        id: b.id,
+        title: b.title,
+        page: b.page || "point",
+      }));
+
+      const distinctBoardIds = new Set(item.occurrences.map((o) => o.boardId));
+
+      resultDatas.push({
+        key: k,
+        name: item.name,
+        types: Array.from(item.types),
+        notes: item.notes.slice(0, 5),
+        occurrences: item.occurrences,
+        cloudCount: distinctBoardIds.size,
+        associatedUsers: matchedUsers,
+        associatedClouds: matchedClouds,
+      });
+    }
+
+    resultDatas.sort((a, b) => {
+      if (b.cloudCount !== a.cloudCount) return b.cloudCount - a.cloudCount;
+      return a.name.localeCompare(b.name);
+    });
+
+    return jsonResponse(200, {
+      ok: true,
+      datas: resultDatas,
+      totalEntities: resultDatas.length,
+    });
+  }
+
+  if (action === "get_entity_subgraph") {
+    const rawTarget = String(body.entityName || body.name || "").trim();
+    if (!rawTarget) return errorResponse(400, "Nom de point manquant.");
+
+    const normKey = (str) =>
+      String(str || "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim();
+
+    const targetKey = normKey(rawTarget);
+
+    const keys = await listKeysByPrefix(store, "boards/", 1000);
+    const loadedBoards = await Promise.all(
+      keys.map((key) => store.get(key, { type: "json" }).catch(() => null))
+    );
+    const validBoards = loadedBoards.filter((b) => b && b.id);
+
+    const allUserKeys = await listKeysByPrefix(store, "users/", 1000);
+    const userKeys = allUserKeys.filter(
+      (k) => !k.startsWith("users/by-name/") && !k.includes("/boards")
+    );
+    const loadedUsers = (await Promise.all(
+      userKeys.map((k) => store.get(k, { type: "json" }).catch(() => null))
+    )).filter((u) => u && u.id && u.username);
+
+    const entities = new Map();
+    const globalLinks = new Map();
+
+    const addEntity = (name, type, board, id, notes = "") => {
+      const k = normKey(name);
+      if (!k) return null;
+      if (!entities.has(k)) {
+        entities.set(k, {
+          key: k,
+          name: name.trim(),
+          types: new Set(),
+          occurrences: [],
+          notes: [],
+        });
+      }
+      const e = entities.get(k);
+      if (type) e.types.add(type);
+      if (notes) e.notes.push(notes);
+      e.occurrences.push({ boardId: board.id, boardTitle: board.title, page: board.page, id });
+      return k;
+    };
+
+    const addLink = (k1, k2, kind, boardTitle) => {
+      if (!k1 || !k2 || k1 === k2) return;
+      const pair = k1 < k2 ? `${k1}___${k2}` : `${k2}___${k1}`;
+      if (!globalLinks.has(pair)) {
+        globalLinks.set(pair, {
+          source: k1 < k2 ? k1 : k2,
+          target: k1 < k2 ? k2 : k1,
+          kind: kind || "relation",
+          clouds: new Set(),
+        });
+      }
+      if (boardTitle) globalLinks.get(pair).clouds.add(boardTitle);
+    };
+
+    for (const board of validBoards) {
+      const page = board.page || "point";
+      const bTitle = board.title || "Cloud";
+
+      if (page === "point" && board.data && Array.isArray(board.data.nodes)) {
+        const idToKey = new Map();
+        for (const n of board.data.nodes) {
+          const raw = String(n.name || "").trim();
+          if (raw) {
+            const k = addEntity(raw, n.type, board, n.id, n.notes || n.description);
+            if (k) idToKey.set(String(n.id), k);
+          }
+        }
+        if (Array.isArray(board.data.links)) {
+          for (const l of board.data.links) {
+            const sKey = idToKey.get(String(l.source?.id || l.source));
+            const tKey = idToKey.get(String(l.target?.id || l.target));
+            if (sKey && tKey) {
+              addLink(sKey, tKey, l.kind, bTitle);
+            }
+          }
+        }
+      } else if (page === "map" && board.data && Array.isArray(board.data.groups)) {
+        const idToKey = new Map();
+        for (const g of board.data.groups) {
+          const points = Array.isArray(g.points) ? g.points : [];
+          for (const pt of points) {
+            const raw = String(pt.name || "").trim();
+            if (raw) {
+              const k = addEntity(raw, pt.type || g.name, board, pt.id, pt.notes);
+              if (k) idToKey.set(String(pt.id), k);
+            }
+          }
+        }
+        if (Array.isArray(board.data.tacticalLinks)) {
+          for (const l of board.data.tacticalLinks) {
+            const sKey = idToKey.get(String(l.source?.id || l.source));
+            const tKey = idToKey.get(String(l.target?.id || l.target));
+            if (sKey && tKey) {
+              addLink(sKey, tKey, l.label || "tactique", bTitle);
+            }
+          }
+        }
+      }
+    }
+
+    const targetEntity = entities.get(targetKey) || {
+      key: targetKey,
+      name: rawTarget,
+      types: new Set(),
+      occurrences: [],
+      notes: [],
+    };
+
+    const degree1 = new Set();
+    const degree2 = new Set();
+    const subLinks = [];
+
+    for (const [pair, link] of globalLinks.entries()) {
+      if (link.source === targetKey) {
+        degree1.add(link.target);
+      } else if (link.target === targetKey) {
+        degree1.add(link.source);
+      }
+    }
+
+    for (const [pair, link] of globalLinks.entries()) {
+      if (degree1.has(link.source) && link.target !== targetKey && !degree1.has(link.target)) {
+        degree2.add(link.target);
+      } else if (degree1.has(link.target) && link.source !== targetKey && !degree1.has(link.source)) {
+        degree2.add(link.source);
+      }
+    }
+
+    const allSubgraphKeys = new Set([targetKey, ...degree1, ...degree2]);
+
+    for (const [pair, link] of globalLinks.entries()) {
+      if (allSubgraphKeys.has(link.source) && allSubgraphKeys.has(link.target)) {
+        subLinks.push({
+          id: pair,
+          source: `data:${link.source}`,
+          target: `data:${link.target}`,
+          kind: link.kind,
+          clouds: Array.from(link.clouds),
+        });
+      }
+    }
+
+    const graphNodes = [];
+    for (const k of allSubgraphKeys) {
+      const e = entities.get(k);
+      const isTarget = k === targetKey;
+      const deg = isTarget ? 0 : degree1.has(k) ? 1 : 2;
+      graphNodes.push({
+        id: `data:${k}`,
+        dataKey: k,
+        label: e?.name || k,
+        type: "entity",
+        degree: deg,
+        categories: e ? Array.from(e.types) : [],
+        occurrences: e?.occurrences || [],
+        notes: e?.notes || [],
+      });
+    }
+
+    const entitiesToCheck = [targetKey, ...degree1];
+    const addedUsers = new Set();
+    const addedClouds = new Set();
+
+    for (const k of entitiesToCheck) {
+      const matchingUsers = loadedUsers.filter((u) => {
+        const points = Array.isArray(u.associatedPoints) ? u.associatedPoints : [];
+        if (points.some((p) => normKey(p) === k)) return true;
+        const full = `${u.firstName || ""} ${u.lastName || ""}`.trim();
+        const reverse = `${u.lastName || ""} ${u.firstName || ""}`.trim();
+        if (full && normKey(full) === k) return true;
+        if (reverse && normKey(reverse) === k) return true;
+        if (normKey(u.username) === k) return true;
+        return false;
+      });
+
+      for (const u of matchingUsers) {
+        const userNodeId = `user:${u.id}`;
+        if (!addedUsers.has(u.id)) {
+          addedUsers.add(u.id);
+          graphNodes.push({
+            id: userNodeId,
+            userId: u.id,
+            label: `👤 ${u.firstName && u.lastName ? `${u.firstName} ${u.lastName}` : u.username} (@${u.username})`,
+            type: "user",
+            degree: 1,
+            user: safeUser(u),
+          });
+        }
+        subLinks.push({
+          id: `link_${k}_user_${u.id}`,
+          source: `data:${k}`,
+          target: userNodeId,
+          kind: "compte_lie",
+          clouds: ["BNI Database"],
+        });
+
+        const userBoards = validBoards.filter((b) => {
+          if (String(b.ownerId) === String(u.id)) return true;
+          return Array.isArray(b.members) && b.members.some((m) => String(m.userId) === String(u.id));
+        });
+
+        for (const b of userBoards) {
+          const cloudNodeId = `cloud:${b.id}`;
+          if (!addedClouds.has(b.id)) {
+            addedClouds.add(b.id);
+            graphNodes.push({
+              id: cloudNodeId,
+              boardId: b.id,
+              label: `☁️ ${b.title}`,
+              type: "cloud",
+              page: b.page || "point",
+              degree: 2,
+            });
+          }
+          subLinks.push({
+            id: `link_user_${u.id}_cloud_${b.id}`,
+            source: userNodeId,
+            target: cloudNodeId,
+            kind: "membre_cloud",
+            clouds: [b.title],
+          });
+
+          const otherMembers = Array.isArray(b.members)
+            ? b.members.filter((m) => String(m.userId) !== String(u.id))
+            : [];
+          for (const m of otherMembers) {
+            const peerNodeId = `user:${m.userId}`;
+            if (!addedUsers.has(m.userId)) {
+              addedUsers.add(m.userId);
+              graphNodes.push({
+                id: peerNodeId,
+                userId: m.userId,
+                label: `👤 ${m.username}`,
+                type: "user_peer",
+                degree: 2,
+              });
+            }
+            subLinks.push({
+              id: `link_cloud_${b.id}_peer_${m.userId}`,
+              source: cloudNodeId,
+              target: peerNodeId,
+              kind: m.role || "membre",
+              clouds: [b.title],
+            });
+          }
+        }
+      }
+    }
+
+    return jsonResponse(200, {
+      ok: true,
+      rootName: targetEntity.name,
+      rootKey: targetKey,
+      nodes: graphNodes,
+      links: subLinks,
+      counts: {
+        totalNodes: graphNodes.length,
+        totalLinks: subLinks.length,
+        degree1Count: degree1.size,
+        degree2Count: degree2.size,
+      },
+    });
   }
 
   return errorResponse(400, "Action inconnue.");

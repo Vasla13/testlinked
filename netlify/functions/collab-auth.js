@@ -16,6 +16,8 @@ const {
   resolveAuth,
   userKey,
   usernameKey,
+  listKeysByPrefix,
+  getUserBoardIndex,
 } = require("../lib/collab");
 
 exports.handler = async (event) => {
@@ -54,6 +56,15 @@ exports.handler = async (event) => {
       return errorResponse(400, usernameCheck.reason);
     }
 
+    const firstName = String(body.firstName || "").trim();
+    const lastName = String(body.lastName || "").trim();
+    if (!firstName) {
+      return errorResponse(400, "Le prénom est obligatoire pour créer un compte.");
+    }
+    if (!lastName) {
+      return errorResponse(400, "Le nom est obligatoire pour créer un compte.");
+    }
+
     const username = usernameCheck.username;
     const password = String(body.password || "");
     if (password.length < 3) {
@@ -68,6 +79,9 @@ exports.handler = async (event) => {
     const user = {
       id: newId("usr"),
       username,
+      firstName,
+      lastName,
+      associatedPoints: [],
       passwordHash: hashPassword(password),
       createdAt: nowIso(),
     };
@@ -131,6 +145,120 @@ exports.handler = async (event) => {
 
     await deleteSession(auth.store, auth.token);
     return jsonResponse(200, { ok: true });
+  }
+
+  if (action === "list_users") {
+    const auth = await resolveAuth(event, body);
+    if (!auth.ok) {
+      return errorResponse(auth.statusCode || 401, auth.error || "Session requise.");
+    }
+
+    const allKeys = await listKeysByPrefix(store, "users/", 1000);
+    const userKeys = allKeys.filter(
+      (k) => !k.startsWith("users/by-name/") && !k.includes("/boards")
+    );
+
+    const rawUsers = await Promise.all(
+      userKeys.map((k) => store.get(k, { type: "json" }).catch(() => null))
+    );
+
+    const users = [];
+    for (const u of rawUsers) {
+      if (u && u.id && u.username) {
+        const boardIndex = await getUserBoardIndex(store, u.id).catch(() => ({ boardIds: [] }));
+        users.push({
+          ...safeUser(u),
+          boardIds: boardIndex.boardIds || [],
+        });
+      }
+    }
+
+    users.sort((a, b) => String(a.username).localeCompare(String(b.username)));
+
+    return jsonResponse(200, {
+      ok: true,
+      users,
+    });
+  }
+
+  if (action === "admin_update_user") {
+    const auth = await resolveAuth(event, body);
+    if (!auth.ok) {
+      return errorResponse(auth.statusCode || 401, auth.error || "Session requise.");
+    }
+
+    const targetUserId = String(body.userId || "").trim();
+    if (!targetUserId) {
+      return errorResponse(400, "ID utilisateur manquant.");
+    }
+
+    const targetUser = await store.get(userKey(targetUserId), { type: "json" });
+    if (!targetUser) {
+      return errorResponse(404, "Utilisateur introuvable.");
+    }
+
+    if (body.firstName !== undefined) {
+      targetUser.firstName = String(body.firstName || "").trim();
+    }
+    if (body.lastName !== undefined) {
+      targetUser.lastName = String(body.lastName || "").trim();
+    }
+    if (body.password && String(body.password).length >= 3) {
+      targetUser.passwordHash = hashPassword(body.password);
+    }
+    if (Array.isArray(body.associatedPoints)) {
+      const dedup = Array.from(
+        new Set(body.associatedPoints.map((s) => String(s || "").trim()).filter(Boolean))
+      );
+      targetUser.associatedPoints = dedup;
+    }
+
+    await store.setJSON(userKey(targetUser.id), targetUser);
+    return jsonResponse(200, {
+      ok: true,
+      user: safeUser(targetUser),
+    });
+  }
+
+  if (action === "associate_user_point") {
+    const auth = await resolveAuth(event, body);
+    if (!auth.ok) {
+      return errorResponse(auth.statusCode || 401, auth.error || "Session requise.");
+    }
+
+    const targetUserId = String(body.userId || "").trim();
+    const pointName = String(body.pointName || "").trim();
+    const mode = String(body.mode || "toggle"); // "add" | "remove" | "toggle"
+
+    if (!targetUserId || !pointName) {
+      return errorResponse(400, "Données incomplètes (userId et pointName requis).");
+    }
+
+    const targetUser = await store.get(userKey(targetUserId), { type: "json" });
+    if (!targetUser) {
+      return errorResponse(404, "Utilisateur introuvable.");
+    }
+
+    const currentPoints = Array.isArray(targetUser.associatedPoints) ? [...targetUser.associatedPoints] : [];
+    const normalizedTarget = pointName.toLowerCase();
+    const exists = currentPoints.some((p) => String(p).toLowerCase() === normalizedTarget);
+
+    if (mode === "remove" || (mode === "toggle" && exists)) {
+      targetUser.associatedPoints = currentPoints.filter(
+        (p) => String(p).toLowerCase() !== normalizedTarget
+      );
+    } else {
+      if (!exists) {
+        currentPoints.push(pointName);
+      }
+      targetUser.associatedPoints = currentPoints;
+    }
+
+    await store.setJSON(userKey(targetUser.id), targetUser);
+    return jsonResponse(200, {
+      ok: true,
+      user: safeUser(targetUser),
+    });
   }
 
   return errorResponse(400, "Action inconnue.");

@@ -2366,17 +2366,32 @@ function bindCloudHomeTabs() {
     }
 }
 
-async function runCloudAuth(action) {
+async function runCloudAuth(action, extraPayload = {}) {
     const userInput = document.getElementById('cloud-auth-user');
     const passInput = document.getElementById('cloud-auth-pass');
+    const firstInput = document.getElementById('cloud-auth-first');
+    const lastInput = document.getElementById('cloud-auth-last');
     const username = userInput ? userInput.value.trim() : '';
     const password = passInput ? passInput.value : '';
+    const firstName = firstInput ? firstInput.value.trim() : (extraPayload.firstName || '');
+    const lastName = lastInput ? lastInput.value.trim() : (extraPayload.lastName || '');
+
     if (!username || !password) {
         showCustomAlert('Renseigne l identifiant et le mot de passe.');
         return false;
     }
+    if (action === 'register' && (!firstName || !lastName)) {
+        showCustomAlert('Le prénom et le nom sont obligatoires pour créer un compte.');
+        return false;
+    }
+
     try {
-        const res = await collabAuthRequest(action, { username, password });
+        const payload = { username, password, ...extraPayload };
+        if (action === 'register') {
+            payload.firstName = firstName;
+            payload.lastName = lastName;
+        }
+        const res = await collabAuthRequest(action, payload);
         collab.token = String(res.token || '');
         collab.user = res.user || null;
         persistCollabState();
@@ -2468,6 +2483,14 @@ async function renderCloudHome() {
                         <h3 class="cloud-auth-title">Connexion au Cloud</h3>
                         <div class="cloud-auth-copy">Renseignez votre identifiant et mot de passe ci-dessous :</div>
                         <div class="cloud-auth-grid">
+                            <label class="cloud-auth-field" id="cloud-field-first" style="display:none;">
+                                <span class="cloud-auth-label">Prénom</span>
+                                <input id="cloud-auth-first" type="text" placeholder="Prénom" class="modal-input-standalone cloud-auth-input" autocomplete="given-name" />
+                            </label>
+                            <label class="cloud-auth-field" id="cloud-field-last" style="display:none;">
+                                <span class="cloud-auth-label">Nom</span>
+                                <input id="cloud-auth-last" type="text" placeholder="Nom de famille" class="modal-input-standalone cloud-auth-input" autocomplete="family-name" />
+                            </label>
                             <label class="cloud-auth-field">
                                 <span class="cloud-auth-label">Identifiant</span>
                                 <input id="cloud-auth-user" type="text" placeholder="ex: jude, mia, dutch..." class="modal-input-standalone cloud-auth-input" autocomplete="username" />
@@ -2537,7 +2560,26 @@ async function renderCloudHome() {
 
         const registerBtn = document.getElementById('cloud-auth-register');
         const loginBtn = document.getElementById('cloud-auth-login');
-        if (registerBtn) registerBtn.onclick = () => { runCloudAuth('register').catch(() => {}); };
+        if (registerBtn) {
+            registerBtn.onclick = () => {
+                const fField = document.getElementById('cloud-field-first');
+                const lField = document.getElementById('cloud-field-last');
+                if (fField && (fField.style.display === 'none' || !fField.offsetParent)) {
+                    fField.style.display = 'flex';
+                    if (lField) lField.style.display = 'flex';
+                    const titleEl = document.querySelector('.cloud-auth-title');
+                    if (titleEl) titleEl.textContent = 'Création de compte Cloud';
+                    const copyEl = document.querySelector('.cloud-auth-copy');
+                    if (copyEl) copyEl.textContent = 'Renseignez vos nom, prénom, identifiant et mot de passe :';
+                    registerBtn.textContent = 'Valider inscription';
+                    registerBtn.classList.add('primary');
+                    const firstInput = document.getElementById('cloud-auth-first');
+                    if (firstInput) firstInput.focus();
+                    return;
+                }
+                runCloudAuth('register').catch(() => {});
+            };
+        }
         if (loginBtn) loginBtn.onclick = () => { runCloudAuth('login').catch(() => {}); };
 
         const passInput = document.getElementById('cloud-auth-pass');

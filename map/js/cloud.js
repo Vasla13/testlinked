@@ -1535,6 +1535,14 @@ async function renderCloudHome() {
                     <h3 class="cloud-auth-title">Connexion au cloud</h3>
                     <div class="cloud-auth-copy">Entre simplement un identifiant et un mot de passe. Si le compte n existe pas encore, tu peux le creer ici.</div>
                     <div class="cloud-auth-grid">
+                        <label class="cloud-auth-field" id="cloud-field-first" style="display:none;">
+                            <span class="cloud-auth-label">Prénom</span>
+                            <input id="cloud-auth-first" type="text" placeholder="Prénom" class="cloud-auth-input" autocomplete="given-name" />
+                        </label>
+                        <label class="cloud-auth-field" id="cloud-field-last" style="display:none;">
+                            <span class="cloud-auth-label">Nom</span>
+                            <input id="cloud-auth-last" type="text" placeholder="Nom de famille" class="cloud-auth-input" autocomplete="family-name" />
+                        </label>
                         <label class="cloud-auth-field">
                             <span class="cloud-auth-label">Identifiant</span>
                             <input id="cloud-auth-user" type="text" placeholder="operateur_nord" class="cloud-auth-input" autocomplete="username" />
@@ -1554,19 +1562,32 @@ async function renderCloudHome() {
             `
         );
 
-        const runAuth = async (action) => {
+        const runAuth = async (action, extraPayload = {}) => {
             const userEl = document.getElementById('cloud-auth-user');
             const passEl = document.getElementById('cloud-auth-pass');
+            const firstEl = document.getElementById('cloud-auth-first');
+            const lastEl = document.getElementById('cloud-auth-last');
             const username = String(userEl?.value || '').trim();
             const password = String(passEl?.value || '');
+            const firstName = firstEl ? String(firstEl.value || '').trim() : (extraPayload.firstName || '');
+            const lastName = lastEl ? String(lastEl.value || '').trim() : (extraPayload.lastName || '');
 
             if (!username || !password) {
                 await customAlert('AUTH', 'Renseigne l identifiant et le mot de passe.');
                 return;
             }
+            if (action === 'register' && (!firstName || !lastName)) {
+                await customAlert('AUTH', 'Le prénom et le nom sont obligatoires pour créer un compte.');
+                return;
+            }
 
             try {
-                const res = await collabAuthRequest(action, { username, password });
+                const payload = { username, password, ...extraPayload };
+                if (action === 'register') {
+                    payload.firstName = firstName;
+                    payload.lastName = lastName;
+                }
+                const res = await collabAuthRequest(action, payload);
                 collab.token = String(res.token || '');
                 collab.user = res.user || null;
                 persistCollabState();
@@ -1589,7 +1610,25 @@ async function renderCloudHome() {
         };
 
         const registerBtn = document.getElementById('cloud-auth-register');
-        if (registerBtn) registerBtn.onclick = () => { runAuth('register').catch(() => {}); };
+        if (registerBtn) {
+            registerBtn.onclick = () => {
+                const fField = document.getElementById('cloud-field-first');
+                const lField = document.getElementById('cloud-field-last');
+                if (fField && (fField.style.display === 'none' || !fField.offsetParent)) {
+                    fField.style.display = 'flex';
+                    if (lField) lField.style.display = 'flex';
+                    const titleEl = document.querySelector('.cloud-auth-title');
+                    if (titleEl) titleEl.textContent = 'Création de compte Cloud';
+                    const copyEl = document.querySelector('.cloud-auth-copy');
+                    if (copyEl) copyEl.textContent = 'Renseignez vos nom, prénom, identifiant et mot de passe :';
+                    registerBtn.textContent = 'Valider inscription';
+                    const firstInput = document.getElementById('cloud-auth-first');
+                    if (firstInput) firstInput.focus();
+                    return;
+                }
+                runAuth('register').catch(() => {});
+            };
+        }
 
         const loginBtn = document.getElementById('cloud-auth-login');
         if (loginBtn) loginBtn.onclick = () => { runAuth('login').catch(() => {}); };

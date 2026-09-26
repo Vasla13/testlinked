@@ -85,6 +85,9 @@ function safeUser(user) {
   return {
     id: user.id,
     username: user.username,
+    firstName: user.firstName || "",
+    lastName: user.lastName || "",
+    associatedPoints: Array.isArray(user.associatedPoints) ? user.associatedPoints : [],
     createdAt: user.createdAt,
   };
 }
